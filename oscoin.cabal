@@ -1,0 +1,84 @@
+name:                oscoin
+version:             0.1.0.0
+synopsis:            open-source collaboration network
+license:             BSD3
+license-file:        LICENSE
+author:              Alexis Sellier
+maintainer:          alexis@monadic.xyz
+copyright:           2018 Monadic
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:
+      src
+
+  exposed-modules:
+      Oscoin.Block
+    , Oscoin.Consensus
+    , Oscoin.HTTP
+    , Oscoin.Node
+    , Oscoin.P2P
+    , Oscoin.Transaction
+
+  build-depends:
+      base >=4.10 && <4.11
+    , bytestring
+    , containers
+    , mtl
+    , stm
+    , time
+    , text
+    , text-format
+    , filepath
+    , ansi-terminal
+
+  default-language:
+      Haskell2010
+
+  default-extensions:
+      MultiParamTypeClasses
+    , FunctionalDependencies
+    , ParallelListComp
+    , FlexibleContexts
+    , DeriveFunctor
+    , NamedFieldPuns
+    , ConstraintKinds
+    , StandaloneDeriving
+    , ViewPatterns
+    , TypeSynonymInstances
+    , RankNTypes
+    , StandaloneDeriving
+    , ScopedTypeVariables
+    , GeneralizedNewtypeDeriving
+    , TypeApplications
+    , DeriveGeneric
+    , FlexibleInstances
+    , MultiParamTypeClasses
+    , OverloadedStrings
+    , RecordWildCards
+    , GADTs
+    , TypeFamilies
+
+  ghc-options:
+    -Wall
+    -fno-warn-orphans
+    -fno-warn-name-shadowing
+    -fno-warn-unused-do-bind
+    -fno-warn-unused-local-binds
+
+executable oscoin
+  main-is: src/Main.hs
+  build-depends:
+      base >=4.10 && <4.11
+    , oscoin
+  default-extensions:
+      GADTs
+    , OverloadedStrings
+    , TypeFamilies
+  default-language:
+      Haskell2010
+
+source-repository head
+  type: git
+  location: https://monadic.phacility.com/source/oscoin

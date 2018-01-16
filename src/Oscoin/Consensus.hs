@@ -1,0 +1,1 @@
+module Oscoin.Consensus where
