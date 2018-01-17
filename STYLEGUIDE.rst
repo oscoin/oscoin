@@ -14,7 +14,7 @@ This style guide is optimized for the following desired outcomes:
 1. Code shouldn't have to change unless the intent of it changes,
    or *write once*.
 2. Code should be readable, as long as making it readable doesn't conflict
-   with **1.**.
+   with **1**.
 3. Code should be layed out such that diffs only touch code they intend to
    change, or *diff hygiene*.
 
@@ -28,7 +28,7 @@ Use descriptive top-level function names and types.
 * For monadic concrete types, suffix with *M*, ex: ``RandomM``, ``AppM``.
 * To distinguish between functions which operate on monads, suffix with *M*,
   example ``mapM`` vs ``map``.
-* For transforms, suffix with *T*, ex: ``RandomT``, ``NetworkT``.
+* For transformers, suffix with *T*, ex: ``RandomT``, ``NetworkT``.
 
 Language extensions
 -------------------
@@ -256,12 +256,12 @@ Use record syntax for newtypes:
   newtype Email = Email { fromEmail :: Text }
 
 The name of the getter should always be the name of the type, prefixed with
-``from``.
+*from*.
 
 Polymorphism
 ------------
 
-Prefer more general function types to specific ones (*write-once*).
+Prefer more general function types to specific ones (*write once*).
 
 .. code:: haskell
 
