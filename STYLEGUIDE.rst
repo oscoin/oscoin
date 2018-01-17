@@ -8,6 +8,8 @@ General
 * Indent with **four** spaces unless otherwise specified.
 * Try to fit code within 80 columns.
 * Don't overuse point-free style, especially not with operators.
+* Avoid Template Haskell. It's slow and forfeits clarity.
+* Always use ``-Wall`` when compiling.
 
 This style guide is optimized for the following desired outcomes:
 
