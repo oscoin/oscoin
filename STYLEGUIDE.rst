@@ -1,0 +1,365 @@
+===================
+Haskell Style Guide
+===================
+
+General
+-------
+
+* Indent with **four** spaces unless otherwise specified.
+* Try to fit code within 80 columns.
+* Don't overuse point-free style, especially not with operators.
+
+This style guide is optimized for the following desired outcomes:
+
+1. Code shouldn't have to change unless the intent of it changes,
+   or *write once*.
+2. Code should be readable, as long as making it readable doesn't conflict
+   with **1.**.
+3. Code should be layed out such that diffs only touch code they intend to
+   change, or *diff hygiene*.
+
+Naming
+------
+
+Use descriptive top-level function names and types.
+
+* For monadic type classes, prefix with *Monad*, ex: ``MonadRandom``,
+  ``MonadNetwork`` etc.
+* For monadic concrete types, suffix with *M*, ex: ``RandomM``, ``AppM``.
+* To distinguish between functions which operate on monads, suffix with *M*,
+  example ``mapM`` vs ``map``.
+* For transforms, suffix with *T*, ex: ``RandomT``, ``NetworkT``.
+
+Language extensions
+-------------------
+
+Should be specified one-by-one as follows:
+
+.. code:: haskell
+
+  {-# LANGUAGE TypeFamilies #-}
+  {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+Imports
+-------
+
+Imports are always aligned as such:
+
+.. code:: haskell
+
+  import qualified Module as M
+  import           Control.Monad
+
+Imports of modules such as ``Data.Map`` ``Data.ByteString`` etc. should look
+like this:
+
+.. code:: haskell
+
+  import qualified Data.Map as Map
+  import           Data.Map (Map)
+
+For any module that isn't part of ``base`` either import it ``qualified`` or
+import only the necessary names.
+
+.. code:: haskell
+
+  import qualified Data.Map as Map
+  import           Control.Monad
+  import           Crypto.Hash (Digest, SHA256(..), hashlazy)
+
+Qualified names for common modules are as follows:
+
+==================== ==============
+Module               Qualified name
+==================== ==============
+Data.ByteString      BS
+Data.ByteString.Lazy LBS
+Data.Text            T
+Data.Text.Lazy       LT
+Data.Sequence        Seq
+Data.Map             Map
+Data.HashMap         HashMap
+Data.List.NonEmpty   NonEmpty
+==================== ==============
+
+Ordering & grouping
+^^^^^^^^^^^^^^^^^^^
+
+Imports are split into local dependencies and external dependencies with a
+``\n``. Local imports always come first. Within the groupings, use alphabetical
+order.
+
+.. code:: haskell
+
+  import MyProject.Types
+  import MyProject.Network
+
+  import Control.Monad
+  import Data.Map (Map)
+  ...
+
+Function signatures
+-------------------
+
+When individual parameters are to be documented, or the header is long, format
+as such:
+
+.. code:: haskell
+
+  myFunction
+      :: Monad m
+      => Text
+      -> Int
+      -> m (Text)
+
+If there are multiple constraints, the following are acceptable:
+
+.. code:: haskell
+
+  startNode
+      :: ( MonadReader (Env Tx') m
+         , MonadBlock Tx' m
+         , MonadLogger m )
+      => NS.ServiceName
+      -> [(NS.HostName, NS.ServiceName)]
+      -> m ()
+
+.. code:: haskell
+
+  startNode
+      :: (MonadReader (Env Tx') m, MonadMempool Tx' m)
+      => NS.ServiceName
+      -> [(NS.HostName, NS.ServiceName)]
+      -> m ()
+
+.. code:: haskell
+
+  startNode
+      :: MonadReader (Env Tx') m
+      => MonadMempool Tx' m
+      => NS.ServiceName
+      -> [(NS.HostName, NS.ServiceName)]
+      -> m ()
+
+``where`` clause
+----------------
+
+``where`` clauses are indented **two** spaces instead of four. Example:
+
+.. code:: haskell
+
+  myFunction x y =
+      z + z
+    where
+      z = x * y
+
+``if`` clause
+-------------
+
+``if`` clauses are formatted as follows:
+
+.. code:: haskell
+
+  if x > y
+     then y
+     else x
+
+Or
+
+.. code:: haskell
+
+  if x > y then y else x
+
+``do`` notation
+---------------
+
+``do`` always goes after the ``=`` and is followed by a ``\n``.
+
+.. code:: haskell
+
+  myFunction = do
+      c <- getChar
+      putChar c
+
+Functor, Monad and Applicative
+------------------------------
+
+Prefer the following more general functions:
+
+.. code:: haskell
+
+  <$>
+  <*>
+  pure
+
+Over
+
+.. code:: haskell
+
+  liftM
+  ap
+  return
+
+Prefer ``>>=`` over ``do`` notation unless doing so would require a lambda.
+
+Datatypes
+---------
+
+Arrange ADTs as such:
+
+.. code:: haskell
+
+  data Maybe a = Just a | Nothing
+
+Or
+
+.. code:: haskell
+
+  data Maybe a =
+        Just a
+      | Nothing
+
+When a product type has more than *three* fields, prefer a **record**, unless
+the field order is self-evident.
+
+Records
+-------
+
+Format as shown and use descriptive field names with a prefix matching the
+type name:
+
+.. code:: haskell
+
+  data Node = Node
+      { nodeId      :: Id
+      , nodeAddress :: Address
+      , nodeState   :: NodeState
+      } deriving (Show)
+
+Use the ``RecordWildCards`` extension when convenient:
+
+.. code:: haskell
+
+  instance ToJSON Node where
+    toJSON Node{..} = object [ "id"    .= nodeId
+                             , "addr"  .= nodeAddress
+                             , "state" .= nodeState
+                             ]
+
+Newtypes
+--------
+
+Use record syntax for newtypes:
+
+.. code:: haskell
+
+  newtype Email = Email { fromEmail :: Text }
+
+The name of the getter should always be the name of the type, prefixed with
+``from``.
+
+Polymorphism
+------------
+
+Prefer more general function types to specific ones (*write-once*).
+
+.. code:: haskell
+
+  myFunc :: Foldable t => t a -> t a
+
+is preferable to:
+
+.. code:: haskell
+
+  myFunc :: Map k v -> Map k v
+
+Type classes
+------------
+
+In general, prefer *associated type synonyms* over *functional dependencies*.
+
+Guards
+------
+
+For functions with several guard clauses, prefer these styles:
+
+.. code:: haskell
+
+  compare x y
+      | x > y =
+          LT
+      | x < y =
+          GT
+      | otherwise =
+          EQ
+
+.. code:: haskell
+
+  compare' x y
+      | x > y = LT
+      | x < y = GT
+      | otherwise = EQ
+
+Prefer guards and pattern matching over control-flow structures such as
+``case`` and ``if``
+
+Lambdas
+-------
+
+.. code:: haskell
+
+  \x y -> x + y
+
+Pure exceptions
+---------------
+
+Use ``ExceptT`` from ``Control.Monad.Except``.
+
+**Do not** use ``ErrorT`` or ``EitherT`` or anything from ``Control.Monad.Error``.
+
+Formatting examples
+-------------------
+
+.. code:: haskell
+
+  ...
+  handle (CursorMove ex ey _ _) View { vcursor } t@(Brush s BrushDown)
+      | size  <- fromIntegral s
+      , start <- floor <$> vcursor
+      , end   <- floor <$> V2 ex ey :: V2 Int
+      = do
+          fg <- gets fgColor
+
+          forM_ (map (fmap fromIntegral) (line start end)) $ \pt ->
+              fillRectangle fg $ Rect pt (pt + size)
+
+          pure t
+
+.. code:: haskell
+
+  let
+    something =
+      map f
+        . g
+        $ xs
+
+Library recommendations
+-----------------------
+
+Unless you know what you're doing, use these libraries for their respective
+purposes.
+
+================= =================== ===================================================
+Use-case          Recommendation      Hackage link
+================= =================== ===================================================
+Threads/async     **async**           https://hackage.haskell.org/package/async
+Stream processing **streaming**       https://hackage.haskell.org/package/streaming
+Lenses            **microlens**       https://hackage.haskell.org/package/microlens
+Exceptions        **safe-exceptions** https://hackage.haskell.org/package/safe-exceptions
+Testing           **tasty**           https://hackage.haskell.org/package/tasty
+Crypto            **cryptonite**      https://hackage.haskell.org/package/cryptonite
+Writer            **writer-cps-mtl**  https://hackage.haskell.org/package/writer-cps-mtl
+Logging           **fast-logger**     https://hackage.haskell.org/package/fast-logger
+Lifting IO        **monad-control**   https://hackage.haskell.org/package/monad-control
+================= =================== ===================================================
+
