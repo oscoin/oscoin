@@ -4,3 +4,6 @@ packages:
 - .
 
 extra-deps: []
+
+ghc-options:
+  "$locals": -fhide-source-paths
