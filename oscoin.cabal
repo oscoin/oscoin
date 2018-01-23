@@ -22,7 +22,8 @@ library
     , Oscoin.Transaction
 
   build-depends:
-      base >=4.10 && <4.11
+      foundation
+    , cryptonite
     , bytestring
     , containers
     , mtl
@@ -37,7 +38,8 @@ library
       Haskell2010
 
   default-extensions:
-      MultiParamTypeClasses
+      RebindableSyntax
+    , MultiParamTypeClasses
     , FunctionalDependencies
     , ParallelListComp
     , FlexibleContexts
