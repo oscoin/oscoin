@@ -14,12 +14,31 @@ library
       src
 
   exposed-modules:
-      Oscoin.Block
+      Oscoin.Prelude
+
+    , Oscoin.Block
     , Oscoin.Consensus
     , Oscoin.HTTP
     , Oscoin.Node
-    , Oscoin.P2P
     , Oscoin.Transaction
+
+    , Oscoin.Patch
+    , Oscoin.Account
+    , Oscoin.User
+
+    , Oscoin.Org
+    , Oscoin.Org.Issue
+    , Oscoin.Org.Membership
+    , Oscoin.Org.Repository
+
+    , Oscoin.Storage.Internal
+    , Oscoin.Storage.Transaction
+    , Oscoin.Storage.Block
+
+    , Oscoin.P2P
+    , Oscoin.P2P.Internal
+    , Oscoin.P2P.Transaction
+    , Oscoin.P2P.Block
 
   build-depends:
       foundation
