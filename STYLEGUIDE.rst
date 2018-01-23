@@ -363,5 +363,6 @@ Crypto            **cryptonite**      https://hackage.haskell.org/package/crypto
 Writer            **writer-cps-mtl**  https://hackage.haskell.org/package/writer-cps-mtl
 Logging           **fast-logger**     https://hackage.haskell.org/package/fast-logger
 Lifting IO        **monad-control**   https://hackage.haskell.org/package/monad-control
+Pretty printing   **wl-pprint-text**  https://hackage.haskell.org/package/wl-pprint-text
 ================= =================== ===================================================
 
