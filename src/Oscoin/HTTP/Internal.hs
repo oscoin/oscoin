@@ -7,19 +7,21 @@ import           Web.Spock
 -- | The global server state.
 newtype State = State ()
 
--- | Storage connection.
-type Connection = State.Handle
+-- | Storage connection handle.
+type Handle = State.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction = SpockAction Connection () State
+type ApiAction = SpockAction Handle () State
 
 -- | The type of our api.
-type Api = SpockM Connection () State
+type Api = SpockM Handle () State
+
+-- | Represents any monad which can act like an ApiAction.
+type MonadApi m = (HasSpock m, SpockConn m ~ Handle)
 
 getBody :: ApiAction ByteString
 getBody = body
 
-type MonadApi m = (HasSpock m, SpockConn m ~ Connection)
-
-withConn :: HasSpock m => (SpockConn m -> IO a) -> m a
-withConn = runQuery
+-- | Runs an action by passing it a handle.
+withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
+withHandle = runQuery
