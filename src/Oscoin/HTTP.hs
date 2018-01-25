@@ -5,6 +5,7 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
+import qualified Oscoin.Node.State as State
 
 import           Web.Spock
 import           Web.Spock.Config
@@ -19,8 +20,11 @@ data Environment = Production | Development | Testing
 
 run :: Environment -> Int -> IO ()
 run env port = do
-    spockCfg <- defaultSpockCfg () PCNoDatabase (State ())
+    spockCfg <- defaultSpockCfg () (PCConn connBuilder) (State ())
     runSpock port (spock spockCfg (app env))
+  where
+    conn        = State.connect ()
+    connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
 
 loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production = Wai.logStdout
