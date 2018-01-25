@@ -16,15 +16,18 @@ library
   exposed-modules:
       Oscoin.Prelude
 
+    , Oscoin.Account
     , Oscoin.Block
     , Oscoin.Consensus
-    , Oscoin.HTTP
     , Oscoin.Node
-    , Oscoin.Transaction
-
+    , Oscoin.Node.State
     , Oscoin.Patch
-    , Oscoin.Account
+    , Oscoin.Transaction
     , Oscoin.User
+
+    , Oscoin.HTTP
+    , Oscoin.HTTP.Handlers
+    , Oscoin.HTTP.Internal
 
     , Oscoin.Org
     , Oscoin.Org.Issue
@@ -32,6 +35,7 @@ library
     , Oscoin.Org.Repository
 
     , Oscoin.Storage.Internal
+    , Oscoin.Storage.State
     , Oscoin.Storage.Transaction
     , Oscoin.Storage.Block
 
@@ -41,7 +45,10 @@ library
     , Oscoin.P2P.Block
 
   build-depends:
-      foundation
+      base
+    , foundation
+
+    , aeson
     , cryptonite
     , bytestring
     , containers
@@ -51,14 +58,18 @@ library
     , text
     , text-format
     , filepath
+    , http-types
     , ansi-terminal
+    , Spock
+    , wai
+    , wai-middleware-static
+    , wai-extra
 
   default-language:
       Haskell2010
 
   default-extensions:
-      RebindableSyntax
-    , MultiParamTypeClasses
+      MultiParamTypeClasses
     , FunctionalDependencies
     , ParallelListComp
     , FlexibleContexts
