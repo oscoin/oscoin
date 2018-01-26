@@ -2,11 +2,16 @@ module Oscoin.Node.State where
 
 import           Oscoin.Prelude
 import           Oscoin.Org (OrgId, OrgKey, OrgVal)
-import qualified Oscoin.Storage.State as State
+import qualified Oscoin.Storage.State as StateTree
+import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Transaction as Mempool
 
 -- | Node state handle for interacting with the state tree.
 data Handle = Handle
-    { hStateTree :: State.Handle }
+    { hStateTree  :: StateTree.Handle
+    , hBlockStore :: BlockStore.Handle
+    , hMempool    :: Mempool.Handle
+    }
 
 -- | The StorageT monad transformer.
 type StorageT m a = ReaderT Handle m a
@@ -14,7 +19,9 @@ type StorageT m a = ReaderT Handle m a
 -- | Connect to state storage.
 connect :: () -> IO Handle
 connect () = do
-    hStateTree <- State.connect
+    hStateTree <- StateTree.connect
+    hBlockStore <- notImplemented
+    hMempool <- notImplemented
     pure Handle{..}
 
 -- | Close the connection to state storage.
