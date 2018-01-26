@@ -48,10 +48,13 @@ library
       base
     , foundation
 
+    , acid-state
     , aeson
     , cryptonite
     , bytestring
     , containers
+    , kademlia
+    , monad-logger
     , mtl
     , stm
     , time
