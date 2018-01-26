@@ -100,8 +100,6 @@ Get a specific member of an org::
 
   GET /orgs/:org/members/:id
 
-.. vim: filetype=rst
-
 Tokens
 ------
 
@@ -114,4 +112,6 @@ Metadata
 
   GET https://api.oscoin.local/orgs/:org/data/:key
   PUT https://api.oscoin.local/orgs/:org/data/:key
+
+.. vim: filetype=rst
 
