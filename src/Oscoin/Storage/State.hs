@@ -19,23 +19,23 @@ data Handle = Handle
     , hConn :: Connection           -- ^ Connection to database.
     }
 
-connect :: IO Handle
+connect :: MonadIO m => m Handle
 connect = do
-    ref <- newIORef mempty
+    ref <- io $ newIORef mempty
     pure Handle
         { hTree = ref
         , hConn = ()
         }
 
-close :: Handle -> IO ()
+close :: MonadIO m => Handle -> m ()
 close _ = pass
 
-lookup :: Handle -> Key -> IO (Maybe Val)
+lookup :: MonadIO m => Handle -> Key -> m (Maybe Val)
 lookup Handle{hTree} k = do
-    t <- readIORef hTree
+    t <- io $ readIORef hTree
     pure $ Map.lookup k t
 
-set :: Handle -> Key -> Val -> IO ()
+set :: MonadIO m => Handle -> Key -> Val -> m ()
 set Handle{hTree} k v =
-    modifyIORef hTree (Map.insert k v)
+    io $ modifyIORef hTree (Map.insert k v)
 

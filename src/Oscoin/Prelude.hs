@@ -6,6 +6,7 @@ module Oscoin.Prelude
     , module Data.ByteString
     , module Data.Map
     , module Data.IORef
+    , MonadIO
     , notImplemented
     , io
     , pass
@@ -17,7 +18,7 @@ import Data.ByteString (ByteString)
 import Data.Map (Map)
 import Data.IORef (IORef)
 import Control.Monad.IO.Class
-import Control.Monad.Reader (ReaderT, runReaderT)
+import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, local)
 
 notImplemented :: a
 notImplemented = error "Not implemented"
