@@ -38,4 +38,18 @@ Pull flow
 5. The client constructs the appropriate git object(s) from the response, and
    updates the repository head.
 
+State hierarchy
+---------------
+
+::
+
+  Node.State
+    Storage.Block
+      BlockStore
+    Storage.Transaction
+      Mempool
+    Storage.State
+      StateTree
+      Database
+
 .. vim: filetype=rst
