@@ -2,16 +2,20 @@ module Oscoin.Node.State where
 
 import           Oscoin.Prelude
 import           Oscoin.Org (OrgId, OrgKey, OrgVal)
+import qualified Oscoin.Storage.State as State
 
 -- | Node state handle for interacting with the state tree.
-newtype Handle = Handle ()
+data Handle = Handle
+    { hStateTree :: State.Handle }
 
 -- | The StorageT monad transformer.
 type StorageT m a = ReaderT Handle m a
 
 -- | Connect to state storage.
 connect :: () -> IO Handle
-connect = notImplemented
+connect () = do
+    hStateTree <- State.connect
+    pure Handle{..}
 
 -- | Close the connection to state storage.
 close :: Handle -> IO ()
