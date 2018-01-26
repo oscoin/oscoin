@@ -37,10 +37,46 @@ app env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")
 
+    -- / ----------------------------------------------------------------------
+
     get root $ do
         json $ object [ "ok" .= True ]
 
-    -- /orgs/:org/data/:key
+    -- /orgs ------------------------------------------------------------------
 
-    get ("orgs" <//> var <//> "data" <//> var) Handlers.getOrgKey
-    put ("orgs" <//> var <//> "data" <//> var) Handlers.setOrgKey
+    get  "orgs" Handlers.getOrgs
+
+    -- /orgs/:org -------------------------------------------------------------
+
+    get    ("orgs" <//> var) Handlers.getOrg
+    post   ("orgs" <//> var) Handlers.createOrg
+    put    ("orgs" <//> var) Handlers.updateOrg
+    delete ("orgs" <//> var) Handlers.deleteOrg
+
+    -- /orgs/:org/repos -------------------------------------------------------
+
+    get ("orgs" <//> var <//> "repos") Handlers.getRepos
+
+    -- /orgs/:org/repos/:repo -------------------------------------------------
+
+    get    ("orgs" <//> var <//> "repos" <//> var) Handlers.getRepo
+    post   ("orgs" <//> var <//> "repos" <//> var) Handlers.createRepo
+    put    ("orgs" <//> var <//> "repos" <//> var) Handlers.updateRepo
+    delete ("orgs" <//> var <//> "repos" <//> var) Handlers.deleteRepo
+
+    -- /orgs/:org/repos/:repo/patches -----------------------------------------
+
+    post   ("orgs" <//> var <//> "repos" <//> var <//> "patches") Handlers.submitPatch
+
+    -- /orgs/:org/data/:key ---------------------------------------------------
+
+    get    ("orgs" <//> var <//> "data" <//> var) Handlers.getOrgKey
+    put    ("orgs" <//> var <//> "data" <//> var) Handlers.setOrgKey
+    delete ("orgs" <//> var <//> "data" <//> var) Handlers.deleteOrgKey
+
+    -- /orgs/:org/members/:member ---------------------------------------------
+
+    get    ("orgs" <//> var <//> "members" <//> var) Handlers.getMember
+    post   ("orgs" <//> var <//> "members" <//> var) Handlers.createMember
+    put    ("orgs" <//> var <//> "members" <//> var) Handlers.updateMember
+    delete ("orgs" <//> var <//> "members" <//> var) Handlers.deleteMember
