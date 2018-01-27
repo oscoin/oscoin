@@ -1,6 +1,6 @@
-===================
-Haskell Style Guide
-===================
+=======================
+= Haskell Style Guide =
+=======================
 
 General
 -------
@@ -366,3 +366,4 @@ Lifting IO        **monad-control**   https://hackage.haskell.org/package/monad-
 Pretty printing   **wl-pprint-text**  https://hackage.haskell.org/package/wl-pprint-text
 ================= =================== ===================================================
 
+.. vim: filetype=rst
