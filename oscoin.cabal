@@ -50,6 +50,7 @@ library
       base
     , foundation
 
+    , async
     , acid-state
     , aeson
     , cryptonite
@@ -79,6 +80,7 @@ library
 
   default-extensions:
       MultiParamTypeClasses
+    , NoImplicitPrelude
     , FunctionalDependencies
     , ParallelListComp
     , FlexibleContexts

@@ -5,7 +5,9 @@ import           Oscoin.Node.Service
 import           Oscoin.Prelude
 import           Oscoin.Environment
 import qualified Oscoin.HTTP as HTTP
+import qualified Oscoin.P2P as P2P
 
+import           Control.Concurrent.Async
 import qualified Network.Socket as NS
 
 data Config = Config
@@ -19,5 +21,10 @@ data State = State ()
 type NodeT m a = ServiceT State Config m a
 
 run :: Config -> NodeT IO ()
-run Config{..} =
-    lift $ HTTP.run cfgEnv (read cfgServiceName)
+run Config{..} = do
+    threads <- lift . traverse async $
+        [ HTTP.run cfgEnv (read cfgServiceName)
+        , P2P.run cfgEnv
+        ]
+    (_, _err) <- lift $ waitAny threads
+    pass
