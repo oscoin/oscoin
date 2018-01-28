@@ -2,6 +2,7 @@
 module Oscoin.HTTP where
 
 import           Oscoin.Prelude
+import           Oscoin.Environment
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
@@ -14,9 +15,6 @@ import qualified Network.Wai as Wai
 import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
-
-data Environment = Production | Development | Testing
-    deriving (Show)
 
 run :: Environment -> Int -> IO ()
 run env port = do

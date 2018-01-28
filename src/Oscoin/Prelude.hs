@@ -2,6 +2,7 @@
 module Oscoin.Prelude
     ( module Foundation
     , module Control.Monad.Reader
+    , module Control.Monad.Trans.Class
     , module Data.Text
     , module Data.ByteString
     , module Data.Map
@@ -18,7 +19,8 @@ import Data.ByteString (ByteString)
 import Data.Map (Map)
 import Data.IORef (IORef)
 import Control.Monad.IO.Class
-import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, local)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, asks, local)
 
 notImplemented :: a
 notImplemented = error "Not implemented"

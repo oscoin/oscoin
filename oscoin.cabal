@@ -19,8 +19,10 @@ library
     , Oscoin.Account
     , Oscoin.Block
     , Oscoin.Consensus
+    , Oscoin.Environment
     , Oscoin.Node
     , Oscoin.Node.State
+    , Oscoin.Node.Service
     , Oscoin.Patch
     , Oscoin.Transaction
     , Oscoin.User
@@ -62,8 +64,12 @@ library
     , text-format
     , filepath
     , http-types
+    , network
+    , network-simple
     , ansi-terminal
     , Spock
+    , stm
+    , transformers
     , wai
     , wai-middleware-static
     , wai-extra
