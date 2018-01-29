@@ -16,6 +16,7 @@ import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 
+-- TODO: Move this to Internal module.
 run :: Environment -> Int -> IO ()
 run env port =
     runSpock port (mkMiddleware env)
