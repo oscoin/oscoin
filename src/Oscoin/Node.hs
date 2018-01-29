@@ -6,6 +6,7 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import qualified Oscoin.HTTP as HTTP
 import qualified Oscoin.P2P as P2P
+import qualified Oscoin.Consensus as Consensus
 
 import           Control.Concurrent.Async
 import qualified Network.Socket as NS
@@ -25,6 +26,7 @@ run Config{..} = do
     threads <- lift . traverse async $
         [ HTTP.run cfgEnv (read cfgServiceName)
         , P2P.run cfgEnv
+        , Consensus.run cfgEnv
         ]
     (_, _err) <- lift $ waitAny threads
     pass
