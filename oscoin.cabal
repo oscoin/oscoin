@@ -117,6 +117,7 @@ executable oscoin
     , oscoin
   default-extensions:
       GADTs
+    , NoImplicitPrelude
     , OverloadedStrings
     , TypeFamilies
   default-language:
@@ -144,6 +145,17 @@ test-suite test
     , QuickCheck
     , tasty
     , tasty-hunit
+    , wai-extra
+
+  default-extensions:
+      GADTs
+    , NoImplicitPrelude
+    , ConstraintKinds
+    , OverloadedStrings
+    , TypeFamilies
+    , NamedFieldPuns
+    , ScopedTypeVariables
+    , RecordWildCards
 
   ghc-options:
     -threaded -rtsopts -with-rtsopts=-N

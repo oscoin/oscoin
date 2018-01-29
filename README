@@ -4,4 +4,13 @@
 
 This is the oscoin light node.
 
+Testing
+-------
+
+To load the tests in the repl, run::
+
+  stack repl --test --main-is oscoin:test:test
+
+Then call the ``main`` function to run them.
+
 .. vim: filetype=rst

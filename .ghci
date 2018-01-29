@@ -1,2 +1,3 @@
+import Prelude
 :set -isrc
 :set -fbyte-code

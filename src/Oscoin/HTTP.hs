@@ -17,9 +17,13 @@ import qualified Network.Wai.Middleware.Static as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 
 run :: Environment -> Int -> IO ()
-run env port = do
+run env port =
+    runSpock port (mkMiddleware env)
+
+mkMiddleware :: Environment -> IO Wai.Middleware
+mkMiddleware env = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) (State ())
-    runSpock port (spock spockCfg (app env))
+    spock spockCfg (app env)
   where
     conn        = State.connect ()
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)

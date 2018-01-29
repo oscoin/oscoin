@@ -1,5 +1,6 @@
 module Main (main) where
 
+import           Oscoin.Prelude
 import           Oscoin.Tests
 import           Test.Tasty
 
