@@ -2,10 +2,11 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude
 import qualified Oscoin.Node.State as State
-import           Oscoin.HTTP.Internal (MonadApi, ApiAction, getBody, withHandle, respond)
-import           Oscoin.Org (OrgId, OrgKey, OrgVal, MemberId)
+import           Oscoin.HTTP.Internal (MonadApi, ApiAction, getRawBody, getBody, withHandle, respond)
+import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId)
 import           Oscoin.Org.Repository (RepoId)
 
+import           Data.Aeson (encode)
 import           Data.Aeson.Types (emptyArray)
 import           Network.HTTP.Types.Status
 
@@ -16,7 +17,7 @@ getOrgKey _org _key = notImplemented
 -- | Set a key under an organization.
 setOrgKey :: OrgId -> OrgKey -> ApiAction ()
 setOrgKey org key = do
-    val :: OrgVal <- getBody
+    val :: OrgVal <- getRawBody
     store $ State.setOrgKey org key val
 
 -- | Delete a key under an organization.
@@ -36,7 +37,9 @@ getOrg :: OrgId -> ApiAction ()
 getOrg = notImplemented
 
 createOrg :: OrgId -> ApiAction ()
-createOrg = notImplemented
+createOrg orgId = do
+    Just org :: Maybe Org <- getBody
+    store $ State.setKey ["orgs", orgId] (encode org)
 
 updateOrg :: OrgId -> ApiAction ()
 updateOrg = notImplemented

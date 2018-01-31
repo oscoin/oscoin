@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 import qualified Oscoin.Node.State as State
 import           Web.Spock
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as LBS
 import qualified Network.HTTP.Types.Status as HTTP
 
 -- | The global server state.
@@ -21,8 +22,11 @@ type Api = SpockM Handle () State
 -- | Represents any monad which can act like an ApiAction.
 type MonadApi m = (HasSpock m, SpockConn m ~ Handle)
 
-getBody :: ApiAction ByteString
-getBody = body
+getBody :: Aeson.FromJSON a => ApiAction (Maybe a)
+getBody = jsonBody
+
+getRawBody :: ApiAction LByteString
+getRawBody = LBS.fromStrict <$> body
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a

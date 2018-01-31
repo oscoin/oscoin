@@ -3,8 +3,11 @@ module Oscoin.Node.State where
 import           Oscoin.Prelude
 import           Oscoin.Org (OrgId, OrgKey, OrgVal, mkOrgKey)
 import qualified Oscoin.Storage.State as StateTree
+import           Oscoin.Storage.State (Key, Val)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Transaction as Mempool
+
+import qualified Data.Text as T
 
 -- | Node state handle for interacting with the state tree.
 data Handle = Handle
@@ -31,9 +34,14 @@ close = notImplemented
 -- | Set an org key to the given value.
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
 setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT m ()
-setOrgKey org key val = do
+setOrgKey org key =
+    setKey (mkOrgKey org key)
+
+-- | Set a state key to the given value.
+setKey :: MonadIO m => Key -> Val -> StorageT m ()
+setKey k v = do
     Handle{hStateTree} <- ask
-    StateTree.set hStateTree (mkOrgKey org key) val
+    StateTree.set hStateTree k v
 
 -- | Run a storage action with the given state handle in another monad.
 runStorageT :: Handle -> StorageT m a -> m a

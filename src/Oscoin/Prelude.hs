@@ -12,6 +12,7 @@ module Oscoin.Prelude
     , module Data.IORef
     , module GHC.Stack
     , MonadIO
+    , LByteString
     , notImplemented
     , io
     , pass
@@ -21,6 +22,7 @@ import Prelude (read)
 import Foundation
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import Data.IORef (IORef)
 import Control.Monad.IO.Class
@@ -29,6 +31,8 @@ import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, asks, local)
 import Data.Traversable (Traversable(..), sequence)
 import Data.Foldable (traverse_)
 import GHC.Stack (HasCallStack)
+
+type LByteString = LBS.ByteString
 
 notImplemented :: a
 notImplemented = error "Not implemented"

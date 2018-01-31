@@ -4,8 +4,8 @@ import           Oscoin.Prelude
 import qualified Data.Map as Map
 import           Data.IORef
 
-type Key = Text
-type Val = ByteString
+type Key = [Text]
+type Val = LByteString
 
 -- | Database connection.
 type Connection = ()
