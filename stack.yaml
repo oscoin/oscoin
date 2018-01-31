@@ -2,10 +2,14 @@ resolver: lts-10.4
 
 packages:
 - .
+- location: vendor/wai/wai-extra
+  extra-dep: true
 
 extra-deps:
 - acid-state-0.14.3
 - kademlia-1.1.0.0
+- tasty-hunit-0.10.0.1
+- tasty-1.0.0.1
 
 ghc-options:
   "$locals": -fhide-source-paths

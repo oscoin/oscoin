@@ -25,15 +25,15 @@ runSession sess =
     spockAsApp (mkMiddleware Testing) >>= Wai.runSession sess
 
 -- TODO: Should also assert status is 2xx.
-assertBody :: Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()
+assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()
 assertBody obj = Wai.assertBody (Aeson.encode obj)
 
 -- | Assert a response status is 200 OK.
-assertOK :: Wai.SResponse -> Wai.Session ()
+assertOK :: HasCallStack => Wai.SResponse -> Wai.Session ()
 assertOK = Wai.assertStatus 200
 
 -- | Assert a response status is the given code.
-assertStatus :: Int -> Wai.SResponse -> Wai.Session ()
+assertStatus :: HasCallStack => Int -> Wai.SResponse -> Wai.Session ()
 assertStatus = Wai.assertStatus
 
 -- | Low-level HTTP request helper.

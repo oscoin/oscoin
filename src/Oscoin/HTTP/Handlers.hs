@@ -2,9 +2,12 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude
 import qualified Oscoin.Node.State as State
-import           Oscoin.HTTP.Internal (MonadApi, ApiAction, getBody, withHandle)
+import           Oscoin.HTTP.Internal (MonadApi, ApiAction, getBody, withHandle, respond)
 import           Oscoin.Org (OrgId, OrgKey, OrgVal, MemberId)
 import           Oscoin.Org.Repository (RepoId)
+
+import           Data.Aeson.Types (emptyArray)
+import           Network.HTTP.Types.Status
 
 -- | Get a key under an organization.
 getOrgKey :: OrgId -> OrgKey -> ApiAction ()
@@ -26,7 +29,8 @@ store s = withHandle $ \h ->
     State.runStorageT h s
 
 getOrgs :: ApiAction ()
-getOrgs = notImplemented
+getOrgs =
+    respond ok200 emptyArray
 
 getOrg :: OrgId -> ApiAction ()
 getOrg = notImplemented

@@ -10,6 +10,7 @@ module Oscoin.Prelude
     , module Data.ByteString
     , module Data.Map
     , module Data.IORef
+    , module GHC.Stack
     , MonadIO
     , notImplemented
     , io
@@ -27,6 +28,7 @@ import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, asks, local)
 import Data.Traversable (Traversable(..), sequence)
 import Data.Foldable (traverse_)
+import GHC.Stack (HasCallStack)
 
 notImplemented :: a
 notImplemented = error "Not implemented"
