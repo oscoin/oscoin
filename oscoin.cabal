@@ -109,6 +109,8 @@ library
     -fno-warn-name-shadowing
     -fno-warn-unused-do-bind
     -fno-warn-unused-local-binds
+    -fprint-unicode-syntax
+    -fno-print-expanded-synonyms
 
 executable oscoin
   main-is: src/Main.hs

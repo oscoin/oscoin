@@ -1,1 +1,1 @@
--c "stack repl --ghc-options=-fno-hide-source-paths"
+-c "stack repl --test --ghc-options=-fno-hide-source-paths"
