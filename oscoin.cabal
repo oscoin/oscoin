@@ -142,10 +142,15 @@ test-suite test
 
   build-depends:
       base
+    , aeson
+    , http-types
     , oscoin
     , QuickCheck
-    , tasty
-    , tasty-hunit
+    , tasty       >= 1.0.0.1
+    , tasty-hunit >= 0.10.0.1
+    , bytestring
+    , Spock
+    , wai
     , wai-extra
 
   default-extensions:

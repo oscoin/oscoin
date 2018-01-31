@@ -7,7 +7,6 @@ import Oscoin.HTTP (mkMiddleware)
 import Test.Tasty.HUnit (Assertion)
 
 import qualified Data.Aeson as Aeson
-import           Data.Aeson (object, (.=))
 import qualified Data.ByteString.Lazy as LBS
 
 import qualified Network.Wai.Test as Wai
