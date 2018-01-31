@@ -351,19 +351,19 @@ Library recommendations
 Unless you know what you're doing, use these libraries for their respective
 purposes.
 
-================= =================== ===================================================
-Use-case          Recommendation      Hackage link
-================= =================== ===================================================
-Threads/async     **async**           https://hackage.haskell.org/package/async
-Stream processing **streaming**       https://hackage.haskell.org/package/streaming
-Lenses            **microlens**       https://hackage.haskell.org/package/microlens
-Exceptions        **safe-exceptions** https://hackage.haskell.org/package/safe-exceptions
-Testing           **tasty**           https://hackage.haskell.org/package/tasty
-Crypto            **cryptonite**      https://hackage.haskell.org/package/cryptonite
-Writer            **writer-cps-mtl**  https://hackage.haskell.org/package/writer-cps-mtl
-Logging           **fast-logger**     https://hackage.haskell.org/package/fast-logger
-Lifting IO        **monad-control**   https://hackage.haskell.org/package/monad-control
-Pretty printing   **wl-pprint-text**  https://hackage.haskell.org/package/wl-pprint-text
-================= =================== ===================================================
+================= ======================= =======================================================
+Use-case          Recommendation          Hackage link
+================= ======================= =======================================================
+Threads/async     **async**               https://hackage.haskell.org/package/async
+Stream processing **streaming**           https://hackage.haskell.org/package/streaming
+Lenses            **microlens**           https://hackage.haskell.org/package/microlens
+Exceptions        **safe-exceptions**     https://hackage.haskell.org/package/safe-exceptions
+Testing           **tasty**               https://hackage.haskell.org/package/tasty
+Crypto            **cryptonite**          https://hackage.haskell.org/package/cryptonite
+Writer            **writer-cps-mtl**      https://hackage.haskell.org/package/writer-cps-mtl
+Logging           **fast-logger**         https://hackage.haskell.org/package/fast-logger
+Lifting IO        **monad-control**       https://hackage.haskell.org/package/monad-control
+Pretty printing   **wl-pprint-annotated** https://hackage.haskell.org/package/wl-pprint-annotated
+================= ======================= =======================================================
 
 .. vim: filetype=rst
