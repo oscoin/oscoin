@@ -135,6 +135,7 @@ test-suite test
 
   other-modules:
       Oscoin.Tests
+    , Oscoin.HTTP.Test.Helpers
 
   default-language:
       Haskell2010

@@ -1,53 +1,23 @@
 module Oscoin.Tests where
 
-import Oscoin.Prelude
-import Oscoin.Environment
-import Oscoin.HTTP (mkMiddleware)
+import           Oscoin.Prelude
+import           Oscoin.HTTP.Test.Helpers
 
-import Test.Tasty
-import Test.Tasty.HUnit
-import Test.QuickCheck
+import           Test.Tasty
+import           Test.Tasty.HUnit
 
-import qualified Data.Aeson as Aeson
-import qualified Data.ByteString.Lazy as LBS
-
-import qualified Network.Wai.Test as Wai
-import qualified Network.Wai      as Wai
-import           Web.Spock (spockAsApp)
-import           Network.HTTP.Types.Method (StdMethod(..))
-import qualified Network.HTTP.Types.Method as HTTP
-import qualified Network.HTTP.Types.Header as HTTP
+import           Data.Aeson (object, (.=))
 
 tests :: TestTree
 tests = testGroup "Oscoin"
     [ testCase "API" testOscoinAPI ]
 
-runSession :: Wai.Session () -> Assertion
-runSession sess =
-    spockAsApp (mkMiddleware Testing) >>= Wai.runSession sess
-
 testOscoinAPI :: Assertion
 testOscoinAPI = runSession $ do
-    resp <- request GET "/" [] noBody
-    Wai.assertStatus 200 resp
+    get "/"     >>= assertOK
+    get "/orgs" >>= assertBody (object [])
 
-request
-    :: Aeson.ToJSON a
-    => HTTP.StdMethod
-    -> ByteString
-    -> HTTP.RequestHeaders
-    -> Maybe a
-    -> Wai.Session Wai.SResponse
-request method path headers body =
-    Wai.srequest $ Wai.SRequest (Wai.setPath req path) (reqBody body)
-  where
-    req = Wai.defaultRequest
-        { Wai.requestMethod = HTTP.renderStdMethod method
-        , Wai.requestHeaders = headers
-        }
-    reqBody Nothing    = LBS.empty
-    reqBody (Just obj) = Aeson.encode obj
+    post "/orgs/acme" (object []) >>= assertStatus 201
+    get  "/orgs/acme"             >>= assertBody (object [])
 
--- | Represents an empty request body.
-noBody :: Maybe ()
-noBody = Nothing
+    put "/orgs/acme/data/zod" (object [("name" .= t "zod")]) >>= assertOK
