@@ -32,7 +32,16 @@ getRawBody = LBS.fromStrict <$> body
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = runQuery
 
-respond :: Aeson.ToJSON a => HTTP.Status -> a -> ApiAction ()
-respond status body = do
+respond :: Aeson.ToJSON a => HTTP.Status -> Maybe a -> ApiAction ()
+respond status (Just body) =
+    respondRaw status (Aeson.encode body)
+respond status Nothing =
+    respondRaw status ""
+
+respondRaw :: HTTP.Status -> LByteString -> ApiAction ()
+respondRaw status body = do
     setStatus status
-    json body
+    lazyBytes body
+
+emptyBody :: Maybe ()
+emptyBody = Nothing

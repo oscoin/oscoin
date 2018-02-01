@@ -7,8 +7,6 @@ import           Oscoin.Storage.State (Key, Val)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Transaction as Mempool
 
-import qualified Data.Text as T
-
 -- | Node state handle for interacting with the state tree.
 data Handle = Handle
     { hStateTree  :: StateTree.Handle
@@ -23,8 +21,8 @@ type StorageT m a = ReaderT Handle m a
 connect :: () -> IO Handle
 connect () = do
     hStateTree <- StateTree.connect
-    hBlockStore <- notImplemented
-    hMempool <- notImplemented
+    hBlockStore <- pure undefined
+    hMempool <- pure undefined
     pure Handle{..}
 
 -- | Close the connection to state storage.
@@ -36,6 +34,12 @@ close = notImplemented
 setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT m ()
 setOrgKey org key =
     setKey (mkOrgKey org key)
+
+-- | Get a state value at the given key.
+getKey :: MonadIO m => Key -> StorageT m (Maybe Val)
+getKey k = do
+    Handle{hStateTree} <- ask
+    StateTree.get hStateTree k
 
 -- | Set a state key to the given value.
 setKey :: MonadIO m => Key -> Val -> StorageT m ()

@@ -2,6 +2,7 @@ module Oscoin.Tests where
 
 import           Oscoin.Prelude
 import           Oscoin.HTTP.Test.Helpers
+import           Oscoin.Org (Org(..))
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -18,8 +19,9 @@ testOscoinAPI = runSession $ do
     get "/"     >>= assertOK
     get "/orgs" >>= assertBody emptyArray
 
-    post "/orgs/acme" (object []) >>= assertStatus 201
-    get  "/orgs/acme"             >>= assertBody emptyArray
+    let org = Org { orgName = "Acme", orgId = "acme" }
+    post "/orgs/acme" org >>= assertStatus 201
+    get  "/orgs/acme"     >>= assertBody org
 
     let value = object ["name" .= t "zod"]
     put "/orgs/acme/data/zod" value >>= assertOK

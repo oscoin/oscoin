@@ -30,8 +30,8 @@ connect = do
 close :: MonadIO m => Handle -> m ()
 close _ = pass
 
-lookup :: MonadIO m => Handle -> Key -> m (Maybe Val)
-lookup Handle{hTree} k = do
+get :: MonadIO m => Handle -> Key -> m (Maybe Val)
+get Handle{hTree} k = do
     t <- io $ readIORef hTree
     pure $ Map.lookup k t
 

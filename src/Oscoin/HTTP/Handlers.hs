@@ -2,7 +2,7 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude
 import qualified Oscoin.Node.State as State
-import           Oscoin.HTTP.Internal (MonadApi, ApiAction, getRawBody, getBody, withHandle, respond)
+import           Oscoin.HTTP.Internal
 import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId)
 import           Oscoin.Org.Repository (RepoId)
 
@@ -31,15 +31,22 @@ store s = withHandle $ \h ->
 
 getOrgs :: ApiAction ()
 getOrgs =
-    respond ok200 emptyArray
+    respond ok200 (Just emptyArray)
 
 getOrg :: OrgId -> ApiAction ()
-getOrg = notImplemented
+getOrg orgId = do
+    result <- store $ State.getKey ["orgs", orgId]
+    case result of
+        Just org ->
+            respondRaw ok200 org
+        Nothing ->
+            respond notFound404 emptyBody
 
 createOrg :: OrgId -> ApiAction ()
 createOrg orgId = do
     Just org :: Maybe Org <- getBody
     store $ State.setKey ["orgs", orgId] (encode org)
+    respond created201 emptyBody
 
 updateOrg :: OrgId -> ApiAction ()
 updateOrg = notImplemented

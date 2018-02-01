@@ -34,7 +34,7 @@ import GHC.Stack (HasCallStack)
 
 type LByteString = LBS.ByteString
 
-notImplemented :: a
+notImplemented :: HasCallStack => a
 notImplemented = error "Not implemented"
 
 io :: MonadIO m => IO a -> m a
