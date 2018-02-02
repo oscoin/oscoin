@@ -16,6 +16,7 @@ library
   exposed-modules:
       Oscoin.Prelude
 
+    , Oscoin.Address
     , Oscoin.Account
     , Oscoin.Block
     , Oscoin.Consensus
@@ -27,6 +28,9 @@ library
     , Oscoin.Transaction
     , Oscoin.User
 
+    , Oscoin.Crypto.Hash
+    , Oscoin.Crypto.PubKey
+
     , Oscoin.HTTP
     , Oscoin.HTTP.Handlers
     , Oscoin.HTTP.Internal
@@ -35,6 +39,7 @@ library
     , Oscoin.Org.Issue
     , Oscoin.Org.Membership
     , Oscoin.Org.Repository
+    , Oscoin.Org.Transaction
 
     , Oscoin.Storage.Internal
     , Oscoin.Storage.State
@@ -53,6 +58,7 @@ library
     , async
     , acid-state
     , aeson
+    , binary
     , cryptonite
     , bytestring
     , containers
@@ -65,6 +71,7 @@ library
     , text-format
     , filepath
     , http-types
+    , memory
     , network
     , network-simple
     , ansi-terminal
