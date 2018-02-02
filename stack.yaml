@@ -11,6 +11,7 @@ extra-deps:
 - tasty-hunit-0.10.0.1
 - tasty-1.0.0.1
 - merkle-tree-0.1.0
+- base58-bytestring-0.1.0
 
 ghc-options:
   "$locals": -fhide-source-paths

@@ -11,7 +11,7 @@ import           Oscoin.Prelude
 import           Crypto.Hash (HashAlgorithm, Digest, Blake2b_256(..))
 import qualified Crypto.Hash as Crypto
 import qualified Data.Binary as Binary
-import           Data.ByteArray (convert, zero)
+import           Data.ByteArray (ByteArrayAccess, convert, zero)
 import qualified Data.ByteArray as ByteArray
 import           Data.Maybe (fromJust)
 import           Data.Binary (Binary)
@@ -20,7 +20,7 @@ import qualified Data.ByteString.Lazy as LBS
 type Hashed a = Hashed' Blake2b_256 a
 
 newtype Hashed' algo a = Hashed' { fromHashed :: Crypto.Digest algo }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, ByteArrayAccess)
 
 instance Binary (Hashed' Blake2b_256 a) where
     put = Binary.put <$> fromHashed

@@ -60,6 +60,8 @@ library
     , acid-state
     , aeson
     , binary
+    , base16-bytestring
+    , base58-bytestring
     , cryptonite
     , bytestring
     , containers
@@ -77,6 +79,7 @@ library
     , network
     , network-simple
     , ansi-terminal
+    , semigroups
     , Spock
     , stm
     , transformers
