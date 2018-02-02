@@ -35,6 +35,10 @@ setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT m ()
 setOrgKey org key =
     setKey (mkOrgKey org key)
 
+getOrgKey :: MonadIO m => OrgId -> OrgKey -> StorageT m (Maybe OrgVal)
+getOrgKey org key =
+    getKey (mkOrgKey org key)
+
 -- | Get a state value at the given key.
 getKey :: MonadIO m => Key -> StorageT m (Maybe Val)
 getKey k = do

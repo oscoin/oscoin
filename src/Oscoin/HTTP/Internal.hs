@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 import qualified Oscoin.Node.State as State
 import           Web.Spock
 import qualified Data.Aeson as Aeson
+import           Data.Aeson ((.=))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.HTTP.Types.Status as HTTP
 
@@ -43,5 +44,14 @@ respondRaw status body = do
     setStatus status
     lazyBytes body
 
+notImplemented :: ApiAction ()
+notImplemented =
+    respond HTTP.notImplemented501 (Just body)
+  where
+    body = errorBody "Not implemented"
+
 emptyBody :: Maybe ()
 emptyBody = Nothing
+
+errorBody :: Text -> Aeson.Value
+errorBody msg = Aeson.object ["error" .= msg]

@@ -26,3 +26,4 @@ testOscoinAPI = runSession $ do
     let value = object ["name" .= t "zod"]
     put "/orgs/acme/data/zod" value >>= assertOK
     get "/orgs/acme/data/zod" >>= assertBody value
+    get "/orgs/acme/data/doz" >>= assertStatus 404
