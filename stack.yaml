@@ -10,6 +10,7 @@ extra-deps:
 - kademlia-1.1.0.0
 - tasty-hunit-0.10.0.1
 - tasty-1.0.0.1
+- merkle-tree-0.1.0
 
 ghc-options:
   "$locals": -fhide-source-paths

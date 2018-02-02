@@ -18,7 +18,6 @@ library
 
     , Oscoin.Address
     , Oscoin.Account
-    , Oscoin.Block
     , Oscoin.Consensus
     , Oscoin.Environment
     , Oscoin.Node
@@ -28,6 +27,8 @@ library
     , Oscoin.Transaction
     , Oscoin.User
 
+    , Oscoin.Crypto.Blockchain
+    , Oscoin.Crypto.Blockchain.Block
     , Oscoin.Crypto.Hash
     , Oscoin.Crypto.PubKey
 
@@ -72,6 +73,7 @@ library
     , filepath
     , http-types
     , memory
+    , merkle-tree
     , network
     , network-simple
     , ansi-terminal
