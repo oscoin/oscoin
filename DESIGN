@@ -44,4 +44,70 @@ not have commutative patch application. This means that the order in which the
 patches are applied *always* matters. It may not affect the source files, but
 it will affect the final commit hash, resulting in a fork.
 
+Storage
+-------
+
+Storage backends for chain state are swappable. We can imagine starting with
+something like LMDB or acid-state for storing the state tree, but if this grows
+to a significant size, it'll make sense to support something like IPFS. IPFS
+supports tree structures and takes care of replication and distribution.
+Supporting such a protocol might be beneficial both in terms of scalability and
+interoperability. These IPFS nodes would not need to connect to the blockchain,
+they would simply mirror the global state-tree, offering read-only access to
+the state of the network.
+
+Multihashes and Multiaddresses
+------------------------------
+
+All checksums and network addresses shall use multiformats. This is important
+for forward compatibility and future-proofness. It also allows us to use
+different hashing algorithms depending on the required level of security or
+efficiency.
+
+Transaction ordering
+--------------------
+
+There are cases when a user might want to send several transactions together,
+with guaranteed ordering. There are three ways we can achieve this, each having
+different properties:
+
+1. Use sequence numbers, such that T and T' have a well-defined order. This
+   requires some form of grouping id. The grouping id however can be the user
+   account id. This property is also useful to ensure no transactions were
+   missed, especially if the sequence number is part of the hash preimage.
+
+2. Have a ``MultiTx`` which allows for atomic execution of transactions, as
+   well as serving as an ordering mechanism.
+
+3. Design transactions such that they are always able to contain one or more
+   operations. Ex::
+
+     Transaction [
+        OpSendTokens
+        OpSendTokens
+        OpCreateRepo
+     ]
+
+   This concept of transactions is very familiar in database systems for
+   example.
+
+Network capacity
+----------------
+
+When a node starts up, it allocates a certain amount of storage to the network.
+Equally, when a user stores code on the network, the size of that code can be
+calculated. It is therefore possible to establish a ratio between storage used
+by a user and storage available in the network.  Since all nodes store data the
+same way, and all data is accounted for, it's easy to verify how much data is
+available on the network.
+
+With this in mind, we can require users to stake tokens in proportion to the
+size of the data they have stored on the network. This is normalized to the
+total network capacity. For example, if the network capacity is 100GB, and
+a user stakes 1% of the tokens in circulation, he is alloted 1GB of space.
+
+As the network capacity increases, the price of storage decreases. However, as
+more tokens come into circulation, each token represents a smaller percentage
+of the network.
+
 .. vim: filetype=rst
