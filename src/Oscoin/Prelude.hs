@@ -13,6 +13,7 @@ module Oscoin.Prelude
     , module Data.IORef
     , module Data.Sequence
     , module Data.List.NonEmpty
+    , module Data.Has
     , module GHC.Stack
     , MonadIO
     , LByteString
@@ -33,11 +34,12 @@ import Data.Map (Map)
 import Data.IORef (IORef)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class (MonadTrans, lift)
-import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, asks, local)
+import Control.Monad.Reader (MonadReader, ReaderT(..), runReaderT, ask, asks, local)
 import Data.Traversable (Traversable(..), sequence)
 import Data.Foldable (for_, traverse_, Foldable, toList, null)
 import Data.Sequence (Seq)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Has
 import GHC.Stack (HasCallStack)
 
 type LByteString = LBS.ByteString

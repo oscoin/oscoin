@@ -65,6 +65,7 @@ library
     , cryptonite
     , bytestring
     , containers
+    , data-has
     , kademlia
     , monad-logger
     , mtl
