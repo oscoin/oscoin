@@ -33,14 +33,14 @@ getRawBody = LBS.fromStrict <$> body
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = runQuery
 
-respond :: Aeson.ToJSON a => HTTP.Status -> Maybe a -> ApiAction ()
+respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction ()
 respond status (Just body) =
-    respondRaw status (Aeson.encode body)
+    respondBytes status (Aeson.encode body)
 respond status Nothing =
-    respondRaw status ""
+    respondBytes status ""
 
-respondRaw :: HTTP.Status -> LByteString -> ApiAction ()
-respondRaw status body = do
+respondBytes :: HTTP.Status -> LByteString -> ApiAction ()
+respondBytes status body = do
     setStatus status
     lazyBytes body
 
@@ -49,9 +49,6 @@ notImplemented =
     respond HTTP.notImplemented501 (Just body)
   where
     body = errorBody "Not implemented"
-
-emptyBody :: Maybe ()
-emptyBody = Nothing
 
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]

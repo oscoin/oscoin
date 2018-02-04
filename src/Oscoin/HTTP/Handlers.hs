@@ -16,7 +16,7 @@ getOrgKey org key = do
     result <- storage $ State.getOrgKey org key
     case result of
         Just val ->
-            respondRaw ok200 val
+            respondBytes ok200 val
         Nothing ->
             respond notFound404 (Just $ errorBody "Not found")
 
@@ -44,15 +44,15 @@ getOrg orgId = do
     result <- storage $ State.getKey ["orgs", orgId]
     case result of
         Just org ->
-            respondRaw ok200 org
+            respondBytes ok200 org
         Nothing ->
-            respond notFound404 emptyBody
+            respond notFound404 Nothing
 
 createOrg :: OrgId -> ApiAction ()
 createOrg orgId = do
     Just org :: Maybe Org <- getBody
     storage $ State.setKey ["orgs", orgId] (encode org)
-    respond created201 emptyBody
+    respond created201 Nothing
 
 updateOrg :: OrgId -> ApiAction ()
 updateOrg _ = notImplemented
