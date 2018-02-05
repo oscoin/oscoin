@@ -39,8 +39,8 @@ testOscoinTxs = do
     let tx = setTx "acme" "home" "~"
     assertValidTx tx
 
-    sig <- Crypto.sign priKey tx
-    Crypto.verify pubKey sig tx @? "Signature should verify"
+    signed <- Crypto.sign priKey tx
+    Crypto.verify pubKey signed @? "Signature should verify"
 
 assertValidTx :: HasCallStack => Tx -> Assertion
 assertValidTx tx =

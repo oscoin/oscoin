@@ -29,7 +29,7 @@ module Oscoin.Prelude
 
 import Prelude (read, map, zip)
 -- TODO: We should be using these instead of the ones in "Foldable".
-import Foundation hiding (NonEmpty, Foldable, toList, null)
+import Foundation hiding (Signed, NonEmpty, Foldable, toList, null)
 import Foundation.Collection (getNonEmpty)
 import Data.Text (Text)
 import Data.ByteString (ByteString)

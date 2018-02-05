@@ -1,5 +1,6 @@
 module Oscoin.Crypto.PubKey
-    ( generateKeyPair
+    ( Signed(..)
+    , generateKeyPair
     , sign
     , verify
     , module Crypto.PubKey.ECC.ECDSA
@@ -18,6 +19,11 @@ import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
 
+-- | A signed message.
+-- Create these with "sign" and verify them with "verify".
+data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
+    deriving (Functor, Eq)
+
 instance Binary PublicKey where
     put (PublicKey curve (Point x y)) | curve == getCurveByName SEC_p256k1 =
         Binary.put x >> Binary.put y
@@ -29,17 +35,19 @@ instance Binary PublicKey where
 
         pure $ PublicKey (getCurveByName SEC_p256k1) (Point x y)
 
+-- | Generate a new random keypair.
 generateKeyPair :: MonadRandom m => m (PublicKey, PrivateKey)
 generateKeyPair = do
     (pk, sk) <- generate (getCurveByName SEC_p256k1)
     pure (pk, sk)
 
--- TODO: Should return the message with the signature. Create a new "Signed"
--- type.
-sign :: (MonadRandom m, Binary msg) => PrivateKey -> msg -> m Signature
-sign key msg =
-    ECDSA.sign key hashAlgorithm (LBS.toStrict $ Binary.encode msg)
+-- | Sign a message with a private key.
+sign :: (MonadRandom m, Binary msg) => PrivateKey -> msg -> m (Signed msg)
+sign key msg = do
+    sig <- ECDSA.sign key hashAlgorithm (LBS.toStrict $ Binary.encode msg)
+    pure $ Signed msg sig
 
-verify :: Binary msg => PublicKey -> Signature -> msg -> Bool
-verify key sig msg =
+-- | Verify a signed message with the public key.
+verify :: Binary msg => PublicKey -> Signed msg -> Bool
+verify key (Signed msg sig) =
     ECDSA.verify hashAlgorithm key sig (LBS.toStrict $ Binary.encode msg)
