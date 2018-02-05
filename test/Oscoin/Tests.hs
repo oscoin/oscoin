@@ -37,12 +37,13 @@ testOscoinTxs = do
     (pubKey, priKey) <- Crypto.generateKeyPair
 
     let tx = setTx "acme" "home" "~"
-    assertValidTx tx
 
     signed <- Crypto.sign priKey tx
+    assertValidTx signed
+
     Crypto.verify pubKey signed @? "Signature should verify"
 
-assertValidTx :: HasCallStack => Tx -> Assertion
+assertValidTx :: HasCallStack => Crypto.Signed Tx -> Assertion
 assertValidTx tx =
     case validateTx tx of
         Left err ->

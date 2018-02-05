@@ -1,11 +1,16 @@
-module Oscoin.Org.Transaction where
+module Oscoin.Org.Transaction
+    ( Tx
+    , validateTx
+    , setTx
+    ) where
 
-import Oscoin.Prelude
-import Oscoin.Org
-import Oscoin.Address
-import Oscoin.Crypto.PubKey
+import           Oscoin.Prelude
+import           Oscoin.Org
+import           Oscoin.Address
+import           Oscoin.Crypto.PubKey
 
-import Data.Binary
+import           Data.Binary
+import qualified Data.Text as T
 
 type Coin = ()
 type Patch = ()
@@ -33,8 +38,19 @@ data Tx =
 
 instance Binary Tx
 
+validateTx :: Signed Tx -> Either Error (Signed Tx)
+validateTx stx@(Signed tx _) = do
+    validateTx' tx
+    pure stx
+
+validateTx' :: Tx -> Either Error Tx
+validateTx' tx@(SetTx orgId orgKey _)
+  | not (T.null orgId)
+  , not (T.null orgKey) = Right tx
+  | otherwise = Left "Invalid org id or key"
+validateTx' _ =
+    notImplemented
+
 setTx :: OrgId -> OrgKey -> OrgVal -> Tx
 setTx = SetTx
 
-validateTx :: Tx -> Either Error Tx
-validateTx = Right
