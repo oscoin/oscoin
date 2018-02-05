@@ -14,7 +14,11 @@ module Oscoin.Prelude
     , module Data.Sequence
     , module Data.List.NonEmpty
     , module Data.Has
+    , module Data.Either
+    , module Data.Default
+    , module Data.ByteArray
     , module GHC.Stack
+    , module GHC.Generics
     , MonadIO
     , LByteString
     , Error(..)
@@ -40,11 +44,15 @@ import Data.Foldable (for_, traverse_, Foldable, toList, null)
 import Data.Sequence (Seq)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Has
+import Data.Either (isRight, isLeft)
+import Data.Default (def, Default)
+import Data.ByteArray (ByteArrayAccess)
 import GHC.Stack (HasCallStack)
+import GHC.Generics (Generic)
 
 type LByteString = LBS.ByteString
 
-newtype Error = Error Text
+newtype Error = Error { fromError :: Text }
     deriving (Show, IsString)
 
 notImplemented :: HasCallStack => a

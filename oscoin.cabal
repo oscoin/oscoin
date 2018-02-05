@@ -65,6 +65,7 @@ library
     , cryptonite
     , bytestring
     , containers
+    , data-default
     , data-has
     , kademlia
     , monad-logger

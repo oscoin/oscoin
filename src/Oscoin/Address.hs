@@ -8,10 +8,10 @@ import Oscoin.Crypto.PubKey
 
 import Data.ByteString.Base58
 import Data.ByteString.Lazy (toStrict)
-import Data.Binary (encode)
+import Data.Binary (Binary, encode)
 
 newtype Address = Address ByteString
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Binary)
 
 toAddress :: PublicKey -> Address
 toAddress pk = Address . encodeBase58 bitcoinAlphabet . toStrict $ encode pk

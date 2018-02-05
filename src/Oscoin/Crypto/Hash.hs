@@ -2,6 +2,7 @@ module Oscoin.Crypto.Hash
     ( Hashed
     , hash
     , hashed
+    , hashAlgorithm
     , maxHash
     , zeroHash
     ) where
@@ -11,7 +12,7 @@ import           Oscoin.Prelude
 import           Crypto.Hash (HashAlgorithm, Digest, Blake2b_256(..))
 import qualified Crypto.Hash as Crypto
 import qualified Data.Binary as Binary
-import           Data.ByteArray (ByteArrayAccess, convert, zero)
+import           Data.ByteArray (convert, zero)
 import qualified Data.ByteArray as ByteArray
 import           Data.Maybe (fromJust)
 import           Data.Binary (Binary)
@@ -32,6 +33,9 @@ hash a =
 
 hashed :: Crypto.Digest algo -> Hashed' algo a
 hashed = Hashed'
+
+hashAlgorithm :: Blake2b_256
+hashAlgorithm = Blake2b_256
 
 instance Binary (Digest Blake2b_256) where
     put digest =
