@@ -19,6 +19,7 @@ module Oscoin.Prelude
     , module Data.ByteArray
     , module GHC.Stack
     , module GHC.Generics
+    , module Debug.Trace
     , MonadIO
     , LByteString
     , Error(..)
@@ -49,11 +50,12 @@ import Data.Default (def, Default)
 import Data.ByteArray (ByteArrayAccess)
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
+import Debug.Trace (trace, traceShow, traceShowM)
 
 type LByteString = LBS.ByteString
 
 newtype Error = Error { fromError :: Text }
-    deriving (Show, IsString)
+    deriving (Show, Eq, IsString)
 
 notImplemented :: HasCallStack => a
 notImplemented = error "Not implemented"

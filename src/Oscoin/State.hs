@@ -1,0 +1,1 @@
+module Oscoin.State where

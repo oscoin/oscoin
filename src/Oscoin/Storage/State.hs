@@ -1,22 +1,17 @@
 module Oscoin.Storage.State where
 
 import           Oscoin.Prelude
-import qualified Data.Map as Map
+import qualified Oscoin.State.Tree as Tree
+import           Oscoin.State.Tree (Tree, Val, Path)
 import           Data.IORef
-
-type Key = [Text]
-type Val = LByteString
 
 -- | Database connection.
 type Connection = ()
 
--- | Key/value tree data-structure.
-type Tree k v = Map k v
-
 -- | State tree handle.
 data Handle = Handle
-    { hTree :: IORef (Tree Key Val) -- ^ In-memory representation of the state tree.
-    , hConn :: Connection           -- ^ Connection to database.
+    { hTree :: IORef (Tree Path Val) -- ^ In-memory representation of the state tree.
+    , hConn :: Connection            -- ^ Connection to database.
     }
 
 connect :: MonadIO m => m Handle
@@ -30,12 +25,11 @@ connect = do
 close :: MonadIO m => Handle -> m ()
 close _ = pass
 
-get :: MonadIO m => Handle -> Key -> m (Maybe Val)
+get :: MonadIO m => Handle -> Path -> m (Maybe Val)
 get Handle{hTree} k = do
     t <- io $ readIORef hTree
-    pure $ Map.lookup k t
+    pure $ Tree.get k t
 
-set :: MonadIO m => Handle -> Key -> Val -> m ()
+set :: MonadIO m => Handle -> Path -> Val -> m ()
 set Handle{hTree} k v =
-    io $ modifyIORef hTree (Map.insert k v)
-
+    io $ modifyIORef hTree (Tree.set k v)

@@ -1,13 +1,16 @@
 module Oscoin.Org.Transaction
     ( Tx
-    , validateTx
+    , validateTransaction
+    , applyTransaction
+    , verifySignature
     , setTx
     ) where
 
 import           Oscoin.Prelude
 import           Oscoin.Org
 import           Oscoin.Address
-import           Oscoin.Crypto.PubKey
+import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
+import qualified Oscoin.Crypto.PubKey as Crypto
 
 import           Data.Binary
 import qualified Data.Text as T
@@ -23,7 +26,7 @@ type RepoId = ()
 type PatchId = ()
 
 data Voice = Yea | Nay
-    deriving (Generic)
+    deriving (Show, Eq, Generic)
 
 instance Binary Voice
 
@@ -34,23 +37,35 @@ data Tx =
     | AmmendIssueTx IssueId Text Text [PatchId]
     | SendTx        Address Address Coin
     | SetTx         OrgId OrgKey OrgVal
-    deriving (Generic)
+    deriving (Show, Eq, Generic)
 
 instance Binary Tx
 
-validateTx :: Signed Tx -> Either Error (Signed Tx)
-validateTx stx@(Signed tx _) = do
-    validateTx' tx
+validateTransaction :: Signed Tx -> Either Error (Signed Tx)
+validateTransaction stx@(Signed tx _) = do
+    validateTransaction' tx
     pure stx
 
-validateTx' :: Tx -> Either Error Tx
-validateTx' tx@(SetTx orgId orgKey _)
+validateTransaction' :: Tx -> Either Error Tx
+validateTransaction' tx@(SetTx orgId orgKey _)
   | not (T.null orgId)
   , not (T.null orgKey) = Right tx
   | otherwise = Left "Invalid org id or key"
-validateTx' _ =
+validateTransaction' _ =
     notImplemented
 
 setTx :: OrgId -> OrgKey -> OrgVal -> Tx
 setTx = SetTx
+
+verifySignature :: PublicKey -> Signed Tx -> Either Error Tx
+verifySignature pubKey stx =
+    if Crypto.verify pubKey stx
+       then Right (sigMessage stx)
+       else Left  "Invalid signature"
+
+applyTransaction :: Tx -> OrgTree -> OrgTree
+applyTransaction (SetTx org key val) tree =
+    setPath org ["data", key] val tree
+applyTransaction _ _ =
+    notImplemented
 

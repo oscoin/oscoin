@@ -3,7 +3,7 @@ module Oscoin.HTTP.Handlers where
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
 import           Oscoin.HTTP.Internal
-import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId)
+import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId, mkOrgDataPath)
 import           Oscoin.Org.Repository (RepoId)
 
 import           Data.Aeson (encode)
@@ -13,7 +13,7 @@ import           Network.HTTP.Types.Status
 -- | Get a key under an organization.
 getOrgKey :: OrgId -> OrgKey -> ApiAction ()
 getOrgKey org key = do
-    result <- storage $ State.getOrgKey org key
+    result <- storage $ State.getPath (mkOrgDataPath org [key])
     case result of
         Just val ->
             respondBytes ok200 val
@@ -24,7 +24,7 @@ getOrgKey org key = do
 setOrgKey :: OrgId -> OrgKey -> ApiAction ()
 setOrgKey org key = do
     val :: OrgVal <- getRawBody
-    storage $ State.setOrgKey org key val
+    storage $ State.setPath (mkOrgDataPath org [key]) val
 
 -- | Delete a key under an organization.
 deleteOrgKey :: OrgId -> OrgKey -> ApiAction ()
@@ -41,7 +41,7 @@ getOrgs =
 
 getOrg :: OrgId -> ApiAction ()
 getOrg orgId = do
-    result <- storage $ State.getKey ["orgs", orgId]
+    result <- storage $ State.getPath ["orgs", orgId]
     case result of
         Just org ->
             respondBytes ok200 org
@@ -51,7 +51,7 @@ getOrg orgId = do
 createOrg :: OrgId -> ApiAction ()
 createOrg orgId = do
     Just org :: Maybe Org <- getBody
-    storage $ State.setKey ["orgs", orgId] (encode org)
+    storage $ State.setPath ["orgs", orgId] (encode org)
     respond created201 Nothing
 
 updateOrg :: OrgId -> ApiAction ()

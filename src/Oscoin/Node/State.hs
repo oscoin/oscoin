@@ -1,9 +1,9 @@
 module Oscoin.Node.State where
 
 import           Oscoin.Prelude
-import           Oscoin.Org (OrgId, OrgKey, OrgVal, mkOrgKey)
+import           Oscoin.Org (OrgId, OrgPath, OrgKey, OrgVal, mkOrgPath)
+import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Storage.State as StateTree
-import           Oscoin.Storage.State (Key, Val)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Transaction as Mempool
 
@@ -29,25 +29,29 @@ connect () = do
 close :: Handle -> IO ()
 close = notImplemented
 
--- | Set an org key to the given value.
+-- | Set an org path to the given value.
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
+setOrgPath :: MonadIO m => OrgId -> OrgPath -> OrgVal -> StorageT m ()
+setOrgPath org path =
+    setPath (mkOrgPath org path)
+
 setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT m ()
 setOrgKey org key =
-    setKey (mkOrgKey org key)
+    setPath (mkOrgPath org [key])
 
-getOrgKey :: MonadIO m => OrgId -> OrgKey -> StorageT m (Maybe OrgVal)
-getOrgKey org key =
-    getKey (mkOrgKey org key)
+getOrgPath :: MonadIO m => OrgId -> OrgPath -> StorageT m (Maybe OrgVal)
+getOrgPath org path =
+    getPath (mkOrgPath org path)
 
--- | Get a state value at the given key.
-getKey :: MonadIO m => Key -> StorageT m (Maybe Val)
-getKey k = do
+-- | Get a state value at the given path.
+getPath :: MonadIO m => Path -> StorageT m (Maybe Val)
+getPath k = do
     Handle{hStateTree} <- ask
     StateTree.get hStateTree k
 
--- | Set a state key to the given value.
-setKey :: MonadIO m => Key -> Val -> StorageT m ()
-setKey k v = do
+-- | Set a state path to the given value.
+setPath :: MonadIO m => Path -> Val -> StorageT m ()
+setPath k v = do
     Handle{hStateTree} <- ask
     StateTree.set hStateTree k v
 

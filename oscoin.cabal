@@ -42,6 +42,9 @@ library
     , Oscoin.Org.Repository
     , Oscoin.Org.Transaction
 
+    , Oscoin.State
+    , Oscoin.State.Tree
+
     , Oscoin.Storage.Internal
     , Oscoin.Storage.State
     , Oscoin.Storage.Transaction

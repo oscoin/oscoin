@@ -2,9 +2,10 @@ module Oscoin.Tests where
 
 import           Oscoin.Prelude
 import           Oscoin.HTTP.Test.Helpers
-import           Oscoin.Org (Org(..))
+import           Oscoin.Org (Org(..), OrgTree, mkOrgPath, mkOrgDataPath)
+import qualified Oscoin.Org as Org
+import qualified Oscoin.Org.Transaction as Org
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Org.Transaction
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -15,8 +16,9 @@ import qualified Data.Text as T
 
 tests :: TestTree
 tests = testGroup "Oscoin"
-    [ testCase "API" testOscoinAPI
-    , testCase "Tx"  testOscoinTxs ]
+    [ testCase "API"   testOscoinAPI
+    , testCase "Tx"    testOscoinTxs
+    , testCase "Paths" testOscoinPaths ]
 
 testOscoinAPI :: Assertion
 testOscoinAPI = runSession $ do
@@ -36,16 +38,33 @@ testOscoinTxs :: Assertion
 testOscoinTxs = do
     (pubKey, priKey) <- Crypto.generateKeyPair
 
-    let tx = setTx "acme" "home" "~"
+    -- Create a new, valid `setTx` transaction.
+    let tx = Org.setTx "acme" "home" "~"
 
-    signed <- Crypto.sign priKey tx
-    assertValidTx signed
+    -- Sign it and verify it.
+    tx' <- Crypto.sign priKey tx
+    assertValidTx tx'
+    Org.verifySignature pubKey tx' @?= Right tx
 
-    Crypto.verify pubKey signed @? "Signature should verify"
+    -- Now let's create an empty state tree.
+    let tree  = mempty :: OrgTree
 
-assertValidTx :: HasCallStack => Crypto.Signed Tx -> Assertion
+    -- And apply this transaction to it. This should create a key
+    -- under `/orgs/acme/data`.
+    let tree' = Org.applyTransaction tx tree
+
+    -- The updated state should include the newly set key.
+    Org.getPath "acme" ["data", "home"] tree' @?= Just "~"
+
+testOscoinPaths :: Assertion
+testOscoinPaths = do
+    -- Check that our path creation functions work as expected.
+    mkOrgPath     "acme" ["key"] @?= ["orgs", "acme", "key"]
+    mkOrgDataPath "acme" ["key"] @?= ["orgs", "acme", "data", "key"]
+
+assertValidTx :: HasCallStack => Crypto.Signed Org.Tx -> Assertion
 assertValidTx tx =
-    case validateTx tx of
+    case Org.validateTransaction tx of
         Left err ->
             assertFailure (T.unpack $ fromError err)
         _ ->
