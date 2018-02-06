@@ -21,16 +21,22 @@ tests = testGroup "Oscoin"
     , testCase "Paths" testOscoinPaths ]
 
 testOscoinAPI :: Assertion
-testOscoinAPI = runSession $ do
+testOscoinAPI = runSession ["acme"] $ do
     get "/"     >>= assertOK
     get "/orgs" >>= assertBody emptyArray
 
     let org = Org { orgName = "Acme", orgId = "acme" }
-    post "/orgs/acme" org >>= assertStatus 201
+    post "/orgs/acme" org >>= assertStatus 202
+    -- ...
+    -- Wait for transaction to be committed.
+    -- ...
     get  "/orgs/acme"     >>= assertBody org
 
     let value = object ["name" .= t "zod"]
-    put "/orgs/acme/data/zod" value >>= assertOK
+    put "/orgs/acme/data/zod" value >>= assertStatus 202
+    -- ...
+    -- Wait for transaction to be committed.
+    -- ...
     get "/orgs/acme/data/zod" >>= assertBody value
     get "/orgs/acme/data/doz" >>= assertStatus 404
 

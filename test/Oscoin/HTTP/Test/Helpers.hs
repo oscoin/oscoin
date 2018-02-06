@@ -2,6 +2,7 @@ module Oscoin.HTTP.Test.Helpers where
 
 import Oscoin.Prelude
 import Oscoin.Environment
+import Oscoin.Org (OrgId)
 import Oscoin.HTTP (mkMiddleware)
 
 import Test.Tasty.HUnit (Assertion)
@@ -20,9 +21,9 @@ import qualified Network.HTTP.Types.Header as HTTP
 type Session = Wai.Session
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: Session () -> Assertion
-runSession sess =
-    spockAsApp (mkMiddleware Testing) >>= Wai.runSession sess
+runSession :: [OrgId] -> Session () -> Assertion
+runSession orgs sess =
+    spockAsApp (mkMiddleware orgs Testing) >>= Wai.runSession sess
 
 -- TODO: Should also assert status is 2xx.
 assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()

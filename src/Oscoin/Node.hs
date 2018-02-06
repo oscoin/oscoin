@@ -4,6 +4,7 @@ import           Oscoin.Node.Service
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
+import           Oscoin.Org (OrgId)
 import qualified Oscoin.HTTP as HTTP
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Consensus as Consensus
@@ -15,6 +16,7 @@ data Config = Config
     { cfgServiceName :: NS.ServiceName
     , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
     , cfgEnv         :: Environment
+    , cfgOrgs        :: [OrgId]
     }
 
 data State = State ()
@@ -24,7 +26,7 @@ type NodeT m a = ServiceT State Config m a
 run :: Config -> NodeT IO ()
 run Config{..} = do
     threads <- lift . traverse async $
-        [ HTTP.run cfgEnv (read cfgServiceName)
+        [ HTTP.run cfgOrgs cfgEnv (read cfgServiceName)
         , P2P.run cfgEnv
         , Consensus.run cfgEnv
         ]

@@ -3,6 +3,7 @@ module Oscoin.HTTP where
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
+import           Oscoin.Org (OrgId)
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
@@ -17,17 +18,18 @@ import qualified Network.Wai.Middleware.Static as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 
 -- TODO: Move this to Internal module.
-run :: Environment -> Int -> IO ()
-run env port =
-    runSpock port (mkMiddleware env)
+run :: [OrgId] -> Environment -> Int -> IO ()
+run orgs env port =
+    runSpock port (mkMiddleware orgs env)
 
-mkMiddleware :: Environment -> IO Wai.Middleware
-mkMiddleware env = do
-    spockCfg <- defaultSpockCfg () (PCConn connBuilder) (State ())
+mkMiddleware :: [OrgId] -> Environment -> IO Wai.Middleware
+mkMiddleware orgs env = do
+    spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg (app env)
   where
     conn        = State.connect ()
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
+    state       = mkState { stOrgs = orgs }
 
 loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production = Wai.logStdout
