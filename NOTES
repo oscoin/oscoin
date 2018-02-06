@@ -1,0 +1,71 @@
+=========
+= NOTES =
+=========
+
+Architecture
+------------
+
+Notes on code architecture for the light-node.
+
+NodeT
+^^^^^
+
+``NodeT`` captures all effects and capabilities of the light-node. The question
+of what base monad to use with ``NodeT`` is important. We have two choices:
+
+  1. ``STM``
+  2. ``IO``
+
+With ``IO``,  we say that any effect can be obtained at will. This is powerful,
+but doesn't give us any safety or ability to reason about what can and cannot
+occure in this monad.
+
+With ``STM``, we are able to communicate between threads, run operations
+atomically and access read/write state. However, no networking is available,
+no randomness and no access to a clock. If these are needed, they have to be
+accessed through an ``STM`` var, ex::
+
+    -- | Get the amount of time passed in the form of "ticks". Each tick
+    -- represents an atomic amount of time.
+    getTicks :: STM [Tick]
+
+    -- | Get a random number. This reads from a lazy list of random numbers.
+    getRandom :: STM Rand
+
+    -- | Send a message to a network peer. A separate thread reads messages
+    -- from a TQueue and writes them to the socket.
+    sendMessage :: Peer -> Message -> STM ()
+
+    -- | Receive a message from a peer. A separtae thread reads messages
+    -- from the peer socket and writes them to a TQueue.
+    recvMessage :: Peet -> STM Message
+
+Alternatively, we send an ``IO`` through an ``STM`` channel::
+
+    performIO :: IO a -> STM b
+
+This executes the ``IO`` action in another thread. To execute the IO, we do::
+
+    join . atomically $ io
+
+since we get a ``IO (IO a)`` from ``atomically``.
+
+-------------------------------------------------------------------------------
+
+Another way to think about this problem is to push IO to the edges. In that
+case, we run our ``NodeT`` stack for the lifetime of a request, or other kind
+of "cycle". For the API, this is already the case, we have an ``ApiAction``
+monad which captures this pattern. For consensus and p2p we don't have a clear
+request/response architecure, which complicates things. One idea is something
+like::
+
+    loop :: ConsensusT r a -> IO ()
+    loop r consensus = do
+        (r', result) <- runConsensusT consensus r
+        processResult result
+        loop r' consensus
+
+With the style, we run the consensus in distinct "ticks". Each tick returns
+a result which when processed may invoke IO.
+
+.. vim: filetype=rst
