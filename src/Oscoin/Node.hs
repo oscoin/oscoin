@@ -4,7 +4,7 @@ import           Oscoin.Node.Service
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import           Oscoin.Org (OrgId)
+import           Oscoin.Org (Org)
 import qualified Oscoin.HTTP as HTTP
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Consensus as Consensus
@@ -16,7 +16,7 @@ data Config = Config
     { cfgServiceName :: NS.ServiceName
     , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
     , cfgEnv         :: Environment
-    , cfgOrgs        :: [OrgId]
+    , cfgOrgs        :: [Org]
     }
 
 data State = State ()

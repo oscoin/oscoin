@@ -2,7 +2,7 @@ module Oscoin.HTTP.Test.Helpers where
 
 import Oscoin.Prelude
 import Oscoin.Environment
-import Oscoin.Org (OrgId)
+import Oscoin.Org (Org)
 import Oscoin.HTTP (mkMiddleware)
 
 import Test.Tasty.HUnit (Assertion)
@@ -21,7 +21,7 @@ import qualified Network.HTTP.Types.Header as HTTP
 type Session = Wai.Session
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: [OrgId] -> Session () -> Assertion
+runSession :: [Org] -> Session () -> Assertion
 runSession orgs sess =
     spockAsApp (mkMiddleware orgs Testing) >>= Wai.runSession sess
 

@@ -1,7 +1,7 @@
 module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
-import           Oscoin.Org (OrgId)
+import           Oscoin.Org (Org)
 import qualified Oscoin.Node.State as State
 import           Web.Spock
 import qualified Data.Aeson as Aeson
@@ -11,7 +11,7 @@ import qualified Network.HTTP.Types.Status as HTTP
 
 -- | The global server state.
 data State = State
-    { stOrgs :: [OrgId] }
+    { stOrgs :: [Org] }
     deriving (Show)
 
 -- | Storage connection handle.

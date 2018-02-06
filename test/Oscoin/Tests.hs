@@ -14,6 +14,9 @@ import           Data.Aeson (object, (.=))
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
 
+acme :: Org
+acme = Org { orgName = "Acme", orgId = "acme" }
+
 tests :: TestTree
 tests = testGroup "Oscoin"
     [ testCase "API"   testOscoinAPI
@@ -21,16 +24,11 @@ tests = testGroup "Oscoin"
     , testCase "Paths" testOscoinPaths ]
 
 testOscoinAPI :: Assertion
-testOscoinAPI = runSession ["acme"] $ do
+testOscoinAPI = runSession [acme] $ do
     get "/"     >>= assertOK
     get "/orgs" >>= assertBody emptyArray
 
-    let org = Org { orgName = "Acme", orgId = "acme" }
-    post "/orgs/acme" org >>= assertStatus 202
-    -- ...
-    -- Wait for transaction to be committed.
-    -- ...
-    get  "/orgs/acme"     >>= assertBody org
+    get  "/orgs/acme" >>= assertBody acme
 
     let value = object ["name" .= t "zod"]
     put "/orgs/acme/data/zod" value >>= assertStatus 202
