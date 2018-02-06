@@ -8,17 +8,21 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Transaction as Mempool
 
 -- | Node state handle for interacting with the state tree.
-data Handle = Handle
+data Handle tx = Handle
     { hStateTree  :: StateTree.Handle
     , hBlockStore :: BlockStore.Handle
-    , hMempool    :: Mempool.Handle
+    , hMempool    :: Mempool.Handle tx
     }
 
+instance Has (Mempool.Handle tx) (Handle tx) where
+    getter = hMempool
+    modifier = error "Read-only access allowed"
+
 -- | The StorageT monad transformer.
-type StorageT m a = ReaderT Handle m a
+type StorageT tx m a = ReaderT (Handle tx) m a
 
 -- | Connect to state storage.
-connect :: () -> IO Handle
+connect :: () -> IO (Handle tx)
 connect () = do
     hStateTree <- StateTree.connect
     hBlockStore <- pure undefined
@@ -26,36 +30,36 @@ connect () = do
     pure Handle{..}
 
 -- | Close the connection to state storage.
-close :: Handle -> IO ()
+close :: Handle tx -> IO ()
 close = notImplemented
 
 -- | Set an org path to the given value.
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
-setOrgPath :: MonadIO m => OrgId -> OrgPath -> OrgVal -> StorageT m ()
+setOrgPath :: MonadIO m => OrgId -> OrgPath -> OrgVal -> StorageT tx m ()
 setOrgPath org path =
     setPath (mkOrgPath org path)
 
-setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT m ()
+setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT tx m ()
 setOrgKey org key =
     setPath (mkOrgPath org [key])
 
-getOrgPath :: MonadIO m => OrgId -> OrgPath -> StorageT m (Maybe OrgVal)
+getOrgPath :: MonadIO m => OrgId -> OrgPath -> StorageT tx m (Maybe OrgVal)
 getOrgPath org path =
     getPath (mkOrgPath org path)
 
 -- | Get a state value at the given path.
-getPath :: MonadIO m => Path -> StorageT m (Maybe Val)
+getPath :: MonadIO m => Path -> StorageT tx m (Maybe Val)
 getPath k = do
     Handle{hStateTree} <- ask
     StateTree.get hStateTree k
 
 -- | Set a state path to the given value.
-setPath :: MonadIO m => Path -> Val -> StorageT m ()
+setPath :: MonadIO m => Path -> Val -> StorageT tx m ()
 setPath k v = do
     Handle{hStateTree} <- ask
     StateTree.set hStateTree k v
 
 -- | Run a storage action with the given state handle in another monad.
-runStorageT :: Handle -> StorageT m a -> m a
+runStorageT :: Handle tx -> StorageT tx m a -> m a
 runStorageT h s =
     runReaderT s h

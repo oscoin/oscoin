@@ -4,8 +4,9 @@ import           Oscoin.Prelude
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Foldable (toList)
+import           Control.Concurrent.STM.TVar (TVar, modifyTVar)
 
-newtype Handle = Handle ()
+newtype Handle tx = Handle (TVar (Mempool tx))
 
 newtype Mempool tx = Mempool { fromMempool :: Set tx }
     deriving (Show, Monoid)
@@ -22,8 +23,11 @@ removeTxs txs' (Mempool txs) =
     Mempool $ Set.difference (Set.fromList (toList txs')) txs
 
 updateMempool
-    :: forall tx r m. (Has (Mempool tx) r, MonadReader r m)
+    :: ( Has (Handle tx) r
+       , MonadReader r m
+       , MonadSTM m )
     => (Mempool tx -> Mempool tx)
     -> m ()
-updateMempool =
-    notImplemented
+updateMempool f = do
+    Handle tvar <- asks getter
+    liftSTM $ modifyTVar tvar f

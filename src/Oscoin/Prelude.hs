@@ -5,6 +5,8 @@ module Oscoin.Prelude
     , module Foundation.Collection
     , module Control.Monad.Reader
     , module Control.Monad.Trans.Class
+    , module Control.Monad.STM.Class
+    , module Control.Concurrent.STM
     , module Data.Traversable
     , module Data.Foldable
     , module Data.Text
@@ -40,6 +42,8 @@ import Data.IORef (IORef)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Reader (MonadReader, ReaderT(..), runReaderT, ask, asks, local)
+import Control.Monad.STM.Class (MonadSTM, liftSTM)
+import Control.Concurrent.STM (STM, atomically)
 import Data.Traversable (Traversable(..), sequence)
 import Data.Foldable (for_, traverse_, Foldable, toList, null)
 import Data.Sequence (Seq)

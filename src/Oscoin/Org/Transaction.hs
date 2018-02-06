@@ -2,6 +2,7 @@ module Oscoin.Org.Transaction
     ( Tx
     , validateTransaction
     , applyTransaction
+    , submitTransaction
     , verifySignature
     , setTx
     ) where
@@ -11,6 +12,8 @@ import           Oscoin.Org
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Node.State as State
+import qualified Oscoin.Storage.Transaction as Mempool
 
 import           Data.Binary
 import qualified Data.Text as T
@@ -26,18 +29,18 @@ type RepoId = ()
 type PatchId = ()
 
 data Voice = Yea | Nay
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Ord, Generic)
 
 instance Binary Voice
 
 data Tx =
-      AccountTx     AccountId Address Coin PublicKey [Permission]
+      AccountTx     AccountId Address Coin [Permission]
     | PatchTx       RepoId BranchId PatchId [Patch]
     | VoiceIssueTx  IssueId Voice
     | AmmendIssueTx IssueId Text Text [PatchId]
     | SendTx        Address Address Coin
     | SetTx         OrgId OrgKey OrgVal
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
 
@@ -69,3 +72,6 @@ applyTransaction (SetTx org key val) tree =
 applyTransaction _ _ =
     notImplemented
 
+submitTransaction :: Tx -> State.StorageT Tx IO ()
+submitTransaction tx =
+    Mempool.updateMempool (Mempool.addTx tx)

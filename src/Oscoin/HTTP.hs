@@ -4,6 +4,7 @@ module Oscoin.HTTP where
 import           Oscoin.Prelude
 import           Oscoin.Environment
 import           Oscoin.Org (Org, OrgId)
+import qualified Oscoin.Org.Transaction as Org
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
@@ -37,7 +38,7 @@ loggingMiddleware Development = Wai.logStdoutDev
 loggingMiddleware Testing = id
 
 -- | Entry point for the Spock application.
-app :: Environment -> Api ()
+app :: Environment -> Api Org.Tx ()
 app env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")

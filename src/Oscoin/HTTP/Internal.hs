@@ -19,43 +19,43 @@ data State = State
 type Handle = State.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction = SpockAction Handle () State
+type ApiAction tx = SpockAction (Handle tx) () State
 
 -- | The type of our api.
-type Api = SpockM Handle () State
+type Api tx = SpockM (Handle tx) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi m = (HasSpock m, SpockConn m ~ Handle)
+type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle tx)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State { stOrgs = [] }
 
-getBody :: Aeson.FromJSON a => ApiAction (Maybe a)
+getBody :: Aeson.FromJSON a => ApiAction tx (Maybe a)
 getBody = Spock.jsonBody
 
-getRawBody :: ApiAction LByteString
+getRawBody :: ApiAction tx LByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-getState :: ApiAction State
+getState :: ApiAction tx State
 getState = Spock.getState
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction ()
+respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction tx ()
 respond status (Just body) =
     respondBytes status (Aeson.encode body)
 respond status Nothing =
     respondBytes status ""
 
-respondBytes :: HTTP.Status -> LByteString -> ApiAction ()
+respondBytes :: HTTP.Status -> LByteString -> ApiAction tx ()
 respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body
 
-notImplemented :: ApiAction ()
+notImplemented :: ApiAction tx ()
 notImplemented =
     respond HTTP.notImplemented501 (Just body)
   where
