@@ -1,9 +1,10 @@
 module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
-import           Oscoin.Org (Org)
+import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
-import           Web.Spock
+import qualified Web.Spock as Spock
+import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn)
 import qualified Data.Aeson as Aeson
 import           Data.Aeson ((.=))
 import qualified Data.ByteString.Lazy as LBS
@@ -11,7 +12,7 @@ import qualified Network.HTTP.Types.Status as HTTP
 
 -- | The global server state.
 data State = State
-    { stOrgs :: [Org] }
+    { stOrgs :: [(OrgId, Org)] }
     deriving (Show)
 
 -- | Storage connection handle.
@@ -31,14 +32,17 @@ mkState :: State
 mkState = State { stOrgs = [] }
 
 getBody :: Aeson.FromJSON a => ApiAction (Maybe a)
-getBody = jsonBody
+getBody = Spock.jsonBody
 
 getRawBody :: ApiAction LByteString
-getRawBody = LBS.fromStrict <$> body
+getRawBody = LBS.fromStrict <$> Spock.body
+
+getState :: ApiAction State
+getState = Spock.getState
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
-withHandle = runQuery
+withHandle = Spock.runQuery
 
 respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction ()
 respond status (Just body) =
@@ -48,8 +52,8 @@ respond status Nothing =
 
 respondBytes :: HTTP.Status -> LByteString -> ApiAction ()
 respondBytes status body = do
-    setStatus status
-    lazyBytes body
+    Spock.setStatus status
+    Spock.lazyBytes body
 
 notImplemented :: ApiAction ()
 notImplemented =

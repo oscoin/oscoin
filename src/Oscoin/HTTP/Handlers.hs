@@ -6,8 +6,7 @@ import           Oscoin.HTTP.Internal
 import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId, mkOrgDataPath)
 import           Oscoin.Org.Repository (RepoId)
 
-import           Data.Aeson (encode)
-import           Data.Aeson.Types (emptyArray)
+import           Data.Aeson (encode, toJSON)
 import           Network.HTTP.Types.Status
 
 -- | Get a key under an organization.
@@ -36,15 +35,16 @@ storage s = withHandle $ \h ->
     State.runStorageT h s
 
 getOrgs :: ApiAction ()
-getOrgs =
-    respond ok200 (Just emptyArray)
+getOrgs = do
+    State{stOrgs} <- getState
+    respond ok200 $ Just $ toJSON $ map snd stOrgs
 
 getOrg :: OrgId -> ApiAction ()
 getOrg orgId = do
-    result <- storage $ State.getPath ["orgs", orgId]
-    case result of
+    State{stOrgs} <- getState
+    case lookup orgId stOrgs of
         Just org ->
-            respondBytes ok200 org
+            respond ok200 (Just $ toJSON org)
         Nothing ->
             respond notFound404 Nothing
 

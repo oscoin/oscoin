@@ -28,7 +28,7 @@ module Oscoin.Prelude
     , pass
     ) where
 
-import Prelude (read, map, zip)
+import Prelude (read, map, zip, lookup)
 -- TODO: We should be using these instead of the ones in "Foldable".
 import Foundation hiding (Signed, NonEmpty, Foldable, toList, null)
 import Foundation.Collection (getNonEmpty)

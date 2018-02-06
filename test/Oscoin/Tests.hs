@@ -11,7 +11,6 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 
 import           Data.Aeson (object, (.=))
-import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
 
 acme :: Org
@@ -24,9 +23,9 @@ tests = testGroup "Oscoin"
     , testCase "Paths" testOscoinPaths ]
 
 testOscoinAPI :: Assertion
-testOscoinAPI = runSession [acme] $ do
+testOscoinAPI = runSession [("acme", acme)] $ do
     get "/"     >>= assertOK
-    get "/orgs" >>= assertBody emptyArray
+    get "/orgs" >>= assertBody [acme]
 
     get  "/orgs/acme" >>= assertBody acme
 
