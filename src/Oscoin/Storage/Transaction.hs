@@ -4,12 +4,13 @@ import           Oscoin.Prelude
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Foldable (toList)
+import qualified Data.Aeson as Aeson
 import           Control.Concurrent.STM.TVar (TVar, modifyTVar)
 
-newtype Handle tx = Handle (TVar (Mempool tx))
+newtype Handle tx = Handle { fromHandle :: TVar (Mempool tx) }
 
 newtype Mempool tx = Mempool { fromMempool :: Set tx }
-    deriving (Show, Monoid)
+    deriving (Show, Monoid, Eq, Aeson.ToJSON)
 
 addTx :: Ord tx => tx -> Mempool tx -> Mempool tx
 addTx tx (Mempool txs) = Mempool (Set.insert tx txs)

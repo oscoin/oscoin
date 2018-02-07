@@ -6,6 +6,9 @@ import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Storage.State as StateTree
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Transaction as Mempool
+import           Oscoin.Storage.Transaction (Mempool)
+
+import           Control.Concurrent.STM.TVar (readTVar)
 
 -- | Node state handle for interacting with the state tree.
 data Handle tx = Handle
@@ -32,6 +35,11 @@ connect () = do
 -- | Close the connection to state storage.
 close :: Handle tx -> IO ()
 close = notImplemented
+
+getMempool :: (Monad m, MonadSTM m) => StorageT tx m (Mempool tx)
+getMempool = do
+    Handle{hMempool} <- ask
+    liftSTM $ readTVar (Mempool.fromHandle hMempool)
 
 -- | Set an org path to the given value.
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.

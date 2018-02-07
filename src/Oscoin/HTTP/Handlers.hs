@@ -7,8 +7,13 @@ import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId, mkOrgDataPath
 import qualified Oscoin.Org.Transaction as Org
 import           Oscoin.Org.Repository (RepoId)
 
-import           Data.Aeson (encode, toJSON)
+import           Data.Aeson (ToJSON, encode, toJSON)
 import           Network.HTTP.Types.Status
+
+getMempool :: ToJSON tx => ApiAction tx ()
+getMempool = do
+    mp <- storage $ State.getMempool
+    respond ok200 (Just (toJSON mp))
 
 -- | Get a key under an organization.
 getOrgKey :: OrgId -> OrgKey -> ApiAction tx ()

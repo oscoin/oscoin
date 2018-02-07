@@ -19,6 +19,7 @@ module Oscoin.Prelude
     , module Data.Either
     , module Data.Default
     , module Data.ByteArray
+    , module Data.Function
     , module GHC.Stack
     , module GHC.Generics
     , module Debug.Trace
@@ -28,6 +29,8 @@ module Oscoin.Prelude
     , notImplemented
     , io
     , pass
+    , encodeUtf8
+    , decodeUtf8
     ) where
 
 import Prelude (read, map, zip, lookup)
@@ -35,6 +38,8 @@ import Prelude (read, map, zip, lookup)
 import Foundation hiding (Signed, NonEmpty, Foldable, toList, null)
 import Foundation.Collection (getNonEmpty)
 import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
@@ -52,6 +57,7 @@ import Data.Has
 import Data.Either (isRight, isLeft)
 import Data.Default (def, Default)
 import Data.ByteArray (ByteArrayAccess)
+import Data.Function ((&))
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
 import Debug.Trace (trace, traceShow, traceShowM)
@@ -69,3 +75,9 @@ io = liftIO
 
 pass :: Monad m => m ()
 pass = pure ()
+
+-- | Note that this is /not/ the standard @Data.Text.Encoding.decodeUtf8@. That
+-- function will throw impure exceptions on any decoding errors. This function
+-- instead uses @decodeLenient@.
+decodeUtf8 :: ByteString -> Text
+decodeUtf8 = decodeUtf8With lenientDecode

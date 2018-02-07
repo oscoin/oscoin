@@ -1,3 +1,4 @@
+{-# LANGUAGE ExtendedDefaultRules #-}
 module Oscoin.Org.Transaction
     ( Tx
     , validateTransaction
@@ -15,8 +16,12 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Storage.Transaction as Mempool
 
+import qualified Data.ByteString.Base64.Extended as Base64
 import           Data.Binary
 import qualified Data.Text as T
+import           Data.Aeson
+
+default (Text, ())
 
 type Coin = ()
 type Patch = ()
@@ -43,6 +48,17 @@ data Tx =
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
+
+instance ToJSON Tx where
+    toJSON (SetTx org key val) =
+        object [ "object" .= "transaction"
+               , "type"   .= "set"
+               , "org"    .= org
+               , "key"    .= key
+               , "value"  .= Base64.encodeLazy val
+               ]
+    toJSON _ =
+        notImplemented
 
 validateTransaction :: Signed Tx -> Either Error (Signed Tx)
 validateTransaction stx@(Signed tx _) = do
