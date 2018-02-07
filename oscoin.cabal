@@ -55,6 +55,9 @@ library
     , Oscoin.P2P.Transaction
     , Oscoin.P2P.Block
 
+  other-modules:
+      Data.ByteString.Base64.Extended
+
   build-depends:
       base
     , foundation
@@ -65,6 +68,7 @@ library
     , binary
     , base16-bytestring
     , base58-bytestring
+    , base64-bytestring
     , cryptonite
     , bytestring
     , containers
