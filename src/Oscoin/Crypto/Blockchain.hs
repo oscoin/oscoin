@@ -7,11 +7,9 @@ import           Oscoin.Prelude
 import qualified Prelude as Prelude
 
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Base16 as Base16
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
-import           Data.ByteArray (ByteArrayAccess, convert)
 import           Text.Printf
 
 type Blockchain tx = NonEmpty (Block tx)
@@ -44,24 +42,19 @@ headerHash :: Header -> Hashed Header
 headerHash header =
     hash header
 
--- TODO: Fix return type. Should be Text or String.
-toHex :: ByteArrayAccess ba => ba -> [Char]
-toHex bs =
-    BS.unpack $ Base16.encode $ convert bs
-
 -- TODO: Don't use Prelude.replicate.
 printBlockchain :: Binary tx => Blockchain tx -> IO ()
 printBlockchain blks = do
     printf "\n"
     for_ (zip heights (toList blks)) $ \(h, Block bh@Header{..} txs) -> do
-        printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (toHex $ headerHash bh)
-        printf "│ prevHash:   %-64s │\n" (toHex blockPrevHash)
+        printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (BS.unpack $ toHex $ headerHash bh)
+        printf "│ prevHash:   %-64s │\n" (BS.unpack $ toHex blockPrevHash)
         printf "│ timestamp:  %-64d │\n" blockTimestamp
         printf "│ rootHash:   %-64s │\n" (BS.unpack blockRootHash)
         printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
 
         for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) ->
-            printf "│ %03d:  %-64s       │\n" n (toHex $ hashTx tx)
+            printf "│ %03d:  %-64s       │\n" n (BS.unpack $ toHex $ hashTx tx)
 
         printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
   where

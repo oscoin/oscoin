@@ -11,7 +11,10 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 
 import           Data.Aeson (object, (.=))
+import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
+import           Lens.Micro ((^?))
+import           Lens.Micro.Aeson (key, nth)
 
 acme :: Org
 acme = Org { orgName = "Acme", orgId = "acme" }
@@ -30,7 +33,16 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     get  "/orgs/acme" >>= assertBody acme
 
     let value = object ["name" .= t "zod"]
-    put "/orgs/acme/data/zod" value >>= assertStatus 202
+    get "/node/mempool" >>= assertBody emptyArray
+
+    resp <- put "/orgs/acme/data/zod" value
+    assertStatus 202 resp
+
+    body <- jsonBody resp
+    let Just txId = body ^? key "id"
+
+    body <- jsonBody =<< get "/node/mempool"
+    io $ body ^? nth 0 . key "id" @?= Just txId
     -- ...
     -- Wait for transaction to be committed.
     -- ...

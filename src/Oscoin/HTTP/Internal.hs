@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
 import qualified Web.Spock as Spock
+import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn)
 import qualified Data.Aeson as Aeson
 import           Data.Aeson ((.=))
@@ -39,6 +40,9 @@ getRawBody = LBS.fromStrict <$> Spock.body
 
 getState :: ApiAction tx State
 getState = Spock.getState
+
+param' :: (FromHttpApiData p) => Text -> ApiAction tx p
+param' = Spock.param'
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a

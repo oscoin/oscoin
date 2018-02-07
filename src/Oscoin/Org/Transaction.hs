@@ -1,6 +1,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 module Oscoin.Org.Transaction
     ( Tx
+    , Receipt(..)
     , validateTransaction
     , applyTransaction
     , submitTransaction
@@ -13,6 +14,7 @@ import           Oscoin.Org
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Storage.Transaction as Mempool
 
@@ -76,6 +78,16 @@ validateTransaction' _ =
 setTx :: OrgId -> OrgKey -> OrgVal -> Tx
 setTx = SetTx
 
+-------------------------------------------------------------------------------
+
+data Receipt tx = Receipt { fromReceipt :: Hashed tx }
+
+instance ToJSON tx => ToJSON (Receipt tx) where
+    toJSON (Receipt tx) =
+        object [ "tx" .= toJSON tx ]
+
+-------------------------------------------------------------------------------
+
 verifySignature :: PublicKey -> Signed Tx -> Either Error Tx
 verifySignature pubKey stx =
     if Crypto.verify pubKey stx
@@ -88,6 +100,8 @@ applyTransaction (SetTx org key val) tree =
 applyTransaction _ _ =
     notImplemented
 
-submitTransaction :: Tx -> State.StorageT Tx IO ()
-submitTransaction tx =
+submitTransaction
+    :: (Binary tx, Ord tx) => tx -> State.StorageT tx IO (Receipt tx)
+submitTransaction tx = do
     Mempool.updateMempool (Mempool.addTx tx)
+    pure $ Receipt (hash tx)

@@ -83,11 +83,13 @@ library
     , text-format
     , filepath
     , http-types
+    , http-api-data
     , memory
     , merkle-tree
     , microlens
     , microlens-contra
     , microlens-mtl
+    , microlens-aeson
     , monad-stm
     , network
     , network-simple

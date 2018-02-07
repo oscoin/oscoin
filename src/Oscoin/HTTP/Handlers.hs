@@ -2,6 +2,7 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.HTTP.Internal
 import           Oscoin.Org (Org, OrgId, OrgKey, OrgVal, MemberId, mkOrgDataPath)
 import qualified Oscoin.Org.Transaction as Org
@@ -26,18 +27,20 @@ getOrgKey org key = do
             respond notFound404 (Just $ errorBody "Not found")
 
 -- | Set a key under an organization.
-setOrgKey :: OrgId -> OrgKey -> ApiAction Org.Tx ()
+setOrgKey :: OrgId -> OrgKey -> ApiAction (Crypto.Signed Org.Tx) ()
 setOrgKey org key = do
     val :: OrgVal <- getRawBody
-    storage $ Org.submitTransaction $ Org.setTx org key val
-    respond accepted202 Nothing
+    sig <- param' "sig"
+    tx <- pure $ Crypto.signed sig (Org.setTx org key val)
+    receipt <- storage $ Org.submitTransaction tx
+    respond accepted202 (Just $ toJSON receipt)
 
 -- | Delete a key under an organization.
 deleteOrgKey :: OrgId -> OrgKey -> ApiAction tx ()
 deleteOrgKey _ _ = notImplemented
 
 -- | Runs a StorageT action in a MonadApi monad.
-storage :: MonadApi tx m => State.StorageT tx IO a -> m a
+storage :: MonadApi tx m => State.StorageT (tx) IO a -> m a
 storage s = withHandle $ \h ->
     State.runStorageT h s
 

@@ -1,3 +1,4 @@
+-- TODO: Move this module to Network.Wai.Test.Extended
 module Oscoin.HTTP.Test.Helpers where
 
 import Oscoin.Prelude
@@ -5,9 +6,10 @@ import Oscoin.Environment
 import Oscoin.Org (Org, OrgId)
 import Oscoin.HTTP (mkMiddleware)
 
-import Test.Tasty.HUnit (Assertion)
+import Test.Tasty.HUnit (Assertion, assertFailure)
 
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Lazy as LBS
 
 import qualified Network.Wai.Test as Wai
@@ -80,3 +82,11 @@ noBody = Nothing
 -- | Helper for string literals.
 t :: Text -> Text
 t = id
+
+jsonBody :: HasCallStack => Wai.SResponse -> Wai.Session Aeson.Value
+jsonBody resp =
+    let body = Wai.simpleBody resp
+        in case Aeson.decode body of
+            Just obj -> pure obj
+            Nothing  -> io $ assertFailure
+                ("Could not decode body as JSON:\n`" <> (L8.unpack body) <> "`\n")
