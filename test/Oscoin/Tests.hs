@@ -14,7 +14,7 @@ import           Data.Aeson (object, (.=))
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
 import           Lens.Micro ((^?))
-import           Lens.Micro.Aeson (key, nth)
+import           Lens.Micro.Aeson (key, nth, _String)
 
 acme :: Org
 acme = Org { orgName = "Acme", orgId = "acme" }
@@ -39,10 +39,13 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     assertStatus 202 resp
 
     body <- jsonBody resp
-    let Just txId = body ^? key "id"
+    let Just txId = body ^? key "id" . _String :: Maybe Text
 
     body <- jsonBody =<< get "/node/mempool"
-    io $ body ^? nth 0 . key "id" @?= Just txId
+    io $ body ^? nth 0 . key "id" . _String @?= Just txId
+
+    resp <- get (encodeUtf8 $ "/node/mempool/" <> txId)
+    assertOK resp
     -- ...
     -- Wait for transaction to be committed.
     -- ...

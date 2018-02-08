@@ -51,7 +51,8 @@ app env = do
 
     -- /node/mempool ----------------------------------------------------------
 
-    get ("node" <//> "mempool") Handlers.getAllTransactions
+    get  ("node" <//> "mempool") Handlers.getAllTransactions
+    post ("node" <//> "mempool") Handlers.submitTransaction
 
     -- /node/mempool/:id ------------------------------------------------------
 

@@ -50,6 +50,7 @@ data Tx =
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
+instance Hashable Tx
 
 instance ToJSON Tx where
     toJSON (SetTx org key val) =
@@ -61,6 +62,24 @@ instance ToJSON Tx where
                ]
     toJSON _ =
         notImplemented
+
+instance FromJSON Tx where
+    parseJSON = withObject "Tx" $ \o -> do
+        typ :: Text <- o .: "type"
+        case typ of
+            "set" -> do
+                org <- o .: "org"
+                key <- o .: "key"
+                val <- o .: "value"
+                pure $ SetTx org key (Base64.decodeLazy val)
+            _ ->
+                notImplemented
+
+instance FromJSON (Signed Tx) where
+    parseJSON = withObject "Signed Tx" $ \o -> do
+        tx  <- o .: "tx"
+        sig <- o .: "signature"
+        pure $ Crypto.signed sig tx
 
 validateTransaction :: Signed Tx -> Either Error (Signed Tx)
 validateTransaction stx@(Signed tx _) = do

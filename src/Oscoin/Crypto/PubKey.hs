@@ -8,7 +8,7 @@ module Oscoin.Crypto.PubKey
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (hashAlgorithm)
+import           Oscoin.Crypto.Hash (hashAlgorithm, Hashable)
 
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (PublicKey(..), PrivateKey, Signature(..))
@@ -19,14 +19,21 @@ import           Crypto.Random.Types (MonadRandom)
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Aeson (ToJSON(..), object, (.=))
+import           Data.Aeson (FromJSON(..), ToJSON(..), withText, object, (.=))
+import qualified Data.ByteString.Base64.Extended as Base64
+import           Data.ByteString.Base64.Extended (Base64(..))
 import           Web.HttpApiData
 
 instance Ord Signature where
     (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
 
 instance ToJSON Signature where
-    toJSON sig = toJSON (sign_r sig, sign_s sig)
+    toJSON = toJSON . Base64.encodeLazy . Binary.encode
+
+instance FromJSON Signature where
+    parseJSON = withText "Signature" $
+        -- TODO: Can we use the FromJSON instance of Base64?
+        pure . Binary.decode . Base64.decodeLazy . Base64 . encodeUtf8
 
 instance Binary Signature where
     put sig =
@@ -50,6 +57,8 @@ data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
 
 instance Binary msg => Binary (Signed msg)
+
+instance Hashable msg => Hashable (Signed msg)
 
 instance Binary PublicKey where
     put (PublicKey curve (Point x y)) | curve == getCurveByName SEC_p256k1 =

@@ -26,3 +26,6 @@ encodeLazy bs = Base64 (Base64.encode (LBS.toStrict bs))
 
 decode :: Base64 a -> ByteString
 decode (Base64 bs) = Base64.decodeLenient bs
+
+decodeLazy :: Base64 a -> LBS.ByteString
+decodeLazy (Base64 bs) = LBS.fromStrict $ Base64.decodeLenient bs
