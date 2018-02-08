@@ -25,6 +25,7 @@ data Header = Header
     } deriving (Show, Eq, Generic)
 
 instance Binary Header
+instance Hashable Header
 
 -- | Create an empty block header.
 emptyHeader :: Header

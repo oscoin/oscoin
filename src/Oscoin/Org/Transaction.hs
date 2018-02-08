@@ -1,6 +1,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 module Oscoin.Org.Transaction
     ( Tx
+    , TxId
     , Receipt(..)
     , validateTransaction
     , applyTransaction
@@ -14,7 +15,7 @@ import           Oscoin.Org
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Storage.Transaction as Mempool
 
@@ -39,6 +40,8 @@ data Voice = Yea | Nay
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Voice
+
+type TxId = Hashed Tx
 
 data Tx =
       AccountTx     AccountId Address Coin [Permission]
@@ -101,7 +104,7 @@ applyTransaction _ _ =
     notImplemented
 
 submitTransaction
-    :: (Binary tx, Ord tx) => tx -> State.StorageT tx IO (Receipt tx)
+    :: Hashable tx => tx -> State.StorageT tx IO (Receipt tx)
 submitTransaction tx = do
-    Mempool.updateMempool (Mempool.addTx tx)
+    Mempool.updateMempool (Mempool.addTx (hash tx) tx)
     pure $ Receipt (hash tx)

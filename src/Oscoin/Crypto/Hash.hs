@@ -1,6 +1,6 @@
 module Oscoin.Crypto.Hash
     ( Hashed
-    , hash
+    , Hashable(..)
     , hashed
     , hashAlgorithm
     , maxHash
@@ -20,6 +20,7 @@ import           Data.Maybe (fromJust)
 import           Data.Binary (Binary)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Aeson (ToJSON(..), Value(String))
+import           Web.HttpApiData (FromHttpApiData(..))
 
 type Hashed a = Hashed' Blake2b_256 a
 
@@ -33,9 +34,11 @@ instance Binary (Hashed' Blake2b_256 a) where
     put = Binary.put <$> fromHashed
     get = Hashed' <$> Binary.get
 
-hash :: Binary a => a -> Hashed a
-hash a =
-    Hashed' . Crypto.hash . LBS.toStrict $ Binary.encode a
+instance FromHttpApiData (Hashed' Blake2b_256 a) where
+    parseQueryParam txt =
+        case fromHex (encodeUtf8 txt) of
+            Left err -> Left (fromError err)
+            Right bs -> Right $ Binary.decode $ LBS.fromStrict bs
 
 hashed :: Crypto.Digest algo -> Hashed' algo a
 hashed = Hashed'
@@ -65,3 +68,16 @@ toHex :: ByteArrayAccess ba => ba -> ByteString
 toHex bs =
     Base16.encode $ convert bs
 
+-- TODO: Make result type polymorphic: `Either Error ba`.
+fromHex :: ByteString -> Either Error ByteString
+fromHex bs =
+    case Base16.decode bs of
+        (valid, "")  -> Right valid
+        (_, invalid) -> Left $ Error ("Can't parse " <> tshow invalid)
+
+-------------------------------------------------------------------------------
+
+class Binary a => Hashable a where
+    hash :: a -> Hashed a
+    hash a =
+        Hashed' . Crypto.hash . LBS.toStrict $ Binary.encode a

@@ -31,13 +31,16 @@ module Oscoin.Prelude
     , pass
     , encodeUtf8
     , decodeUtf8
+    , tshow
     ) where
 
 import Prelude (read, map, zip, lookup)
+import qualified Prelude as Prelude
 -- TODO: We should be using these instead of the ones in "Foldable".
 import Foundation hiding (Signed, NonEmpty, Foldable, toList, null)
 import Foundation.Collection (getNonEmpty)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (lenientDecode)
 import Data.ByteString (ByteString)
@@ -81,3 +84,7 @@ pass = pure ()
 -- instead uses @decodeLenient@.
 decodeUtf8 :: ByteString -> Text
 decodeUtf8 = decodeUtf8With lenientDecode
+
+-- | Convert a value to readable Text.
+tshow :: Show a => a -> Text
+tshow = T.pack . Prelude.show

@@ -3,6 +3,7 @@ module Oscoin.HTTP.Internal where
 import           Oscoin.Prelude
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
+import           Oscoin.Crypto.Hash (Hashed)
 import qualified Web.Spock as Spock
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn)
@@ -20,13 +21,13 @@ data State = State
 type Handle = State.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction tx = SpockAction (Handle tx) () State
+type ApiAction tx = SpockAction (Handle (Hashed tx) tx) () State
 
 -- | The type of our api.
-type Api tx = SpockM (Handle tx) () State
+type Api tx = SpockM (Handle (Hashed tx) tx) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle tx)
+type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle (Hashed tx) tx)
 
 -- | Create an empty state.
 mkState :: State
