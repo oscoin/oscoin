@@ -177,6 +177,9 @@ test-suite test
     , QuickCheck
     , tasty       >= 1.0.0.1
     , tasty-hunit >= 0.10.0.1
+    , text
+    , microlens
+    , microlens-aeson
     , bytestring
     , Spock
     , wai
