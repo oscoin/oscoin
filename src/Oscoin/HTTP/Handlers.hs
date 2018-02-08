@@ -3,14 +3,14 @@ module Oscoin.HTTP.Handlers where
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Crypto.Hash (Hashed, Hashable)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Storage.Transaction as Mempool
 import           Oscoin.Org (Org, OrgId, OrgKey, MemberId, mkOrgDataPath)
 import qualified Oscoin.Org.Transaction as Org
 import           Oscoin.Org.Repository (RepoId)
 
-import           Data.Aeson (ToJSON, encode, toJSON)
+import           Data.Aeson (FromJSON, ToJSON, encode, toJSON)
 import           Network.HTTP.Types.Status
 
 getAllTransactions :: ToJSON tx => ApiAction tx ()
@@ -24,6 +24,18 @@ getTransaction txId = do
     case Mempool.lookup txId mp of
         Just tx -> respond ok200 (Just (toJSON tx))
         Nothing -> respond notFound404 Nothing
+
+submitTransaction :: forall tx. (Hashable tx, FromJSON tx) => ApiAction tx ()
+submitTransaction = do
+    -- TODO: Create a pattern for this.
+    result :: Maybe tx <- getBody
+    case result of
+        Just tx -> do
+            -- TODO: Verify signature passed in url.
+            receipt <- storage $ Org.submitTransaction tx
+            respond accepted202 (Just (toJSON receipt))
+        Nothing ->
+            respond badRequest400 Nothing
 
 -- | Get a key under an organization.
 getOrgKey :: OrgId -> OrgKey -> ApiAction tx ()

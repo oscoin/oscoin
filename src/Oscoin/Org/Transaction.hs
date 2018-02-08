@@ -15,7 +15,7 @@ import           Oscoin.Org
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
+import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Storage.Transaction as Mempool
 
@@ -85,9 +85,9 @@ setTx = SetTx
 
 data Receipt tx = Receipt { fromReceipt :: Hashed tx }
 
-instance ToJSON tx => ToJSON (Receipt tx) where
+instance ToJSON (Receipt tx) where
     toJSON (Receipt tx) =
-        object [ "tx" .= toJSON tx ]
+        object [ "tx" .= decodeUtf8 (toHex tx) ]
 
 -------------------------------------------------------------------------------
 
