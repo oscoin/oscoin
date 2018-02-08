@@ -1,4 +1,3 @@
-{-# LANGUAGE ExtendedDefaultRules #-}
 module Oscoin.Org.Transaction
     ( Tx
     , TxId
@@ -23,8 +22,6 @@ import qualified Data.ByteString.Base64.Extended as Base64
 import           Data.Binary
 import qualified Data.Text as T
 import           Data.Aeson
-
-default (Text, ())
 
 type Coin = ()
 type Patch = ()
@@ -56,8 +53,8 @@ instance Binary Tx
 
 instance ToJSON Tx where
     toJSON (SetTx org key val) =
-        object [ "object" .= "transaction"
-               , "type"   .= "set"
+        object [ "object" .= ("transaction" :: Text)
+               , "type"   .= ("set" :: Text)
                , "org"    .= org
                , "key"    .= key
                , "value"  .= Base64.encodeLazy val
