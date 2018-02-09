@@ -38,8 +38,10 @@ data Voice = Yea | Nay
 
 instance Binary Voice
 
+-- | Transaction ID.
 type TxId = Hashed Tx
 
+-- | An org transaction.
 data Tx =
       AccountTx     AccountId Address Coin [Permission]
     | PatchTx       RepoId BranchId PatchId [Patch]
@@ -93,6 +95,7 @@ setTx = SetTx
 
 -------------------------------------------------------------------------------
 
+-- | A transaction receipt. Contains the hashed transaction.
 data Receipt tx = Receipt { fromReceipt :: Hashed tx }
 
 instance ToJSON (Receipt tx) where
@@ -107,12 +110,14 @@ verifySignature pubKey stx =
        then Right (sigMessage stx)
        else Left  "Invalid signature"
 
+-- | Apply a transaction to the org state-tree.
 applyTransaction :: Tx -> OrgTree -> OrgTree
 applyTransaction (SetTx org key val) tree =
     setPath org ["data", key] val tree
 applyTransaction _ _ =
     notImplemented
 
+-- | Submit a transaction to the mempool.
 submitTransaction
     :: Hashable tx => tx -> State.StorageT tx IO (Receipt tx)
 submitTransaction tx = do
