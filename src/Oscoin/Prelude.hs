@@ -63,7 +63,7 @@ import Data.ByteArray (ByteArrayAccess)
 import Data.Function ((&))
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
-import Debug.Trace (trace, traceShow, traceShowM)
+import Debug.Trace (trace, traceShow, traceM, traceShowM)
 
 type LByteString = LBS.ByteString
 

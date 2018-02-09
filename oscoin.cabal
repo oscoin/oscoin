@@ -98,6 +98,7 @@ library
     , Spock
     , stm
     , transformers
+    , unordered-containers
     , wai
     , wai-middleware-static
     , wai-extra

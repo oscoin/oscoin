@@ -75,12 +75,6 @@ instance FromJSON Tx where
             _ ->
                 notImplemented
 
-instance FromJSON (Signed Tx) where
-    parseJSON = withObject "Signed Tx" $ \o -> do
-        tx  <- o .: "tx"
-        sig <- o .: "signature"
-        pure $ Crypto.signed sig tx
-
 validateTransaction :: Signed Tx -> Either Error (Signed Tx)
 validateTransaction stx@(Signed tx _) = do
     validateTransaction' tx
