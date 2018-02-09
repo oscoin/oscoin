@@ -7,13 +7,18 @@ import qualified Oscoin.Org as Org
 import qualified Oscoin.Org.Transaction as Org
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.Hash.Arbitrary ()
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import           Test.QuickCheck
+import           Test.QuickCheck.Instances ()
 
-import           Data.Aeson (object, (.=), encode)
+import           Data.Aeson ((.=))
+import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
+import qualified Data.Binary as Binary
 import           Lens.Micro ((^?))
 import           Lens.Micro.Aeson (key, nth, _String)
 
@@ -39,11 +44,11 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     get "/node/mempool" >>= assertBody emptyArray
 
     -- Now let's create a value we want to store in the org.
-    let value = object ["name" .= t "zod"]
+    let value = Aeson.object ["name" .= t "zod"]
 
     -- Let's create a transaction to store that value under the key
     -- "zod".
-    let tx = Org.setTx "acme" "zod" (encode value)
+    let tx = Org.setTx "acme" "zod" (Aeson.encode value)
 
     -- Now generate a key pair and sign the transaction.
     (_, priKey) <- io Crypto.generateKeyPair
@@ -108,6 +113,15 @@ testOscoinCrypto = do
     -- unsigned one.
     Crypto.fromHashed (Crypto.hash signed) @?=
         Crypto.fromHashed (Crypto.hash val)
+
+    quickCheck $ \(x :: ByteString) ->
+        (Crypto.fromHex . Crypto.toHex) x == Right x
+
+    quickCheck $ \(x :: Crypto.Hashed ByteString) ->
+        (Binary.decode . Binary.encode) x == x
+
+    quickCheck $ \(x :: Crypto.Hashed ByteString) ->
+        (Aeson.decode . Aeson.encode) x == Just x
 
 assertValidTx :: HasCallStack => Crypto.Signed Org.Tx -> Assertion
 assertValidTx tx =
