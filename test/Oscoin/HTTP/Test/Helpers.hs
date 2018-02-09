@@ -63,11 +63,11 @@ assertStatus = Wai.assertStatus
 request
     :: Aeson.ToJSON a
     => HTTP.StdMethod                    -- ^ Request method
-    -> ByteString                        -- ^ Request path
+    -> Text                              -- ^ Request path
     -> HTTP.RequestHeaders               -- ^ Request headers
     -> Maybe a                           -- ^ Request body
     -> Wai.Session Wai.SResponse
-request method path headers body =
+request method (encodeUtf8 -> path) headers body =
     Wai.srequest $ Wai.SRequest (Wai.setPath req path) (reqBody body)
   where
     req = Wai.defaultRequest
@@ -78,20 +78,20 @@ request method path headers body =
     reqBody (Just obj) = Aeson.encode obj
 
 -- | A GET request.
-get :: ByteString -> Wai.Session Wai.SResponse
+get :: Text -> Wai.Session Wai.SResponse
 get path = request GET path [] noBody
 
 -- | A DELETE request.
-delete :: ByteString -> Wai.Session Wai.SResponse
+delete :: Text -> Wai.Session Wai.SResponse
 delete path = request DELETE path [] noBody
 
 -- | A PUT request.
-put :: Aeson.ToJSON a => ByteString -> a -> Wai.Session Wai.SResponse
+put :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
 put path body =
     request PUT path [] (Just body)
 
 -- | A POST request.
-post :: Aeson.ToJSON a => ByteString -> a -> Wai.Session Wai.SResponse
+post :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
 post path body =
     request POST path [] (Just body)
 
@@ -102,6 +102,9 @@ noBody = Nothing
 -- | Helper for string literals.
 t :: Text -> Text
 t = id
+
+responseBody :: Wai.SResponse -> LBS.ByteString
+responseBody = Wai.simpleBody
 
 jsonBody :: HasCallStack => Wai.SResponse -> Wai.Session Aeson.Value
 jsonBody resp =

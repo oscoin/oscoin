@@ -55,19 +55,17 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     tx'         <- Crypto.sign priKey tx
 
     -- Submit the transaction to the mempool.
-    resp <- post "/node/mempool" tx'
-    assertStatus 202 resp
+    resp <- post "/node/mempool" tx' ; assertStatus 202 resp
 
     -- The response is a transaction receipt, with the transaction
     -- id (hash).
-    receipt <- jsonBody resp
-    let Just txId = receipt ^? key "tx" . _String :: Maybe Text
+    let Just txId = responseBody resp ^? key "tx" . _String
 
     -- Get the mempool once again, make sure the transaction is in there.
-    mp <- jsonBody =<< get "/node/mempool"
+    mp <- responseBody <$> get "/node/mempool"
     mp ^? nth 0 . key "id" . _String @?= Just txId
 
-    get (encodeUtf8 $ "/node/mempool/" <> txId)
+    get ("/node/mempool/" <> txId)
         >>= assertOK <> assertJSON
     -- ...
     -- Wait for transaction to be committed.
