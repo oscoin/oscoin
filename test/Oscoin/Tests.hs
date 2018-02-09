@@ -67,8 +67,8 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     mp <- jsonBody =<< get "/node/mempool"
     io $ mp ^? nth 0 . key "id" . _String @?= Just txId
 
-    resp <- get (encodeUtf8 $ "/node/mempool/" <> txId)
-    assertOK resp
+    get (encodeUtf8 $ "/node/mempool/" <> txId)
+        >>= assertOK <> assertJSON
     -- ...
     -- Wait for transaction to be committed.
     -- ...

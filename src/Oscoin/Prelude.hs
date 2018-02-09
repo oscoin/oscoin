@@ -20,6 +20,7 @@ module Oscoin.Prelude
     , module Data.Default
     , module Data.ByteArray
     , module Data.Function
+    , module Data.Functor
     , module GHC.Stack
     , module GHC.Generics
     , module Debug.Trace
@@ -61,6 +62,7 @@ import Data.Either (isRight, isLeft)
 import Data.Default (def, Default)
 import Data.ByteArray (ByteArrayAccess)
 import Data.Function ((&))
+import Data.Functor (void)
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
 import Debug.Trace (trace, traceShow, traceM, traceShowM)

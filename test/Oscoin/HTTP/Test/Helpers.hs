@@ -22,6 +22,10 @@ import qualified Network.HTTP.Types.Header as HTTP
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
 
+instance Monoid a => Monoid (Session a) where
+    mempty = pure mempty
+    mappend = liftA2 mappend
+
 -- | Turn a "Session" into an "Assertion".
 runSession :: [(OrgId, Org)] -> Session () -> Assertion
 runSession orgs sess =
@@ -30,6 +34,9 @@ runSession orgs sess =
 -- TODO: Should also assert status is 2xx.
 assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()
 assertBody obj = Wai.assertBody (Aeson.encode obj)
+
+assertJSON :: HasCallStack => Wai.SResponse -> Wai.Session ()
+assertJSON = void . jsonBody
 
 -- | Assert a response status is 200 OK.
 assertOK :: HasCallStack => Wai.SResponse -> Wai.Session ()
