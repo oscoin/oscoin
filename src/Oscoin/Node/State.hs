@@ -42,8 +42,8 @@ getMempool = do
     Handle{hMempool} <- ask
     liftSTM $ readTVar (Mempool.fromHandle hMempool)
 
--- | Set an org path to the given value.
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
+-- | Set an org path to the given value.
 setOrgPath :: MonadIO m => OrgId -> OrgPath -> OrgVal -> StorageT tx m ()
 setOrgPath org path =
     setPath (mkOrgPath org path)

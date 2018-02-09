@@ -345,6 +345,24 @@ Formatting examples
         . g
         $ xs
 
+TODOs
+-----
+
+When adding TODOs to code, use one of these formats::
+
+  -- TODO: Something should be done.
+
+  -- TODO(alexis): Something should be done.
+
+When the TODO is to be added to a function signature, add it *before* the
+docstring, so it doesn't show up in the docs:
+
+.. code:: haskell
+
+  -- TODO: Something should be done.
+  -- | This function doesn't do enough things.
+  myFunc :: a -> a -> a
+
 Library recommendations
 -----------------------
 
