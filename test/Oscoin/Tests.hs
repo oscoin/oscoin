@@ -10,7 +10,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
 
 import           Test.Tasty
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit hiding ((@?=))
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
@@ -51,8 +51,8 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     let tx = Org.setTx "acme" "zod" (Aeson.encode value)
 
     -- Now generate a key pair and sign the transaction.
-    (_, priKey) <- io Crypto.generateKeyPair
-    tx'         <- io (Crypto.sign priKey tx)
+    (_, priKey) <- Crypto.generateKeyPair
+    tx'         <- Crypto.sign priKey tx
 
     -- Submit the transaction to the mempool.
     resp <- post "/node/mempool" tx'
@@ -65,7 +65,7 @@ testOscoinAPI = runSession [("acme", acme)] $ do
 
     -- Get the mempool once again, make sure the transaction is in there.
     mp <- jsonBody =<< get "/node/mempool"
-    io $ mp ^? nth 0 . key "id" . _String @?= Just txId
+    mp ^? nth 0 . key "id" . _String @?= Just txId
 
     get (encodeUtf8 $ "/node/mempool/" <> txId)
         >>= assertOK <> assertJSON

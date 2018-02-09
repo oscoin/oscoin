@@ -7,7 +7,9 @@ import Oscoin.Org (Org, OrgId)
 import Oscoin.HTTP (mkMiddleware)
 
 import Test.Tasty.HUnit (Assertion, assertFailure)
+import qualified Test.Tasty.HUnit as Tasty
 
+import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Lazy as LBS
@@ -26,10 +28,21 @@ instance Monoid a => Monoid (Session a) where
     mempty = pure mempty
     mappend = liftA2 mappend
 
+instance MonadRandom Session where
+    getRandomBytes = io . getRandomBytes
+
 -- | Turn a "Session" into an "Assertion".
 runSession :: [(OrgId, Org)] -> Session () -> Assertion
 runSession orgs sess =
     spockAsApp (mkMiddleware orgs Testing) >>= Wai.runSession sess
+
+infix 1 @?=, @=?
+
+(@?=) :: (MonadIO m, Eq a, Show a) => a -> a -> m ()
+(@?=) a b = io $ Tasty.assertEqual "" a b
+
+(@=?) :: (MonadIO m, Eq a, Show a) => a -> a -> m ()
+(@=?) = flip (@?=)
 
 -- TODO: Should also assert status is 2xx.
 assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()
