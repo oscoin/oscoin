@@ -364,6 +364,8 @@ Writer            **writer-cps-mtl**      https://hackage.haskell.org/package/wr
 Logging           **fast-logger**         https://hackage.haskell.org/package/fast-logger
 Lifting IO        **monad-control**       https://hackage.haskell.org/package/monad-control
 Pretty printing   **wl-pprint-annotated** https://hackage.haskell.org/package/wl-pprint-annotated
+Option parsing    **optparse-generic**    https://hackage.haskell.org/package/optparse-generic
+Child processes   **typed-process**       https://hackage.haskell.org/package/typed-process
 ================= ======================= =======================================================
 
 .. vim: filetype=rst

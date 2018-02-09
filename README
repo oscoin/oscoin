@@ -24,4 +24,9 @@ To open the docs, run::
 
   stack haddock oscoin --open
 
+COPYRIGHT
+---------
+
+Copyright (c) Monadic, 2017-2018
+
 .. vim: filetype=rst
