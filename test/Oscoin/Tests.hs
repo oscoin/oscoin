@@ -11,7 +11,7 @@ import           Oscoin.Crypto.Hash.Arbitrary ()
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
-import           Test.QuickCheck
+import           Test.Tasty.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 import           Data.Aeson ((.=))
@@ -27,10 +27,14 @@ acme = Org { orgName = "Acme", orgId = "acme" }
 
 tests :: TestTree
 tests = testGroup "Oscoin"
-    [ testCase "API"     testOscoinAPI
-    , testCase "Tx"      testOscoinTxs
-    , testCase "Paths"   testOscoinPaths
-    , testCase "Crypto"  testOscoinCrypto ]
+    [ testCase       "API"                            testOscoinAPI
+    , testCase       "Tx"                             testOscoinTxs
+    , testCase       "Paths"                          testOscoinPaths
+    , testCase       "Crypto"                         testOscoinCrypto
+    , testProperty   "Binary instance of Hashed"      propHashedBinary
+    , testProperty   "JSON instance of Hashed"        propHashedJSON
+    , testProperty   "Hexadecimal encoding"           propHexEncoding
+    ]
 
 testOscoinAPI :: Assertion
 testOscoinAPI = runSession [("acme", acme)] $ do
@@ -112,14 +116,14 @@ testOscoinCrypto = do
     Crypto.fromHashed (Crypto.hash signed) @?=
         Crypto.fromHashed (Crypto.hash val)
 
-    quickCheck $ \(x :: ByteString) ->
-        (Crypto.fromHex . Crypto.toHex) x == Right x
+propHashedBinary :: Crypto.Hashed ByteString -> Bool
+propHashedBinary x = (Binary.decode . Binary.encode) x == x
 
-    quickCheck $ \(x :: Crypto.Hashed ByteString) ->
-        (Binary.decode . Binary.encode) x == x
+propHashedJSON :: Crypto.Hashed ByteString -> Bool
+propHashedJSON x = (Aeson.decode . Aeson.encode) x == Just x
 
-    quickCheck $ \(x :: Crypto.Hashed ByteString) ->
-        (Aeson.decode . Aeson.encode) x == Just x
+propHexEncoding :: ByteString -> Bool
+propHexEncoding x = (Crypto.fromHex . Crypto.toHex) x == Right x
 
 assertValidTx :: HasCallStack => Crypto.Signed Org.Tx -> Assertion
 assertValidTx tx =
