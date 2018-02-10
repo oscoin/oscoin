@@ -1,16 +1,20 @@
 module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
+import           Oscoin.Environment
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Web.Spock as Spock
 import           Web.HttpApiData (FromHttpApiData)
-import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn)
+import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn, runSpock, spock)
+import           Web.Spock.Config (defaultSpockCfg, PoolOrConn(..), ConnBuilder(..), PoolCfg(..))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson ((.=))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.HTTP.Types.Status as HTTP
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Middleware.RequestLogger as Wai
 
 -- | The global server state.
 data State = State
@@ -68,3 +72,21 @@ notImplemented =
 
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
+
+run :: Ord tx => Api tx () -> [(OrgId, Org)] -> Int -> IO ()
+run app orgs port =
+    runSpock port (mkMiddleware app orgs)
+
+mkMiddleware :: Ord tx => Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
+mkMiddleware app orgs = do
+    spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
+    spock spockCfg app
+  where
+    conn        = State.connect ()
+    connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
+    state       = mkState { stOrgs = orgs }
+
+loggingMiddleware :: Environment -> Wai.Middleware
+loggingMiddleware Production = Wai.logStdout
+loggingMiddleware Development = Wai.logStdoutDev
+loggingMiddleware Testing = id

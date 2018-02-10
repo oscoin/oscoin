@@ -35,6 +35,7 @@ library
     , Oscoin.HTTP
     , Oscoin.HTTP.Handlers
     , Oscoin.HTTP.Internal
+    , Oscoin.HTTP.API
 
     , Oscoin.Org
     , Oscoin.Org.Issue

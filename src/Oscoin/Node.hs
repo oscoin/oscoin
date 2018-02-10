@@ -26,7 +26,7 @@ type NodeT m a = ServiceT State Config m a
 run :: Config -> NodeT IO ()
 run Config{..} = do
     threads <- lift . traverse async $
-        [ HTTP.run cfgOrgs cfgEnv (read cfgServiceName)
+        [ HTTP.run (HTTP.api cfgEnv) cfgOrgs (read cfgServiceName)
         , P2P.run cfgEnv
         , Consensus.run cfgEnv
         ]
