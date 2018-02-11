@@ -2,7 +2,6 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Hash (Hashed, Hashable)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Storage.Transaction as Mempool
@@ -51,9 +50,6 @@ getOrgKey org key = do
 storage :: MonadApi tx m => State.StorageT tx IO a -> m a
 storage s = withHandle $ \h ->
     State.runStorageT h s
-
-submitOrgTransaction :: ApiAction (Crypto.Signed Org.Tx) ()
-submitOrgTransaction = undefined
 
 getOrgs :: ApiAction tx ()
 getOrgs = do
