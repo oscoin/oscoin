@@ -384,6 +384,7 @@ Lifting IO        **monad-control**       https://hackage.haskell.org/package/mo
 Pretty printing   **wl-pprint-annotated** https://hackage.haskell.org/package/wl-pprint-annotated
 Option parsing    **optparse-generic**    https://hackage.haskell.org/package/optparse-generic
 Child processes   **typed-process**       https://hackage.haskell.org/package/typed-process
+Free monads       **freer-simple**        https://hackage.haskell.org/package/freer-simple
 ================= ======================= =======================================================
 
 .. vim: filetype=rst
