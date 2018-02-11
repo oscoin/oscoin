@@ -12,7 +12,7 @@ import           Control.Concurrent.STM.TVar (TVar, newTVar, modifyTVar, readTVa
 newtype Handle k tx = Handle { fromHandle :: TVar (Mempool k tx) }
 
 newtype Mempool k tx = Mempool { fromMempool :: Map k tx }
-    deriving (Show, Monoid, Eq)
+    deriving (Show, Semigroup, Monoid, Eq)
 
 instance (Aeson.ToJSON k, Aeson.ToJSON tx) => Aeson.ToJSON (Mempool k tx) where
     toJSON (Mempool txs) =

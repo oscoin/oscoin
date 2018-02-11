@@ -148,6 +148,10 @@ library
 
   ghc-options:
     -Wall
+    -Wcompat
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
     -fno-warn-orphans
     -fno-warn-name-shadowing
     -fno-warn-unused-do-bind

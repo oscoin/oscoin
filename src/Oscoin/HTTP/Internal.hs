@@ -27,6 +27,9 @@ type Handle = State.Handle
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction tx = SpockAction (Handle (Hashed tx) tx) () State
 
+instance MonadFail (ApiAction tx) where
+    fail = error "failing!"
+
 -- | The type of our api.
 type Api tx = SpockM (Handle (Hashed tx) tx) () State
 

@@ -25,9 +25,12 @@ import qualified Network.HTTP.Types.Header as HTTP
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
 
-instance Monoid a => Monoid (Session a) where
+instance Semigroup a => Semigroup (Session a) where
+    (<>) = liftA2 (<>)
+
+instance (Monoid a, Semigroup a) => Monoid (Session a) where
     mempty = pure mempty
-    mappend = liftA2 mappend
+    mappend = (<>)
 
 instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
