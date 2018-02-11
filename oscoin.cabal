@@ -108,29 +108,43 @@ library
       Haskell2010
 
   default-extensions:
-      MultiParamTypeClasses
-    , NoImplicitPrelude
-    , FunctionalDependencies
-    , ParallelListComp
-    , FlexibleContexts
-    , DeriveFunctor
-    , NamedFieldPuns
-    , ConstraintKinds
-    , StandaloneDeriving
+    -- Prelude
+      NoImplicitPrelude
+
+    -- Syntax
     , ViewPatterns
-    , TypeSynonymInstances
-    , RankNTypes
-    , StandaloneDeriving
-    , ScopedTypeVariables
-    , GeneralizedNewtypeDeriving
-    , TypeApplications
-    , DeriveGeneric
-    , FlexibleInstances
-    , MultiParamTypeClasses
+    , ParallelListComp
     , OverloadedStrings
-    , RecordWildCards
-    , GADTs
+    , BangPatterns
+    , TypeOperators
+
+    -- Deriving
+    , DeriveFunctor
+    , DeriveFoldable
+    , DeriveTraversable
+    , DeriveGeneric
+    , GeneralizedNewtypeDeriving
+    , StandaloneDeriving
+
+    -- Type system
+    , ConstraintKinds
+    , RankNTypes
     , TypeFamilies
+    , TypeApplications
+    , TypeSynonymInstances
+    , FunctionalDependencies
+    , ScopedTypeVariables
+    , FlexibleInstances
+    , FlexibleContexts
+    , MultiParamTypeClasses
+    , GADTs
+
+    -- Records
+    , RecordWildCards
+    , NamedFieldPuns
+
+    -- Future compatibility
+    , MonadFailDesugaring
 
   ghc-options:
     -Wall
