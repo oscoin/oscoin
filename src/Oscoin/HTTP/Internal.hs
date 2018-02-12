@@ -76,11 +76,11 @@ notImplemented =
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run :: Ord tx => Api tx () -> [(OrgId, Org)] -> Int -> IO ()
+run :: Api tx () -> [(OrgId, Org)] -> Int -> IO ()
 run app orgs port =
     runSpock port (mkMiddleware app orgs)
 
-mkMiddleware :: Ord tx => Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
+mkMiddleware :: Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
 mkMiddleware app orgs = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app

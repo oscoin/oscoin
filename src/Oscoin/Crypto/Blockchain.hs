@@ -35,7 +35,7 @@ validateBlockchain (blk :| blk' : blks)
 blockchain :: [Block a] -> Blockchain a
 blockchain = fromList
 
-blockHash :: Binary tx => Block tx -> Hashed Header
+blockHash :: Block tx -> Hashed Header
 blockHash blk = headerHash (blockHeader blk)
 
 headerHash :: Header -> Hashed Header

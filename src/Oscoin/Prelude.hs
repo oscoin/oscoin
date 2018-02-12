@@ -22,6 +22,7 @@ module Oscoin.Prelude
     , module Data.Default
     , module Data.ByteArray
     , module Data.Function
+    , module Data.Maybe
     , module Data.Functor
     , module GHC.Stack
     , module GHC.Generics
@@ -66,6 +67,7 @@ import Data.Either (isRight, isLeft)
 import Data.Default (def, Default)
 import Data.ByteArray (ByteArrayAccess)
 import Data.Function ((&))
+import Data.Maybe (fromJust)
 import Data.Functor (void)
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
