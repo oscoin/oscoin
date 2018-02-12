@@ -1,4 +1,4 @@
-module Oscoin.Storage.Transaction where
+module Oscoin.Transaction.Mempool where
 
 import           Oscoin.Prelude
 import           Data.Map (Map)

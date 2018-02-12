@@ -4,7 +4,7 @@ import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
 import           Oscoin.Crypto.Hash (Hashed, Hashable)
 import           Oscoin.HTTP.Internal
-import qualified Oscoin.Storage.Transaction as Mempool
+import qualified Oscoin.Transaction.Mempool as Mempool
 import           Oscoin.Org (Org, OrgId, OrgKey, MemberId, mkOrgDataPath)
 import qualified Oscoin.Org.Transaction as Org
 import           Oscoin.Org.Repository (RepoId)

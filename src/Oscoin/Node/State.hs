@@ -5,8 +5,8 @@ import           Oscoin.Org (OrgId, OrgPath, OrgKey, OrgVal, mkOrgPath)
 import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Storage.State as StateTree
 import qualified Oscoin.Storage.Block as BlockStore
-import qualified Oscoin.Storage.Transaction as Mempool
-import           Oscoin.Storage.Transaction (Mempool)
+import qualified Oscoin.Transaction.Mempool as Mempool
+import           Oscoin.Transaction.Mempool (Mempool)
 import           Oscoin.Crypto.Hash (Hashed)
 
 import           Control.Concurrent.STM.TVar (readTVar)

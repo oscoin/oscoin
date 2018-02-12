@@ -24,7 +24,6 @@ library
     , Oscoin.Node.State
     , Oscoin.Node.Service
     , Oscoin.Patch
-    , Oscoin.Transaction
     , Oscoin.User
 
     , Oscoin.Crypto.Blockchain
@@ -48,13 +47,15 @@ library
 
     , Oscoin.Storage.Internal
     , Oscoin.Storage.State
-    , Oscoin.Storage.Transaction
     , Oscoin.Storage.Block
 
     , Oscoin.P2P
     , Oscoin.P2P.Internal
     , Oscoin.P2P.Transaction
     , Oscoin.P2P.Block
+
+    , Oscoin.Transaction
+    , Oscoin.Transaction.Mempool
 
   other-modules:
       Data.ByteString.Base64.Extended
