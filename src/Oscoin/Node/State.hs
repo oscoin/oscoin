@@ -7,26 +7,25 @@ import qualified Oscoin.Storage.State as StateTree
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Transaction.Mempool as Mempool
 import           Oscoin.Transaction.Mempool (Mempool)
-import           Oscoin.Crypto.Hash (Hashed)
 
 import           Control.Concurrent.STM.TVar (readTVar)
 
 -- | Node state handle for interacting with the state tree.
-data Handle k tx = Handle
+data Handle tx = Handle
     { hStateTree  :: StateTree.Handle
     , hBlockStore :: BlockStore.Handle
-    , hMempool    :: Mempool.Handle (Hashed tx) tx
+    , hMempool    :: Mempool.Handle tx
     }
 
-instance Has (Mempool.Handle (Hashed tx) tx) (Handle k tx) where
+instance Has (Mempool.Handle tx) (Handle tx) where
     getter = hMempool
     modifier = error "Read-only access allowed"
 
 -- | The StorageT monad transformer.
-type StorageT tx m a = ReaderT (Handle (Hashed tx) tx) m a
+type StorageT tx m a = ReaderT (Handle tx) m a
 
 -- | Connect to state storage.
-connect :: () -> IO (Handle k tx)
+connect :: Ord (Id tx) => () -> IO (Handle tx)
 connect () = do
     hStateTree <- StateTree.connect
     hBlockStore <- pure undefined
@@ -34,10 +33,10 @@ connect () = do
     pure Handle{..}
 
 -- | Close the connection to state storage.
-close :: Handle k tx -> IO ()
+close :: Handle tx -> IO ()
 close = notImplemented
 
-getMempool :: (Monad m, MonadSTM m) => StorageT tx m (Mempool (Hashed tx) tx)
+getMempool :: (Monad m, MonadSTM m) => StorageT tx m (Mempool (Id tx) tx)
 getMempool = do
     Handle{hMempool} <- ask
     liftSTM $ readTVar (Mempool.fromHandle hMempool)
@@ -69,6 +68,6 @@ setPath k v = do
     StateTree.set hStateTree k v
 
 -- | Run a storage action with the given state handle in another monad.
-runStorageT :: Handle (Hashed tx) tx -> StorageT tx m a -> m a
+runStorageT :: Handle tx -> StorageT tx m a -> m a
 runStorageT h s =
     runReaderT s h

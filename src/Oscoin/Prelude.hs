@@ -30,6 +30,7 @@ module Oscoin.Prelude
     , MonadIO
     , LByteString
     , Error(..)
+    , Id
     , notImplemented
     , io
     , pass
@@ -77,6 +78,9 @@ type LByteString = LBS.ByteString
 
 newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)
+
+-- | 'Id' maps a type to its identifier type. Example: 'Hashed' @tx@ for @tx@.
+type family Id a :: *
 
 notImplemented :: HasCallStack => a
 notImplemented = error "Not implemented"

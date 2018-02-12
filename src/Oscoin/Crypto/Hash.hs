@@ -29,6 +29,9 @@ import           Web.HttpApiData (FromHttpApiData(..))
 
 type Hashed a = Hashed' Blake2b_256 a
 
+-- | Default instance for 'Id'.
+type instance Id tx = Hashed tx
+
 newtype Hashed' algo a = Hashed' { fromHashed :: Digest algo }
     deriving (Eq, Ord, Show, ByteArrayAccess)
 

@@ -1,6 +1,5 @@
 module Oscoin.Org.Transaction
     ( Tx
-    , TxId
     , Receipt(..)
     , validateTransaction
     , applyTransaction
@@ -39,7 +38,7 @@ data Voice = Yea | Nay
 instance Binary Voice
 
 -- | Transaction ID.
-type TxId = Hashed Tx
+type instance Id Tx = Hashed Tx
 
 -- | An org transaction.
 data Tx =

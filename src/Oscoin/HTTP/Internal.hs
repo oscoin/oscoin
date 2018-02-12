@@ -4,7 +4,6 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
-import           Oscoin.Crypto.Hash (Hashed)
 import qualified Web.Spock as Spock
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn, runSpock, spock)
@@ -25,16 +24,16 @@ data State = State
 type Handle = State.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction tx = SpockAction (Handle (Hashed tx) tx) () State
+type ApiAction tx = SpockAction (Handle tx) () State
 
 instance MonadFail (ApiAction tx) where
     fail = error "failing!"
 
 -- | The type of our api.
-type Api tx = SpockM (Handle (Hashed tx) tx) () State
+type Api tx = SpockM (Handle tx) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle (Hashed tx) tx)
+type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle tx)
 
 -- | Create an empty state.
 mkState :: State
@@ -76,11 +75,11 @@ notImplemented =
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run :: Api tx () -> [(OrgId, Org)] -> Int -> IO ()
+run :: Ord (Id tx) => Api tx () -> [(OrgId, Org)] -> Int -> IO ()
 run app orgs port =
     runSpock port (mkMiddleware app orgs)
 
-mkMiddleware :: Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
+mkMiddleware :: Ord (Id tx) => Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
 mkMiddleware app orgs = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
