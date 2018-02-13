@@ -68,4 +68,19 @@ like::
 With the style, we run the consensus in distinct "ticks". Each tick returns
 a result which when processed may invoke IO.
 
+-------------------------------------------------------------------------------
+
+Can we come up with a typeclass to represent blockchains?
+
+::
+
+  class Chain a where
+    type Transaction a :: *
+
+    apply :: Transaction a -> a -> a
+    genesis :: a
+
+    default genesis :: Default a => a
+    genesis = def
+
 .. vim: filetype=rst
