@@ -14,14 +14,6 @@ import           Control.Concurrent.STM.TVar (TVar, newTVar, modifyTVar, readTVa
 newtype Handle tx = Handle
     { fromHandle :: TVar (Evented tx (Mempool (Id tx) tx)) }
 
-data Evented ev prod = Evented
-    { evProducer    :: prod
-    , evSubscribers :: Map (Id (Channel ev)) (Channel ev)
-    }
-
-evented :: Ord (Id (Channel ev)) => prod -> Evented ev prod
-evented prod = Evented prod mempty
-
 newtype Mempool k tx = Mempool { fromMempool :: Map k tx }
     deriving (Show, Semigroup, Monoid, Eq)
 
@@ -69,7 +61,7 @@ updateMempool
     -> m ()
 updateMempool f = do
     Handle tvar <- asks getter
-    liftSTM $ modifyTVar tvar $ withProducer f
+    liftSTM $ modifyTVar tvar $ mapProducer f
 
 read :: (MonadMempool tx r m, MonadSTM m) => m (Mempool (Id tx) tx)
 read = do
@@ -87,19 +79,4 @@ subscribe key = do
 addSubscriber :: (Ord (Id (Channel tx)), MonadSTM m, MonadMempool tx r m) => Id (Channel tx) -> Channel tx -> m ()
 addSubscriber key chan = do
     Handle tvar <- asks getter
-    liftSTM . modifyTVar tvar . withSubscribers $ Map.insert key chan
-
-withProducer
-    :: (Mempool (Id tx) tx -> Mempool (Id tx) tx)
-    -> Evented tx (Mempool (Id tx) tx)
-    -> Evented tx (Mempool (Id tx) tx)
-withProducer = undefined
-
-withSubscribers
-    :: ( Map (Id (Channel ev)) (Channel ev)
-      -> Map (Id (Channel ev)) (Channel ev))
-    -> Evented ev prod
-    -> Evented ev prod
-withSubscribers f (Evented p subs) =
-    Evented p (f subs)
-
+    liftSTM . modifyTVar tvar . mapSubscribers $ Map.insert key chan
