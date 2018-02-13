@@ -16,8 +16,6 @@ module Oscoin.Node.State.Mempool
     , unsubscribe
     ) where
 
--- TODO: This module should probably be under Node.
-
 import           Oscoin.Prelude hiding (read, lookup)
 import           Oscoin.Node.Channel
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
