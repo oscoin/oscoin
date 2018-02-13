@@ -5,9 +5,12 @@ import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Org (Org(..), OrgTree, mkOrgPath, mkOrgDataPath)
 import qualified Oscoin.Org as Org
 import qualified Oscoin.Org.Transaction as Org
+import           Oscoin.Org.Arbitrary ()
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
+import qualified Oscoin.Node.State.Mempool as Mempool
+import           Oscoin.Node.Channel (Subscription(..), flushChannel, fromEvent)
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
@@ -31,6 +34,7 @@ tests = testGroup "Oscoin"
     , testCase       "Tx"                             testOscoinTxs
     , testCase       "Paths"                          testOscoinPaths
     , testCase       "Crypto"                         testOscoinCrypto
+    , testCase       "Mempool"                        testOscoinMempool
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
@@ -115,6 +119,20 @@ testOscoinCrypto = do
     -- unsigned one.
     Crypto.fromHashed (Crypto.hash signed) @?=
         Crypto.fromHashed (Crypto.hash val)
+
+testOscoinMempool :: Assertion
+testOscoinMempool = do
+    let sub :: Subscription Org.Tx
+             = Subscription "alice"
+
+    mp <- Mempool.new @Org.Tx
+    txs <- generate arbitrary :: IO [Org.Tx]
+
+    flip runReaderT mp $ do
+        chan <- Mempool.subscribe sub
+        Mempool.writeTxs txs
+        evs <- flushChannel chan
+        map fromEvent evs @?= txs
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

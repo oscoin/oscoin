@@ -80,7 +80,7 @@ library
     , kademlia
     , monad-logger
     , mtl
-    , stm
+    , stm >= 2.4.5.0
     , time
     , text
     , text-format
@@ -188,6 +188,7 @@ test-suite test
       Oscoin.Tests
     , Oscoin.HTTP.Test.Helpers
     , Oscoin.Crypto.Hash.Arbitrary
+    , Oscoin.Org.Arbitrary
 
   default-language:
       Haskell2010

@@ -1,7 +1,7 @@
 module Oscoin.Node.Channel where
 
 import Oscoin.Prelude
-import Control.Concurrent.STM.TQueue (TQueue, newTQueue, writeTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueue, writeTQueue, readTQueue, flushTQueue)
 import qualified Data.Map as Map
 
 newtype Event tx = Event { fromEvent :: tx }
@@ -9,10 +9,18 @@ newtype Event tx = Event { fromEvent :: tx }
 
 type Channel tx = TQueue (Event tx)
 
-type instance Id (Channel tx) = Subscription (Channel tx)
+type instance Id (Channel tx) = Subscription tx
 
 newChannel :: MonadSTM m => m (Channel tx)
 newChannel = liftSTM newTQueue
+
+readChannel :: MonadSTM m => Channel tx -> m (Event tx)
+readChannel =
+    liftSTM . readTQueue
+
+flushChannel :: MonadSTM m => Channel tx -> m [Event tx]
+flushChannel =
+    liftSTM . flushTQueue
 
 newtype Subscription ev = Subscription Text
     deriving (Eq, Ord, Show)
@@ -31,7 +39,8 @@ mapProducer
     :: (prod -> prod)
     -> Evented ev prod
     -> Evented ev prod
-mapProducer = undefined
+mapProducer f (Evented p subs) =
+    Evented (f p) subs
 
 mapSubscribers
     :: (Subscribers ev -> Subscribers ev)
