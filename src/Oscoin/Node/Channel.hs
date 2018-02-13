@@ -7,12 +7,12 @@ data Event tx = Event (Id tx) tx
 
 type Channel tx = TQueue (Event tx)
 
-type instance Id (Channel tx) = Subscription
+type instance Id (Channel tx) = Subscription (Channel tx)
 
 newChannel :: MonadSTM m => m (Channel tx)
 newChannel = liftSTM newTQueue
 
-newtype Subscription = Subscription Text
+newtype Subscription ev = Subscription Text
     deriving (Eq, Ord, Show)
 
 type Subscribers ev = Map (Id (Channel ev)) (Channel ev)
