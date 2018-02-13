@@ -135,8 +135,8 @@ testOscoinMempool = do
     flip runReaderT mp $ do
         -- Subscribe to the mempool with the subscription token.
         chan <- Mempool.subscribe sub
-        -- Write the transactions.
-        Mempool.writeTxs txs
+        -- Add the transactions.
+        Mempool.addTxs txs
         -- Retrieve all events from the channel.
         evs <- Mempool.flushChannel chan
         -- Verify that they contain the transactions we generated.

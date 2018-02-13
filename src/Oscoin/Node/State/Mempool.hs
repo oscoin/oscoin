@@ -2,8 +2,7 @@ module Oscoin.Node.State.Mempool
     ( -- * Mempool
       Mempool(..)
     , lookup
-    , addTx
-    , addTxs
+    , insert
     , removeTxs
 
       -- * MonadMempool
@@ -11,7 +10,7 @@ module Oscoin.Node.State.Mempool
     , Handle(..)
     , new
     , read
-    , writeTxs
+    , addTxs
     , subscribe
     , unsubscribe
 
@@ -34,7 +33,7 @@ import           Control.Concurrent.STM.TVar (TVar, newTVar, modifyTVar, readTVa
 
 -- | A map of transaction keys to transactions.
 newtype Mempool k tx = Mempool { fromMempool :: Map k tx }
-    deriving (Show, Semigroup, Monoid, Eq)
+    deriving (Show, Semigroup, Monoid, Eq, Foldable)
 
 -- | The 'Aeson.ToJSON' instance of 'Mempool' includes transaction ids as fields
 -- inside the transaction object.
@@ -50,21 +49,22 @@ lookup :: Ord k => k -> Mempool k tx -> Maybe tx
 lookup k (Mempool txs) = Map.lookup k txs
 
 -- | Add a transaction to a mempool.
-addTx
+insert
     :: (Hashable tx, Id tx ~ Hashed tx)
     => tx
     -> Mempool (Id tx) tx
     -> Mempool (Id tx) tx
-addTx tx (Mempool txs) =
+insert tx (Mempool txs) =
     Mempool (Map.insert (hash tx) tx txs)
 
+-- TODO: We shouldn't need this function. Use foldr instead.
 -- | Add multiple transactions to a mempool.
-addTxs
+insertMany
     :: (Foldable t, Hashable tx, Id tx ~ Hashed tx)
     => t tx
     -> Mempool (Id tx) tx
     -> Mempool (Id tx) tx
-addTxs txs' (Mempool txs) =
+insertMany txs' (Mempool txs) =
     Mempool . Map.union txs
             . Map.fromList
             . map (\tx -> (hash tx, tx))
@@ -93,14 +93,14 @@ new
 new =
     Handle <$> (liftSTM $ newTVar $ evented mempty)
 
--- | Write transactions to the mempool, notifying all subscribers.
-writeTxs
+-- | Add transactions to the mempool, notifying all subscribers.
+addTxs
     :: (MonadMempool tx r m, MonadSTM m, Foldable t)
     => (Id tx ~ Hashed tx, Hashable tx)
     => t tx
     -> m ()
-writeTxs txs = do
-    update (addTxs txs)
+addTxs txs = do
+    update (insertMany txs)
     tvar <- fromHandle <$> asks getter
     evt  <- liftSTM (readTVar tvar)
     for_ txs $ notifySubscribers evt

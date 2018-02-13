@@ -42,7 +42,7 @@ module Oscoin.Prelude
 import Prelude (read, map, zip, lookup)
 import qualified Prelude as Prelude
 -- TODO: We should be using these instead of the ones in "Foldable".
-import Foundation hiding (Signed, NonEmpty, Foldable, toList, null, fail, (<>))
+import Foundation hiding (Signed, NonEmpty, Foldable, toList, null, fail, (<>), foldr)
 import Foundation.Collection (getNonEmpty)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -60,7 +60,7 @@ import Control.Monad.STM.Class (MonadSTM, liftSTM)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad.Fail (MonadFail, fail)
 import Data.Traversable (Traversable(..), sequence, traverse)
-import Data.Foldable (for_, traverse_, Foldable, toList, null)
+import Data.Foldable (for_, traverse_, Foldable, toList, null, foldr)
 import Data.Sequence (Seq)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Has

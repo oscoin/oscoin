@@ -122,5 +122,5 @@ submitTransaction
     => tx
     -> State.StorageT tx m (Receipt tx)
 submitTransaction tx = do
-    Mempool.writeTxs [tx]
+    Mempool.addTxs [tx]
     pure $ Receipt (hash tx)
