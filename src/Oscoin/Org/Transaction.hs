@@ -15,7 +15,7 @@ import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex)
 import qualified Oscoin.Node.State as State
-import qualified Oscoin.Transaction.Mempool as Mempool
+import qualified Oscoin.Node.State.Mempool as Mempool
 
 import qualified Data.ByteString.Base64.Extended as Base64
 import           Data.Binary

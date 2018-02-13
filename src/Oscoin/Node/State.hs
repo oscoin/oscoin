@@ -3,10 +3,10 @@ module Oscoin.Node.State where
 import           Oscoin.Prelude
 import           Oscoin.Org (OrgId, OrgPath, OrgKey, OrgVal, mkOrgPath)
 import           Oscoin.State.Tree (Val, Path)
+import qualified Oscoin.Node.State.Mempool as Mempool
+import           Oscoin.Node.State.Mempool (Mempool)
 import qualified Oscoin.Storage.State as StateTree
 import qualified Oscoin.Storage.Block as BlockStore
-import qualified Oscoin.Transaction.Mempool as Mempool
-import           Oscoin.Transaction.Mempool (Mempool)
 
 -- | Node state handle for interacting with the state tree.
 data Handle tx = Handle

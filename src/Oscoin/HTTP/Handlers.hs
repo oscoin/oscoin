@@ -2,9 +2,9 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
+import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.HTTP.Internal
-import qualified Oscoin.Transaction.Mempool as Mempool
 import           Oscoin.Org (Org, OrgId, OrgKey, MemberId, mkOrgDataPath)
 import qualified Oscoin.Org.Transaction as Org
 import           Oscoin.Org.Repository (RepoId)
