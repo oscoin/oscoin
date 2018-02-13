@@ -59,7 +59,7 @@ import Control.Monad.Reader (MonadReader, ReaderT(..), runReaderT, ask, asks, lo
 import Control.Monad.STM.Class (MonadSTM, liftSTM)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad.Fail (MonadFail, fail)
-import Data.Traversable (Traversable(..), sequence)
+import Data.Traversable (Traversable(..), sequence, traverse)
 import Data.Foldable (for_, traverse_, Foldable, toList, null)
 import Data.Sequence (Seq)
 import Data.List.NonEmpty (NonEmpty(..))

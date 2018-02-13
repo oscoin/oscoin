@@ -11,7 +11,7 @@ module Oscoin.Node.State.Mempool
     , Handle(..)
     , new
     , read
-    , update
+    , writeTxs
     , subscribe
     , unsubscribe
     ) where
@@ -90,14 +90,17 @@ new
 new =
     Handle <$> (liftSTM $ newTVar $ evented mempty)
 
--- | Update the mempool with an update function.
-update
-    :: (MonadMempool tx r m, MonadSTM m)
-    => (Mempool (Id tx) tx -> Mempool (Id tx) tx)
+-- | Write transactions to the mempool, notifying all subscribers.
+writeTxs
+    :: (MonadMempool tx r m, MonadSTM m, Foldable t)
+    => (Id tx ~ Hashed tx, Hashable tx)
+    => t tx
     -> m ()
-update f = do
-    Handle tvar <- asks getter
-    liftSTM $ modifyTVar tvar $ mapProducer f
+writeTxs txs = do
+    update (addTxs txs)
+    tvar <- fromHandle <$> asks getter
+    evt  <- liftSTM (readTVar tvar)
+    for_ txs $ notifySubscribers evt
 
 -- | Return a read-only version of the mempool.
 read :: (MonadMempool tx r m, MonadSTM m) => m (Mempool (Id tx) tx)
@@ -126,6 +129,7 @@ unsubscribe key = do
 
 -- Internal functions ---------------------------------------------------------
 
+-- | Add a subscriber to the mempool.
 addSubscriber
     :: (MonadSTM m, MonadMempool tx r m)
     => Id (Channel tx)
@@ -133,3 +137,12 @@ addSubscriber
 addSubscriber key chan = do
     Handle tvar <- asks getter
     liftSTM . modifyTVar tvar . mapSubscribers $ Map.insert key chan
+
+-- | Update the mempool with an update function.
+update
+    :: (MonadMempool tx r m, MonadSTM m)
+    => (Mempool (Id tx) tx -> Mempool (Id tx) tx)
+    -> m ()
+update f = do
+    Handle tvar <- asks getter
+    liftSTM $ modifyTVar tvar $ mapProducer f

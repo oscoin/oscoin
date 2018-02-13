@@ -1,9 +1,11 @@
 module Oscoin.Node.Channel where
 
 import Oscoin.Prelude
-import Control.Concurrent.STM.TQueue (TQueue, newTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueue, writeTQueue)
+import qualified Data.Map as Map
 
-data Event tx = Event (Id tx) tx
+newtype Event tx = Event { fromEvent :: tx }
+    deriving (Functor, Eq, Ord, Show)
 
 type Channel tx = TQueue (Event tx)
 
@@ -37,3 +39,12 @@ mapSubscribers
     -> Evented ev prod
 mapSubscribers f (Evented p subs) =
     Evented p (f subs)
+
+notifySubscribers
+    :: (Monad m, MonadSTM m)
+    => Evented ev prod
+    -> ev
+    -> m ()
+notifySubscribers (Evented{evSubscribers}) ev =
+    for_ (Map.toList evSubscribers) $ \(_, chan) ->
+        liftSTM $ writeTQueue chan (Event ev)
