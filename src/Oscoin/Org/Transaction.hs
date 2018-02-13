@@ -95,9 +95,9 @@ setTx = SetTx
 -------------------------------------------------------------------------------
 
 -- | A transaction receipt. Contains the hashed transaction.
-data Receipt tx = Receipt { fromReceipt :: Hashed tx }
+data Receipt tx = Receipt { fromReceipt :: Id tx }
 
-instance ToJSON (Receipt tx) where
+instance Id tx ~ Hashed tx => ToJSON (Receipt tx) where
     toJSON (Receipt tx) =
         object [ "tx" .= decodeUtf8 (toHex tx) ]
 
@@ -118,7 +118,9 @@ applyTransaction _ _ =
 
 -- | Submit a transaction to the mempool.
 submitTransaction
-    :: Hashable tx => tx -> State.StorageT tx IO (Receipt tx)
+    :: (Monad m, MonadSTM m, Hashable tx, Id tx ~ Hashed tx)
+    => tx
+    -> State.StorageT tx m (Receipt tx)
 submitTransaction tx = do
     Mempool.updateMempool (Mempool.addTx (hash tx) tx)
     pure $ Receipt (hash tx)

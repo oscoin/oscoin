@@ -2,7 +2,7 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
-import           Oscoin.Crypto.Hash (Hashed, Hashable)
+import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Transaction.Mempool as Mempool
 import           Oscoin.Org (Org, OrgId, OrgKey, MemberId, mkOrgDataPath)
@@ -12,19 +12,19 @@ import           Oscoin.Org.Repository (RepoId)
 import           Data.Aeson (FromJSON, ToJSON, encode, toJSON)
 import           Network.HTTP.Types.Status
 
-getAllTransactions :: ToJSON tx => ApiAction tx ()
+getAllTransactions :: (ToJSON (Id tx), ToJSON tx) => ApiAction tx ()
 getAllTransactions = do
     mp <- storage $ State.getMempool
     respond ok200 (Just (toJSON mp))
 
-getTransaction :: ToJSON tx => Hashed tx -> ApiAction tx ()
+getTransaction :: (Ord (Id tx), ToJSON tx) => Id tx -> ApiAction tx ()
 getTransaction txId = do
     mp <- storage $ State.getMempool
     case Mempool.lookup txId mp of
         Just tx -> respond ok200 (Just (toJSON tx))
         Nothing -> respond notFound404 Nothing
 
-submitTransaction :: forall tx. (Hashable tx, FromJSON tx) => ApiAction tx ()
+submitTransaction :: (Hashable tx, FromJSON tx, Id tx ~ Hashed tx) => ApiAction tx ()
 submitTransaction = do
     -- TODO: Create a pattern for this.
     result :: Maybe tx <- getBody

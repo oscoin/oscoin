@@ -3,7 +3,7 @@ module Oscoin.HTTP.API where
 import           Oscoin.Prelude
 import           Oscoin.Environment
 import qualified Oscoin.Org.Transaction as Org
-import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Crypto.PubKey (Signed)
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
@@ -16,7 +16,7 @@ import qualified Network.Wai.Middleware.Static as Wai
 import           Web.Spock (middleware, get, post, root, json, (<//>), var)
 
 -- | Entry point for API.
-api :: Environment -> Api (Crypto.Signed Org.Tx) ()
+api :: Environment -> Api (Signed Org.Tx) ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")

@@ -8,7 +8,7 @@ module Oscoin.Crypto.PubKey
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (hashAlgorithm, Hashable(..), hashed, fromHashed)
+import           Oscoin.Crypto.Hash (Hashed, hashAlgorithm, Hashable(..), hashed, fromHashed)
 
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (PublicKey(..), PrivateKey, Signature(..))
@@ -49,6 +49,8 @@ instance FromHttpApiData Signature where
 -- Create these with "sign" and verify them with "verify".
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
+
+type instance Id (Signed msg) = Hashed (Signed msg)
 
 instance Binary msg => Binary (Signed msg)
 

@@ -23,6 +23,7 @@ library
     , Oscoin.Node
     , Oscoin.Node.State
     , Oscoin.Node.Service
+    , Oscoin.Node.Channel
     , Oscoin.Patch
     , Oscoin.User
 
