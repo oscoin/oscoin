@@ -14,9 +14,12 @@ module Oscoin.Node.State.Mempool
     , writeTxs
     , subscribe
     , unsubscribe
+
+    , module Exports
     ) where
 
 import           Oscoin.Prelude hiding (read, lookup)
+import qualified Oscoin.Node.Channel as Exports (flushChannel, readChannel, Channel)
 import           Oscoin.Node.Channel
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import           Data.Map (Map)

@@ -10,7 +10,7 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
 import qualified Oscoin.Node.State.Mempool as Mempool
-import           Oscoin.Node.Channel (Subscription(..), flushChannel, fromEvent)
+import           Oscoin.Node.Channel (Subscription(..), fromEvent)
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
@@ -122,16 +122,24 @@ testOscoinCrypto = do
 
 testOscoinMempool :: Assertion
 testOscoinMempool = do
+    -- Create a subscription token.
     let sub :: Subscription Org.Tx
              = Subscription "alice"
 
+    -- Create a new mempool of org transactions.
     mp <- Mempool.new @Org.Tx
+
+    -- Create some arbitrary transactions.
     txs <- generate arbitrary :: IO [Org.Tx]
 
     flip runReaderT mp $ do
+        -- Subscribe to the mempool with the subscription token.
         chan <- Mempool.subscribe sub
+        -- Write the transactions.
         Mempool.writeTxs txs
-        evs <- flushChannel chan
+        -- Retrieve all events from the channel.
+        evs <- Mempool.flushChannel chan
+        -- Verify that they contain the transactions we generated.
         map fromEvent evs @?= txs
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
