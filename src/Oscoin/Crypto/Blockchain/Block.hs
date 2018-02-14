@@ -18,18 +18,18 @@ type Height = Integer
 type Timestamp = Word32
 
 -- | Block header.
-data Header = Header
-    { blockPrevHash   :: Hashed Header
+data BlockHeader = BlockHeader
+    { blockPrevHash   :: Hashed BlockHeader
     , blockRootHash   :: ByteString -- TODO: Should be Digest.
     , blockTimestamp  :: Timestamp
     } deriving (Show, Eq, Generic)
 
-instance Binary Header
-instance Hashable Header
+instance Binary BlockHeader
+instance Hashable BlockHeader
 
 -- | Create an empty block header.
-emptyHeader :: Header
-emptyHeader = Header
+emptyHeader :: BlockHeader
+emptyHeader = BlockHeader
     { blockPrevHash = hashed zeroHash
     , blockRootHash = zero 32
     , blockTimestamp = 0
@@ -37,7 +37,7 @@ emptyHeader = Header
 
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx = Block
-    { blockHeader :: Header
+    { blockHeader :: BlockHeader
     , blockData   :: Seq tx
     } deriving (Show, Generic)
 
@@ -54,7 +54,7 @@ validateBlock blk
 genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx
 genesisBlock timestamp xs =
     Block
-        Header
+        BlockHeader
             { blockPrevHash  = hashed zeroHash
             , blockTimestamp = timestamp
             , blockRootHash  = hashTxs xs

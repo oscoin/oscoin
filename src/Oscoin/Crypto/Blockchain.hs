@@ -35,10 +35,10 @@ validateBlockchain (blk :| blk' : blks)
 blockchain :: [Block a] -> Blockchain a
 blockchain = fromList
 
-blockHash :: Block tx -> Hashed Header
+blockHash :: Block tx -> Hashed BlockHeader
 blockHash blk = headerHash (blockHeader blk)
 
-headerHash :: Header -> Hashed Header
+headerHash :: BlockHeader -> Hashed BlockHeader
 headerHash header =
     hash header
 
@@ -46,7 +46,7 @@ headerHash header =
 printBlockchain :: Binary tx => Blockchain tx -> IO ()
 printBlockchain blks = do
     printf "\n"
-    for_ (zip heights (toList blks)) $ \(h, Block bh@Header{..} txs) -> do
+    for_ (zip heights (toList blks)) $ \(h, Block bh@BlockHeader{..} txs) -> do
         printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (BS.unpack $ toHex $ headerHash bh)
         printf "│ prevHash:   %-64s │\n" (BS.unpack $ toHex blockPrevHash)
         printf "│ timestamp:  %-64d │\n" blockTimestamp

@@ -3,6 +3,7 @@ module Oscoin.Crypto.Hash
     , Hashable(..)
     , hashed
     , fromHashed
+    , HashAlgorithm
     , hashAlgorithm
     , maxHash
     , zeroHash
@@ -12,7 +13,7 @@ module Oscoin.Crypto.Hash
 
 import           Oscoin.Prelude
 
-import           Crypto.Hash (HashAlgorithm, Digest, Blake2b_256(..))
+import           Crypto.Hash (Digest, Blake2b_256(..))
 import qualified Crypto.Hash as Crypto
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Put as Binary
@@ -54,6 +55,8 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
 hashed :: Crypto.Digest algo -> Hashed' algo a
 hashed = Hashed'
 
+type HashAlgorithm = Blake2b_256
+
 hashAlgorithm :: Blake2b_256
 hashAlgorithm = Blake2b_256
 
@@ -69,11 +72,11 @@ instance ToJSON (Digest Blake2b_256) where
     toJSON digest =
         String $ decodeUtf8 $ toHex $ LBS.toStrict $ Binary.encode digest
 
-maxHash :: HashAlgorithm a => Digest a
+maxHash :: Crypto.HashAlgorithm a => Digest a
 maxHash = fromJust $
     Crypto.digestFromByteString (ByteArray.replicate (Crypto.hashDigestSize Blake2b_256) maxBound :: ByteString)
 
-zeroHash :: HashAlgorithm a => Digest a
+zeroHash :: Crypto.HashAlgorithm a => Digest a
 zeroHash = fromJust $
     Crypto.digestFromByteString (zero (Crypto.hashDigestSize Blake2b_256) :: ByteString)
 
