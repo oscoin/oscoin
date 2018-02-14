@@ -122,9 +122,9 @@ testOscoinCrypto = do
 
 testOscoinMempool :: Assertion
 testOscoinMempool = do
-    -- Create a subscription token.
-    let sub :: Subscription Org.Tx
-             = Subscription "alice"
+    -- Create two subscription tokens.
+    let s1 :: Subscription Org.Tx = Subscription "alice"
+        s2 :: Subscription Org.Tx = Subscription "bob"
 
     -- Create a new mempool of org transactions.
     mp <- Mempool.new @Org.Tx
@@ -133,14 +133,24 @@ testOscoinMempool = do
     txs <- generate arbitrary :: IO [Org.Tx]
 
     flip runReaderT mp $ do
-        -- Subscribe to the mempool with the subscription token.
-        chan <- Mempool.subscribe sub
+        -- Subscribe to the mempool with the subscription tokens.
+        chan1 <- Mempool.subscribe s1
+        chan2 <- Mempool.subscribe s2
+
         -- Add the transactions.
         Mempool.addTxs txs
-        -- Retrieve all events from the channel.
-        evs <- Mempool.flushChannel chan
+
+        -- Retrieve all events from the channels.
+        evs1 <- Mempool.flushChannel chan1
+        evs2 <- Mempool.flushChannel chan2
+
         -- Verify that they contain the transactions we generated.
-        map fromEvent evs @?= txs
+        map fromEvent evs1 @?= txs
+        map fromEvent evs2 @?= txs
+
+        -- If we try to read again, the channel is empty.
+        evs <- Mempool.flushChannel chan1
+        evs @?= []
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x
