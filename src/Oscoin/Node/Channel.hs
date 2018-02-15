@@ -23,7 +23,7 @@ flushChannel =
     liftSTM . flushTQueue
 
 newtype Subscription ev = Subscription Text
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, IsString)
 
 type Subscribers ev = Map (Id (Channel ev)) (Channel ev)
 

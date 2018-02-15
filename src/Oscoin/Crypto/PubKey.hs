@@ -3,6 +3,7 @@ module Oscoin.Crypto.PubKey
     , generateKeyPair
     , sign
     , signed
+    , unsign
     , verify
     , module Crypto.PubKey.ECC.ECDSA
     ) where
@@ -95,6 +96,10 @@ sign key msg = do
 -- | Create a signed message from a message and a signature.
 signed :: Signature -> msg -> Signed msg
 signed sig msg = Signed msg sig
+
+-- | Unwrap a signed message from its signature.
+unsign :: Signed msg -> msg
+unsign = sigMessage
 
 -- | Verify a signed message with the public key.
 verify :: Binary msg => PublicKey -> Signed msg -> Bool

@@ -33,3 +33,7 @@ get Handle{hTree} k = do
 set :: MonadIO m => Handle -> Path -> Val -> m ()
 set Handle{hTree} k v =
     io $ modifyIORef hTree (Tree.set k v)
+
+update :: MonadIO m => Handle -> (Tree Path Val -> Tree Path Val) -> m ()
+update Handle{hTree} f =
+    io $ modifyIORef hTree f

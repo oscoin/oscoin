@@ -32,7 +32,7 @@ run Config{..} = do
     threads <- lift . traverse async $
         [ HTTP.run (HTTP.api cfgEnv) cfgOrgs (read cfgServiceName) mp st
         , P2P.run cfgEnv mp st
-        , Consensus.run cfgEnv mp st
+        , runReaderT (Consensus.run cfgEnv st) mp
         ]
     (_, _err) <- lift $ waitAny threads
     pass
