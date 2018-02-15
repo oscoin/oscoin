@@ -113,7 +113,7 @@ testOscoinCrypto :: Assertion
 testOscoinCrypto = do
     let val :: Text = "fnord"
     (_, priKey) <- Crypto.generateKeyPair
-    signed <- io $ Crypto.sign priKey val
+    signed <- Crypto.sign priKey val
 
     -- Verify that hashing a signed message is the same thing as hashing an
     -- unsigned one.
