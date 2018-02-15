@@ -191,6 +191,7 @@ test-suite test
     , Oscoin.Crypto.PubKey.Arbitrary
     , Oscoin.Crypto.Blockchain.Arbitrary
     , Oscoin.Org.Arbitrary
+    , Oscoin.Test.Helpers
 
   default-language:
       Haskell2010

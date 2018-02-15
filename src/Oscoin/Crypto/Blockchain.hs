@@ -12,6 +12,12 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import           Text.Printf
 
+-- TODO: Use this representation for Blockchain.
+--
+-- data Blockchain
+--     = Genesis    (Block tx)
+--     | Blockchain (Block tx) Blockchain
+
 type Blockchain tx = NonEmpty (Block tx)
 
 validateBlockchain :: Blockchain tx -> Either Error (Blockchain tx)
@@ -31,9 +37,6 @@ validateBlockchain (blk :| blk' : blks)
     t  = blockTimestamp (blockHeader blk)
     t' = blockTimestamp (blockHeader blk')
     hours = 3600
-
-blockchain :: [Block a] -> Blockchain a
-blockchain = fromList
 
 blockHash :: Block tx -> Hashed BlockHeader
 blockHash blk = headerHash (blockHeader blk)

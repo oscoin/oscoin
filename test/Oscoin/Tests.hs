@@ -1,7 +1,6 @@
 module Oscoin.Tests where
 
 import           Oscoin.Prelude
-import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Org (Org(..), OrgTree, mkOrgPath, mkOrgDataPath)
 import qualified Oscoin.Org as Org
 import qualified Oscoin.Org.Transaction as Org
@@ -10,10 +9,14 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
-import           Oscoin.Crypto.Blockchain.Block (validateBlock)
-import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith)
+import           Oscoin.Crypto.Blockchain.Block (validateBlock, blockHeader)
+import           Oscoin.Crypto.Blockchain (validateBlockchain)
+import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.Channel (Subscription(..), fromEvent)
+
+import           Oscoin.HTTP.Test.Helpers
+import           Oscoin.Test.Helpers
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
@@ -163,8 +166,15 @@ testOscoinBlockchain = do
     txs <- generate . listOf $
         arbitrarySignedWith key' :: IO [Crypto.Signed Org.Tx]
 
-    genesis <- generate $ arbitraryGenesisWith txs
-    isRight (validateBlock genesis) @? "Block is valid"
+    gblock <- generate $ arbitraryGenesisWith txs
+    assertNoError $ validateBlock gblock
+
+    txs' <- generate . listOf $
+        arbitrarySignedWith key' :: IO [Crypto.Signed Org.Tx]
+
+    block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
+
+    assertNoError $ validateBlockchain (block :| gblock : [])
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

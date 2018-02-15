@@ -44,8 +44,12 @@ instance Arbitrary BlockHeader where
 
 arbitraryValidBlock :: forall tx. (Binary tx, Arbitrary tx) => Blockchain tx -> Gen (Block tx)
 arbitraryValidBlock (Block prevHeader _ :| _) = do
-    elapsed <- choose (2750, 3250)
     txs <- arbitrary :: Gen [tx]
+    arbitraryValidBlockWith prevHeader txs
+
+arbitraryValidBlockWith :: forall tx. Binary tx => BlockHeader -> [tx] -> Gen (Block tx)
+arbitraryValidBlockWith prevHeader txs = do
+    elapsed <- choose (2750, 3250)
     let header = BlockHeader
                { blockPrevHash  = hash prevHeader
                , blockRootHash  = hashTxs txs
