@@ -140,6 +140,7 @@ library
     , FlexibleContexts
     , MultiParamTypeClasses
     , GADTs
+    , InstanceSigs
 
     -- Records
     , RecordWildCards

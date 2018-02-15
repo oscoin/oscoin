@@ -28,10 +28,13 @@ import           Data.Aeson (FromJSON(..), ToJSON(..), Value(String), withText)
 import qualified Data.Text as T
 import           Web.HttpApiData (FromHttpApiData(..))
 
-type Hashed a = Hashed' Blake2b_256 a
+-- | Represents data that has been hashed with 'HashAlgorithm'.
+type Hashed a = Hashed' HashAlgorithm a
 
+-- | Represents data that has been hashed with @algo@. In general, it's
+-- recommended to use 'Hashed' instead.
 newtype Hashed' algo a = Hashed' { fromHashed :: Digest algo }
-    deriving (Eq, Ord, Show, ByteArrayAccess)
+    deriving (Eq, Ord, Show, Functor, ByteArrayAccess)
 
 instance ToJSON (Hashed' Blake2b_256 a) where
     toJSON (Hashed' digest) = toJSON digest
@@ -52,11 +55,14 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
             Left err -> Left (fromError err)
             Right bs -> Right $ Binary.decode $ LBS.fromStrict bs
 
-hashed :: Crypto.Digest algo -> Hashed' algo a
+-- | Wrap a 'Crypto.Digest' 'HashAlgorithm' into a 'Hashed'.
+hashed :: Crypto.Digest HashAlgorithm -> Hashed a
 hashed = Hashed'
 
+-- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
 
+-- | Default hash algorithm  used in this module.
 hashAlgorithm :: Blake2b_256
 hashAlgorithm = Blake2b_256
 
@@ -72,13 +78,19 @@ instance ToJSON (Digest Blake2b_256) where
     toJSON digest =
         String $ decodeUtf8 $ toHex $ LBS.toStrict $ Binary.encode digest
 
-maxHash :: Crypto.HashAlgorithm a => Digest a
+-- | The maximum hash value.
+maxHash :: forall a. Crypto.HashAlgorithm a => Digest a
 maxHash = fromJust $
-    Crypto.digestFromByteString (ByteArray.replicate (Crypto.hashDigestSize Blake2b_256) maxBound :: ByteString)
+    Crypto.digestFromByteString (ByteArray.replicate n maxBound :: ByteString)
+  where
+    n = Crypto.hashDigestSize (undefined :: a)
 
-zeroHash :: Crypto.HashAlgorithm a => Digest a
+-- | The zero hash. Also the minimum hash value.
+zeroHash :: forall a. Crypto.HashAlgorithm a => Digest a
 zeroHash = fromJust $
-    Crypto.digestFromByteString (zero (Crypto.hashDigestSize Blake2b_256) :: ByteString)
+    Crypto.digestFromByteString (zero n :: ByteString)
+  where
+    n = Crypto.hashDigestSize (undefined :: a)
 
 toHex :: ByteArrayAccess ba => ba -> ByteString
 toHex bs =
