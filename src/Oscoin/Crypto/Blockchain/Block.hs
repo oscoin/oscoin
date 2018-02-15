@@ -51,15 +51,24 @@ validateBlock blk
     | otherwise =
         Right blk
 
-genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx
-genesisBlock timestamp xs =
+block
+    :: (Foldable t, Binary tx)
+    => Hashed BlockHeader
+    -> Timestamp
+    -> t tx
+    -> Block tx
+block prev t txs =
     Block
         BlockHeader
-            { blockPrevHash  = hashed zeroHash
-            , blockTimestamp = timestamp
-            , blockRootHash  = hashTxs xs
+            { blockPrevHash  = prev
+            , blockTimestamp = t
+            , blockRootHash  = hashTxs txs
             }
-        (Seq.fromList (toList xs))
+        (Seq.fromList (toList txs))
+
+genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx
+genesisBlock t xs =
+    block (hashed zeroHash) t xs
 
 isGenesisBlock :: Block a -> Bool
 isGenesisBlock blk =
