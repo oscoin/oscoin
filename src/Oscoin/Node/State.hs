@@ -5,12 +5,12 @@ import           Oscoin.Org (OrgId, OrgPath, OrgKey, OrgVal, mkOrgPath)
 import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.State.Mempool (Mempool)
-import qualified Oscoin.Storage.State as StateTree
+import qualified Oscoin.Node.State.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
 
 -- | Node state handle for interacting with the state tree.
 data Handle tx = Handle
-    { hStateTree  :: StateTree.Handle
+    { hStateTree  :: STree.Handle
     , hBlockStore :: BlockStore.Handle
     , hMempool    :: Mempool.Handle tx
     }
@@ -23,9 +23,8 @@ instance Has (Mempool.Handle tx) (Handle tx) where
 type StorageT tx m a = ReaderT (Handle tx) m a
 
 -- | Connect to state storage.
-connect :: Mempool.Handle tx -> IO (Handle tx)
-connect hMempool = do
-    hStateTree <- StateTree.connect
+connect :: Mempool.Handle tx -> STree.Handle -> IO (Handle tx)
+connect hMempool hStateTree = do
     hBlockStore <- pure undefined
     pure Handle{..}
 
@@ -54,13 +53,13 @@ getOrgPath org path =
 getPath :: MonadIO m => Path -> StorageT tx m (Maybe Val)
 getPath k = do
     Handle{hStateTree} <- ask
-    StateTree.get hStateTree k
+    STree.get hStateTree k
 
 -- | Set a state path to the given value.
 setPath :: MonadIO m => Path -> Val -> StorageT tx m ()
 setPath k v = do
     Handle{hStateTree} <- ask
-    StateTree.set hStateTree k v
+    STree.set hStateTree k v
 
 -- | Run a storage action with the given state handle in another monad.
 runStorageT :: Handle tx -> StorageT tx m a -> m a

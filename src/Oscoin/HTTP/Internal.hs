@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
+import qualified Oscoin.Node.State.Tree as STree
 import qualified Oscoin.Node.State.Mempool as Mempool
 import qualified Web.Spock as Spock
 import           Web.HttpApiData (FromHttpApiData)
@@ -81,20 +82,22 @@ run
     -> [(OrgId, Org)]
     -> Int
     -> Mempool.Handle tx
+    -> STree.Handle
     -> IO ()
-run app orgs port mp =
-    runSpock port (mkMiddleware app orgs mp)
+run app orgs port mp st =
+    runSpock port (mkMiddleware app orgs mp st)
 
 mkMiddleware
     :: Api tx ()
     -> [(OrgId, Org)]
     -> Mempool.Handle tx
+    -> STree.Handle
     -> IO Wai.Middleware
-mkMiddleware app orgs mp = do
+mkMiddleware app orgs mp st = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
-    conn        = State.connect mp
+    conn        = State.connect mp st
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
     state       = mkState { stOrgs = orgs }
 

@@ -23,6 +23,7 @@ library
     , Oscoin.Node
     , Oscoin.Node.State
     , Oscoin.Node.State.Mempool
+    , Oscoin.Node.State.Tree
     , Oscoin.Node.Service
     , Oscoin.Node.Channel
     , Oscoin.Patch
@@ -48,7 +49,6 @@ library
     , Oscoin.State.Tree
 
     , Oscoin.Storage.Internal
-    , Oscoin.Storage.State
     , Oscoin.Storage.Block
 
     , Oscoin.P2P

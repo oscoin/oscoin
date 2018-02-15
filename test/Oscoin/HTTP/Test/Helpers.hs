@@ -7,6 +7,7 @@ import           Oscoin.Org (Org, OrgId)
 import           Oscoin.HTTP.Internal (mkMiddleware)
 import           Oscoin.HTTP.API (api)
 import qualified Oscoin.Node.State.Mempool as Mempool
+import qualified Oscoin.Node.State.Tree as STree
 
 import Test.Tasty.HUnit (Assertion, assertFailure)
 import qualified Test.Tasty.HUnit as Tasty
@@ -40,7 +41,8 @@ instance MonadRandom Session where
 runSession :: [(OrgId, Org)] -> Session () -> Assertion
 runSession orgs sess = do
     mp <- Mempool.new
-    spockAsApp (mkMiddleware (api Testing) orgs mp) >>= Wai.runSession sess
+    st <- STree.connect
+    spockAsApp (mkMiddleware (api Testing) orgs mp st) >>= Wai.runSession sess
 
 infix 1 @?=, @=?
 
