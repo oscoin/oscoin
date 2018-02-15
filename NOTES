@@ -113,4 +113,8 @@ Blockchain is future-proof. We don't have to stay with PoA; orgs can decide
 to go for more decentralized networks down the line. They can use delegated
 voting etc.
 
+In the end, if we are looking to have DAOs running the world, then open networks
+work better. How can we have a DAO where a minority selects validators which
+can collude and subvert the network.
+
 .. vim: filetype=rst
