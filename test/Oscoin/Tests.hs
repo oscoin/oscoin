@@ -7,8 +7,11 @@ import qualified Oscoin.Org as Org
 import qualified Oscoin.Org.Transaction as Org
 import           Oscoin.Org.Arbitrary ()
 import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
+import           Oscoin.Crypto.Blockchain.Block (validateBlock)
+import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.Channel (Subscription(..), fromEvent)
 
@@ -35,6 +38,7 @@ tests = testGroup "Oscoin"
     , testCase       "Paths"                          testOscoinPaths
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
+    , testCase       "Blockchain"                     testOscoinBlockchain
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
@@ -151,6 +155,16 @@ testOscoinMempool = do
         -- If we try to read again, the channel is empty.
         evs <- Mempool.flushChannel chan1
         evs @?= []
+
+testOscoinBlockchain :: Assertion
+testOscoinBlockchain = do
+    (_, key') <- Crypto.generateKeyPair
+
+    txs <- generate . listOf $
+        arbitrarySignedWith key' :: IO [Crypto.Signed Org.Tx]
+
+    genesis <- generate $ arbitraryGenesisWith txs
+    isRight (validateBlock genesis) @? "Block is valid"
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

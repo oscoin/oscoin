@@ -30,6 +30,7 @@ module Oscoin.Prelude
     , MonadIO
     , LByteString
     , Error(..)
+    , Timestamp
     , Id
     , notImplemented
     , io
@@ -78,6 +79,9 @@ type LByteString = LBS.ByteString
 
 newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)
+
+-- | Unix timestamp.
+type Timestamp = Word32
 
 -- | 'Id' maps a type to its identifier type. Example: 'Hashed' @tx@ for @tx@.
 type family Id a :: *

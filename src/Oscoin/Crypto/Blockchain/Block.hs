@@ -14,9 +14,6 @@ import           GHC.Generics (Generic)
 -- | Block height.
 type Height = Integer
 
--- | Block creation timestamp.
-type Timestamp = Word32
-
 -- | Block header.
 data BlockHeader = BlockHeader
     { blockPrevHash   :: Hashed BlockHeader

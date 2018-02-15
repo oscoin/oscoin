@@ -56,6 +56,10 @@ arbitraryValidBlock (Block prevHeader _ :| _) = do
 arbitraryGenesis :: forall tx. (Binary tx, Arbitrary tx) => Gen (Block tx)
 arbitraryGenesis = do
     txs <- resize 20 $ arbitrary :: Gen [tx]
+    arbitraryGenesisWith txs
+
+arbitraryGenesisWith :: Binary tx => [tx] -> Gen (Block tx)
+arbitraryGenesisWith txs = do
     g <- genesisBlock <$> arbitrary <*> pure txs
     pure $ g { blockHeader = blockHeader g }
 
