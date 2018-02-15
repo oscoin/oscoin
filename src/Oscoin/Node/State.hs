@@ -23,11 +23,10 @@ instance Has (Mempool.Handle tx) (Handle tx) where
 type StorageT tx m a = ReaderT (Handle tx) m a
 
 -- | Connect to state storage.
-connect :: Ord (Id tx) => () -> IO (Handle tx)
-connect () = do
+connect :: Mempool.Handle tx -> IO (Handle tx)
+connect hMempool = do
     hStateTree <- StateTree.connect
     hBlockStore <- pure undefined
-    hMempool <- Mempool.new
     pure Handle{..}
 
 -- | Close the connection to state storage.

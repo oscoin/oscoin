@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import           Oscoin.Org (Org, OrgId)
 import qualified Oscoin.Node.State as State
+import qualified Oscoin.Node.State.Mempool as Mempool
 import qualified Web.Spock as Spock
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn, runSpock, spock)
@@ -75,16 +76,25 @@ notImplemented =
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run :: Ord (Id tx) => Api tx () -> [(OrgId, Org)] -> Int -> IO ()
-run app orgs port =
-    runSpock port (mkMiddleware app orgs)
+run
+    :: Api tx ()
+    -> [(OrgId, Org)]
+    -> Int
+    -> Mempool.Handle tx
+    -> IO ()
+run app orgs port mp =
+    runSpock port (mkMiddleware app orgs mp)
 
-mkMiddleware :: Ord (Id tx) => Api tx () -> [(OrgId, Org)] -> IO Wai.Middleware
-mkMiddleware app orgs = do
+mkMiddleware
+    :: Api tx ()
+    -> [(OrgId, Org)]
+    -> Mempool.Handle tx
+    -> IO Wai.Middleware
+mkMiddleware app orgs mp = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
-    conn        = State.connect ()
+    conn        = State.connect mp
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
     state       = mkState { stOrgs = orgs }
 

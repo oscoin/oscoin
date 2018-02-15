@@ -1,11 +1,12 @@
 -- TODO: Move this module to Network.Wai.Test.Extended
 module Oscoin.HTTP.Test.Helpers where
 
-import Oscoin.Prelude
-import Oscoin.Environment
-import Oscoin.Org (Org, OrgId)
-import Oscoin.HTTP.Internal (mkMiddleware)
-import Oscoin.HTTP.API (api)
+import           Oscoin.Prelude
+import           Oscoin.Environment
+import           Oscoin.Org (Org, OrgId)
+import           Oscoin.HTTP.Internal (mkMiddleware)
+import           Oscoin.HTTP.API (api)
+import qualified Oscoin.Node.State.Mempool as Mempool
 
 import Test.Tasty.HUnit (Assertion, assertFailure)
 import qualified Test.Tasty.HUnit as Tasty
@@ -37,8 +38,9 @@ instance MonadRandom Session where
 
 -- | Turn a "Session" into an "Assertion".
 runSession :: [(OrgId, Org)] -> Session () -> Assertion
-runSession orgs sess =
-    spockAsApp (mkMiddleware (api Testing) orgs) >>= Wai.runSession sess
+runSession orgs sess = do
+    mp <- Mempool.new
+    spockAsApp (mkMiddleware (api Testing) orgs mp) >>= Wai.runSession sess
 
 infix 1 @?=, @=?
 
