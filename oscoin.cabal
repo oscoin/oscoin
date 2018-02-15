@@ -188,6 +188,7 @@ test-suite test
       Oscoin.Tests
     , Oscoin.HTTP.Test.Helpers
     , Oscoin.Crypto.Hash.Arbitrary
+    , Oscoin.Crypto.PubKey.Arbitrary
     , Oscoin.Crypto.Blockchain.Arbitrary
     , Oscoin.Org.Arbitrary
 
