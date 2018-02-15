@@ -71,10 +71,11 @@ a result which when processed may invoke IO.
 -------------------------------------------------------------------------------
 
 Can we come up with a typeclass to represent blockchains?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ::
 
-  class Chain a where
+  class Blockchain a where
     type Transaction a :: *
 
     apply :: Transaction a -> a -> a
@@ -82,5 +83,34 @@ Can we come up with a typeclass to represent blockchains?
 
     default genesis :: Default a => a
     genesis = def
+
+
+Why blockchain?
+^^^^^^^^^^^^^^^
+
+What characteristics of blockchains are interesting and not available in other
+architectures? The purported attributes are:
+
+* *Tamper-proof*: You can't go back and edit a transaction in the past. Also
+  known as 'immutable'.
+* *Censor-proof*: All transactions, if valid get included in the ledger.
+
+However, these are really only valid in either PoW blockchains or in open
+networks, the reason being that otherwise, it's up to the validators whether
+the ledger gets tampered with or if transactions are censored. In an open
+network, that is also the case, but the validators are much less likely to
+collude.
+
+If we don't have a blockchain:
+
+* How do we handle the case of stake-holders voting for their validators? Can
+this be done without a chain?
+* How do you "fork" a DL if it isn't blockchain-based?
+* How do you create an org that isn't owned by anyone? For example to share some
+code that requires a multisig to take down, but every member can write to?
+
+Blockchain is future-proof. We don't have to stay with PoA; orgs can decide
+to go for more decentralized networks down the line. They can use delegated
+voting etc.
 
 .. vim: filetype=rst
