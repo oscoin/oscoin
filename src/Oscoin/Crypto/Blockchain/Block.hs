@@ -27,7 +27,7 @@ instance Hashable BlockHeader
 -- | Create an empty block header.
 emptyHeader :: BlockHeader
 emptyHeader = BlockHeader
-    { blockPrevHash = hashed zeroHash
+    { blockPrevHash = toHashed zeroHash
     , blockRootHash = zero 32
     , blockTimestamp = 0
     }
@@ -65,11 +65,11 @@ block prev t txs =
 
 genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx
 genesisBlock t xs =
-    block (hashed zeroHash) t xs
+    block (toHashed zeroHash) t xs
 
 isGenesisBlock :: Block a -> Bool
 isGenesisBlock blk =
-    (blockPrevHash . blockHeader) blk == hashed zeroHash
+    (blockPrevHash . blockHeader) blk == toHashed zeroHash
 
 hashTxs :: (Foldable t, Binary tx) => t tx -> ByteString
 hashTxs txs
@@ -84,4 +84,4 @@ hashTxs txs
 
 hashTx :: Binary tx => tx -> Hashed tx
 hashTx tx =
-    hashed (hashlazy (encode tx))
+    toHashed (hashlazy (encode tx))

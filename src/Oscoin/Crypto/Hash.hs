@@ -1,7 +1,7 @@
 module Oscoin.Crypto.Hash
     ( Hashed
     , Hashable(..)
-    , hashed
+    , toHashed
     , fromHashed
     , HashAlgorithm
     , hashAlgorithm
@@ -33,11 +33,11 @@ type Hashed a = Hashed' HashAlgorithm a
 
 -- | Represents data that has been hashed with @algo@. In general, it's
 -- recommended to use 'Hashed' instead.
-newtype Hashed' algo a = Hashed' { fromHashed :: Digest algo }
+newtype Hashed' algo a = Hashed { fromHashed :: Digest algo }
     deriving (Eq, Ord, Show, Functor, ByteArrayAccess)
 
 instance ToJSON (Hashed' Blake2b_256 a) where
-    toJSON (Hashed' digest) = toJSON digest
+    toJSON (Hashed digest) = toJSON digest
 
 instance FromJSON (Hashed' Blake2b_256 a) where
     parseJSON = withText "Hashed' Blake2b_256 a" $ \t ->
@@ -47,7 +47,7 @@ instance FromJSON (Hashed' Blake2b_256 a) where
 
 instance Binary (Hashed' Blake2b_256 a) where
     put = Binary.put <$> fromHashed
-    get = hashed <$> Binary.get
+    get = Hashed <$> Binary.get
 
 instance FromHttpApiData (Hashed' Blake2b_256 a) where
     parseQueryParam txt =
@@ -56,8 +56,8 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
             Right bs -> Right $ Binary.decode $ LBS.fromStrict bs
 
 -- | Wrap a 'Crypto.Digest' 'HashAlgorithm' into a 'Hashed'.
-hashed :: Crypto.Digest HashAlgorithm -> Hashed a
-hashed = Hashed'
+toHashed :: Crypto.Digest HashAlgorithm -> Hashed a
+toHashed = Hashed
 
 -- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
@@ -108,7 +108,17 @@ fromHex bs =
 class Binary a => Hashable a where
     hash :: a -> Hashed a
     hash a =
-        hashed . Crypto.hash . LBS.toStrict $ Binary.encode a
+        Hashed . Crypto.hash . LBS.toStrict $ Binary.encode a
 
-instance Hashable Text
-instance Hashable ByteString
+instance Hashable () where
+    hash () = Hashed zeroHash
+
+instance Hashable Text where
+    hash = Hashed . Crypto.hash . encodeUtf8
+
+instance Hashable ByteString where
+    hash = Hashed . Crypto.hash
+
+instance (Binary a, ByteArrayAccess a) => Hashable (Maybe a) where
+    hash (Just x) = Hashed (Crypto.hash x)
+    hash Nothing  = Hashed zeroHash

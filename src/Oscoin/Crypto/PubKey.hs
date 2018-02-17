@@ -9,7 +9,7 @@ module Oscoin.Crypto.PubKey
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (Hashed, hashAlgorithm, Hashable(..), hashed, fromHashed)
+import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed)
 
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (PublicKey(..), PrivateKey, Signature(..))
@@ -57,7 +57,7 @@ instance Binary msg => Binary (Signed msg)
 
 instance Hashable msg => Hashable (Signed msg) where
     hash :: Signed msg -> Hashed (Signed msg)
-    hash (Signed msg _) = hashed (fromHashed (hash msg))
+    hash (Signed msg _) = toHashed (fromHashed (hash msg))
 
 instance ToJSON tx => ToJSON (Signed tx) where
     toJSON (Signed tx sig) =
