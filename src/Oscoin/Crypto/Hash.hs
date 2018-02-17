@@ -75,8 +75,8 @@ instance Binary (Digest Blake2b_256) where
         size = Crypto.hashDigestSize Blake2b_256
 
 instance ToJSON (Digest Blake2b_256) where
-    toJSON digest =
-        String $ decodeUtf8 $ toHex $ LBS.toStrict $ Binary.encode digest
+    toJSON =
+        String . decodeUtf8 . toHex . LBS.toStrict . Binary.encode
 
 -- | The maximum hash value.
 maxHash :: forall a. Crypto.HashAlgorithm a => Digest a
@@ -93,8 +93,8 @@ zeroHash = fromJust $
     n = Crypto.hashDigestSize (undefined :: a)
 
 toHex :: ByteArrayAccess ba => ba -> ByteString
-toHex bs =
-    Base16.encode $ convert bs
+toHex =
+    Base16.encode . convert
 
 -- TODO: Make result type polymorphic: `Either Error ba`.
 fromHex :: ByteString -> Either Error ByteString
@@ -107,8 +107,7 @@ fromHex bs =
 
 class Binary a => Hashable a where
     hash :: a -> Hashed a
-    hash a =
-        Hashed . Crypto.hash . LBS.toStrict $ Binary.encode a
+    hash = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
 
 instance Hashable () where
     hash () = Hashed zeroHash
