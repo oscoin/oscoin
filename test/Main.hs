@@ -1,8 +1,10 @@
 module Main (main) where
 
 import           Oscoin.Prelude
-import           Oscoin.Tests
+import qualified Oscoin.Tests as Oscoin
+import qualified Crypto.Tests as Crypto
 import           Test.Tasty
 
 main :: IO ()
-main = defaultMain tests
+main = defaultMain $
+    testGroup "All" [Oscoin.tests, Crypto.tests]
