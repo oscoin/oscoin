@@ -28,6 +28,7 @@ tests = testGroup "Crypto"
     , testProperty    "Invariant"              propInvariant
     , testProperty    "Sorted"                 propSorted
     , testProperty    "List From/To"           propList
+    , testProperty    "AVL-balanced"           propBalanceFactor
     ]
 
 -- | Updates must preserve ordering.
@@ -64,3 +65,8 @@ propInsertElem :: Tree.Tree Key Val -> Key -> Val -> Property
 propInsertElem tree k v =
     not (Tree.elem k tree) ==>
         Tree.elem k (Tree.insert k v tree)
+
+-- | The balance factor of an AVL tree should always be in the set {-1, 0, 1}.
+propBalanceFactor :: Tree Key Val -> Bool
+propBalanceFactor tree =
+    fromEnum (Tree.balance tree) `elem` [-1, 0, 1]

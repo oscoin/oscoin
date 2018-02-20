@@ -80,7 +80,7 @@ null _     = False
 
 -- Utility --------------------------------------------------------------------
 
-newtype Height = Height Int
+newtype Height = Height { fromHeight :: Int }
     deriving (Num, Eq, Ord, Show)
 
 height :: Tree k v -> Height
@@ -89,17 +89,27 @@ height (Leaf _ _)   = 0
 height (Node _ l r) = max (height l + 1) (height r + 1)
 
 data Balance =
-      LeftHeavy
-    | RightHeavy
+      LeftHeavy  Int
+    | RightHeavy Int
     | Balanced
     deriving (Eq, Show)
+
+instance Enum Balance where
+    toEnum n
+        | n > 0     = RightHeavy n
+        | n < 0     = LeftHeavy n
+        | otherwise = Balanced
+
+    fromEnum (LeftHeavy n)  = n
+    fromEnum (RightHeavy n) = n
+    fromEnum Balanced       = 0
 
 balance :: Tree k v -> Balance
 balance Empty        = Balanced
 balance (Leaf _ _)   = Balanced
 balance (Node _ l r)
-    | b < 0     = LeftHeavy
-    | b > 0     = RightHeavy
+    | b < 0     = LeftHeavy  b
+    | b > 0     = RightHeavy b
     | otherwise = Balanced
   where
-    b = height r - height l
+    b = fromHeight (height r - height l)
