@@ -8,6 +8,13 @@ module Crypto.Data.Auth.Tree
     , null
     , toList
     , fromList
+
+    -- * Utility types and functions
+    , Height
+    , height
+
+    , Balance
+    , balance
     ) where
 
 import           Prelude hiding (lookup, null, elem)
@@ -70,3 +77,29 @@ fromList kvs = foldr (\(k, v) tree -> insert k v tree) Empty kvs
 null :: Tree k v -> Bool
 null Empty = True
 null _     = False
+
+-- Utility --------------------------------------------------------------------
+
+newtype Height = Height Int
+    deriving (Num, Eq, Ord, Show)
+
+height :: Tree k v -> Height
+height Empty        = 0
+height (Leaf _ _)   = 0
+height (Node _ l r) = max (height l + 1) (height r + 1)
+
+data Balance =
+      LeftHeavy
+    | RightHeavy
+    | Balanced
+    deriving (Eq, Show)
+
+balance :: Tree k v -> Balance
+balance Empty        = Balanced
+balance (Leaf _ _)   = Balanced
+balance (Node _ l r)
+    | b < 0     = LeftHeavy
+    | b > 0     = RightHeavy
+    | otherwise = Balanced
+  where
+    b = height r - height l

@@ -39,21 +39,27 @@ propInvariant tree (toList -> inserts) =
     updates = [Tree.insert k v | (k, v) <- inserts]
            ++ [Tree.delete k   | (k, _) <- inserts]
 
+-- | The tree is always sorted.
 propSorted :: Tree Key Val -> Bool
 propSorted (Tree.toList -> kvs) =
     sort kvs == kvs
 
+-- | Converting to/from a list should preverse the data.
+--
+-- Note that unique keys are required for this invariant to hold, as duplicate
+-- keys will be overwritten.
 propList :: Set Key -> NonEmpty Val -> Bool
-propList (Set.toList -> ks) (toList -> vs) =
+propList (Set.toList -> ks) (cycle . toList -> vs) =
     (Tree.toList . Tree.fromList) kvs == kvs
   where
-    kvs = zip ks (cycle vs)
+    kvs = zip ks vs
 
-propInsertLookup :: Tree.Tree Key Val -> Key -> Val -> Property
+-- | Keys inserted should be available for lookup.
+propInsertLookup :: Tree.Tree Key Val -> Key -> Val -> Bool
 propInsertLookup tree k v =
-    not (Tree.elem k tree) ==>
-        Tree.lookup k (Tree.insert k v tree) == Just v
+    Tree.lookup k (Tree.insert k v tree) == Just v
 
+-- | Keys inserted should be elements of the tree.
 propInsertElem :: Tree.Tree Key Val -> Key -> Val -> Property
 propInsertElem tree k v =
     not (Tree.elem k tree) ==>
