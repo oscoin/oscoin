@@ -1,6 +1,7 @@
 module Crypto.Data.Auth.Tree
     ( Tree(..)
     , empty
+    , elem
     , insert
     , lookup
     , delete
@@ -9,7 +10,7 @@ module Crypto.Data.Auth.Tree
     , fromList
     ) where
 
-import           Prelude hiding (lookup, null)
+import           Prelude hiding (lookup, null, elem)
 
 -- * Note: The key of an inner node is always the left-most key of its right
 --   sub-tree.
@@ -23,13 +24,22 @@ data Tree k v =
 empty :: Tree k v
 empty = Empty
 
+elem :: Ord k => k -> Tree k v -> Bool
+elem _ Empty = False
+elem k (Leaf k' _) = k == k'
+elem k (Node k' l r)
+    | k < k'    = elem k l
+    | otherwise = elem k r
+
 insert :: Ord k => k -> v -> Tree k v -> Tree k v
 insert k v Empty = Leaf k v
 insert k v (Node k' l r)
     | k < k'    = Node k' (insert k v l) r
     | otherwise = Node k' l (insert k v r)
-insert k v (Leaf k' _) | k == k' =
-    Leaf k' v
+insert k v (Leaf k' v')
+    | k == k' = Leaf k' v
+    | k >  k' = Node k (Leaf k' v') (Leaf k v)
+    | k <  k' = Node k' (Leaf k v) (Leaf k' v')
 insert _ _ _ =
     undefined
 
@@ -50,7 +60,9 @@ delete k (Node k' l r)
     | otherwise = Node k' l (delete k r)
 
 toList :: Tree k v -> [(k, v)]
-toList _ = undefined
+toList Empty = []
+toList (Leaf k v) = [(k, v)]
+toList (Node _ l r) = toList l ++ toList r
 
 fromList :: Ord k => [(k, v)] -> Tree k v
 fromList kvs = foldr (\(k, v) tree -> insert k v tree) Empty kvs
