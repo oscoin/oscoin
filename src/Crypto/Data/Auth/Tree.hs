@@ -44,12 +44,12 @@ elem k (Node k' l r)
 insert :: Ord k => k -> v -> Tree k v -> Tree k v
 insert k v Empty = Leaf k v
 insert k v (Node k' l r)
-    | k < k'    = Node k' (insert k v l) r
-    | otherwise = Node k' l (insert k v r)
+    | k < k'    = rebalance $ Node k' (insert k v l) r
+    | otherwise = rebalance $ Node k' l (insert k v r)
 insert k v (Leaf k' v')
     | k == k' = Leaf k' v
-    | k >  k' = Node k (Leaf k' v') (Leaf k v)
-    | k <  k' = Node k' (Leaf k v) (Leaf k' v')
+    | k >  k' = rebalance $ Node k (Leaf k' v') (Leaf k v)
+    | k <  k' = rebalance $ Node k' (Leaf k v) (Leaf k' v')
 insert _ _ _ =
     undefined
 
@@ -75,7 +75,7 @@ toList (Leaf k v) = [(k, v)]
 toList (Node _ l r) = toList l ++ toList r
 
 fromList :: Ord k => [(k, v)] -> Tree k v
-fromList kvs = foldr (\(k, v) tree -> insert k v tree) Empty kvs
+fromList kvs = foldl (\tree (k, v) -> insert k v tree) Empty kvs
 
 null :: Tree k v -> Bool
 null Empty = True
@@ -92,7 +92,7 @@ instance Show Height where
 height :: Tree k v -> Height
 height Empty        = 0
 height (Leaf _ _)   = 0
-height (Node _ l r) = max (height l + 1) (height r + 1)
+height (Node _ l r) = 1 + max (height l) (height r)
 
 data Balance =
       LeftHeavy  Int
@@ -119,6 +119,21 @@ balance (Node _ l r)
     | otherwise = Balanced
   where
     b = fromHeight (height r - height l)
+
+rebalance :: Tree k v -> Tree k v
+rebalance tree =
+    case balance tree of
+        LeftHeavy  n | n < -1 -> rotR tree
+        RightHeavy n | n >  1 -> rotL tree
+        _                     -> tree
+
+rotL :: Tree k v -> Tree k v
+rotL (Node k l (Node rk rl rr)) = Node rk (Node k l rl) rr
+rotL z                          = z
+
+rotR :: Tree k v -> Tree k v
+rotR (Node k (Node lk ll lr) r) = Node lk ll (Node k lr r)
+rotR z                          = z
 
 -------------------------------------------------------------------------------
 
