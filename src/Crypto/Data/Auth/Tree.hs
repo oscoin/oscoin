@@ -128,14 +128,15 @@ showPretty tree =
   where
     go :: (Show k, Show v) => Int -> Tree k v -> String
     go lvl Empty = indent lvl ++ "Empty"
-    go lvl node@(Node _ l r) = concat $
-        [ indent lvl, showNode node, "\n"
+    go lvl (Node k l r) = concat $
+        [ indent lvl, showNode k l r, "\n"
         , go (lvl + 2) l
         , go (lvl + 2) r
         ]
-    go lvl (Leaf k v) = concat [indent lvl, ("Leaf ", show k, " (val=", show v), ")\n"]
+    go lvl (Leaf k v) =
+        concat [indent lvl, "Leaf ", show k, " (val=", show v, ")\n"]
 
     indent lvl = concat (replicate lvl "  ")
-    showNode node@(Node k l r) =
+    showNode k l r | node <- Node k l r =
         concat ["Node ", show k, " (height=", show (height node), ", ", show (balance node), ")"]
 
