@@ -5,6 +5,7 @@ import           Prelude
 import           Data.List (sort)
 import qualified Data.Set as Set
 import           Data.Set (Set)
+import           Data.Word
 import           Data.List.NonEmpty (NonEmpty, toList)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -13,8 +14,8 @@ import           Test.QuickCheck.Instances ()
 import qualified Crypto.Data.Auth.Tree as Tree
 import           Crypto.Data.Auth.Tree (Tree)
 
-type Key = Int
-type Val = Int
+type Key = Word8
+type Val = Word8
 
 instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
     arbitrary = do

@@ -121,19 +121,32 @@ balance (Node _ l r)
     b = fromHeight (height r - height l)
 
 rebalance :: Tree k v -> Tree k v
-rebalance tree =
+rebalance tree@(Node _ l r) =
     case balance tree of
-        LeftHeavy  n | n < -1 -> rotR tree
-        RightHeavy n | n >  1 -> rotL tree
-        _                     -> tree
+        LeftHeavy  n | n < -1 ->
+            case balance l of
+                RightHeavy _ -> rotLR tree
+                _            -> rotR tree
+        RightHeavy n | n > 1 ->
+            case balance r of
+                LeftHeavy _ -> rotRL tree
+                _           -> rotL tree
+        _ -> tree
+rebalance tree = tree
 
-rotL :: Tree k v -> Tree k v
+rotL, rotR, rotLR, rotRL :: Tree k v -> Tree k v
+
 rotL (Node k l (Node rk rl rr)) = Node rk (Node k l rl) rr
-rotL z                          = z
+rotL t = t
 
-rotR :: Tree k v -> Tree k v
 rotR (Node k (Node lk ll lr) r) = Node lk ll (Node k lr r)
-rotR z                          = z
+rotR t = t
+
+rotLR (Node k (Node lk ll (Node lrk lrl lrr)) r) = Node lrk (Node lk ll lrl) (Node k lrr r)
+rotLR t = t
+
+rotRL (Node k l (Node rk (Node rlk rll rlr) rr)) = Node rlk (Node k l rll) (Node rk rlr rr)
+rotRL t = t
 
 -------------------------------------------------------------------------------
 
