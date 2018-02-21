@@ -26,7 +26,10 @@ data Tree k v =
       Empty
     | Node k (Tree k v) (Tree k v)
     | Leaf k v
-    deriving (Show, Eq)
+    deriving (Eq)
+
+instance (Show k, Show v) => Show (Tree k v) where
+    show = showPretty
 
 empty :: Tree k v
 empty = Empty
@@ -81,7 +84,10 @@ null _     = False
 -- Utility --------------------------------------------------------------------
 
 newtype Height = Height { fromHeight :: Int }
-    deriving (Num, Eq, Ord, Show)
+    deriving (Num, Eq, Ord)
+
+instance Show Height where
+    show = show . fromHeight
 
 height :: Tree k v -> Height
 height Empty        = 0
@@ -113,3 +119,23 @@ balance (Node _ l r)
     | otherwise = Balanced
   where
     b = fromHeight (height r - height l)
+
+-------------------------------------------------------------------------------
+
+showPretty :: (Show k, Show v) => Tree k v -> String
+showPretty tree =
+    go 0 tree
+  where
+    go :: (Show k, Show v) => Int -> Tree k v -> String
+    go lvl Empty = indent lvl ++ "Empty"
+    go lvl node@(Node _ l r) = concat $
+        [ indent lvl, showNode node, "\n"
+        , go (lvl + 2) l
+        , go (lvl + 2) r
+        ]
+    go lvl (Leaf k v) = concat [indent lvl, ("Leaf ", show k, " (val=", show v), ")\n"]
+
+    indent lvl = concat (replicate lvl "  ")
+    showNode node@(Node k l r) =
+        concat ["Node ", show k, " (height=", show (height node), ", ", show (balance node), ")"]
+
