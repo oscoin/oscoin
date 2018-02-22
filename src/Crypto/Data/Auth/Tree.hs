@@ -8,6 +8,11 @@ module Crypto.Data.Auth.Tree
     , null
     , toList
     , fromList
+    , map
+    , mapWithKey
+    , foldr
+    , values
+    , keys
 
     -- * Utility types and functions
     , Height
@@ -17,7 +22,8 @@ module Crypto.Data.Auth.Tree
     , balance
     ) where
 
-import           Prelude hiding (lookup, null, elem)
+import           Prelude hiding (lookup, null, elem, foldr, map, traverse)
+import qualified Data.List as List
 
 -- * Note: The key of an inner node is always the left-most key of its right
 --   sub-tree.
@@ -27,9 +33,6 @@ data Tree k v =
     | Node k (Tree k v) (Tree k v)
     | Leaf k v
     deriving (Eq)
-
-instance (Show k, Show v) => Show (Tree k v) where
-    show = showPretty
 
 empty :: Tree k v
 empty = Empty
@@ -80,6 +83,21 @@ fromList kvs = foldl (\tree (k, v) -> insert k v tree) Empty kvs
 null :: Tree k v -> Bool
 null Empty = True
 null _     = False
+
+foldr :: (a -> b -> b) -> b -> Tree k a -> b
+foldr f acc tree = List.foldr (f . snd) acc (toList tree)
+
+mapWithKey :: Ord k => (k -> a -> b) -> Tree k a -> Tree k b
+mapWithKey f tree = fromList $ List.map (\(k, v) -> (k, f k v)) (toList tree)
+
+map :: Ord k => (a -> b) -> Tree k a -> Tree k b
+map f tree = mapWithKey (\_ v -> f v) tree
+
+values :: Tree k v -> [v]
+values tree = List.map snd (toList tree)
+
+keys :: Tree k v -> [k]
+keys tree = List.map fst (toList tree)
 
 -- Utility --------------------------------------------------------------------
 
@@ -168,3 +186,13 @@ showPretty tree =
     showNode k l r | node <- Node k l r =
         concat ["Node ", show k, " (height=", show (height node), ", ", show (balance node), ")"]
 
+-- Instances ------------------------------------------------------------------
+
+instance Foldable (Tree k) where
+    foldr = foldr
+
+instance Ord k => Functor (Tree k) where
+    fmap = map
+
+instance (Show k, Show v) => Show (Tree k v) where
+    show = showPretty
