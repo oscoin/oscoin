@@ -57,10 +57,10 @@ library
     , Oscoin.P2P.Block
 
     , Oscoin.Transaction
+    , Crypto.Data.Auth.Tree
 
   other-modules:
       Data.ByteString.Base64.Extended
-      Crypto.Data.Auth.Tree
 
   build-depends:
       base
@@ -204,6 +204,9 @@ test-suite test
       base
     , aeson
     , binary
+    , containers
+    , cryptonite
+    , memory
     , http-types
     , oscoin
     , QuickCheck
@@ -222,12 +225,16 @@ test-suite test
   default-extensions:
       GADTs
     , NoImplicitPrelude
+    , TypeApplications
     , ConstraintKinds
     , OverloadedStrings
     , TypeFamilies
     , NamedFieldPuns
     , ScopedTypeVariables
     , RecordWildCards
+    , ViewPatterns
+    , TypeSynonymInstances
+    , FlexibleInstances
 
   ghc-options:
     -threaded -rtsopts -with-rtsopts=-N
