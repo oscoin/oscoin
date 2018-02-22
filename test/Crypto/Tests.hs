@@ -23,23 +23,27 @@ instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
         pure $ Tree.fromList kvs
 
 tests :: TestTree
-tests = testGroup "Crypto"
+tests = localOption (QuickCheckTests 1000) $ testGroup "Crypto"
     [ testProperty    "Insert/Lookup"          propInsertLookup
     , testProperty    "Insert/Elem"            propInsertElem
+    , testProperty    "Delete/Elem"            propDelete
     , testProperty    "Invariant"              propInvariant
     , testProperty    "Sorted"                 propSorted
     , testProperty    "List From/To"           propList
-    , testProperty    "AVL-balanced"           propBalanceFactor
+    , testProperty    "AVL-balanced"           propBalanced
     ]
 
 -- | Updates must preserve ordering.
-propInvariant :: Tree Key Val -> NonEmpty (Key, Val) -> Bool
-propInvariant tree (toList -> inserts) =
-    propSorted (foldr ($) tree updates)
+propInvariant :: Tree Key Val -> Gen Bool
+propInvariant tree = do
+    inserts <- arbitrary :: Gen [(Key, Val)]
+    deletes <- map fst <$> sublistOf inserts
+    updated <- pure (foldr ($) tree (updates inserts deletes))
+    pure $ propSorted updated && propBalanced updated
   where
-    updates :: [Tree Key Val -> Tree Key Val]
-    updates = [Tree.insert k v | (k, v) <- inserts]
-           ++ [Tree.delete k   | (k, _) <- inserts]
+    updates :: [(Key, Val)] -> [Key] -> [Tree Key Val -> Tree Key Val]
+    updates inserts deletes = [Tree.insert k v | (k, v) <- inserts]
+                           ++ [Tree.delete k   |  k     <- deletes]
 
 -- | The tree is always sorted.
 propSorted :: Tree Key Val -> Bool
@@ -67,7 +71,13 @@ propInsertElem tree k v =
     not (Tree.elem k tree) ==>
         Tree.elem k (Tree.insert k v tree)
 
+-- | Deleting all the keys in a tree should result in an empty tree.
+propDelete :: Tree.Tree Key Val -> Property
+propDelete tree =
+    not (Tree.null tree) ==>
+        Tree.null $ foldr Tree.delete tree (Tree.keys tree)
+
 -- | The balance factor of an AVL tree should always be in the set {-1, 0, 1}.
-propBalanceFactor :: Tree Key Val -> Bool
-propBalanceFactor tree =
+propBalanced :: Tree Key Val -> Bool
+propBalanced tree =
     fromEnum (Tree.balance tree) `elem` [-1, 0, 1]

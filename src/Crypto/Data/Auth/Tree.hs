@@ -69,8 +69,11 @@ delete k leaf@(Leaf k' _)
     | k == k'   = Empty
     | otherwise = leaf
 delete k (Node k' l r)
-    | k < k'    = Node k' (delete k l) r
-    | otherwise = Node k' l (delete k r)
+    | k < k'    = cleanup $ Node k' (delete k l) r
+    | otherwise = cleanup $ Node k' l (delete k r)
+  where
+    cleanup (Node _ Empty Empty) = Empty
+    cleanup tree                 = tree
 
 toList :: Tree k v -> [(k, v)]
 toList Empty = []
@@ -173,7 +176,7 @@ showPretty tree =
     go 0 tree
   where
     go :: (Show k, Show v) => Int -> Tree k v -> String
-    go lvl Empty = indent lvl ++ "Empty"
+    go lvl Empty = indent lvl ++ "Empty\n"
     go lvl (Node k l r) = concat $
         [ indent lvl, showNode k l r, "\n"
         , go (lvl + 2) l
