@@ -182,15 +182,33 @@ rebalance tree = tree
 
 rotL, rotR, rotLR, rotRL :: Tree k v -> Tree k v
 
+-- | Simple left rotation.
+--
+--      n1             n2
+--     / \            /  \
+--    a   n2    →    n1   c
+--       /  \       /  \
+--      b    c     a    b
+--
 rotL (Node k l (Node rk rl rr)) = Node rk (Node k l rl) rr
 rotL t = t
 
+-- | Simple right rotation.
+--
+--      n2           n1
+--     /  \         / \
+--    n1   c   →   a   n2
+--   /  \             /  \
+--  a    b           b    c
+--
 rotR (Node k (Node lk ll lr) r) = Node lk ll (Node k lr r)
 rotR t = t
 
+-- | Left-right rotation.
 rotLR (Node k (Node lk ll (Node lrk lrl lrr)) r) = Node lrk (Node lk ll lrl) (Node k lrr r)
 rotLR t = t
 
+-- | Right-left rotation.
 rotRL (Node k l (Node rk (Node rlk rll rlr) rr)) = Node rlk (Node k l rll) (Node rk rlr rr)
 rotRL t = t
 
