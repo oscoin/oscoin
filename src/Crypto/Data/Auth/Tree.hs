@@ -10,7 +10,6 @@ module Crypto.Data.Auth.Tree
     , fromList
     , map
     , mapWithKey
-    , foldr
     , values
     , keys
     , flatten
@@ -27,18 +26,23 @@ module Crypto.Data.Auth.Tree
 import           Prelude hiding (lookup, null, elem, foldr, map, traverse)
 import qualified Data.List as List
 
+-- | An AVL+ tree.
+--
 -- * Note: The key of an inner node is always the left-most key of its right
 --   sub-tree.
-
+-- * Note: AVL+ trees only store values at the leaves.
+--
 data Tree k v =
       Empty
     | Node k (Tree k v) (Tree k v)
     | Leaf k v
-    deriving (Eq)
+    deriving (Eq, Functor, Traversable, Foldable)
 
+-- | Create an empty tree.
 empty :: Tree k v
 empty = Empty
 
+-- | /O(log n)/. Return 'True' if the key is an element of the tree.
 elem :: Ord k => k -> Tree k v -> Bool
 elem _ Empty = False
 elem k (Leaf k' _) = k == k'
@@ -46,6 +50,7 @@ elem k (Node k' l r)
     | k < k'    = elem k l
     | otherwise = elem k r
 
+-- | /O(log n)/. Insert a key and value into a tree.
 insert :: Ord k => k -> v -> Tree k v -> Tree k v
 insert k v Empty = Leaf k v
 insert k v (Node k' l r)
@@ -58,6 +63,7 @@ insert k v (Leaf k' v')
 insert _ _ _ =
     undefined
 
+-- | /O(log n)/. Lookup a key from a tree.
 lookup :: Ord k => k -> Tree k v -> Maybe v
 lookup k (Leaf k' v) | k == k' = Just v
 lookup k (Node k' l r)
@@ -65,6 +71,7 @@ lookup k (Node k' l r)
     | otherwise = lookup k r
 lookup _ _ = Nothing
 
+-- | /O(log n)/. Delete a key from a tree.
 delete :: Ord k => k -> Tree k v -> Tree k v
 delete _ Empty = Empty
 delete k leaf@(Leaf k' _)
@@ -78,11 +85,13 @@ delete k (Node k' l r)
     collapse (Node _ Empty r) = r
     collapse tree             = tree
 
+-- | Get the left most key of a tree.
 leftmost :: Tree k v -> k
 leftmost (Node _ l _) = leftmost l
 leftmost (Leaf k _)   = k
 leftmost Empty        = undefined
 
+-- | Convert a tree into a list of @(k, v)@ pairs.
 toList :: Tree k v -> [(k, v)]
 toList Empty = []
 toList (Leaf k v) = [(k, v)]
@@ -91,22 +100,24 @@ toList (Node _ l r) = toList l ++ toList r
 fromList :: Ord k => [(k, v)] -> Tree k v
 fromList kvs = foldl (\tree (k, v) -> insert k v tree) Empty kvs
 
+-- | Return 'True' if a tree is empty.
 null :: Tree k v -> Bool
 null Empty = True
 null _     = False
 
-foldr :: (a -> b -> b) -> b -> Tree k a -> b
-foldr f acc tree = List.foldr (f . snd) acc (toList tree)
-
+-- | Map a function with a key onto the values of a tree.
 mapWithKey :: Ord k => (k -> a -> b) -> Tree k a -> Tree k b
 mapWithKey f tree = fromList $ List.map (\(k, v) -> (k, f k v)) (toList tree)
 
-map :: Ord k => (a -> b) -> Tree k a -> Tree k b
-map f tree = mapWithKey (\_ v -> f v) tree
+-- | Map a function onto the values of a tree.
+map :: (a -> b) -> Tree k a -> Tree k b
+map = fmap
 
+-- | Return the values of a tree in-order.
 values :: Tree k v -> [v]
 values tree = List.map snd (toList tree)
 
+-- | Return the keys of a tree in-order.
 keys :: Tree k v -> [k]
 keys tree = List.map fst (toList tree)
 
@@ -204,12 +215,6 @@ showPretty tree =
         concat ["Node ", show k, " (height=", show (height node), ", ", show (balance node), ")"]
 
 -- Instances ------------------------------------------------------------------
-
-instance Foldable (Tree k) where
-    foldr = foldr
-
-instance Ord k => Functor (Tree k) where
-    fmap = map
 
 instance (Show k, Show v) => Show (Tree k v) where
     show = showPretty
