@@ -19,31 +19,30 @@ type Val = Word8
 
 instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
     arbitrary = do
-        kvs <- arbitrary
-        pure $ Tree.fromList kvs
+        inserts <- arbitrary :: Gen [(k, v)]
+        deletes <- map fst <$> sublistOf inserts
+        pure (foldr ($) Tree.empty (updates inserts deletes))
+      where
+        updates :: [(k, v)] -> [k] -> [Tree k v -> Tree k v]
+        updates inserts deletes = [Tree.delete k   |  k     <- deletes]
+                               ++ [Tree.insert k v | (k, v) <- inserts]
 
 tests :: TestTree
-tests = localOption (QuickCheckTests 1000) $ testGroup "Crypto"
+tests = localOption (QuickCheckTests 200) $ testGroup "Crypto"
     [ testProperty    "Insert/Lookup"          propInsertLookup
     , testProperty    "Insert/Elem"            propInsertElem
     , testProperty    "Delete/Elem"            propDelete
     , testProperty    "Invariant"              propInvariant
     , testProperty    "Sorted"                 propSorted
     , testProperty    "List From/To"           propList
+    , testProperty    "Inner nodes"            propInnerNodes
     , testProperty    "AVL-balanced"           propBalanced
     ]
 
 -- | Updates must preserve ordering.
-propInvariant :: Tree Key Val -> Gen Bool
-propInvariant tree = do
-    inserts <- arbitrary :: Gen [(Key, Val)]
-    deletes <- map fst <$> sublistOf inserts
-    updated <- pure (foldr ($) tree (updates inserts deletes))
-    pure $ propSorted updated && propBalanced updated
-  where
-    updates :: [(Key, Val)] -> [Key] -> [Tree Key Val -> Tree Key Val]
-    updates inserts deletes = [Tree.insert k v | (k, v) <- inserts]
-                           ++ [Tree.delete k   |  k     <- deletes]
+propInvariant :: Tree Key Val -> Bool
+propInvariant tree =
+    propSorted tree && propBalanced tree && propInnerNodes tree
 
 -- | The tree is always sorted.
 propSorted :: Tree Key Val -> Bool
@@ -81,3 +80,12 @@ propDelete tree =
 propBalanced :: Tree Key Val -> Bool
 propBalanced tree =
     fromEnum (Tree.balance tree) `elem` [-1, 0, 1]
+
+propInnerNodes :: Tree Key Val -> Bool
+propInnerNodes tree =
+    all propInnerNode (Tree.flatten tree)
+
+propInnerNode :: Tree Key Val -> Bool
+propInnerNode (Tree.Node k _ r) =
+    k == Tree.leftmost r
+propInnerNode _ = True

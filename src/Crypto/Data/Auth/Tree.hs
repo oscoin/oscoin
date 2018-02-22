@@ -13,6 +13,8 @@ module Crypto.Data.Auth.Tree
     , foldr
     , values
     , keys
+    , flatten
+    , leftmost
 
     -- * Utility types and functions
     , Height
@@ -69,11 +71,17 @@ delete k leaf@(Leaf k' _)
     | k == k'   = Empty
     | otherwise = leaf
 delete k (Node k' l r)
-    | k < k'    = cleanup $ Node k' (delete k l) r
-    | otherwise = cleanup $ Node k' l (delete k r)
+    | k < k'    = rebalance . collapse $ Node k' (delete k l) r
+    | otherwise = rebalance . collapse $ let r' = delete k r in Node (leftmost r') l r'
   where
-    cleanup (Node _ Empty Empty) = Empty
-    cleanup tree                 = tree
+    collapse (Node _ l Empty) = l
+    collapse (Node _ Empty r) = r
+    collapse tree             = tree
+
+leftmost :: Tree k v -> k
+leftmost (Node _ l _) = leftmost l
+leftmost (Leaf k _)   = k
+leftmost Empty        = undefined
 
 toList :: Tree k v -> [(k, v)]
 toList Empty = []
@@ -101,6 +109,12 @@ values tree = List.map snd (toList tree)
 
 keys :: Tree k v -> [k]
 keys tree = List.map fst (toList tree)
+
+-- | Flatten a tree to a list of nodes in a depth-first manner.
+flatten :: Tree k v -> [Tree k v]
+flatten Empty             = []
+flatten leaf@(Leaf _ _)   = [leaf]
+flatten node@(Node _ l r) = node : flatten l ++ flatten r
 
 -- Utility --------------------------------------------------------------------
 
