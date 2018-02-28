@@ -14,7 +14,6 @@ import           Test.Tasty.HUnit
 import           Test.QuickCheck.Instances ()
 
 import qualified Crypto.Data.Auth.Tree as Tree
-import qualified Crypto.Data.Auth.Tree.Proof as Tree
 import           Crypto.Data.Auth.Tree (Tree)
 import           Crypto.Hash (SHA256)
 
@@ -100,14 +99,12 @@ propInnerNode _ = True
 propProofVerify :: Tree Key Val -> Key -> Val -> Bool
 propProofVerify tree' k v | tree <- Tree.insert k v tree'
                           , root <- Tree.merkleHash tree =
-    case Tree.lookup' k tree :: (Maybe Val, Tree.Proof SHA256 Key Val) of
+    case Tree.lookup' @Key @Val @SHA256 k tree of
         (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
         _               -> False
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
-    case Tree.lookup' '?' Tree.empty :: (Maybe Val, Tree.Proof SHA256 Char Key) of
-        (Nothing, proof) ->
-            Tree.verify proof Tree.emptyHash '?' Nothing @?= Right ()
-        _ ->
-            assertFailure "Key was found in empty tree"
+    case Tree.lookup' @Char @Key @SHA256 '?' Tree.empty of
+        (Nothing, proof) -> Tree.verify proof Tree.emptyHash '?' Nothing @?= Right ()
+        _                -> assertFailure "Key was found in empty tree"
