@@ -17,6 +17,7 @@ module Crypto.Data.Auth.Tree
     , leftmost
     , verify
     , merkleHash
+    , emptyHash
 
     -- * Utility types and functions
     , Height
@@ -60,13 +61,17 @@ merkleHash
     => Tree k v
     -> Digest a
 merkleHash Empty =
-    fromJust $ digestFromByteString (zero n :: ByteString)
-  where
-    n = hashDigestSize (undefined :: a)
+    emptyHash
 merkleHash (Leaf k v) =
     hash (LBS.toStrict $ Binary.encode (k, v))
 merkleHash (Node _ l r) =
     hashOfHashes [merkleHash l, merkleHash r]
+
+emptyHash :: forall a. HashAlgorithm a => Digest a
+emptyHash =
+    fromJust $ digestFromByteString (zero n :: ByteString)
+  where
+    n = hashDigestSize (undefined :: a)
 
 hashOfHashes :: HashAlgorithm a => [Digest a]  -> Digest a
 hashOfHashes =
@@ -79,11 +84,14 @@ verify
     => Proof a k v
     -> Digest a
     -> k
-    -> v
+    -> Maybe v
     -> Either String ()
-verify (KeyExistsProof path) root k v
+verify (KeyExistsProof path) root k (Just v)
     | pathDigest path k v == root = Right ()
     | otherwise                   = Left "Root's don't match"
+verify (KeyAbsentProof Nothing Nothing) root _ Nothing
+    | root == emptyHash = Right ()
+    | otherwise         = Left "Empty absence proof"
 verify _ _ _ _ = undefined
 
 pathDigest
@@ -142,7 +150,7 @@ lookup' k tree =
         | k < k'    = f k l (R (merkleHash r) : path)
         | otherwise = f k r (L (merkleHash l) : path)
     f _ Empty _ =
-        (Nothing, undefined)
+        (Nothing, KeyAbsentProof Nothing Nothing)
 
 -- | /O(log n)/. Delete a key from a tree.
 delete :: Ord k => k -> Tree k v -> Tree k v

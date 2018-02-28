@@ -10,6 +10,7 @@ import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Either (isRight)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
+import           Test.Tasty.HUnit
 import           Test.QuickCheck.Instances ()
 
 import qualified Crypto.Data.Auth.Tree as Tree
@@ -31,7 +32,7 @@ instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
                                ++ [Tree.insert k v | (k, v) <- inserts]
 
 tests :: TestTree
-tests = localOption (QuickCheckTests 200) $ testGroup "Crypto"
+tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     [ testProperty    "Insert/Lookup"          propInsertLookup
     , testProperty    "Insert/Elem"            propInsertElem
     , testProperty    "Delete/Elem"            propDelete
@@ -41,6 +42,7 @@ tests = localOption (QuickCheckTests 200) $ testGroup "Crypto"
     , testProperty    "Inner nodes"            propInnerNodes
     , testProperty    "AVL-balanced"           propBalanced
     , testProperty    "Proofs"                 propProofVerify
+    , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
 
 -- | Updates must preserve ordering.
@@ -99,5 +101,13 @@ propProofVerify :: Tree Key Val -> Key -> Val -> Bool
 propProofVerify tree' k v | tree <- Tree.insert k v tree'
                           , root <- Tree.merkleHash tree =
     case Tree.lookup' k tree :: (Maybe Val, Tree.Proof SHA256 Key Val) of
-        (Just v, proof) -> isRight (Tree.verify proof root k v)
+        (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
         _               -> False
+
+testEmptyTreeProof :: Assertion
+testEmptyTreeProof = do
+    case Tree.lookup' '?' Tree.empty :: (Maybe Val, Tree.Proof SHA256 Char Key) of
+        (Nothing, proof) ->
+            Tree.verify proof Tree.emptyHash '?' Nothing @?= Right ()
+        _ ->
+            assertFailure "Key was found in empty tree"

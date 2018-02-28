@@ -8,7 +8,7 @@ import Data.List (intercalate)
 data Proof d k v =
       KeyExistsProof (Path d ())
       -- ^ Proof of existence of a key.
-    | KeyAbsentProof (Path d (k, v)) (Path d (k, v))
+    | KeyAbsentProof (Maybe (Path d (k, v))) (Maybe (Path d (k, v)))
       -- ^ Proof of absence of a key.
 
 instance Show d => Show (Proof d k v) where
