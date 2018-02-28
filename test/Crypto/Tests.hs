@@ -7,12 +7,15 @@ import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Data.Word
 import           Data.List.NonEmpty (NonEmpty, toList)
+import           Data.Either (isRight)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 import qualified Crypto.Data.Auth.Tree as Tree
+import qualified Crypto.Data.Auth.Tree.Proof as Tree
 import           Crypto.Data.Auth.Tree (Tree)
+import           Crypto.Hash (SHA256)
 
 type Key = Word8
 type Val = Word8
@@ -37,6 +40,7 @@ tests = localOption (QuickCheckTests 200) $ testGroup "Crypto"
     , testProperty    "List From/To"           propList
     , testProperty    "Inner nodes"            propInnerNodes
     , testProperty    "AVL-balanced"           propBalanced
+    , testProperty    "Proofs"                 propProofVerify
     ]
 
 -- | Updates must preserve ordering.
@@ -83,9 +87,17 @@ propBalanced tree =
 
 propInnerNodes :: Tree Key Val -> Bool
 propInnerNodes tree =
-    all propInnerNode (Tree.flatten tree)
+    all (propInnerNode >> propBalanced) (Tree.flatten tree)
 
 propInnerNode :: Tree Key Val -> Bool
 propInnerNode (Tree.Node k _ r) =
     k == Tree.leftmost r
 propInnerNode _ = True
+
+-- | Valid proofs of key existence verify positively.
+propProofVerify :: Tree Key Val -> Key -> Val -> Bool
+propProofVerify tree' k v | tree <- Tree.insert k v tree'
+                          , root <- Tree.merkleHash tree =
+    case Tree.lookup' k tree :: (Maybe Val, Tree.Proof SHA256 Key Val) of
+        (Just v, proof) -> isRight (Tree.verify proof root k v)
+        _               -> False

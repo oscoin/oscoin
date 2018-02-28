@@ -57,7 +57,9 @@ library
     , Oscoin.P2P.Block
 
     , Oscoin.Transaction
+
     , Crypto.Data.Auth.Tree
+    , Crypto.Data.Auth.Tree.Proof
 
   other-modules:
       Data.ByteString.Base64.Extended

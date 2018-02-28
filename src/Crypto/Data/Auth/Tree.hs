@@ -4,6 +4,7 @@ module Crypto.Data.Auth.Tree
     , elem
     , insert
     , lookup
+    , lookup'
     , delete
     , null
     , toList
@@ -14,6 +15,8 @@ module Crypto.Data.Auth.Tree
     , keys
     , flatten
     , leftmost
+    , verify
+    , merkleHash
 
     -- * Utility types and functions
     , Height
@@ -23,8 +26,20 @@ module Crypto.Data.Auth.Tree
     , balance
     ) where
 
+import           Crypto.Data.Auth.Tree.Proof
+import           Crypto.Hash (HashAlgorithm, Digest, hash, digestFromByteString, hashDigestSize)
+import qualified Data.Binary as Binary
+import           Data.Binary (Binary)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
+import           Data.ByteString (ByteString)
+import           Data.ByteArray (zero, convert)
+import           Data.Maybe (fromJust)
+
+import qualified Prelude as Prelude
 import           Prelude hiding (lookup, null, elem, foldr, map, traverse)
 import qualified Data.List as List
+import           GHC.Generics
 
 -- | An AVL+ tree.
 --
@@ -36,7 +51,48 @@ data Tree k v =
       Empty
     | Node k (Tree k v) (Tree k v)
     | Leaf k v
-    deriving (Eq, Functor, Traversable, Foldable)
+    deriving (Eq, Functor, Traversable, Foldable, Generic)
+
+instance (Binary k, Binary v) => Binary (Tree k v)
+
+merkleHash
+    :: forall k v a. (Binary k, Binary v, HashAlgorithm a)
+    => Tree k v
+    -> Digest a
+merkleHash Empty =
+    fromJust $ digestFromByteString (zero n :: ByteString)
+  where
+    n = hashDigestSize (undefined :: a)
+merkleHash (Leaf k v) =
+    hash (LBS.toStrict $ Binary.encode (k, v))
+merkleHash (Node _ l r) =
+    hashOfHashes [merkleHash l, merkleHash r]
+
+hashOfHashes :: HashAlgorithm a => [Digest a]  -> Digest a
+hashOfHashes =
+    hash . BS.concat . fmap convert
+
+-- TODO: Use hashInit/hashUpdate for performance?
+-- | Verify a proof.
+verify
+    :: (Binary k, Binary v, HashAlgorithm a)
+    => Proof a k v
+    -> Digest a
+    -> k
+    -> v
+    -> Either String ()
+verify (KeyExistsProof path) root k v
+    | pathDigest path k v == root = Right ()
+    | otherwise                   = Left "Root's don't match"
+verify _ _ _ _ = undefined
+
+pathDigest
+    :: (Binary k, Binary v, HashAlgorithm a) => Path a () -> k -> v -> Digest a
+pathDigest (Path elems _) k v =
+    List.foldl' (flip digest) (merkleHash (Leaf k v)) elems
+  where
+    digest (L l) r = hashOfHashes [l, r]
+    digest (R r) l = hashOfHashes [l, r]
 
 -- | Create an empty tree.
 empty :: Tree k v
@@ -70,6 +126,23 @@ lookup k (Node k' l r)
     | k < k'    = lookup k l
     | otherwise = lookup k r
 lookup _ _ = Nothing
+
+lookup'
+    :: (Binary k, Binary v, HashAlgorithm d, Ord k)
+    => k
+    -> Tree k v
+    -> (Maybe v, Proof d k v)
+lookup' k tree =
+    f k tree []
+  where
+    f k (Leaf k' v) path
+        | k == k'   = (Just v, KeyExistsProof (Path path ()))
+        | otherwise = (Nothing, undefined)
+    f k (Node k' l r) path
+        | k < k'    = f k l (R (merkleHash r) : path)
+        | otherwise = f k r (L (merkleHash l) : path)
+    f _ Empty _ =
+        (Nothing, undefined)
 
 -- | /O(log n)/. Delete a key from a tree.
 delete :: Ord k => k -> Tree k v -> Tree k v
