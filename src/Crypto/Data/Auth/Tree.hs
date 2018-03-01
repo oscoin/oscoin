@@ -13,6 +13,10 @@ module Crypto.Data.Auth.Tree
     , mapWithKey
     , union
     , values
+    , pred
+    , succ
+    , first
+    , last
     , keys
     , flatten
     , leftmost
@@ -39,7 +43,7 @@ import           Data.ByteArray (zero, convert)
 import           Data.Maybe (fromJust)
 
 import qualified Prelude as Prelude
-import           Prelude hiding (lookup, null, elem, foldr, map, traverse)
+import           Prelude hiding (lookup, null, elem, foldr, map, traverse, pred, succ, last)
 import qualified Data.List as List
 import           GHC.Generics
 
@@ -149,12 +153,38 @@ lookup' k tree =
   where
     f k (Leaf k' v) path
         | k == k'   = (Just v, KeyExistsProof (Path path ()))
-        | otherwise = (Nothing, undefined)
+        | otherwise = (Nothing, keyAbsentProof k tree)
     f k (Node k' l r) path
         | k < k'    = f k l (R (merkleHash r) : path)
         | otherwise = f k r (L (merkleHash l) : path)
     f _ Empty _ =
         (Nothing, KeyAbsentProof Nothing Nothing)
+
+keyAbsentProof :: (HashAlgorithm a, Ord k) => k -> Tree k v -> Proof a k v
+keyAbsentProof k tree = undefined
+
+pred :: Ord k => k -> Tree k v -> Maybe (k, v)
+pred k (Node k' l r)
+    | k == k'   = Just (rightmost l)
+    | k <  k'   = pred k l
+    | otherwise = pred k r
+pred k _ = Nothing
+
+succ :: Ord k => k -> Tree k v -> Maybe (k, v)
+succ k (Node k' l r)
+    | k <  k'   = if   fst (rightmost l) == k
+                  then Just (leftmost r)
+                  else succ k l
+    | otherwise = succ k r
+succ k _ = Nothing
+
+first :: Tree k v -> Maybe (k, v)
+first Empty = Nothing
+first tree  = Just (leftmost tree)
+
+last :: Tree k v -> Maybe (k, v)
+last Empty = Nothing
+last tree  = Just (rightmost tree)
 
 -- | /O(log n)/. Delete a key from a tree.
 delete :: Ord k => k -> Tree k v -> Tree k v
@@ -164,17 +194,23 @@ delete k leaf@(Leaf k' _)
     | otherwise = leaf
 delete k (Node k' l r)
     | k < k'    = rebalance . collapse $ Node k' (delete k l) r
-    | otherwise = rebalance . collapse $ let r' = delete k r in Node (leftmost r') l r'
+    | otherwise = rebalance . collapse $ let r' = delete k r in Node (fst $ leftmost r') l r'
   where
     collapse (Node _ l Empty) = l
     collapse (Node _ Empty r) = r
     collapse tree             = tree
 
 -- | Get the left most key of a tree.
-leftmost :: Tree k v -> k
+leftmost :: Tree k v -> (k, v)
 leftmost (Node _ l _) = leftmost l
-leftmost (Leaf k _)   = k
+leftmost (Leaf k v)   = (k, v)
 leftmost Empty        = undefined
+
+-- | Get the right most key of a tree.
+rightmost :: Tree k v -> (k, v)
+rightmost (Node _ _ r) = rightmost r
+rightmost (Leaf k v)   = (k, v)
+rightmost Empty        = undefined
 
 -- | Convert a tree into a list of @(k, v)@ pairs.
 toList :: Tree k v -> [(k, v)]

@@ -42,6 +42,9 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "AVL-balanced"           propBalanced
     , testProperty    "Proofs"                 propProofVerify
     , testProperty    "More proofs"            propProofNotVerify
+    , testProperty    "Pred/Succ"              propPredSucc
+    , testProperty    "First"                  propFirst
+    , testProperty    "Last"                   propLast
     , testCase        "Union"                  testUnion
     , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
@@ -94,7 +97,7 @@ propInnerNodes tree =
 
 propInnerNode :: Tree Key Val -> Bool
 propInnerNode (Tree.Node k _ r) =
-    k == Tree.leftmost r
+    k == fst (Tree.leftmost r)
 propInnerNode _ = True
 
 testUnion :: Assertion
@@ -134,3 +137,30 @@ testEmptyTreeProof = do
     case Tree.lookup' @Char @Key @SHA256 '?' Tree.empty of
         (Nothing, proof) -> Tree.verify proof Tree.emptyHash '?' Nothing @?= Right ()
         _                -> assertFailure "Key was found in empty tree"
+
+-- | > The successor of the predecessor of `k` is `k`.
+propPredSucc :: Tree Key Val -> Bool
+propPredSucc tree =
+    all predicate (Tree.keys tree)
+  where
+    predicate :: Key -> Bool
+    predicate k
+        | Just (p, _) <- Tree.pred k tree
+        , Just (s, _) <- Tree.succ p tree = s == k
+        | otherwise                       = True
+
+-- | The first element of a tree has no predecessor.
+propFirst :: Tree Key Val -> Property
+propFirst tree =
+    not (Tree.null tree) ==>
+        case Tree.first tree of
+            Just (k, _) -> Tree.pred k tree == Nothing
+            _            -> False
+
+-- | The last element of a tree has no successor.
+propLast :: Tree Key Val -> Property
+propLast tree =
+    not (Tree.null tree) ==>
+        case Tree.last tree of
+            Just (k, _) -> Tree.succ k tree == Nothing
+            _            -> False
