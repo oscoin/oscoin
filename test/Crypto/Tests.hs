@@ -33,8 +33,8 @@ instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
 tests :: TestTree
 tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     [ testProperty    "Insert/Lookup"          propInsertLookup
-    , testProperty    "Insert/Elem"            propInsertElem
-    , testProperty    "Delete/Elem"            propDelete
+    , testProperty    "Insert/Member"          propInsertMember
+    , testProperty    "Delete/Member"          propDelete
     , testProperty    "Invariant"              propInvariant
     , testProperty    "Sorted"                 propSorted
     , testProperty    "List From/To"           propList
@@ -69,11 +69,11 @@ propInsertLookup :: Tree.Tree Key Val -> Key -> Val -> Bool
 propInsertLookup tree k v =
     Tree.lookup k (Tree.insert k v tree) == Just v
 
--- | Keys inserted should be elements of the tree.
-propInsertElem :: Tree.Tree Key Val -> Key -> Val -> Property
-propInsertElem tree k v =
-    not (Tree.elem k tree) ==>
-        Tree.elem k (Tree.insert k v tree)
+-- | Keys inserted should be members of the tree.
+propInsertMember :: Tree.Tree Key Val -> Key -> Val -> Property
+propInsertMember tree k v =
+    not (Tree.member k tree) ==>
+        Tree.member k (Tree.insert k v tree)
 
 -- | Deleting all the keys in a tree should result in an empty tree.
 propDelete :: Tree.Tree Key Val -> Property

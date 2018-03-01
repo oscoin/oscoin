@@ -1,7 +1,7 @@
 module Crypto.Data.Auth.Tree
     ( Tree(..)
     , empty
-    , elem
+    , member
     , insert
     , lookup
     , lookup'
@@ -107,12 +107,12 @@ empty :: Tree k v
 empty = Empty
 
 -- | /O(log n)/. Return 'True' if the key is an element of the tree.
-elem :: Ord k => k -> Tree k v -> Bool
-elem _ Empty = False
-elem k (Leaf k' _) = k == k'
-elem k (Node k' l r)
-    | k < k'    = elem k l
-    | otherwise = elem k r
+member :: Ord k => k -> Tree k v -> Bool
+member _ Empty = False
+member k (Leaf k' _) = k == k'
+member k (Node k' l r)
+    | k < k'    = member k l
+    | otherwise = member k r
 
 -- | /O(log n)/. Insert a key and value into a tree.
 insert :: Ord k => k -> v -> Tree k v -> Tree k v
