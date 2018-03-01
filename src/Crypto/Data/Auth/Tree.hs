@@ -11,6 +11,7 @@ module Crypto.Data.Auth.Tree
     , fromList
     , map
     , mapWithKey
+    , union
     , values
     , keys
     , flatten
@@ -52,7 +53,10 @@ data Tree k v =
       Empty
     | Node k (Tree k v) (Tree k v)
     | Leaf k v
-    deriving (Eq, Functor, Traversable, Foldable, Generic)
+    deriving (Functor, Traversable, Foldable, Generic)
+
+instance (Eq k, Eq v) => Eq (Tree k v) where
+    (==) t1 t2 = toList t1 == toList t2
 
 instance (Binary k, Binary v) => Binary (Tree k v)
 
@@ -179,7 +183,7 @@ toList (Leaf k v) = [(k, v)]
 toList (Node _ l r) = toList l ++ toList r
 
 fromList :: Ord k => [(k, v)] -> Tree k v
-fromList kvs = foldl (\tree (k, v) -> insert k v tree) Empty kvs
+fromList kvs = List.foldl' (\tree (k, v) -> insert k v tree) Empty kvs
 
 -- | Return 'True' if a tree is empty.
 null :: Tree k v -> Bool
@@ -193,6 +197,11 @@ mapWithKey f tree = fromList $ List.map (\(k, v) -> (k, f k v)) (toList tree)
 -- | Map a function onto the values of a tree.
 map :: (a -> b) -> Tree k a -> Tree k b
 map = fmap
+
+-- | Left-biased union of two trees.
+union :: Ord k => Tree k v -> Tree k v -> Tree k v
+union t1 t2 =
+    List.foldl' (\tree (k, v) -> insert k v tree) t2 (toList t1)
 
 -- | Return the values of a tree in-order.
 values :: Tree k v -> [v]

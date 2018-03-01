@@ -41,6 +41,7 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "Inner nodes"            propInnerNodes
     , testProperty    "AVL-balanced"           propBalanced
     , testProperty    "Proofs"                 propProofVerify
+    , testCase        "Union"                  testUnion
     , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
 
@@ -94,6 +95,13 @@ propInnerNode :: Tree Key Val -> Bool
 propInnerNode (Tree.Node k _ r) =
     k == Tree.leftmost r
 propInnerNode _ = True
+
+testUnion :: Assertion
+testUnion =
+    Tree.union t1 t2 @?= Tree.fromList [('a', 1), ('b', 1), ('d', 2)]
+  where
+    t1 = Tree.fromList [('a', 1), ('b', 1)]
+    t2 = Tree.fromList [('a', 2), ('d', 2)]
 
 -- | Valid proofs of key existence verify positively.
 propProofVerify :: Tree Key Val -> Key -> Val -> Bool
