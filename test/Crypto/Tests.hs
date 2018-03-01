@@ -7,7 +7,7 @@ import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Data.Word
 import           Data.List.NonEmpty (NonEmpty, toList)
-import           Data.Either (isRight)
+import           Data.Either (isLeft, isRight)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 import           Test.Tasty.HUnit
@@ -41,6 +41,7 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "Inner nodes"            propInnerNodes
     , testProperty    "AVL-balanced"           propBalanced
     , testProperty    "Proofs"                 propProofVerify
+    , testProperty    "More proofs"            propProofNotVerify
     , testCase        "Union"                  testUnion
     , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
@@ -110,6 +111,23 @@ propProofVerify tree' k v | tree <- Tree.insert k v tree'
     case Tree.lookup' @Key @Val @SHA256 k tree of
         (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
         _               -> False
+
+-- | Valid proofs of key existence against the wrong key verify negatively.
+propProofNotVerify :: Tree Key Val -> Key -> Val -> Gen Bool
+propProofNotVerify tree k v = do
+    ks <- arbitrary :: Gen [Key]
+
+    -- Add a set of additional keys to the tree with the same value `v`.
+    let t = Tree.union tree (Tree.fromList $ (k, v) : [(k', v) | k' <- ks])
+    let root = Tree.merkleHash t
+
+    pure $ case Tree.lookup' @Key @Val @SHA256 k t of
+        (Just _, proof) ->
+            all isLeft [ Tree.verify proof root k' (Just v)
+                       | (k', v) <- Tree.toList t
+                       , k' /= k ]
+        _ ->
+            False
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
