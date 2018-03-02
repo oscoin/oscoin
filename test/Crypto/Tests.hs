@@ -46,6 +46,7 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "First"                  propFirst
     , testProperty    "Last"                   propLast
     , testProperty    "Size"                   propSize
+    , testProperty    "Succ"                   propSucc
     , testCase        "Union"                  testUnion
     , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
@@ -168,6 +169,18 @@ propPredSucc t =
         , Just (s, _) <- Tree.succ p t = s == k
 
         | otherwise = False
+
+propSucc :: Tree Key Val -> Key -> Property
+propSucc tree k =
+    preconditions ==>
+        case Tree.succ k tree of
+            Just (k', _) -> k' > k && Tree.member k' tree
+            _            -> False
+  where
+    preconditions =
+        case Tree.bounds tree of
+            Just (l, r) -> l <= k && k < r
+            Nothing     -> False
 
 -- | The first element of a tree has no predecessor.
 propFirst :: Tree Key Val -> Property

@@ -17,6 +17,7 @@ module Crypto.Data.Auth.Tree
     , succ
     , first
     , last
+    , bounds
     , keys
     , size
     , flatten
@@ -174,12 +175,19 @@ pred _ _ = Nothing
 
 succ :: Ord k => k -> Tree k v -> Maybe (k, v)
 succ k (Node k' l r)
-    | k <  k'   = if   fst (rightmost l) == k
-                  then Just (leftmost r)
-                  else succ k l
+    | k < k' =
+        if fst (rightmost l) <= k
+           then Just (leftmost r)
+           else succ k l
     | otherwise = succ k r
 succ k (Leaf k' v) | k' > k = Just (k', v)
 succ _ _ = Nothing
+
+bounds :: Tree k v -> Maybe (k, k)
+bounds tree = do
+    (l, _) <- first tree
+    (r, _) <- last tree
+    pure (l, r)
 
 first :: Tree k v -> Maybe (k, v)
 first Empty = Nothing
