@@ -168,7 +168,8 @@ pred k (Node k' l r)
     | k == k'   = Just (rightmost l)
     | k <  k'   = pred k l
     | otherwise = pred k r
-pred k _ = Nothing
+pred k (Leaf k' v) | k' < k = Just (k', v)
+pred _ _ = Nothing
 
 succ :: Ord k => k -> Tree k v -> Maybe (k, v)
 succ k (Node k' l r)
@@ -176,7 +177,8 @@ succ k (Node k' l r)
                   then Just (leftmost r)
                   else succ k l
     | otherwise = succ k r
-succ k _ = Nothing
+succ k (Leaf k' v) | k' > k = Just (k', v)
+succ _ _ = Nothing
 
 first :: Tree k v -> Maybe (k, v)
 first Empty = Nothing

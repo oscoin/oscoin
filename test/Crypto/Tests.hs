@@ -139,15 +139,34 @@ testEmptyTreeProof = do
         _                -> assertFailure "Key was found in empty tree"
 
 -- | > The successor of the predecessor of `k` is `k`.
-propPredSucc :: Tree Key Val -> Bool
-propPredSucc tree =
-    all predicate (Tree.keys tree)
+propPredSucc :: Tree Key Val -> Property
+propPredSucc t =
+    preconditions ==>
+        all predicate (Tree.keys t)
   where
+    preconditions :: Bool
+    preconditions =
+        and [ not $ Tree.null t
+            , not $ (fst <$> Tree.last t)  == Just maxBound
+            , not $ (fst <$> Tree.first t) == Just minBound
+            ]
     predicate :: Key -> Bool
     predicate k
-        | Just (p, _) <- Tree.pred k tree
-        , Just (s, _) <- Tree.succ p tree = s == k
-        | otherwise                       = True
+        -- `k` is the first key in the tree. Check that the key that would
+        -- preceed it has `k` as its successor.
+        | Nothing      <- Tree.pred k t
+        , Just (k', _) <- Tree.succ (pred k) t = k' == k
+
+        -- `k` is the last key in the tree. Check that the key that would
+        -- succeed it has `k` as its predecessor
+        | Nothing      <- Tree.succ k t
+        , Just (k', _) <- Tree.pred (succ k) t = k' == k
+
+        -- `k` is somewhere in the middle, check that succ . pred == id.
+        | Just (p, _) <- Tree.pred k t
+        , Just (s, _) <- Tree.succ p t = s == k
+
+        | otherwise = False
 
 -- | The first element of a tree has no predecessor.
 propFirst :: Tree Key Val -> Property
