@@ -15,13 +15,14 @@ module Crypto.Data.Auth.Tree
     , values
     , pred
     , succ
-    , first
-    , last
+    , lookupMin
+    , lookupMax
+    , findMin
+    , findMax
     , bounds
     , keys
     , size
     , flatten
-    , leftmost
     , verify
     , merkleHash
     , emptyHash
@@ -131,11 +132,9 @@ insert k v (Node k' l r)
     | k < k'    = rebalance $ Node k' (insert k v l) r
     | otherwise = rebalance $ Node k' l (insert k v r)
 insert k v (Leaf k' v')
-    | k == k' = Leaf k' v
-    | k >  k' = rebalance $ Node k (Leaf k' v') (Leaf k v)
-    | k <  k' = rebalance $ Node k' (Leaf k v) (Leaf k' v')
-insert _ _ _ =
-    undefined
+    | k > k'    = rebalance $ Node k (Leaf k' v') (Leaf k v)
+    | k < k'    = rebalance $ Node k' (Leaf k v) (Leaf k' v')
+    | otherwise = Leaf k' v
 
 -- | /O(log n)/. Lookup a key from a tree.
 lookup :: Ord k => k -> Tree k v -> Maybe v
@@ -177,7 +176,7 @@ keyAbsentProof k tree =
 
 pred :: Ord k => k -> Tree k v -> Maybe (k, v)
 pred k (Node k' l r)
-    | k == k'   = Just (rightmost l)
+    | k == k'   = lookupMax l
     | k <  k'   = pred k l
     | otherwise = pred k r
 pred k (Leaf k' v) | k' < k = Just (k', v)
@@ -186,8 +185,8 @@ pred _ _ = Nothing
 succ :: Ord k => k -> Tree k v -> Maybe (k, v)
 succ k (Node k' l r)
     | k < k' =
-        if fst (rightmost l) <= k
-           then Just (leftmost r)
+        if fst (findMax l) <= k
+           then lookupMin r
            else succ k l
     | otherwise = succ k r
 succ k (Leaf k' v) | k' > k = Just (k', v)
@@ -195,17 +194,29 @@ succ _ _ = Nothing
 
 bounds :: Tree k v -> Maybe (k, k)
 bounds tree = do
-    (l, _) <- first tree
-    (r, _) <- last tree
+    (l, _) <- lookupMin tree
+    (r, _) <- lookupMax tree
     pure (l, r)
 
-first :: Tree k v -> Maybe (k, v)
-first Empty = Nothing
-first tree  = Just (leftmost tree)
+lookupMin :: Tree k v -> Maybe (k, v)
+lookupMin Empty = Nothing
+lookupMin (Leaf k v) = Just (k, v)
+lookupMin (Node _ l _) = lookupMin l
 
-last :: Tree k v -> Maybe (k, v)
-last Empty = Nothing
-last tree  = Just (rightmost tree)
+lookupMax :: Tree k v -> Maybe (k, v)
+lookupMax Empty = Nothing
+lookupMax (Leaf k v) = Just (k, v)
+lookupMax (Node _ _ r) = lookupMax r
+
+findMax :: Tree k v -> (k, v)
+findMax t
+    | Just r <- lookupMax t = r
+    | otherwise = error "Tree.findMax: empty tree has no maximal element"
+
+findMin :: Tree k v -> (k, v)
+findMin t
+    | Just r <- lookupMin t = r
+    | otherwise = error "Tree.findMin: empty tree has no minimal element"
 
 size :: Tree k v -> Int
 size Empty = 0
@@ -220,23 +231,11 @@ delete k leaf@(Leaf k' _)
     | otherwise = leaf
 delete k (Node k' l r)
     | k < k'    = rebalance . collapse $ Node k' (delete k l) r
-    | otherwise = rebalance . collapse $ let r' = delete k r in Node (fst $ leftmost r') l r'
+    | otherwise = rebalance . collapse $ let r' = delete k r in Node (fst $ findMin r') l r'
   where
     collapse (Node _ l Empty) = l
     collapse (Node _ Empty r) = r
     collapse tree             = tree
-
--- | Get the left most key of a tree.
-leftmost :: Tree k v -> (k, v)
-leftmost (Node _ l _) = leftmost l
-leftmost (Leaf k v)   = (k, v)
-leftmost Empty        = undefined
-
--- | Get the right most key of a tree.
-rightmost :: Tree k v -> (k, v)
-rightmost (Node _ _ r) = rightmost r
-rightmost (Leaf k v)   = (k, v)
-rightmost Empty        = undefined
 
 -- | Convert a tree into a list of @(k, v)@ pairs.
 toList :: Tree k v -> [(k, v)]

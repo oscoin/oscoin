@@ -99,7 +99,7 @@ propInnerNodes tree =
 
 propInnerNode :: Tree Key Val -> Bool
 propInnerNode (Tree.Node k _ r) =
-    k == fst (Tree.leftmost r)
+    k == fst (Tree.findMin r)
 propInnerNode _ = True
 
 testUnion :: Assertion
@@ -149,8 +149,8 @@ propPredSucc t =
     preconditions :: Bool
     preconditions =
         and [ not $ Tree.null t
-            , not $ (fst <$> Tree.last t)  == Just maxBound
-            , not $ (fst <$> Tree.first t) == Just minBound
+            , not $ (fst <$> Tree.lookupMax t)  == Just maxBound
+            , not $ (fst <$> Tree.lookupMin t) == Just minBound
             ]
     predicate :: Key -> Bool
     predicate k
@@ -186,7 +186,7 @@ propSucc tree k =
 propFirst :: Tree Key Val -> Property
 propFirst tree =
     not (Tree.null tree) ==>
-        case Tree.first tree of
+        case Tree.lookupMin tree of
             Just (k, _) -> Tree.pred k tree == Nothing
             _            -> False
 
@@ -194,7 +194,7 @@ propFirst tree =
 propLast :: Tree Key Val -> Property
 propLast tree =
     not (Tree.null tree) ==>
-        case Tree.last tree of
+        case Tree.lookupMax tree of
             Just (k, _) -> Tree.succ k tree == Nothing
             _            -> False
 
