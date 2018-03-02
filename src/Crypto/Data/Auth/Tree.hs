@@ -18,6 +18,7 @@ module Crypto.Data.Auth.Tree
     , first
     , last
     , keys
+    , size
     , flatten
     , leftmost
     , verify
@@ -187,6 +188,11 @@ first tree  = Just (leftmost tree)
 last :: Tree k v -> Maybe (k, v)
 last Empty = Nothing
 last tree  = Just (rightmost tree)
+
+size :: Tree k v -> Int
+size Empty = 0
+size (Leaf _ _) = 1
+size (Node _ l r) = size l + size r
 
 -- | /O(log n)/. Delete a key from a tree.
 delete :: Ord k => k -> Tree k v -> Tree k v

@@ -45,6 +45,7 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "Pred/Succ"              propPredSucc
     , testProperty    "First"                  propFirst
     , testProperty    "Last"                   propLast
+    , testProperty    "Size"                   propSize
     , testCase        "Union"                  testUnion
     , testCase        "Empty tree Proof"       testEmptyTreeProof
     ]
@@ -183,3 +184,7 @@ propLast tree =
         case Tree.last tree of
             Just (k, _) -> Tree.succ k tree == Nothing
             _            -> False
+
+propSize :: Tree Key Val -> Bool
+propSize tree =
+    length (Tree.toList tree) == Tree.size tree
