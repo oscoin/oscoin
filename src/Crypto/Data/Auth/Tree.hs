@@ -162,8 +162,18 @@ lookup' k tree =
     f _ Empty _ =
         (Nothing, KeyAbsentProof Nothing Nothing)
 
-keyAbsentProof :: (HashAlgorithm a, Ord k) => k -> Tree k v -> Proof a k v
-keyAbsentProof k tree = undefined
+keyAbsentProof :: (HashAlgorithm a, Binary k, Binary v, Ord k) => k -> Tree k v -> Proof a k v
+keyAbsentProof k tree =
+    KeyAbsentProof left right
+  where
+    left = do
+        (k', v') <- pred k tree
+        (_, KeyExistsProof path) <- pure $ lookup' k' tree
+        pure (path { pathLeaf = (k', v') })
+    right = do
+        (k', v') <- succ k tree
+        (_, KeyExistsProof path) <- pure $ lookup' k' tree
+        pure (path { pathLeaf = (k', v') })
 
 pred :: Ord k => k -> Tree k v -> Maybe (k, v)
 pred k (Node k' l r)
