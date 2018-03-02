@@ -58,8 +58,8 @@ import           GHC.Generics
 --
 data Tree k v =
       Empty
-    | Node k (Tree k v) (Tree k v)
-    | Leaf k v
+    | Node !k !(Tree k v) !(Tree k v)
+    | Leaf !k v
     deriving (Functor, Traversable, Foldable, Generic)
 
 instance (Eq k, Eq v) => Eq (Tree k v) where
