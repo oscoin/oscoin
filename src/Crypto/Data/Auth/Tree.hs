@@ -124,6 +124,7 @@ member k (Leaf k' _) = k == k'
 member k (Node k' l r)
     | k < k'    = member k l
     | otherwise = member k r
+{-# INLINABLE member #-}
 
 -- | /O(log n)/. Insert a key and value into a tree.
 insert :: Ord k => k -> v -> Tree k v -> Tree k v
@@ -135,6 +136,7 @@ insert k v (Leaf k' v')
     | k > k'    = rebalance $ Node k (Leaf k' v') (Leaf k v)
     | k < k'    = rebalance $ Node k' (Leaf k v) (Leaf k' v')
     | otherwise = Leaf k' v
+{-# INLINABLE insert #-}
 
 -- | /O(log n)/. Lookup a key from a tree.
 lookup :: Ord k => k -> Tree k v -> Maybe v
@@ -143,6 +145,7 @@ lookup k (Node k' l r)
     | k < k'    = lookup k l
     | otherwise = lookup k r
 lookup _ _ = Nothing
+{-# INLINABLE lookup #-}
 
 lookup'
     :: (Binary k, Binary v, HashAlgorithm d, Ord k)
@@ -160,6 +163,7 @@ lookup' k tree =
         | otherwise = f k r (L (merkleHash l) : path)
     f _ Empty _ =
         (Nothing, KeyAbsentProof Nothing Nothing)
+{-# INLINABLE lookup' #-}
 
 keyAbsentProof :: (HashAlgorithm a, Binary k, Binary v, Ord k) => k -> Tree k v -> Proof a k v
 keyAbsentProof k tree =
@@ -181,6 +185,7 @@ pred k (Node k' l r)
     | otherwise = pred k r
 pred k (Leaf k' v) | k' < k = Just (k', v)
 pred _ _ = Nothing
+{-# INLINABLE pred #-}
 
 succ :: Ord k => k -> Tree k v -> Maybe (k, v)
 succ k (Node k' l r)
@@ -191,6 +196,7 @@ succ k (Node k' l r)
     | otherwise = succ k r
 succ k (Leaf k' v) | k' > k = Just (k', v)
 succ _ _ = Nothing
+{-# INLINABLE succ #-}
 
 bounds :: Tree k v -> Maybe (k, k)
 bounds tree = do
@@ -236,6 +242,7 @@ delete k (Node k' l r)
     collapse (Node _ l Empty) = l
     collapse (Node _ Empty r) = r
     collapse tree             = tree
+{-# INLINABLE delete #-}
 
 -- | Convert a tree into a list of @(k, v)@ pairs.
 toList :: Tree k v -> [(k, v)]
