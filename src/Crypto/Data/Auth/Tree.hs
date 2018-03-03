@@ -225,8 +225,8 @@ findMin t
     | otherwise = error "Tree.findMin: empty tree has no minimal element"
 
 size :: Tree k v -> Int
-size Empty = 0
-size (Leaf _ _) = 1
+size Empty        = 0
+size (Leaf _ _)   = 1
 size (Node _ l r) = size l + size r
 
 -- | /O(log n)/. Delete a key from a tree.
