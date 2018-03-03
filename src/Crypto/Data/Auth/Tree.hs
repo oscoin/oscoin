@@ -235,13 +235,17 @@ delete _ Empty = Empty
 delete k leaf@(Leaf k' _)
     | k == k'   = Empty
     | otherwise = leaf
-delete k (Node k' l r)
-    | k < k'    = rebalance . collapse $ Node k' (delete k l) r
-    | otherwise = rebalance . collapse $ let r' = delete k r in Node (fst $ findMin r') l r'
+delete k tree =
+    go tree
   where
-    collapse (Node _ l Empty) = l
-    collapse (Node _ Empty r) = r
-    collapse tree             = tree
+    go (Node _ l (Leaf k' _)) | k' == k = l
+    go (Node _ (Leaf k' _) r) | k' == k = r
+    go (Node k' l r)
+        | k < k'    = rebalance $ Node k' (go l) r
+        | otherwise = rebalance $ Node leftmostKey l (go r)
+      where
+        leftmostKey = fst (findMin (go r))
+    go tree = tree
 {-# INLINABLE delete #-}
 
 -- | Convert a tree into a list of @(k, v)@ pairs.
