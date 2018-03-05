@@ -1,11 +1,14 @@
 module Crypto.Tests where
 
-import           Prelude
+import           Prelude hiding (length)
+import qualified Prelude
 
 import           Data.List (sort)
 import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Data.Word
+import           Data.ByteArray (ByteArrayAccess(..))
+import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Either (isLeft, isRight)
 import           Test.Tasty
@@ -19,6 +22,10 @@ import           Crypto.Hash (SHA256)
 
 type Key = Word8
 type Val = Word8
+
+instance ByteArrayAccess Word8 where
+    length = const 1
+    withByteArray b = withByteArray (BS.singleton b)
 
 instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Tree.Tree k v) where
     arbitrary = do
@@ -136,8 +143,8 @@ propProofNotVerify tree k v = do
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
-    case Tree.lookup' @Char @Key @SHA256 '?' Tree.empty of
-        (Nothing, proof) -> Tree.verify proof Tree.emptyHash '?' Nothing @?= Right ()
+    case Tree.lookup' @Key @Val @SHA256 1 Tree.empty of
+        (Nothing, proof) -> Tree.verify proof Tree.emptyHash 1 Nothing @?= Right ()
         _                -> assertFailure "Key was found in empty tree"
 
 -- | > The successor of the predecessor of `k` is `k`.
@@ -200,4 +207,4 @@ propLast tree =
 
 propSize :: Tree Key Val -> Bool
 propSize tree =
-    length (Tree.toList tree) == Tree.size tree
+    Prelude.length (Tree.toList tree) == Tree.size tree

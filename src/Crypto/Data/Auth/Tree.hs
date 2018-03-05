@@ -36,13 +36,11 @@ module Crypto.Data.Auth.Tree
     ) where
 
 import           Crypto.Data.Auth.Tree.Proof
-import           Crypto.Hash (HashAlgorithm, Digest, hash, digestFromByteString, hashDigestSize)
-import qualified Data.Binary as Binary
+import           Crypto.Hash (HashAlgorithm, Digest, digestFromByteString, hashDigestSize, hashUpdate, hashFinalize, hashInit, hashUpdates)
 import           Data.Binary (Binary)
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
 import           Data.ByteString (ByteString)
-import           Data.ByteArray (zero, convert)
+import           Data.ByteArray (zero, ByteArrayAccess)
 import           Data.Maybe (fromJust)
 
 import qualified Prelude as Prelude
@@ -68,15 +66,28 @@ instance (Eq k, Eq v) => Eq (Tree k v) where
 instance (Binary k, Binary v) => Binary (Tree k v)
 
 merkleHash
-    :: forall k v a. (Binary k, Binary v, HashAlgorithm a)
+    :: forall k v a. (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
     => Tree k v
     -> Digest a
-merkleHash Empty =
-    emptyHash
-merkleHash (Leaf k v) =
-    hash (LBS.toStrict $ Binary.encode (k, v))
-merkleHash (Node _ l r) =
-    hashOfHashes [merkleHash l, merkleHash r]
+merkleHash Empty        = emptyHash
+merkleHash (Leaf k v)   = hashLeaf k v
+merkleHash (Node _ l r) = hashNode (merkleHash l) (merkleHash r)
+
+hashLeaf
+    :: (HashAlgorithm a, ByteArrayAccess k, ByteArrayAccess v)
+    => k -> v -> Digest a
+hashLeaf k v =
+    hashFinalize $ flip hashUpdate v
+                 $ flip hashUpdate k
+                 $ flip hashUpdate (BS.singleton 0)
+                 $ hashInit
+hashNode
+    :: HashAlgorithm a
+    => Digest a -> Digest a -> Digest a
+hashNode l r =
+    hashFinalize $ flip hashUpdates [l, r]
+                 $ flip hashUpdate (BS.singleton 1)
+                 $ hashInit
 
 emptyHash :: forall a. HashAlgorithm a => Digest a
 emptyHash =
@@ -84,14 +95,9 @@ emptyHash =
   where
     n = hashDigestSize (undefined :: a)
 
-hashOfHashes :: HashAlgorithm a => [Digest a]  -> Digest a
-hashOfHashes =
-    hash . BS.concat . fmap convert
-
--- TODO: Use hashInit/hashUpdate for performance?
 -- | Verify a proof.
 verify
-    :: (Binary k, Binary v, HashAlgorithm a)
+    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
     => Proof a k v
     -> Digest a
     -> k
@@ -106,12 +112,13 @@ verify (KeyAbsentProof Nothing Nothing) root _ Nothing
 verify _ _ _ _ = undefined
 
 pathDigest
-    :: (Binary k, Binary v, HashAlgorithm a) => Path a () -> k -> v -> Digest a
+    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
+    => Path a () -> k -> v -> Digest a
 pathDigest (Path elems _) k v =
-    List.foldl' (flip digest) (merkleHash (Leaf k v)) elems
+    List.foldl' (flip digest) (hashLeaf k v) elems
   where
-    digest (L l) r = hashOfHashes [l, r]
-    digest (R r) l = hashOfHashes [l, r]
+    digest (L l) r = hashNode l r
+    digest (R r) l = hashNode l r
 
 -- | Create an empty tree.
 empty :: Tree k v
@@ -148,7 +155,7 @@ lookup _ _ = Nothing
 {-# INLINABLE lookup #-}
 
 lookup'
-    :: (Binary k, Binary v, HashAlgorithm d, Ord k)
+    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm d, Ord k)
     => k
     -> Tree k v
     -> (Maybe v, Proof d k v)
@@ -165,7 +172,7 @@ lookup' k tree =
         (Nothing, KeyAbsentProof Nothing Nothing)
 {-# INLINABLE lookup' #-}
 
-keyAbsentProof :: (HashAlgorithm a, Binary k, Binary v, Ord k) => k -> Tree k v -> Proof a k v
+keyAbsentProof :: (HashAlgorithm a, ByteArrayAccess k, ByteArrayAccess v, Ord k) => k -> Tree k v -> Proof a k v
 keyAbsentProof k tree =
     KeyAbsentProof left right
   where
