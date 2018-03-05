@@ -66,7 +66,7 @@ instance (Eq k, Eq v) => Eq (Tree k v) where
 instance (Binary k, Binary v) => Binary (Tree k v)
 
 merkleHash
-    :: forall k v a. (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
+    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
     => Tree k v
     -> Digest a
 merkleHash Empty        = emptyHash
