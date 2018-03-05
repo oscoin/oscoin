@@ -2,8 +2,6 @@ resolver: lts-10.4
 
 packages:
 - .
-- location: vendor/wai/wai-extra
-  extra-dep: true
 
 extra-deps:
 - acid-state-0.14.3
@@ -14,6 +12,10 @@ extra-deps:
 - base58-bytestring-0.1.0
 - monad-stm-0.1.0.2
 - stm-2.4.5.0
+- git: git@github.com:cloudhead/wai
+  commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
+  subdirs:
+    - wai-extra
 
 ghc-options:
   "$locals": -fhide-source-paths
