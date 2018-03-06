@@ -65,6 +65,34 @@ instance (Eq k, Eq v) => Eq (Tree k v) where
 
 instance (Binary k, Binary v) => Binary (Tree k v)
 
+-- Hashing --------------------------------------------------------------------
+
+-- ! A few notes about merkle hashes.
+--
+-- * An empty tree hashes to the empty hash (all zeros).
+-- * An inner node hashes to Hash(1 ∥ LeftHash ∥ RightHash).
+-- * A leaf node hashes to Hash(0 ∥ Key ∥ Value).
+--
+-- The `0` and `1` prefixes are used to differentiate inner node from leaf node
+-- hashes to protect against second pre-image attacks. Without the prefix, it's
+-- possible to construct a leaf that has the same merkle hash as an inner node.
+--
+-- Given a node M with two children, L and R, the hash of M is
+--
+--      H(M) = H(H(L) ∥ H(R))
+--
+-- Now, given a leaf node M' constructed as such:
+--
+--      M' = Leaf(H(L), H(R))
+--
+-- where H(L) is the key and H(R) is the value, we have
+--
+--      H(M') = H(H(L) ∥ H(R))
+--
+-- and notice that H(M') = H(M), even though M and M' are different.
+--
+
+-- | Compute the merkle hash of a tree.
 merkleHash
     :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
     => Tree k v
@@ -94,6 +122,8 @@ emptyHash =
     fromJust $ digestFromByteString (zero n :: ByteString)
   where
     n = hashDigestSize (undefined :: a)
+
+-------------------------------------------------------------------------------
 
 -- | Verify a proof.
 verify
