@@ -94,7 +94,7 @@ instance (Binary k, Binary v) => Binary (Tree k v)
 
 -- | Compute the merkle hash of a tree.
 merkleHash
-    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
+    :: (HashAlgorithm a, ByteArrayAccess k, ByteArrayAccess v)
     => Tree k v
     -> Digest a
 merkleHash Empty        = emptyHash
@@ -185,10 +185,10 @@ lookup _ _ = Nothing
 {-# INLINABLE lookup #-}
 
 lookup'
-    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm d, Ord k)
+    :: (HashAlgorithm a, Ord k, ByteArrayAccess k, ByteArrayAccess v)
     => k
     -> Tree k v
-    -> (Maybe v, Proof d k v)
+    -> (Maybe v, Proof a k v)
 lookup' k tree =
     f k tree []
   where

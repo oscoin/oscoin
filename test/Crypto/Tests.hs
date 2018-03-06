@@ -120,7 +120,7 @@ testUnion =
 propProofVerify :: Tree Key Val -> Key -> Val -> Bool
 propProofVerify tree' k v | tree <- Tree.insert k v tree'
                           , root <- Tree.merkleHash tree =
-    case Tree.lookup' @Key @Val @SHA256 k tree of
+    case Tree.lookup' @SHA256 k tree of
         (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
         _               -> False
 
@@ -133,7 +133,7 @@ propProofNotVerify tree k v = do
     let t = Tree.union tree (Tree.fromList $ (k, v) : [(k', v) | k' <- ks])
     let root = Tree.merkleHash t
 
-    pure $ case Tree.lookup' @Key @Val @SHA256 k t of
+    pure $ case Tree.lookup' @SHA256 k t of
         (Just _, proof) ->
             all isLeft [ Tree.verify proof root k' (Just v)
                        | (k', v) <- Tree.toList t
@@ -143,7 +143,7 @@ propProofNotVerify tree k v = do
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
-    case Tree.lookup' @Key @Val @SHA256 1 Tree.empty of
+    case Tree.lookup' @SHA256 @Key @Val 1 Tree.empty of
         (Nothing, proof) -> Tree.verify proof Tree.emptyHash 1 Nothing @?= Right ()
         _                -> assertFailure "Key was found in empty tree"
 
