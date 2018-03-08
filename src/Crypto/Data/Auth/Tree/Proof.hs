@@ -32,5 +32,5 @@ instance (Show d, Show a) => Show (Path d a) where
 data PathElem d =
       L (Digest d)
     | R (Digest d)
-    deriving (Show)
+    deriving (Show, Eq)
 

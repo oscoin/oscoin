@@ -17,6 +17,7 @@ import           Test.Tasty.HUnit
 import           Test.QuickCheck.Instances ()
 
 import qualified Crypto.Data.Auth.Tree as Tree
+import qualified Crypto.Data.Auth.Tree.Proof as Tree
 import           Crypto.Data.Auth.Tree (Tree)
 import           Crypto.Hash (SHA256)
 
@@ -49,6 +50,7 @@ tests = localOption (QuickCheckTests 100) $ testGroup "Crypto"
     , testProperty    "AVL-balanced"           propBalanced
     , testProperty    "Proofs"                 propProofVerify
     , testProperty    "More proofs"            propProofNotVerify
+    , testProperty    "Absence proofs"         propProofAbsenceNotVerify
     , testProperty    "Pred/Succ"              propPredSucc
     , testProperty    "First"                  propFirst
     , testProperty    "Last"                   propLast
@@ -140,6 +142,38 @@ propProofNotVerify tree k v = do
                        , k' /= k ]
         _ ->
             False
+
+data Tree' k v = Tree' (Tree k v) k k
+    deriving (Eq, Show)
+
+instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Tree' k v) where
+    arbitrary = do
+        tree <- arbitrary `suchThat` (\t -> not (Tree.null t)) :: Gen (Tree k v)
+        present <- elements (Tree.keys tree)
+        absent <- arbitrary `suchThat` (\k -> not (Tree.member k tree)) :: Gen k
+        pure $ Tree' tree present absent
+
+-- | Valid proofs of key absence against the wrong key verify negatively.
+propProofAbsenceNotVerify :: Tree' Key Val -> Gen Bool
+propProofAbsenceNotVerify (Tree' t present absent) =
+    case Tree.lookup' @SHA256 absent t of
+        -- No matter what, looking up an absent key shouldn't return a proof
+        -- of existence.
+        (_, Tree.KeyExistsProof _) ->
+            pure False
+        -- If an absence proof is returned, we never expect a value.
+        (Just _, Tree.KeyAbsentProof _ _) ->
+            pure False
+        -- Now things are starting to look correct...
+        (Nothing, proof@(Tree.KeyAbsentProof _ _)) -> do
+            -- The proof of absence returned should only verify for the key
+            -- `absent` that it was generated for, and not for any present key
+            -- in the tree.
+            pure $ and [ isRight $ Tree.verify proof root absent Nothing
+                       , isLeft  $ Tree.verify proof root present Nothing
+                       ]
+          where
+            root = Tree.merkleHash @SHA256 t
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
