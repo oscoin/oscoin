@@ -59,6 +59,7 @@ library
     , Oscoin.Transaction
 
     , Crypto.Data.Auth.Tree
+    , Crypto.Data.Auth.Tree.Internal
     , Crypto.Data.Auth.Tree.Proof
 
   other-modules:

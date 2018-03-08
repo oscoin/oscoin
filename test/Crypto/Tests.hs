@@ -122,7 +122,7 @@ testUnion =
 propProofVerify :: Tree Key Val -> Key -> Val -> Bool
 propProofVerify tree' k v | tree <- Tree.insert k v tree'
                           , root <- Tree.merkleHash tree =
-    case Tree.lookup' @SHA256 k tree of
+    case Tree.lookupProof @SHA256 k tree of
         (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
         _               -> False
 
@@ -135,7 +135,7 @@ propProofNotVerify tree k v = do
     let t = Tree.union tree (Tree.fromList $ (k, v) : [(k', v) | k' <- ks])
     let root = Tree.merkleHash t
 
-    pure $ case Tree.lookup' @SHA256 k t of
+    pure $ case Tree.lookupProof @SHA256 k t of
         (Just _, proof) ->
             all isLeft [ Tree.verify proof root k' (Just v)
                        | (k', v) <- Tree.toList t
@@ -156,7 +156,7 @@ instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Tree' k v) where
 -- | Valid proofs of key absence against the wrong key verify negatively.
 propProofAbsenceNotVerify :: Tree' Key Val -> Gen Bool
 propProofAbsenceNotVerify (Tree' t present absent) =
-    case Tree.lookup' @SHA256 absent t of
+    case Tree.lookupProof @SHA256 absent t of
         -- No matter what, looking up an absent key shouldn't return a proof
         -- of existence.
         (_, Tree.KeyExistsProof _) ->
@@ -177,7 +177,7 @@ propProofAbsenceNotVerify (Tree' t present absent) =
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
-    case Tree.lookup' @SHA256 @Key @Val 1 Tree.empty of
+    case Tree.lookupProof @SHA256 @Key @Val 1 Tree.empty of
         (Nothing, proof) -> Tree.verify proof Tree.emptyHash 1 Nothing @?= Right ()
         _                -> assertFailure "Key was found in empty tree"
 

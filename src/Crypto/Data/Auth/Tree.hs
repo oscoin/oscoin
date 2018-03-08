@@ -4,7 +4,6 @@ module Crypto.Data.Auth.Tree
     , member
     , insert
     , lookup
-    , lookup'
     , delete
     , null
     , toList
@@ -23,7 +22,6 @@ module Crypto.Data.Auth.Tree
     , keys
     , size
     , flatten
-    , verify
     , merkleHash
     , emptyHash
 
@@ -35,13 +33,11 @@ module Crypto.Data.Auth.Tree
     , balance
     ) where
 
-import           Crypto.Data.Auth.Tree.Proof
-import           Crypto.Hash (HashAlgorithm, Digest, digestFromByteString, hashDigestSize, hashUpdate, hashFinalize, hashInit, hashUpdates)
+import           Crypto.Data.Auth.Tree.Internal
+
+import           Crypto.Hash (HashAlgorithm, Digest)
 import           Data.Binary (Binary)
-import qualified Data.ByteString as BS
-import           Data.ByteString (ByteString)
-import           Data.ByteArray (zero, ByteArrayAccess)
-import           Data.Maybe (fromJust)
+import           Data.ByteArray (ByteArrayAccess)
 
 import qualified Prelude as Prelude
 import           Prelude hiding (lookup, null, elem, foldr, map, traverse, pred, succ, last)
@@ -101,104 +97,7 @@ merkleHash Empty        = emptyHash
 merkleHash (Leaf k v)   = hashLeaf k v
 merkleHash (Node _ l r) = hashNode (merkleHash l) (merkleHash r)
 
-hashLeaf
-    :: (HashAlgorithm a, ByteArrayAccess k, ByteArrayAccess v)
-    => k -> v -> Digest a
-hashLeaf k v =
-    hashFinalize $ flip hashUpdate v
-                 $ flip hashUpdate k
-                 $ flip hashUpdate (BS.singleton 0)
-                 $ hashInit
-hashNode
-    :: HashAlgorithm a
-    => Digest a -> Digest a -> Digest a
-hashNode l r =
-    hashFinalize $ flip hashUpdates [l, r]
-                 $ flip hashUpdate (BS.singleton 1)
-                 $ hashInit
-
-emptyHash :: forall a. HashAlgorithm a => Digest a
-emptyHash =
-    fromJust $ digestFromByteString (zero n :: ByteString)
-  where
-    n = hashDigestSize (undefined :: a)
-
 -------------------------------------------------------------------------------
-
--- | Verify a proof.
-verify
-    :: (HashAlgorithm a, Ord k, ByteArrayAccess k, ByteArrayAccess v)
-    => Proof a k v       -- ^ The proof to verify.
-    -> Digest a          -- ^ The root hash.
-    -> k                 -- ^ The key to verify.
-    -> Maybe v           -- ^ The value to verify in case of a proof of existence.
-    -> Either String ()  -- ^ A 'Right' value signifies success.
-verify (KeyExistsProof (Path xs ())) root k (Just v)
-    | pathDigest xs k v == root = Right ()
-    | otherwise                 = Left "Roots don't match"
-verify (KeyAbsentProof Nothing Nothing) root _ Nothing
-    | root == emptyHash = Right ()
-    | otherwise         = Left "Empty absence proof"
--- Key is greater than the maximum value in the tree.
-verify (KeyAbsentProof (Just (Path xs (k, v))) Nothing) root k' Nothing
-    | pathDigest xs k v == root
-    , k' > k
-    = Right ()
-
-    | otherwise
-    = Left "Roots don't match"
--- Key is lesser than the minimum vlaue in the tree.
-verify (KeyAbsentProof Nothing (Just (Path xs (k, v)))) root k' Nothing
-    | pathDigest xs k v == root
-    , k' < k
-    = Right ()
-
-    | otherwise
-    = Left "Roots don't match"
-verify (KeyAbsentProof (Just (Path ls (lk, lv)))
-                       (Just (Path rs (rk, rv)))) root k Nothing
-    | lk < k && k < rk                            -- `k` is between the left and right paths.
-    , pathDigest ls lk lv == root                 -- The left path is valid.
-    , pathDigest rs rk rv == root                 -- The right path is valid.
-    , adjacent ls rs                              -- The left and right path are adjacent.
-    = Right ()
-
-    | otherwise = Left "Invalid proof"
-verify _ _ _ _ = undefined
-
-adjacent :: [PathElem a] -> [PathElem a] -> Bool
-adjacent l' r' =
-    isRightmost l && isLeftmost r
-  where
-    (l, r) = stripCommonPrefix l' r'
-
-    isLeftmost (R _ : xs) = isLeftmost xs
-    isLeftmost (L _ : []) = True
-    isLeftmost _          = False
-
-    isRightmost (L _ : xs) = isRightmost xs
-    isRightmost (R _ : []) = True
-    isRightmost _          = False
-
-    -- | If the given paths have a common prefix branch, return them without
-    -- the path elements in common.
-    stripCommonPrefix :: [PathElem a] -> [PathElem a] -> ([PathElem a], [PathElem a])
-    stripCommonPrefix (reverse -> ls) (reverse -> rs) =
-        let (l, r) = go ls rs in (reverse l, reverse r)
-      where
-        go (l:ls) (r:rs)
-            | l == r    = go ls rs
-            | otherwise = (l:ls, r:rs)
-        go ls rs = (ls, rs)
-
-pathDigest
-    :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
-    => [PathElem a] -> k -> v -> Digest a
-pathDigest elems k v =
-    List.foldl' (flip digest) (hashLeaf k v) elems
-  where
-    digest (L l) r = hashNode l r
-    digest (R r) l = hashNode l r
 
 -- | Create an empty tree.
 empty :: Tree k v
@@ -233,37 +132,6 @@ lookup k (Node k' l r)
     | otherwise = lookup k r
 lookup _ _ = Nothing
 {-# INLINABLE lookup #-}
-
-lookup'
-    :: (HashAlgorithm a, Ord k, ByteArrayAccess k, ByteArrayAccess v)
-    => k
-    -> Tree k v
-    -> (Maybe v, Proof a k v)
-lookup' k tree =
-    f k tree []
-  where
-    f k (Leaf k' v) path
-        | k == k'   = (Just v, KeyExistsProof (Path path ()))
-        | otherwise = (Nothing, keyAbsentProof k tree)
-    f k (Node k' l r) path
-        | k < k'    = f k l (R (merkleHash r) : path)
-        | otherwise = f k r (L (merkleHash l) : path)
-    f _ Empty _ =
-        (Nothing, KeyAbsentProof Nothing Nothing)
-{-# INLINABLE lookup' #-}
-
-keyAbsentProof :: (HashAlgorithm a, ByteArrayAccess k, ByteArrayAccess v, Ord k) => k -> Tree k v -> Proof a k v
-keyAbsentProof k tree =
-    KeyAbsentProof left right
-  where
-    left = do
-        (k', v') <- pred k tree
-        (_, KeyExistsProof path) <- pure $ lookup' k' tree
-        pure (path { pathLeaf = (k', v') })
-    right = do
-        (k', v') <- succ k tree
-        (_, KeyExistsProof path) <- pure $ lookup' k' tree
-        pure (path { pathLeaf = (k', v') })
 
 pred :: Ord k => k -> Tree k v -> Maybe (k, v)
 pred k (Node k' l r)
