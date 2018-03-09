@@ -133,6 +133,7 @@ lookup k (Node k' l r)
 lookup _ _ = Nothing
 {-# INLINABLE lookup #-}
 
+-- | Get the predecessor of a key, or 'Nothing' if there is none.
 pred :: Ord k => k -> Tree k v -> Maybe (k, v)
 pred k (Node k' l r)
     | k == k'   = lookupMax l
@@ -142,6 +143,7 @@ pred k (Leaf k' v) | k' < k = Just (k', v)
 pred _ _ = Nothing
 {-# INLINABLE pred #-}
 
+-- | Get the successor of a key, or 'Nothing' if there is none.
 succ :: Ord k => k -> Tree k v -> Maybe (k, v)
 succ k (Node k' l r)
     | k < k' =
@@ -153,32 +155,38 @@ succ k (Leaf k' v) | k' > k = Just (k', v)
 succ _ _ = Nothing
 {-# INLINABLE succ #-}
 
+-- | Return the min and max value of a tree, or 'Nothing' if it's empty.
 bounds :: Tree k v -> Maybe (k, k)
 bounds tree = do
     (l, _) <- lookupMin tree
     (r, _) <- lookupMax tree
     pure (l, r)
 
+-- | Lookup the minimum value of a tree, or 'Nothing' if it's empty.
 lookupMin :: Tree k v -> Maybe (k, v)
 lookupMin Empty = Nothing
 lookupMin (Leaf k v) = Just (k, v)
 lookupMin (Node _ l _) = lookupMin l
 
+-- | Lookup the maximum value of a tree, or 'Nothing' if it's empty.
 lookupMax :: Tree k v -> Maybe (k, v)
 lookupMax Empty = Nothing
 lookupMax (Leaf k v) = Just (k, v)
 lookupMax (Node _ _ r) = lookupMax r
 
+-- | Find the maximum value of a tree. Calls 'error' if the tree is empty.
 findMax :: Tree k v -> (k, v)
 findMax t
     | Just r <- lookupMax t = r
     | otherwise = error "Tree.findMax: empty tree has no maximal element"
 
+-- | Find the minimum value of a tree. Calls 'error' if the tree is empty.
 findMin :: Tree k v -> (k, v)
 findMin t
     | Just r <- lookupMin t = r
     | otherwise = error "Tree.findMin: empty tree has no minimal element"
 
+-- | /O(log n)/. The number of elements in the tree.
 size :: Tree k v -> Int
 size Empty        = 0
 size (Leaf _ _)   = 1
@@ -209,6 +217,7 @@ toList Empty = []
 toList (Leaf k v) = [(k, v)]
 toList (Node _ l r) = toList l ++ toList r
 
+-- | Create a tree from a list of key/value pairs.
 fromList :: Ord k => [(k, v)] -> Tree k v
 fromList kvs = List.foldl' (\tree (k, v) -> insert k v tree) Empty kvs
 
@@ -252,11 +261,14 @@ newtype Height = Height { fromHeight :: Int }
 instance Show Height where
     show = show . fromHeight
 
+-- | Return the height of a tree. If the tree is not balanced, returns the max
+-- height between the left and right branch.
 height :: Tree k v -> Height
 height Empty        = 0
 height (Leaf _ _)   = 0
 height (Node _ l r) = 1 + max (height l) (height r)
 
+-- | Tree balance factor.
 data Balance =
       LeftHeavy  Int
     | RightHeavy Int
@@ -273,6 +285,7 @@ instance Enum Balance where
     fromEnum (RightHeavy n) = n
     fromEnum Balanced       = 0
 
+-- | The balance factor of a tree.
 balance :: Tree k v -> Balance
 balance Empty        = Balanced
 balance (Leaf _ _)   = Balanced
@@ -283,6 +296,7 @@ balance (Node _ l r)
   where
     b = fromHeight (height r - height l)
 
+-- | Rebalance a tree, such that the balance factor is between -1 and 1.
 rebalance :: Tree k v -> Tree k v
 rebalance tree@(Node _ l r) =
     case balance tree of
