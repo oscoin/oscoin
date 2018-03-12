@@ -97,7 +97,7 @@ mkMiddleware app orgs mp st = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
-    conn        = State.connect mp st
+    conn        = State.open mp st
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
     state       = mkState { stOrgs = orgs }
 
