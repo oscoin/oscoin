@@ -11,6 +11,7 @@ import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Either (isLeft, isRight)
+import           Control.Monad.Fail
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 import           Test.Tasty.HUnit
@@ -23,6 +24,9 @@ import           Crypto.Hash (SHA256)
 
 type Key = Word8
 type Val = Word8
+
+instance MonadFail Gen where
+    fail err = error err
 
 instance ByteArrayAccess Word8 where
     length = const 1
@@ -143,37 +147,54 @@ propProofNotVerify tree k v = do
         _ ->
             False
 
-data Tree' k v = Tree' (Tree k v) k k
-    deriving (Eq, Show)
+data TreeTest k v = TreeTest
+    { tTree           :: Tree k v
+    , tExistsKeyVal   :: (k, v)
+    , tAbsentKey      :: k
+    , tKeyExistsProof :: Tree.Proof SHA256 k v
+    , tKeyAbsentProof :: Tree.Proof SHA256 k v
+    } deriving (Eq)
 
-instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Tree' k v) where
+instance (Show k, Show v) => Show (TreeTest k v) where
+    show TreeTest{..} =
+        unlines [ show tTree
+        , "exists=" ++ show tExistsKeyVal
+        , "absent=" ++ show tAbsentKey
+        , ""
+        , show tKeyExistsProof
+        , show tKeyAbsentProof
+        ]
+
+-- | Arbitrary instance for 'TreeTest'.
+instance ( ByteArrayAccess k
+         , ByteArrayAccess v
+         , Arbitrary k
+         , Arbitrary v
+         , Ord k
+         ) => Arbitrary (TreeTest k v) where
     arbitrary = do
+        -- Create a non-empty tree.
         tree <- arbitrary `suchThat` (\t -> not (Tree.null t)) :: Gen (Tree k v)
+        -- Select an arbitrary key from the tree.
         present <- elements (Tree.keys tree)
+        -- Create an arbitrary key which isn't in the tree.
         absent <- arbitrary `suchThat` (\k -> not (Tree.member k tree)) :: Gen k
-        pure $ Tree' tree present absent
+        -- Create a proof of existence of the existing key.
+        (Just v, existsProof) <- pure $ Tree.lookupProof present tree
+        -- Create a proof of absence of the absent key.
+        (Nothing, absentProof) <- pure $ Tree.lookupProof absent tree
+        -- Return a TreeTest object with all of the above.
+        pure $ TreeTest tree (present, v) absent existsProof absentProof
 
--- | Valid proofs of key absence against the wrong key verify negatively.
-propProofAbsenceNotVerify :: Tree' Key Val -> Gen Bool
-propProofAbsenceNotVerify (Tree' t present absent) =
-    case Tree.lookupProof @SHA256 absent t of
-        -- No matter what, looking up an absent key shouldn't return a proof
-        -- of existence.
-        (_, Tree.KeyExistsProof _) ->
-            pure False
-        -- If an absence proof is returned, we never expect a value.
-        (Just _, Tree.KeyAbsentProof _ _) ->
-            pure False
-        -- Now things are starting to look correct...
-        (Nothing, proof@(Tree.KeyAbsentProof _ _)) -> do
-            -- The proof of absence returned should only verify for the key
-            -- `absent` that it was generated for, and not for any present key
-            -- in the tree.
-            pure $ and [ isRight $ Tree.verify proof root absent Nothing
-                       , isLeft  $ Tree.verify proof root present Nothing
-                       ]
-          where
-            root = Tree.merkleHash @SHA256 t
+propProofAbsenceNotVerify :: TreeTest Key Val -> Gen Bool
+propProofAbsenceNotVerify TreeTest{..} = pure $
+    and [ isRight $ Tree.verify tKeyAbsentProof root tAbsentKey          Nothing
+        , isLeft  $ Tree.verify tKeyAbsentProof root (fst tExistsKeyVal) Nothing
+        , isRight $ Tree.verify tKeyExistsProof root (fst tExistsKeyVal) (Just (snd tExistsKeyVal))
+        , isLeft  $ Tree.verify tKeyExistsProof root tAbsentKey          (Just (snd tExistsKeyVal))
+        ]
+  where
+    root = Tree.merkleHash tTree
 
 testEmptyTreeProof :: Assertion
 testEmptyTreeProof = do
