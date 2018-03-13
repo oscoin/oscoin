@@ -8,6 +8,8 @@ import           Data.ByteArray (ByteArrayAccess)
 import           Data.List (intercalate, intersperse)
 import qualified Data.List as List
 
+type Error = String
+
 data Proof d k v =
       KeyExistsProof (Path d ())
       -- ^ Proof of existence of a key.
@@ -84,7 +86,7 @@ verify
     -> Digest a          -- ^ The root hash.
     -> k                 -- ^ The key to verify.
     -> Maybe v           -- ^ The value to verify in case of a proof of existence.
-    -> Either String ()  -- ^ A 'Right' value signifies success.
+    -> Either Error ()   -- ^ A 'Right' value signifies success.
 verify (KeyExistsProof (Path xs ())) root k (Just v) =
     assert (pathDigest xs k v == root) "Path should match supplied root"
 verify (KeyExistsProof _) _ _ Nothing =
@@ -111,7 +113,7 @@ verify (KeyAbsentProof (Just (Path ls (lk, lv))) (Just (Path rs (rk, rv)))) root
 verify (KeyAbsentProof _ _) _ _ (Just _) =
     Left "A value was passed to verify a KeyAbsentProof"
 
-assert :: Bool -> String -> Either String ()
+assert :: Bool -> String -> Either Error ()
 assert True  _   = Right ()
 assert False err = Left err
 
