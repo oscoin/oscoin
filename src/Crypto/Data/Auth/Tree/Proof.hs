@@ -48,32 +48,25 @@ adjacent l' r' =
     -- the path elements in common.
     stripCommonPrefix :: [PathElem a] -> [PathElem a] -> ([PathElem a], [PathElem a])
     stripCommonPrefix (reverse -> ls) (reverse -> rs) =
-        let (l, r) = go ls rs in (reverse l, reverse r)
+        let (l, r) = go ls rs in
+            ( reverse l
+            , reverse r
+            )
       where
         go (l:ls) (r:rs)
             | l == r    = go ls rs
-            | otherwise = (l:ls, r:rs)
+            | otherwise = (ls, rs)
         go ls rs = (ls, rs)
 
 isLeftmost :: [PathElem a] -> Bool
 isLeftmost (R _ : xs) = isLeftmost xs
-isLeftmost (L _ : []) = True
+isLeftmost []         = True
 isLeftmost _          = False
 
 isRightmost :: [PathElem a] -> Bool
 isRightmost (L _ : xs) = isRightmost xs
-isRightmost (R _ : []) = True
+isRightmost []         = True
 isRightmost _          = False
-
-isLeftmost' :: [PathElem a] -> Bool
-isLeftmost' (R _ : xs) = isLeftmost' xs
-isLeftmost' []         = True
-isLeftmost' _          = False
-
-isRightmost' :: [PathElem a] -> Bool
-isRightmost' (L _ : xs) = isRightmost' xs
-isRightmost' []         = True
-isRightmost' _          = False
 
 pathDigest
     :: (ByteArrayAccess k, ByteArrayAccess v, HashAlgorithm a)
@@ -103,12 +96,12 @@ verify (KeyAbsentProof Nothing Nothing) root _ Nothing =
 verify (KeyAbsentProof (Just (Path xs (k, v))) Nothing) root k' Nothing = do
     assert (pathDigest xs k v == root) "Left path should match supplied root"
     assert (k' > k)                    "Left path leaf should be lesser than key"
-    assert (isRightmost' xs)           "Left path should be rightmost"
+    assert (isRightmost xs)            "Left path should be rightmost"
 -- Key is lesser than the minimum vlaue in the tree.
 verify (KeyAbsentProof Nothing (Just (Path xs (k, v)))) root k' Nothing = do
     assert (k' < k)                    "Right path leaf should be greater than key"
     assert (pathDigest xs k v == root) "Right path should match supplied root"
-    assert (isLeftmost' xs)            "Right path should be leftmost"
+    assert (isLeftmost xs)             "Right path should be leftmost"
 -- Key is between two existing values in the tree.
 verify (KeyAbsentProof (Just (Path ls (lk, lv))) (Just (Path rs (rk, rv)))) root k Nothing = do
     assert (lk < k && k < rk)            "Key should be between the left and right paths"
