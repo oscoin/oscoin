@@ -5,7 +5,7 @@ import           Crypto.Data.Auth.Tree hiding (lookup)
 import           Crypto.Data.Auth.Tree.Internal
 import           Crypto.Hash (HashAlgorithm, Digest)
 import           Data.ByteArray (ByteArrayAccess)
-import           Data.List (intercalate, intersperse)
+import           Data.List (intercalate)
 import qualified Data.List as List
 
 type Error = String
