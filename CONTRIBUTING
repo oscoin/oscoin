@@ -7,6 +7,23 @@ Haskell
 
 Read the included styleguide (``STYLE``).
 
+Branching
+---------
+
+* Feature branches are prefixed with ``f/`` - these are branches which change
+  functionality or implementation.
+* Cleanup branches are prefixed with ``c/`` - these are branches which *do not*
+  change any functionality or implementations. For example, fixing styling,
+  removing an unused import etc.
+* Release branches are prefixed with ``r/`` - these are only to be used when
+  creating a release, eg. ``r/1.0.0``.
+* Bug fix branches prefixed with ``b/`` are specifically addressing a
+  divergence between what is expected and what is actual.
+
+After pushing a branch, always open a pull-request. This gives visibility on
+what you're working on. If the branch isn't ready for review, add ``[WIP]`` as
+a prefix to the pull-request title.
+
 Git
 ---
 
