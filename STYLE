@@ -373,18 +373,22 @@ purposes.
 Use-case          Recommendation          Hackage link
 ================= ======================= =======================================================
 Threads/async     **async**               https://hackage.haskell.org/package/async
-Stream processing **streaming**           https://hackage.haskell.org/package/streaming
+Stream processing **streamly**            https://hackage.haskell.org/package/streamly
 Lenses            **microlens**           https://hackage.haskell.org/package/microlens
 Exceptions        **safe-exceptions**     https://hackage.haskell.org/package/safe-exceptions
 Testing           **tasty**               https://hackage.haskell.org/package/tasty
 Crypto            **cryptonite**          https://hackage.haskell.org/package/cryptonite
 Writer            **writer-cps-mtl**      https://hackage.haskell.org/package/writer-cps-mtl
 Logging           **fast-logger**         https://hackage.haskell.org/package/fast-logger
+Logger Monad      **monad-logger**        https://hackage.haskell.org/package/monad-logger
 Lifting IO        **monad-control**       https://hackage.haskell.org/package/monad-control
 Pretty printing   **wl-pprint-annotated** https://hackage.haskell.org/package/wl-pprint-annotated
 Option parsing    **optparse-generic**    https://hackage.haskell.org/package/optparse-generic
 Child processes   **typed-process**       https://hackage.haskell.org/package/typed-process
 Free monads       **freer-simple**        https://hackage.haskell.org/package/freer-simple
+HTTP Client       **req**                 https://hackage.haskell.org/package/req
+File paths        **filepath**            https://hackage.haskell.org/package/filepath
+Terminal output   **ansi-terminal**       https://hackage.haskell.org/package/ansi-terminal
 ================= ======================= =======================================================
 
 .. vim: filetype=rst
