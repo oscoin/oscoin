@@ -59,17 +59,17 @@ instance Hashable msg => Hashable (Signed msg) where
     hash :: Signed msg -> Hashed (Signed msg)
     hash (Signed msg _) = toHashed (fromHashed (hash msg))
 
-instance ToJSON tx => ToJSON (Signed tx) where
-    toJSON (Signed tx sig) =
-        object [ "tx"  .= toJSON tx
+instance ToJSON msg => ToJSON (Signed msg) where
+    toJSON (Signed msg sig) =
+        object [ "msg" .= toJSON msg
                , "sig" .= toJSON sig
                ]
 
-instance FromJSON tx => FromJSON (Signed tx) where
+instance FromJSON msg => FromJSON (Signed msg) where
     parseJSON = withObject "Signed Tx" $ \o -> do
-        tx  <- o .: "tx"
+        msg <- o .: "msg"
         sig <- o .: "sig"
-        pure $ signed sig tx
+        pure $ signed sig msg
 
 instance Binary PublicKey where
     put (PublicKey curve (Point x y)) | curve == getCurveByName SEC_p256k1 =
