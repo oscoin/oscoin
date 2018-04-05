@@ -19,6 +19,7 @@ library
     , Oscoin.Address
     , Oscoin.Account
     , Oscoin.Consensus
+    , Oscoin.Consensus.Class
     , Oscoin.Environment
     , Oscoin.Node
     , Oscoin.Node.State
