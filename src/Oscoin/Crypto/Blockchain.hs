@@ -23,7 +23,7 @@ type Blockchain tx = NonEmpty (Block tx)
 validateBlockchain :: Blockchain tx -> Either Error (Blockchain tx)
 validateBlockchain (blk :| []) = do
     blk' <- validateBlock blk
-    pure $ fromList [blk']
+    pure $ NonEmpty.fromList [blk']
 validateBlockchain (blk :| blk' : blks)
     | blockPrevHash (blockHeader blk) /= headerHash (blockHeader blk') =
         Left (Error "previous hash does not match")

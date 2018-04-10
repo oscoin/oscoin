@@ -1,8 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Oscoin.Prelude
     ( module Prelude
-    , module Foundation
-    , module Foundation.Collection
+    , module Control.Applicative
     , module Control.Monad.Reader
     , module Control.Monad.Trans.Class
     , module Control.Monad.STM.Class
@@ -24,6 +23,8 @@ module Oscoin.Prelude
     , module Data.Function
     , module Data.Maybe
     , module Data.Functor
+    , module Data.String
+    , module Data.Word
     , module GHC.Stack
     , module GHC.Generics
     , module Debug.Trace
@@ -40,11 +41,7 @@ module Oscoin.Prelude
     , tshow
     ) where
 
-import Prelude (read, map, zip, lookup)
-import qualified Prelude as Prelude
--- TODO: We should be using these instead of the ones in "Foldable".
-import Foundation hiding (Signed, NonEmpty, Foldable, toList, null, fail, (<>), foldr)
-import Foundation.Collection (getNonEmpty)
+import Prelude hiding (fail)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
@@ -54,6 +51,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import Data.Semigroup (Semigroup, (<>))
 import Data.IORef (IORef)
+import Control.Applicative (liftA2)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Reader (MonadReader, ReaderT(..), runReaderT, ask, asks, local)
@@ -71,6 +69,8 @@ import Data.ByteArray (ByteArrayAccess)
 import Data.Function ((&))
 import Data.Maybe (fromJust)
 import Data.Functor (void)
+import Data.String (IsString)
+import Data.Word
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
 import Debug.Trace (trace, traceShow, traceM, traceShowM)
