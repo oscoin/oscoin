@@ -73,7 +73,7 @@ import Data.String (IsString)
 import Data.Word
 import GHC.Stack (HasCallStack)
 import GHC.Generics (Generic)
-import Debug.Trace (trace, traceShow, traceM, traceShowM)
+import Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
 
 type LByteString = LBS.ByteString
 
