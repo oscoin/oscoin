@@ -17,6 +17,7 @@ import           Oscoin.Node.Channel (Subscription(..), fromEvent)
 
 import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Test.Helpers
+import qualified Oscoin.Consensus.Tests as Consensus
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
@@ -45,6 +46,7 @@ tests = testGroup "Oscoin"
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
+    , testGroup      "Consensus"                      Consensus.tests
     ]
 
 testOscoinAPI :: Assertion

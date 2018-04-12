@@ -20,5 +20,8 @@ class View m where
 
 class Protocol a where
   type Msg a
+  type Addr a
+  type Tick a
 
-  step :: a -> Msg a -> (a, [Msg a])
+  step :: a -> Tick a -> Maybe (Addr a, Msg a) -> (a, [(Addr a, Msg a)])
+  epoch :: a -> Tick a

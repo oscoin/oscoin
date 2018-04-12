@@ -192,6 +192,7 @@ test-suite test
 
   other-modules:
       Oscoin.Tests
+    , Oscoin.Consensus.Tests
     , Oscoin.HTTP.Test.Helpers
     , Oscoin.Crypto.Hash.Arbitrary
     , Oscoin.Crypto.PubKey.Arbitrary
@@ -211,6 +212,7 @@ test-suite test
     , containers
     , cryptonite
     , memory
+    , mtl
     , http-types
     , oscoin
     , QuickCheck
@@ -223,11 +225,13 @@ test-suite test
     , microlens-aeson
     , bytestring
     , Spock
+    , time
     , wai
     , wai-extra
 
   default-extensions:
       GADTs
+    , GeneralizedNewtypeDeriving
     , NoImplicitPrelude
     , TypeApplications
     , ConstraintKinds
