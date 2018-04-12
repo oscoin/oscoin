@@ -1,5 +1,5 @@
 module Oscoin.Org.Transaction
-    ( Tx
+    ( Tx(..)
     , Receipt(..)
     , validateTransaction
     , applyTransaction

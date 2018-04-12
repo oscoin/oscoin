@@ -58,6 +58,7 @@ library
     , Oscoin.P2P.Block
 
     , Oscoin.Transaction
+    , Oscoin.View
 
     , Crypto.Data.Auth.Tree
     , Crypto.Data.Auth.Tree.Internal

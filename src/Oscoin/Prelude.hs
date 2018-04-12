@@ -3,6 +3,7 @@ module Oscoin.Prelude
     ( module Prelude
     , module Control.Applicative
     , module Control.Monad.Reader
+    , module Control.Monad.State
     , module Control.Monad.Trans.Class
     , module Control.Monad.STM.Class
     , module Control.Concurrent.STM
@@ -54,7 +55,8 @@ import Data.IORef (IORef)
 import Control.Applicative (liftA2)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class (MonadTrans, lift)
-import Control.Monad.Reader (MonadReader, ReaderT(..), runReaderT, ask, asks, local)
+import Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)
+import Control.Monad.State (MonadState)
 import Control.Monad.STM.Class (MonadSTM, liftSTM)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad.Fail (MonadFail, fail)
