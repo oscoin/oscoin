@@ -3,12 +3,12 @@ module Oscoin.Consensus.Class where
 import           Oscoin.Prelude
 
 class Context m where
-  type State m
+  type T m
   type Key m
 
   get :: Key m -> m (Maybe ByteString)
-  set :: Key m -> ByteString -> m (State m)
-  del :: Key m -> m (State m)
+  set :: Key m -> ByteString -> m (T m)
+  del :: Key m -> m (T m)
 
 type Score = [ByteString]
 
@@ -16,9 +16,9 @@ class View m where
   type Transaction m
   type BlockHeader m
 
-  apply :: Maybe (BlockHeader m) -> [Transaction m] -> m (State m)
+  apply :: Maybe (BlockHeader m) -> [Transaction m] -> m ()
 
-class Protocol a where
+class (Ord (Tick a), Num (Tick a)) => Protocol a where
   type Msg a
   type Addr a
   type Tick a
