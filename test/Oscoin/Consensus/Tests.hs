@@ -128,7 +128,7 @@ instance Protocol (BufferedTestNode DummyState) where
       where
         outgoing = [(p, msg) | msg <- btnBuffer, p <- btnPeers]
 
-    epoch _ = 1
+    epoch _ = 10
 
 -- TestNetwork ----------------------------------------------------------------
 
@@ -150,15 +150,18 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg   <- arbitrary :: Gen (Msg (TestNode DummyState))
+            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
             dests <- sublistOf (toList addrs) :: Gen [Word]
             forM dests $ \d -> do
-                at <- arbitrary :: Gen NominalDiffTime
-                pure (at, d, Just msg)
+                at <- choose (0, 100) :: Gen Int
+                pure (fromIntegral at, d, Just msg)
+
+        ticks <- forM nodes $ \(addr, n) ->
+            pure [(epoch n * x, addr, Nothing) | x <- [0..10]]
 
         pure $ TestNetwork
             { tnNodes = Map.fromList nodes
-            , tnMsgs  = sortOn (\(x, _, _) -> x) (mconcat smsgs)
+            , tnMsgs  = sortOn (\(t, _, _) -> t) (mconcat $ smsgs ++ ticks)
             }
 
 runNetwork
@@ -200,19 +203,22 @@ deliverMessage tick (addr, msg) tn@TestNetwork{tnNodes}
         (tn, [])
 
 scheduleMessages
-    :: (Ord (Addr a), TNode a)
+    :: TNode a
     => Tick a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
-scheduleMessages t msgs tn =
+scheduleMessages t msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
         scheduled     = [(deliveryTime, to, Just msg) | (to, msg) <- msgs]
-        msgs'         = sortOn (\(x, _, _) -> x) (scheduled ++ tnMsgs tn)
-     in runNetwork tn { tnMsgs = msgs' }
+        msgs'         = sortOn (\(x, _, _) -> x) (scheduled ++ tnMsgs)
+     in tn { tnMsgs = msgs' }
 
 networkHasMessages :: TestNetwork v -> Bool
 networkHasMessages (TestNetwork _n []) = False
 networkHasMessages _                   = True
 
 -------------------------------------------------------------------------------
+
+filterTicks :: [(a, b, Maybe c)] -> [(a, b, Maybe c)]
+filterTicks = filter (\(_, _, msg) -> isJust msg)
 
 propNetworkNodesIncludeAllTxns
     :: (Eq (Msg a), Ord (Addr a), TNode a)
@@ -222,7 +228,7 @@ propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
         length (nub mappedInitialMsgs) == length (nub firstNodeMsgs)
             && length (nub nodeStates) == 1
   where
-    mappedInitialMsgs = map (\(_, _, m) -> m) initialMsgs
+    mappedInitialMsgs = map (\(_, _, m) -> m) (filterTicks initialMsgs)
     TestNetwork nodes' _ = runNetwork tn
     firstNodeMsgs = nodeState $ head (toList nodes')
     -- Deduplicating the different node states should result in a single state.

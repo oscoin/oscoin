@@ -69,7 +69,7 @@ import Data.Either (isRight, isLeft)
 import Data.Default (def, Default)
 import Data.ByteArray (ByteArrayAccess)
 import Data.Function ((&))
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust, isNothing)
 import Data.Functor (void)
 import Data.String (IsString)
 import Data.Word
