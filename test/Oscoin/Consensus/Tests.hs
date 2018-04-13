@@ -287,12 +287,13 @@ networkHasMessages (TestNetwork _ ms)
     | otherwise   = True
 
 -------------------------------------------------------------------------------
+
 mapMsgs :: Ord (Msg a) => Set (ScheduledMessage a) -> Set (Msg a)
-mapMsgs = foldr (\m acc ->
-    case m of
-        ScheduledMessage _ _ (_, x) -> Set.insert x acc
-        _                           -> acc)
-    Set.empty
+mapMsgs =
+    foldr f Set.empty
+  where
+    f (ScheduledMessage _ _ (_, x)) acc = Set.insert x acc
+    f   _                           acc = acc
 
 propNetworkNodesIncludeAllTxns
     :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
