@@ -179,7 +179,6 @@ deriving instance Show (Scheduled (BufferedTestNode DummyState))
 
 -- TestNetwork ----------------------------------------------------------------
 
--- TODO(tyler): Better data structure for scheduled messages.
 data TestNetwork a = TestNetwork
     { tnNodes :: Map (Addr a) a
     , tnMsgs  :: Set (Scheduled a)
