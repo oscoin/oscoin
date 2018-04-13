@@ -77,7 +77,7 @@ deriving instance Show (TestNode DummyState)
 -- TODO(alexis): Try to make this `Protocol (TestNode s)`
 instance Protocol (TestNode DummyState) where
     type Msg  (TestNode DummyState) = DummyTx
-    type Addr (TestNode DummyState) = Word
+    type Addr (TestNode DummyState) = Word8
     type Tick (TestNode DummyState) = NominalDiffTime
 
     step tn@(TestNode a state peers) _at (Just (from, msg))
@@ -114,7 +114,7 @@ deriving instance Show (BufferedTestNode DummyState)
 
 instance Protocol (BufferedTestNode DummyState) where
     type Msg  (BufferedTestNode DummyState) = DummyTx
-    type Addr (BufferedTestNode DummyState) = Word
+    type Addr (BufferedTestNode DummyState) = Word8
     type Tick (BufferedTestNode DummyState) = NominalDiffTime
 
     step btn@BufferedTestNode{..} _ (Just (_, msg))
@@ -186,14 +186,14 @@ deriving instance Show (TestNetwork (BufferedTestNode DummyState))
 
 instance Arbitrary (TestNetwork (TestNode DummyState)) where
     arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word)
+        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
 
         nodes <- forM (toList addrs) $ \a ->
             pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
             msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word]
+            dests <- sublistOf (toList addrs) :: Gen [Word8]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
                 pure $ ScheduledMessage (fromIntegral at) d msg
@@ -208,7 +208,7 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
 
 instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
     arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word)
+        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
 
         nodes <- forM (toList addrs) $ \addr ->
             pure (addr, BufferedTestNode { btnAddr   = addr
@@ -220,7 +220,7 @@ instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
 
         smsgs <- resize kidSize . listOf1 $ do
             msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word]
+            dests <- sublistOf (toList addrs) :: Gen [Word8]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
                 pure $ ScheduledMessage (fromIntegral at) d msg
