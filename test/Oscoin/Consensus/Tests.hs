@@ -19,11 +19,18 @@ import qualified Data.Set as Set
 import           Data.Time.Clock (NominalDiffTime)
 
 tests :: [TestTree]
-tests = [ testProperty "All nodes include all txns" propNetworkNodesIncludeAllTxns ]
+tests = [ testProperty "All nodes include all txns" (propNetworkNodesIncludeAllTxns @(TestNode DummyState)) ]
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
 kidSize = 11
+
+-- TNode ----------------------------------------------------------------------
+
+class (Eq (TNodeTx a), Protocol a) => TNode a where
+    type TNodeTx a :: *
+
+    nodeState :: a -> [TNodeTx a]
 
 -- DummyView ------------------------------------------------------------------
 
@@ -65,6 +72,7 @@ deriving instance Eq (TestNode DummyState)
 deriving instance Ord (TestNode DummyState)
 deriving instance Show (TestNode DummyState)
 
+-- TODO(alexis): Try to make this `Protocol (TestNode s)`
 instance Protocol (TestNode DummyState) where
     type Msg  (TestNode DummyState) = DummyTx
     type Addr (TestNode DummyState) = Word
@@ -79,6 +87,36 @@ instance Protocol (TestNode DummyState) where
         broadcastMsgs = map (\p -> (p, msg)) filteredPeers
     step tn _at Nothing =
         (tn, [])
+
+    epoch _ = 1
+
+instance TNode (TestNode DummyState) where
+    type TNodeTx (TestNode DummyState) = DummyTx
+
+    nodeState (TestNode _ s _) = s
+
+-- BufferedTestNode -----------------------------------------------------------
+
+data BufferedTestNode s = BufferedTestNode
+    { btnAddr  :: Addr (BufferedTestNode s)
+    , btnPeers :: [Addr (BufferedTestNode s)]
+    , btnState :: s
+    }
+
+instance Protocol (BufferedTestNode DummyState) where
+    type Msg  (BufferedTestNode DummyState) = DummyTx
+    type Addr (BufferedTestNode DummyState) = Word
+    type Tick (BufferedTestNode DummyState) = NominalDiffTime
+
+    step btn@BufferedTestNode{..} _ (Just (from, msg))
+        | msg `elem` btnState = (btn, [])
+        | otherwise           = (btn { btnState = state' }, broadcastMsgs)
+      where
+        ((), state')  = runDummyView (apply Nothing [msg]) btnState
+        filteredPeers = filter (/= from) btnPeers
+        broadcastMsgs = map (\p -> (p, msg)) filteredPeers
+    step btn _ Nothing =
+        (btn, [])
 
     epoch _ = 1
 
@@ -135,15 +173,26 @@ networkHasMessages _                   = True
 
 -------------------------------------------------------------------------------
 
+-- * instance Protocol (BufferedTestNode DummyState) where
+-- * buffer for batching
+-- * knowledge about when the last batch was sent
+-- * read the tick and figure out to send or to buffer.
+-- * broadcast interval setting
+-- * staggered broadcast (so they don't all send at the same time)
+-- * periodic stepping based on 'epoch'.
+-- * new termination condition, since resting state is different (stuff can be buffered)
+-- * `data TestNetwork node`: make TestNetwork work without TestNode.
+
 propNetworkNodesIncludeAllTxns
-    :: TestNetwork (TestNode DummyState) -> Property
+    :: (Eq (Msg a), Ord (Addr a), TNode a)
+    => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
         length (nub mappedInitialMsgs) == length (nub firstNodeMsgs)
             && length (nub nodeStates) == 1
   where
     mappedInitialMsgs = map (\(_, _, m) -> m) initialMsgs
-    (TestNetwork nodes' _) = runNetwork tn
-    (TestNode _addr firstNodeMsgs _peers) = head (toList nodes')
+    TestNetwork nodes' _ = runNetwork tn
+    firstNodeMsgs = nodeState $ head (toList nodes')
     -- Deduplicating the different node states should result in a single state.
-    nodeStates = map (\(TestNode _ state _) -> state) (toList nodes')
+    nodeStates = map nodeState (toList nodes')
