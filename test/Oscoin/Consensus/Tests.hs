@@ -237,18 +237,18 @@ networkHasMessages (TestNetwork _ ms)
 -------------------------------------------------------------------------------
 
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
+    :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
         Set.size mappedInitialMsgs == length (nub firstNodeMsgs)
-            && length (nub nodeStates) == 1
+            && Set.size nodeStates == 1
   where
     mappedInitialMsgs = foldr (\m acc->
         case m of
             ScheduledMessage _ _ x -> Set.insert x acc
             _                      -> acc) Set.empty initialMsgs
     TestNetwork nodes' _ = runNetwork tn
-    firstNodeMsgs = nodeState $ head (toList nodes')
+    firstNodeMsgs = nodeState $ head $ toList nodes'
     -- Deduplicating the different node states should result in a single state.
-    nodeStates = map nodeState (toList nodes')
+    nodeStates = Set.fromList $ map nodeState (toList nodes')
