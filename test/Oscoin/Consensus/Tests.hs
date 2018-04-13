@@ -19,7 +19,8 @@ import qualified Data.Set as Set
 import           Data.Time.Clock (NominalDiffTime)
 
 tests :: [TestTree]
-tests = [ testProperty "All nodes include all txns" (propNetworkNodesIncludeAllTxns @(TestNode DummyState)) ]
+tests = [ testProperty "All nodes include all txns"            (propNetworkNodesIncludeAllTxns @(TestNode DummyState))
+        , testProperty "All nodes include all txns (buffered)" (propNetworkNodesIncludeAllTxns @(BufferedTestNode DummyState)) ]
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
@@ -107,6 +108,10 @@ data BufferedTestNode s = BufferedTestNode
     , btnState   :: s
     }
 
+deriving instance Eq (BufferedTestNode DummyState)
+deriving instance Ord (BufferedTestNode DummyState)
+deriving instance Show (BufferedTestNode DummyState)
+
 instance Protocol (BufferedTestNode DummyState) where
     type Msg  (BufferedTestNode DummyState) = DummyTx
     type Addr (BufferedTestNode DummyState) = Word
@@ -130,6 +135,12 @@ instance Protocol (BufferedTestNode DummyState) where
 
     epoch _ = 10
 
+instance TNode (BufferedTestNode DummyState) where
+    type TNodeTx (BufferedTestNode DummyState) = DummyTx
+
+    nodeState = btnState
+    isResting BufferedTestNode{btnBuffer} = null btnBuffer
+
 -- ScheduledMessage -----------------------------------------------------------
 
 data ScheduledMessage a =
@@ -146,8 +157,21 @@ instance Ord (ScheduledMessage (TestNode DummyState)) where
     (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
         t <= t'
 
+instance Ord (ScheduledMessage (BufferedTestNode DummyState)) where
+    (ScheduledMessage t _ _) <= (ScheduledMessage t' _ _) =
+        t <= t'
+    (ScheduledTick t _) <= (ScheduledTick t' _) =
+        t <= t'
+    (ScheduledTick t _) <= (ScheduledMessage t' _ _) =
+        t <= t'
+    (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
+        t <= t'
+
 deriving instance Eq   (ScheduledMessage (TestNode DummyState))
 deriving instance Show (ScheduledMessage (TestNode DummyState))
+
+deriving instance Eq   (ScheduledMessage (BufferedTestNode DummyState))
+deriving instance Show (ScheduledMessage (BufferedTestNode DummyState))
 
 -- TestNetwork ----------------------------------------------------------------
 
@@ -157,7 +181,8 @@ data TestNetwork a = TestNetwork
     , tnMsgs  :: Set (ScheduledMessage a)
     }
 
-deriving instance Show (TestNetwork (TestNode DummyState))
+deriving instance Show (TestNetwork (TestNode         DummyState))
+deriving instance Show (TestNetwork (BufferedTestNode DummyState))
 
 instance Arbitrary (TestNetwork (TestNode DummyState)) where
     arbitrary = do
@@ -165,6 +190,33 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
 
         nodes <- forM (toList addrs) $ \a ->
             pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
+
+        smsgs <- resize kidSize . listOf1 $ do
+            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
+            dests <- sublistOf (toList addrs) :: Gen [Word]
+            forM dests $ \d -> do
+                at <- choose (0, 100) :: Gen Int
+                pure $ ScheduledMessage (fromIntegral at) d msg
+
+        ticks <- forM nodes $ \(addr, n) -> do
+            pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
+
+        pure $ TestNetwork
+            { tnNodes = Map.fromList nodes
+            , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
+            }
+
+instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
+    arbitrary = do
+        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word)
+
+        nodes <- forM (toList addrs) $ \addr ->
+            pure (addr, BufferedTestNode { btnAddr   = addr
+                                         , btnPeers  = [x | x <- toList addrs, x /= addr]
+                                         , btnBuffer = []
+                                         , btnTick   = 0
+                                         , btnState  = []
+                                         })
 
         smsgs <- resize kidSize . listOf1 $ do
             msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
