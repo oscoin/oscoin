@@ -12,7 +12,7 @@ import           Test.QuickCheck.Instances ()
 import           Control.Monad.Reader
 import           Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
-import           Data.List (sort, sortOn, nub)
+import           Data.List (sort, nub)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -132,7 +132,26 @@ instance Protocol (BufferedTestNode DummyState) where
 
 -- TestNetwork ----------------------------------------------------------------
 
-type ScheduledMessage a = (Tick a, Addr a, Maybe (Msg a))
+data ScheduledMessage a =
+      ScheduledMessage (Tick a) (Addr a) (Msg a)
+    | ScheduledTick    (Tick a) (Addr a)
+
+isTick :: ScheduledMessage a -> Bool
+isTick (ScheduledTick _ _) = True
+isTick _                   = False
+
+instance Ord (ScheduledMessage (TestNode DummyState)) where
+    compare (ScheduledMessage t _ _) (ScheduledMessage t' _ _) =
+        compare t t'
+    compare (ScheduledTick t _) (ScheduledTick t' _) =
+        compare t t'
+    compare (ScheduledTick t _) (ScheduledMessage t' _ _) =
+        compare t t'
+    compare (ScheduledMessage t _ _) (ScheduledTick t' _) =
+        compare t t'
+
+deriving instance Eq   (ScheduledMessage (TestNode DummyState))
+deriving instance Show (ScheduledMessage (TestNode DummyState))
 
 -- TODO(tyler): Better data structure for scheduled messages.
 data TestNetwork a = TestNetwork
@@ -154,28 +173,29 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             dests <- sublistOf (toList addrs) :: Gen [Word]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
-                pure (fromIntegral at, d, Just msg)
+                pure $ ScheduledMessage (fromIntegral at) d msg
 
         ticks <- forM nodes $ \(addr, n) ->
-            pure [(epoch n * x, addr, Nothing) | x <- [0..10]]
+            pure [ScheduledTick (epoch n * x) addr | x <- [0]]
 
         pure $ TestNetwork
             { tnNodes = Map.fromList nodes
-            , tnMsgs  = sortOn (\(t, _, _) -> t) (mconcat $ smsgs ++ ticks)
+            , tnMsgs  = sort (mconcat $ smsgs ++ ticks)
             }
 
 runNetwork
     :: ( Ord (Addr a)
+       , Ord (ScheduledMessage a)
        , TNode a
        ) => TestNetwork a -> TestNetwork a
 runNetwork tn@(TestNetwork nodes [])
     | all isResting nodes = tn
     | otherwise           = runNetwork tn
-runNetwork (TestNetwork nodes ((tick, addr, Nothing) : ms)) =
+runNetwork (TestNetwork nodes ((ScheduledTick tick addr) : ms)) =
     runNetwork (scheduleMessages tick msgs tn)
   where
     (tn, msgs) = deliverTick tick addr (TestNetwork nodes ms)
-runNetwork (TestNetwork nodes ((tick, addr, Just msg) : ms)) =
+runNetwork (TestNetwork nodes ((ScheduledMessage tick addr msg) : ms)) =
     runNetwork (scheduleMessages tick msgs tn)
   where
     (tn, msgs) = deliverMessage tick (addr, msg) (TestNetwork nodes ms)
@@ -203,12 +223,12 @@ deliverMessage tick (addr, msg) tn@TestNetwork{tnNodes}
         (tn, [])
 
 scheduleMessages
-    :: TNode a
+    :: (TNode a, Ord (ScheduledMessage a))
     => Tick a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
 scheduleMessages t msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
-        scheduled     = [(deliveryTime, to, Just msg) | (to, msg) <- msgs]
-        msgs'         = sortOn (\(x, _, _) -> x) (scheduled ++ tnMsgs)
+        scheduled     = [ScheduledMessage deliveryTime to msg | (to, msg) <- msgs]
+        msgs'         = sort (scheduled ++ tnMsgs)
      in tn { tnMsgs = msgs' }
 
 networkHasMessages :: TestNetwork v -> Bool
@@ -217,18 +237,15 @@ networkHasMessages _                   = True
 
 -------------------------------------------------------------------------------
 
-filterTicks :: [(a, b, Maybe c)] -> [(a, b, Maybe c)]
-filterTicks = filter (\(_, _, msg) -> isJust msg)
-
 propNetworkNodesIncludeAllTxns
-    :: (Eq (Msg a), Ord (Addr a), TNode a)
+    :: (Eq (Msg a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
         length (nub mappedInitialMsgs) == length (nub firstNodeMsgs)
             && length (nub nodeStates) == 1
   where
-    mappedInitialMsgs = map (\(_, _, m) -> m) (filterTicks initialMsgs)
+    mappedInitialMsgs = [m | ScheduledMessage _ _ m <- (filter (not . isTick) initialMsgs)]
     TestNetwork nodes' _ = runNetwork tn
     firstNodeMsgs = nodeState $ head (toList nodes')
     -- Deduplicating the different node states should result in a single state.
