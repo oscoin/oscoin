@@ -173,8 +173,8 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
                 at <- choose (0, 100) :: Gen Int
                 pure $ ScheduledMessage (fromIntegral at) d msg
 
-        ticks <- forM nodes $ \(addr, n) ->
-            pure [ScheduledTick (epoch n * x) addr | x <- [0]]
+        ticks <- forM nodes $ \(addr, n) -> do
+            pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
 
         pure $ TestNetwork
             { tnNodes = Map.fromList nodes
