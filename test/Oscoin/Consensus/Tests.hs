@@ -141,34 +141,34 @@ instance TNode (BufferedTestNode DummyState) where
     nodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
 
--- ScheduledMessage -----------------------------------------------------------
+-- Scheduled ------------------------------------------------------------------
 
-data ScheduledMessage a =
+data Scheduled a =
       ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
 
-scheduledTick :: ScheduledMessage a -> Tick a
+scheduledTick :: Scheduled a -> Tick a
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 
-instance Ord (ScheduledMessage (TestNode DummyState)) where
+instance Ord (Scheduled (TestNode DummyState)) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-instance Ord (ScheduledMessage (BufferedTestNode DummyState)) where
+instance Ord (Scheduled (BufferedTestNode DummyState)) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-deriving instance Eq   (ScheduledMessage (TestNode DummyState))
-deriving instance Show (ScheduledMessage (TestNode DummyState))
+deriving instance Eq   (Scheduled (TestNode DummyState))
+deriving instance Show (Scheduled (TestNode DummyState))
 
-deriving instance Eq   (ScheduledMessage (BufferedTestNode DummyState))
-deriving instance Show (ScheduledMessage (BufferedTestNode DummyState))
+deriving instance Eq   (Scheduled (BufferedTestNode DummyState))
+deriving instance Show (Scheduled (BufferedTestNode DummyState))
 
 -- TestNetwork ----------------------------------------------------------------
 
 -- TODO(tyler): Better data structure for scheduled messages.
 data TestNetwork a = TestNetwork
     { tnNodes :: Map (Addr a) a
-    , tnMsgs  :: Set (ScheduledMessage a)
+    , tnMsgs  :: Set (Scheduled a)
     }
 
 deriving instance Show (TestNetwork (TestNode         DummyState))
@@ -225,7 +225,7 @@ instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
 
 runNetwork
     :: ( Ord (Addr a)
-       , Ord (ScheduledMessage a)
+       , Ord (Scheduled a)
        , TNode a
        ) => TestNetwork a -> TestNetwork a
 runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms))) =
@@ -263,7 +263,7 @@ deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
         (tn, [])
 
 scheduleMessages
-    :: (TNode a, Ord (ScheduledMessage a))
+    :: (TNode a, Ord (Scheduled a))
     => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
 scheduleMessages t from msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
@@ -278,7 +278,7 @@ networkHasMessages (TestNetwork _ ms)
 
 -------------------------------------------------------------------------------
 
-mapMsgs :: Ord (Msg a) => Set (ScheduledMessage a) -> Set (Msg a)
+mapMsgs :: Ord (Msg a) => Set (Scheduled a) -> Set (Msg a)
 mapMsgs =
     foldr f Set.empty
   where
@@ -286,7 +286,7 @@ mapMsgs =
     f   _                           acc = acc
 
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
+    :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (Scheduled a), TNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
