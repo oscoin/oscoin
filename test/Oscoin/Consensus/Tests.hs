@@ -98,9 +98,11 @@ instance TNode (TestNode DummyState) where
 -- BufferedTestNode -----------------------------------------------------------
 
 data BufferedTestNode s = BufferedTestNode
-    { btnAddr  :: Addr (BufferedTestNode s)
-    , btnPeers :: [Addr (BufferedTestNode s)]
-    , btnState :: s
+    { btnAddr    :: Addr (BufferedTestNode s)
+    , btnPeers   :: [Addr (BufferedTestNode s)]
+    , btnBuffer  :: [Msg (BufferedTestNode s)]
+    , btnTick    :: Tick (BufferedTestNode s)
+    , btnState   :: s
     }
 
 instance Protocol (BufferedTestNode DummyState) where
@@ -108,15 +110,21 @@ instance Protocol (BufferedTestNode DummyState) where
     type Addr (BufferedTestNode DummyState) = Word
     type Tick (BufferedTestNode DummyState) = NominalDiffTime
 
-    step btn@BufferedTestNode{..} _ (Just (from, msg))
-        | msg `elem` btnState = (btn, [])
-        | otherwise           = (btn { btnState = state' }, broadcastMsgs)
+    step btn@BufferedTestNode{..} _ (Just (_, msg))
+        | msg `elem` btnState =
+            (btn, [])
+        | otherwise =
+            (btn { btnState = state', btnBuffer = msg : btnBuffer }, [])
       where
         ((), state')  = runDummyView (apply Nothing [msg]) btnState
-        filteredPeers = filter (/= from) btnPeers
-        broadcastMsgs = map (\p -> (p, msg)) filteredPeers
-    step btn _ Nothing =
-        (btn, [])
+
+    step btn@BufferedTestNode{..} tick Nothing
+        | tick - btnTick > epoch btn =
+            (btn { btnTick = tick, btnBuffer = [] }, outgoing)
+        | otherwise =
+            (btn, [])
+      where
+        outgoing = [(p, msg) | msg <- btnBuffer, p <- btnPeers]
 
     epoch _ = 1
 
