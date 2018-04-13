@@ -65,12 +65,12 @@ deriving instance Ord (TestNode DummyState)
 deriving instance Show (TestNode DummyState)
 
 -- TODO(tyler): Better data structure for scheduled messages.
-data TestNetwork v = TestNetwork
-    { tnNodes :: Map (Addr (TestNode v)) (TestNode v)
-    , tnMsgs  :: [ScheduledMessage (TestNode v)]
+data TestNetwork a = TestNetwork
+    { tnNodes :: Map (Addr a) a
+    , tnMsgs  :: [ScheduledMessage a]
     }
 
-deriving instance Show (TestNetwork DummyState)
+deriving instance Show (TestNetwork (TestNode DummyState))
 
 instance Protocol (TestNode DummyState) where
     type Msg  (TestNode DummyState) = DummyTx
@@ -89,7 +89,7 @@ instance Protocol (TestNode DummyState) where
 
     epoch _ = 1
 
-instance Arbitrary (TestNetwork DummyState) where
+instance Arbitrary (TestNetwork (TestNode DummyState)) where
     arbitrary = do
         addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word)
 
@@ -109,9 +109,9 @@ instance Arbitrary (TestNetwork DummyState) where
             }
 
 runNetwork
-    :: ( Ord (Addr (TestNode v))
-       , Protocol (TestNode v)
-       ) => TestNetwork v -> TestNetwork v
+    :: ( Ord (Addr a)
+       , Protocol a
+       ) => TestNetwork a -> TestNetwork a
 runNetwork tn@(TestNetwork _nodes []) = tn
 runNetwork (TestNetwork nodes ((tick, addr, msg):ms))
     | Just node <- Map.lookup addr nodes =
@@ -129,7 +129,7 @@ networkHasMessages (TestNetwork _n []) = False
 networkHasMessages _                   = True
 
 propNetworkNodesIncludeAllTxns
-    :: TestNetwork DummyState -> Property
+    :: TestNetwork (TestNode DummyState) -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
         length (nub mappedInitialMsgs) == length (nub firstNodeMsgs)
