@@ -31,6 +31,7 @@ class (Eq (TNodeTx a), Protocol a) => TNode a where
     type TNodeTx a :: *
 
     nodeState :: a -> [TNodeTx a]
+    isResting :: a -> Bool
 
 -- DummyView ------------------------------------------------------------------
 
@@ -94,6 +95,7 @@ instance TNode (TestNode DummyState) where
     type TNodeTx (TestNode DummyState) = DummyTx
 
     nodeState (TestNode _ s _) = s
+    isResting _ = True
 
 -- BufferedTestNode -----------------------------------------------------------
 
@@ -130,7 +132,7 @@ instance Protocol (BufferedTestNode DummyState) where
 
 -- TestNetwork ----------------------------------------------------------------
 
-type ScheduledMessage a = (Tick a, Addr a, Msg a)
+type ScheduledMessage a = (Tick a, Addr a, Maybe (Msg a))
 
 -- TODO(tyler): Better data structure for scheduled messages.
 data TestNetwork a = TestNetwork
@@ -152,7 +154,7 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             dests <- sublistOf (toList addrs) :: Gen [Word]
             forM dests $ \d -> do
                 at <- arbitrary :: Gen NominalDiffTime
-                pure (at, d, msg)
+                pure (at, d, Just msg)
 
         pure $ TestNetwork
             { tnNodes = Map.fromList nodes
@@ -161,19 +163,50 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
 
 runNetwork
     :: ( Ord (Addr a)
-       , Protocol a
+       , TNode a
        ) => TestNetwork a -> TestNetwork a
-runNetwork tn@(TestNetwork _nodes []) = tn
-runNetwork (TestNetwork nodes ((tick, addr, msg):ms))
-    | Just node <- Map.lookup addr nodes =
-        let (node', msgs) = step node tick (Just (addr, msg))
-            nodes'        = Map.insert addr node' nodes
-            deliveryTime  = tick + 1
-            scheduled     = [(deliveryTime, to, msg) | (to, msg) <- msgs]
-            ms'           = sortOn (\(x, _, _) -> x) (scheduled ++ ms)
-         in runNetwork (TestNetwork nodes' ms')
+runNetwork tn@(TestNetwork nodes [])
+    | all isResting nodes = tn
+    | otherwise           = runNetwork tn
+runNetwork (TestNetwork nodes ((tick, addr, Nothing) : ms)) =
+    runNetwork (scheduleMessages tick msgs tn)
+  where
+    (tn, msgs) = deliverTick tick addr (TestNetwork nodes ms)
+runNetwork (TestNetwork nodes ((tick, addr, Just msg) : ms)) =
+    runNetwork (scheduleMessages tick msgs tn)
+  where
+    (tn, msgs) = deliverMessage tick (addr, msg) (TestNetwork nodes ms)
+
+deliverTick
+    :: (TNode a, Ord (Addr a))
+    => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+deliverTick tick addr tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup addr tnNodes =
+        let (node', msgs) = step node tick Nothing
+            nodes'        = Map.insert addr node' tnNodes
+         in (tn { tnNodes = nodes' }, msgs)
     | otherwise =
-        runNetwork (TestNetwork nodes ms)
+        (tn, [])
+
+deliverMessage
+    :: (TNode a, Ord (Addr a))
+    => Tick a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+deliverMessage tick (addr, msg) tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup addr tnNodes =
+        let (node', msgs) = step node tick (Just (addr, msg))
+            nodes'        = Map.insert addr node' tnNodes
+         in (tn { tnNodes = nodes' }, msgs)
+    | otherwise =
+        (tn, [])
+
+scheduleMessages
+    :: (Ord (Addr a), TNode a)
+    => Tick a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
+scheduleMessages t msgs tn =
+    let deliveryTime  = t + 1
+        scheduled     = [(deliveryTime, to, Just msg) | (to, msg) <- msgs]
+        msgs'         = sortOn (\(x, _, _) -> x) (scheduled ++ tnMsgs tn)
+     in runNetwork tn { tnMsgs = msgs' }
 
 networkHasMessages :: TestNetwork v -> Bool
 networkHasMessages (TestNetwork _n []) = False
