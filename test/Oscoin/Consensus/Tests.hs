@@ -33,7 +33,7 @@ class ( Eq (TNodeTx a)
       , Ord (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
-      , Protocol a) => TNode a where
+      , Protocol a ) => TNode a where
     type TNodeTx a :: *
 
     nodeState :: a -> [TNodeTx a]
