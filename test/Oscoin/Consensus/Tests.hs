@@ -55,7 +55,6 @@ tests = [ testProperty "All nodes include all txns" propNetworkNodesIncludeAllTx
 kidSize :: Int
 kidSize = 11
 
-type TestMsg = Word8
 type ScheduledMessage a = (Tick a, Addr a, Msg a)
 
 data TestNode v = TestNode (Addr (TestNode v)) v [Addr (TestNode v)]
@@ -97,7 +96,7 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg   <- arbitrary :: Gen TestMsg
+            msg   <- arbitrary :: Gen (Msg (TestNode DummyState))
             dests <- sublistOf (toList addrs) :: Gen [Word]
             forM dests $ \d -> do
                 at <- arbitrary :: Gen NominalDiffTime
