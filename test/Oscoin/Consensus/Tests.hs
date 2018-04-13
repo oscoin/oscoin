@@ -38,7 +38,7 @@ class ( Eq (TNodeTx a)
 
     nodeState :: a -> [TNodeTx a]
     isResting :: a -> Bool
-    newNode    :: Addr a -> [Addr a] -> a
+    newNode   :: Addr a -> [Addr a] -> a
 
 -- DummyView ------------------------------------------------------------------
 
