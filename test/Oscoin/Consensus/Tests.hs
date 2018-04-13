@@ -173,16 +173,6 @@ networkHasMessages _                   = True
 
 -------------------------------------------------------------------------------
 
--- * instance Protocol (BufferedTestNode DummyState) where
--- * buffer for batching
--- * knowledge about when the last batch was sent
--- * read the tick and figure out to send or to buffer.
--- * broadcast interval setting
--- * staggered broadcast (so they don't all send at the same time)
--- * periodic stepping based on 'epoch'.
--- * new termination condition, since resting state is different (stuff can be buffered)
--- * `data TestNetwork node`: make TestNetwork work without TestNode.
-
 propNetworkNodesIncludeAllTxns
     :: (Eq (Msg a), Ord (Addr a), TNode a)
     => TestNetwork a -> Property
