@@ -18,6 +18,15 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Time.Clock (NominalDiffTime)
 
+tests :: [TestTree]
+tests = [ testProperty "All nodes include all txns" propNetworkNodesIncludeAllTxns ]
+
+-- | Smaller tests for computationally complex generators.
+kidSize :: Int
+kidSize = 11
+
+-- DummyView ------------------------------------------------------------------
+
 type DummyTx = Word8
 type DummyState = [DummyTx]
 
@@ -48,28 +57,13 @@ instance View DummyView where
         for_ txs $ \tx ->
             State.modify (\s -> sort $ tx : s)
 
-tests :: [TestTree]
-tests = [ testProperty "All nodes include all txns" propNetworkNodesIncludeAllTxns ]
-
--- | Smaller tests for computationally complex generators.
-kidSize :: Int
-kidSize = 11
-
-type ScheduledMessage a = (Tick a, Addr a, Msg a)
+-- TestNode -------------------------------------------------------------------
 
 data TestNode v = TestNode (Addr (TestNode v)) v [Addr (TestNode v)]
 
 deriving instance Eq (TestNode DummyState)
 deriving instance Ord (TestNode DummyState)
 deriving instance Show (TestNode DummyState)
-
--- TODO(tyler): Better data structure for scheduled messages.
-data TestNetwork a = TestNetwork
-    { tnNodes :: Map (Addr a) a
-    , tnMsgs  :: [ScheduledMessage a]
-    }
-
-deriving instance Show (TestNetwork (TestNode DummyState))
 
 instance Protocol (TestNode DummyState) where
     type Msg  (TestNode DummyState) = DummyTx
@@ -87,6 +81,18 @@ instance Protocol (TestNode DummyState) where
         (tn, [])
 
     epoch _ = 1
+
+-- TestNetwork ----------------------------------------------------------------
+
+type ScheduledMessage a = (Tick a, Addr a, Msg a)
+
+-- TODO(tyler): Better data structure for scheduled messages.
+data TestNetwork a = TestNetwork
+    { tnNodes :: Map (Addr a) a
+    , tnMsgs  :: [ScheduledMessage a]
+    }
+
+deriving instance Show (TestNetwork (TestNode DummyState))
 
 instance Arbitrary (TestNetwork (TestNode DummyState)) where
     arbitrary = do
@@ -126,6 +132,8 @@ runNetwork (TestNetwork nodes ((tick, addr, msg):ms))
 networkHasMessages :: TestNetwork v -> Bool
 networkHasMessages (TestNetwork _n []) = False
 networkHasMessages _                   = True
+
+-------------------------------------------------------------------------------
 
 propNetworkNodesIncludeAllTxns
     :: TestNetwork (TestNode DummyState) -> Property
