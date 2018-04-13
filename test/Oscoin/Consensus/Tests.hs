@@ -12,7 +12,7 @@ import           Test.QuickCheck.Instances ()
 import           Control.Monad.Reader
 import           Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
-import           Data.List (sort, nub)
+import           Data.List (sort)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -144,7 +144,7 @@ instance TNode (BufferedTestNode DummyState) where
 -- ScheduledMessage -----------------------------------------------------------
 
 data ScheduledMessage a =
-      ScheduledMessage (Tick a) (Addr a) (Msg a)
+      ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
 
 instance Ord (ScheduledMessage (TestNode DummyState)) where
@@ -192,7 +192,7 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
+            msg <- arbitrary :: Gen (Word8, Msg  (TestNode DummyState))
             dests <- sublistOf (toList addrs) :: Gen [Word8]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
@@ -219,7 +219,7 @@ instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
                                          })
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
+            msg <- arbitrary :: Gen (Word8, Msg  (TestNode DummyState))
             dests <- sublistOf (toList addrs) :: Gen [Word8]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
@@ -238,14 +238,14 @@ runNetwork
        , Ord (ScheduledMessage a)
        , TNode a
        ) => TestNetwork a -> TestNetwork a
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick addr, ms))) =
-    runNetwork (scheduleMessages tick msgs tn)
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms))) =
+    runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverTick tick addr (TestNetwork nodes ms)
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick addr msg, ms))) =
-    runNetwork (scheduleMessages tick msgs tn)
+    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms)
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms))) =
+    runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverMessage tick (addr, msg) (TestNetwork nodes ms)
+    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms)
 runNetwork tn@(TestNetwork nodes ms)
     | Set.null ms && all isResting nodes = tn
     | otherwise                          = runNetwork tn
@@ -253,31 +253,31 @@ runNetwork tn@(TestNetwork nodes ms)
 deliverTick
     :: (TNode a, Ord (Addr a))
     => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverTick tick addr tn@TestNetwork{tnNodes}
-    | Just node <- Map.lookup addr tnNodes =
+deliverTick tick to tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick Nothing
-            nodes'        = Map.insert addr node' tnNodes
+            nodes'        = Map.insert to node' tnNodes
          in (tn { tnNodes = nodes' }, msgs)
     | otherwise =
         (tn, [])
 
 deliverMessage
     :: (TNode a, Ord (Addr a))
-    => Tick a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverMessage tick (addr, msg) tn@TestNetwork{tnNodes}
-    | Just node <- Map.lookup addr tnNodes =
-        let (node', msgs) = step node tick (Just (addr, msg))
-            nodes'        = Map.insert addr node' tnNodes
+    => Tick a -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup to tnNodes =
+        let (node', msgs) = step node tick (Just (from, msg))
+            nodes'        = Map.insert to node' tnNodes
          in (tn { tnNodes = nodes' }, msgs)
     | otherwise =
         (tn, [])
 
 scheduleMessages
     :: (TNode a, Ord (ScheduledMessage a))
-    => Tick a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
-scheduleMessages t msgs tn@TestNetwork{tnMsgs} =
+    => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
+scheduleMessages t from msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
-        scheduled     = Set.fromList [ScheduledMessage deliveryTime to msg | (to, msg) <- msgs]
+        scheduled     = Set.fromList [ScheduledMessage deliveryTime to (from, msg) | (to, msg) <- msgs]
         msgs'         = Set.union scheduled tnMsgs
      in tn { tnMsgs = msgs' }
 
@@ -287,19 +287,22 @@ networkHasMessages (TestNetwork _ ms)
     | otherwise   = True
 
 -------------------------------------------------------------------------------
+mapMsgs :: Ord (Msg a) => Set (ScheduledMessage a) -> Set (Msg a)
+mapMsgs = foldr (\m acc ->
+    case m of
+        ScheduledMessage _ _ (_, x) -> Set.insert x acc
+        _                           -> acc)
+    Set.empty
 
 propNetworkNodesIncludeAllTxns
     :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
-        Set.size mappedInitialMsgs == length (nub firstNodeMsgs)
+        Set.size mappedInitialMsgs == Set.size (Set.fromList firstNodeMsgs)
             && Set.size nodeStates == 1
   where
-    mappedInitialMsgs = foldr (\m acc->
-        case m of
-            ScheduledMessage _ _ x -> Set.insert x acc
-            _                      -> acc) Set.empty initialMsgs
+    mappedInitialMsgs = mapMsgs initialMsgs
     TestNetwork nodes' _ = runNetwork tn
     firstNodeMsgs = nodeState $ head $ toList nodes'
     -- Deduplicating the different node states should result in a single state.
