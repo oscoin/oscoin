@@ -28,11 +28,17 @@ kidSize = 11
 
 -- TNode ----------------------------------------------------------------------
 
-class (Eq (TNodeTx a), Protocol a) => TNode a where
+class ( Eq (TNodeTx a)
+      , Ord (Scheduled a)
+      , Ord (Addr a)
+      , Arbitrary (Msg a)
+      , Arbitrary (Addr a)
+      , Protocol a) => TNode a where
     type TNodeTx a :: *
 
     nodeState :: a -> [TNodeTx a]
     isResting :: a -> Bool
+    newNode    :: Addr a -> [Addr a] -> a
 
 -- DummyView ------------------------------------------------------------------
 
@@ -97,6 +103,7 @@ instance TNode (TestNode DummyState) where
 
     nodeState (TestNode _ s _) = s
     isResting _ = True
+    newNode addr peers = TestNode addr [] peers
 
 -- BufferedTestNode -----------------------------------------------------------
 
@@ -140,6 +147,13 @@ instance TNode (BufferedTestNode DummyState) where
 
     nodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
+    newNode addr peers = BufferedTestNode
+        { btnAddr   = addr
+        , btnPeers  = peers
+        , btnBuffer = []
+        , btnTick   = 0
+        , btnState  = []
+        }
 
 -- Scheduled ------------------------------------------------------------------
 
@@ -174,16 +188,16 @@ data TestNetwork a = TestNetwork
 deriving instance Show (TestNetwork (TestNode         DummyState))
 deriving instance Show (TestNetwork (BufferedTestNode DummyState))
 
-instance Arbitrary (TestNetwork (TestNode DummyState)) where
+instance TNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
+        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set (Addr a))
 
         nodes <- forM (toList addrs) $ \a ->
-            pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
+            pure (a, newNode a [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Word8, Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word8]
+            msg <- arbitrary  :: Gen (Addr a, Msg a)
+            dests <- sublistOf (toList addrs) :: Gen [Addr a]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
                 pure $ ScheduledMessage (fromIntegral at) d msg
@@ -196,38 +210,7 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
             }
 
-instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
-    arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
-
-        nodes <- forM (toList addrs) $ \addr ->
-            pure (addr, BufferedTestNode { btnAddr   = addr
-                                         , btnPeers  = [x | x <- toList addrs, x /= addr]
-                                         , btnBuffer = []
-                                         , btnTick   = 0
-                                         , btnState  = []
-                                         })
-
-        smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Word8, Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word8]
-            forM dests $ \d -> do
-                at <- choose (0, 100) :: Gen Int
-                pure $ ScheduledMessage (fromIntegral at) d msg
-
-        ticks <- forM nodes $ \(addr, n) -> do
-            pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
-
-        pure $ TestNetwork
-            { tnNodes = Map.fromList nodes
-            , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
-            }
-
-runNetwork
-    :: ( Ord (Addr a)
-       , Ord (Scheduled a)
-       , TNode a
-       ) => TestNetwork a -> TestNetwork a
+runNetwork :: TNode a => TestNetwork a -> TestNetwork a
 runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms))) =
     runNetwork (scheduleMessages tick to msgs tn)
   where
@@ -241,7 +224,7 @@ runNetwork tn@(TestNetwork nodes ms)
     | otherwise                          = runNetwork tn
 
 deliverTick
-    :: (TNode a, Ord (Addr a))
+    :: (TNode a)
     => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverTick tick to tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
@@ -252,7 +235,7 @@ deliverTick tick to tn@TestNetwork{tnNodes}
         (tn, [])
 
 deliverMessage
-    :: (TNode a, Ord (Addr a))
+    :: (TNode a)
     => Tick a -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
@@ -263,7 +246,7 @@ deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
         (tn, [])
 
 scheduleMessages
-    :: (TNode a, Ord (Scheduled a))
+    :: (TNode a)
     => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
 scheduleMessages t from msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
@@ -286,7 +269,7 @@ mapMsgs =
     f   _                           acc = acc
 
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (Scheduled a), TNode a)
+    :: (Ord (Msg a), Ord (TNodeTx a), TNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
