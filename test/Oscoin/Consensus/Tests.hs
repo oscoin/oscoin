@@ -65,7 +65,10 @@ deriving instance Ord (TestNode DummyState)
 deriving instance Show (TestNode DummyState)
 
 -- TODO(tyler): Better data structure for scheduled messages.
-data TestNetwork v = TestNetwork (Map (Addr (TestNode v)) (TestNode v)) [ScheduledMessage (TestNode v)]
+data TestNetwork v = TestNetwork
+    { tnNodes :: Map (Addr (TestNode v)) (TestNode v)
+    , tnMsgs  :: [ScheduledMessage (TestNode v)]
+    }
 
 deriving instance Show (TestNetwork DummyState)
 
@@ -100,7 +103,10 @@ instance Arbitrary (TestNetwork DummyState) where
                 at <- arbitrary :: Gen NominalDiffTime
                 pure (at, d, msg)
 
-        pure $ TestNetwork (Map.fromList nodes) (sortOn (\(x, _, _) -> x) (mconcat smsgs))
+        pure $ TestNetwork
+            { tnNodes = Map.fromList nodes
+            , tnMsgs  = sortOn (\(x, _, _) -> x) (mconcat smsgs)
+            }
 
 runNetwork
     :: ( Ord (Addr (TestNode v))
