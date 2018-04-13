@@ -147,25 +147,15 @@ data ScheduledMessage a =
       ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
 
+scheduledTick :: ScheduledMessage a -> Tick a
+scheduledTick (ScheduledMessage t _ _) = t
+scheduledTick (ScheduledTick t _)      = t
+
 instance Ord (ScheduledMessage (TestNode DummyState)) where
-    (ScheduledMessage t _ _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledTick t' _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
-        t <= t'
+    s <= s' = scheduledTick s <= scheduledTick s'
 
 instance Ord (ScheduledMessage (BufferedTestNode DummyState)) where
-    (ScheduledMessage t _ _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledTick t' _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
-        t <= t'
+    s <= s' = scheduledTick s <= scheduledTick s'
 
 deriving instance Eq   (ScheduledMessage (TestNode DummyState))
 deriving instance Show (ScheduledMessage (TestNode DummyState))
