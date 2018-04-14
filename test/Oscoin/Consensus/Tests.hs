@@ -97,8 +97,8 @@ instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
 
     epoch _ = 1
 
-instance TNode (TestNode DummyTx) where
-    type TNodeTx (TestNode DummyTx) = DummyTx
+instance (Arbitrary tx, Ord tx) => TNode (TestNode tx) where
+    type TNodeTx (TestNode tx) = tx
 
     nodeState (TestNode _ s _) = s
     isResting _ = True
@@ -141,8 +141,8 @@ instance Ord tx => Protocol (BufferedTestNode tx) where
 
     epoch _ = 10
 
-instance TNode (BufferedTestNode DummyTx) where
-    type TNodeTx (BufferedTestNode DummyTx) = DummyTx
+instance (Arbitrary tx, Ord tx) => TNode (BufferedTestNode tx) where
+    type TNodeTx (BufferedTestNode tx) = tx
 
     nodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
