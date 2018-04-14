@@ -19,8 +19,8 @@ import qualified Data.Set as Set
 import           Data.Time.Clock (NominalDiffTime)
 
 tests :: [TestTree]
-tests = [ testProperty "All nodes include all txns"            (propNetworkNodesIncludeAllTxns @(TestNode DummyState))
-        , testProperty "All nodes include all txns (buffered)" (propNetworkNodesIncludeAllTxns @(BufferedTestNode DummyState)) ]
+tests = [ testProperty "All nodes include all txns"            (propNetworkNodesIncludeAllTxns @(TestNode DummyTx))
+        , testProperty "All nodes include all txns (buffered)" (propNetworkNodesIncludeAllTxns @(BufferedTestNode DummyTx)) ]
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
@@ -43,48 +43,47 @@ class ( Eq (TNodeTx a)
 -- DummyView ------------------------------------------------------------------
 
 type DummyTx = Word8
-type DummyState = [DummyTx]
 
-newtype DummyView a = DummyView (State DummyState a)
+newtype DummyView tx a = DummyView (State [tx] a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadState DummyState
+             , MonadState [tx]
              )
 
-runDummyView :: DummyView a -> DummyState -> (a, DummyState)
-runDummyView (DummyView inner) s =
-    runState inner s
+runDummyView :: DummyView tx a -> [tx] -> (a, [tx])
+runDummyView (DummyView inner) xs =
+    runState inner xs
 
-instance Context DummyView where
-    type T DummyView = DummyState
-    type Key DummyView = ()
+instance Context (DummyView tx) where
+    type T (DummyView tx) = [tx]
+    type Key (DummyView tx) = ()
 
     get = notImplemented
     set = notImplemented
     del = notImplemented
 
-instance View DummyView where
-    type Transaction DummyView = DummyTx
-    type BlockHeader DummyView = ()
+instance Ord tx => View (DummyView tx) where
+    type Transaction (DummyView tx) = tx
+    type BlockHeader (DummyView tx) = ()
 
     apply _ txs =
         for_ txs $ \tx ->
-            State.modify (\s -> sort $ tx : s)
+            State.modify (\txs -> sort $ tx : txs)
 
 -- TestNode -------------------------------------------------------------------
 
-data TestNode v = TestNode (Addr (TestNode v)) v [Addr (TestNode v)]
+data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
 
-deriving instance Eq (TestNode DummyState)
-deriving instance Ord (TestNode DummyState)
-deriving instance Show (TestNode DummyState)
+deriving instance Eq (TestNode DummyTx)
+deriving instance Ord (TestNode DummyTx)
+deriving instance Show (TestNode DummyTx)
 
 -- TODO(alexis): Try to make this `Protocol (TestNode s)`
-instance Protocol (TestNode DummyState) where
-    type Msg  (TestNode DummyState) = DummyTx
-    type Addr (TestNode DummyState) = Word8
-    type Tick (TestNode DummyState) = NominalDiffTime
+instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
+    type Msg  (TestNode tx) = tx
+    type Addr (TestNode tx) = Word8
+    type Tick (TestNode tx) = NominalDiffTime
 
     step tn@(TestNode a state peers) _at (Just (from, msg))
         | msg `elem` state = (tn, [])
@@ -98,8 +97,8 @@ instance Protocol (TestNode DummyState) where
 
     epoch _ = 1
 
-instance TNode (TestNode DummyState) where
-    type TNodeTx (TestNode DummyState) = DummyTx
+instance TNode (TestNode DummyTx) where
+    type TNodeTx (TestNode DummyTx) = DummyTx
 
     nodeState (TestNode _ s _) = s
     isResting _ = True
@@ -107,22 +106,22 @@ instance TNode (TestNode DummyState) where
 
 -- BufferedTestNode -----------------------------------------------------------
 
-data BufferedTestNode s = BufferedTestNode
-    { btnAddr    :: Addr (BufferedTestNode s)
-    , btnPeers   :: [Addr (BufferedTestNode s)]
-    , btnBuffer  :: [Msg (BufferedTestNode s)]
-    , btnTick    :: Tick (BufferedTestNode s)
-    , btnState   :: s
+data BufferedTestNode tx = BufferedTestNode
+    { btnAddr    :: Addr (BufferedTestNode tx)
+    , btnPeers   :: [Addr (BufferedTestNode tx)]
+    , btnBuffer  :: [Msg (BufferedTestNode tx)]
+    , btnTick    :: Tick (BufferedTestNode tx)
+    , btnState   :: [tx]
     }
 
-deriving instance Eq (BufferedTestNode DummyState)
-deriving instance Ord (BufferedTestNode DummyState)
-deriving instance Show (BufferedTestNode DummyState)
+deriving instance Eq (BufferedTestNode DummyTx)
+deriving instance Ord (BufferedTestNode DummyTx)
+deriving instance Show (BufferedTestNode DummyTx)
 
-instance Protocol (BufferedTestNode DummyState) where
-    type Msg  (BufferedTestNode DummyState) = DummyTx
-    type Addr (BufferedTestNode DummyState) = Word8
-    type Tick (BufferedTestNode DummyState) = NominalDiffTime
+instance Protocol (BufferedTestNode DummyTx) where
+    type Msg  (BufferedTestNode DummyTx) = DummyTx
+    type Addr (BufferedTestNode DummyTx) = Word8
+    type Tick (BufferedTestNode DummyTx) = NominalDiffTime
 
     step btn@BufferedTestNode{..} _ (Just (_, msg))
         | msg `elem` btnState =
@@ -142,8 +141,8 @@ instance Protocol (BufferedTestNode DummyState) where
 
     epoch _ = 10
 
-instance TNode (BufferedTestNode DummyState) where
-    type TNodeTx (BufferedTestNode DummyState) = DummyTx
+instance TNode (BufferedTestNode DummyTx) where
+    type TNodeTx (BufferedTestNode DummyTx) = DummyTx
 
     nodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
@@ -165,17 +164,17 @@ scheduledTick :: Scheduled a -> Tick a
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 
-instance Ord (Scheduled (TestNode DummyState)) where
+instance Ord (Scheduled (TestNode DummyTx)) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-instance Ord (Scheduled (BufferedTestNode DummyState)) where
+instance Ord (Scheduled (BufferedTestNode DummyTx)) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-deriving instance Eq   (Scheduled (TestNode DummyState))
-deriving instance Show (Scheduled (TestNode DummyState))
+deriving instance Eq   (Scheduled (TestNode DummyTx))
+deriving instance Show (Scheduled (TestNode DummyTx))
 
-deriving instance Eq   (Scheduled (BufferedTestNode DummyState))
-deriving instance Show (Scheduled (BufferedTestNode DummyState))
+deriving instance Eq   (Scheduled (BufferedTestNode DummyTx))
+deriving instance Show (Scheduled (BufferedTestNode DummyTx))
 
 -- TestNetwork ----------------------------------------------------------------
 
@@ -184,8 +183,8 @@ data TestNetwork a = TestNetwork
     , tnMsgs  :: Set (Scheduled a)
     }
 
-deriving instance Show (TestNetwork (TestNode         DummyState))
-deriving instance Show (TestNetwork (BufferedTestNode DummyState))
+deriving instance Show (TestNetwork (TestNode         DummyTx))
+deriving instance Show (TestNetwork (BufferedTestNode DummyTx))
 
 instance TNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
