@@ -44,28 +44,28 @@ class ( Eq (TNodeTx a)
 
 type DummyTx = Word8
 
-newtype DummyView tx a = DummyView (State [tx] a)
+newtype DummyView (f :: * -> *) tx a = DummyView (State (f tx) a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadState [tx]
+             , MonadState (f tx)
              )
 
-runDummyView :: DummyView tx a -> [tx] -> (a, [tx])
+runDummyView :: DummyView f tx a -> f tx -> (a, f tx)
 runDummyView (DummyView inner) xs =
     runState inner xs
 
-instance Context (DummyView tx) where
-    type T (DummyView tx) = [tx]
-    type Key (DummyView tx) = ()
+instance Context (DummyView f tx) where
+    type T   (DummyView f tx) = f tx
+    type Key (DummyView f tx) = ()
 
     get = notImplemented
     set = notImplemented
     del = notImplemented
 
-instance Ord tx => View (DummyView tx) where
-    type Transaction (DummyView tx) = tx
-    type BlockHeader (DummyView tx) = ()
+instance Ord tx => View (DummyView [] tx) where
+    type Transaction (DummyView [] tx) = tx
+    type BlockHeader (DummyView [] tx) = ()
 
     apply _ txs =
         for_ txs $ \tx ->
