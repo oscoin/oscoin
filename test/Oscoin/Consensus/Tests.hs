@@ -28,15 +28,15 @@ kidSize = 11
 
 -- TestableNode ---------------------------------------------------------------
 
-class ( Eq (TNodeTx a)
+class ( Eq (TestableTx a)
       , Ord (Scheduled a)
       , Ord (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
       , Protocol a ) => TestableNode a where
-    type TNodeTx a :: *
+    type TestableTx a :: *
 
-    nodeState :: a -> [TNodeTx a]
+    nodeState :: a -> [TestableTx a]
     isResting :: a -> Bool
     newNode   :: Addr a -> [Addr a] -> a
 
@@ -94,7 +94,7 @@ instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
     epoch _ = 1
 
 instance (Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
-    type TNodeTx (TestNode tx) = tx
+    type TestableTx (TestNode tx) = tx
 
     nodeState (TestNode _ s _) = s
     isResting _ = True
@@ -134,7 +134,7 @@ instance Ord tx => Protocol (BufferedTestNode tx) where
     epoch _ = 10
 
 instance (Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
-    type TNodeTx (BufferedTestNode tx) = tx
+    type TestableTx (BufferedTestNode tx) = tx
 
     nodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
@@ -259,7 +259,7 @@ mapMsgs =
     f   _                           acc = acc
 
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (TNodeTx a), TestableNode a)
+    :: (Ord (Msg a), Ord (TestableTx a), TestableNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
