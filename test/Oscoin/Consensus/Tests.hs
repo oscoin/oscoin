@@ -76,7 +76,6 @@ instance Ord tx => View (DummyView [] tx) where
 data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
     deriving (Eq, Ord, Show)
 
--- TODO(alexis): Try to make this `Protocol (TestNode s)`
 instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
     type Msg  (TestNode tx) = tx
     type Addr (TestNode tx) = Word8
