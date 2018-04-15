@@ -249,6 +249,16 @@ test-suite test
     , InstanceSigs
 
   ghc-options:
+    -Wall
+    -Wcompat
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fno-warn-orphans
+    -fno-warn-name-shadowing
+    -fno-warn-unused-do-bind
+    -fno-warn-unused-local-binds
+    -fprint-unicode-syntax
     -threaded -rtsopts -with-rtsopts=-N
 
 source-repository head
