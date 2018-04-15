@@ -12,73 +12,74 @@ import           Test.QuickCheck.Instances ()
 import           Control.Monad.Reader
 import           Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
-import           Data.List (sort, nub)
+import           Data.List (sort)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Time.Clock (NominalDiffTime)
 
 tests :: [TestTree]
-tests = [ testProperty "All nodes include all txns"            (propNetworkNodesIncludeAllTxns @(TestNode DummyState))
-        , testProperty "All nodes include all txns (buffered)" (propNetworkNodesIncludeAllTxns @(BufferedTestNode DummyState)) ]
+tests = [ testProperty "All nodes include all txns"            (propNetworkNodesIncludeAllTxns @(TestNode DummyTx))
+        , testProperty "All nodes include all txns (buffered)" (propNetworkNodesIncludeAllTxns @(BufferedTestNode DummyTx)) ]
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
 kidSize = 11
 
--- TNode ----------------------------------------------------------------------
+-- TestableNode ---------------------------------------------------------------
 
-class (Eq (TNodeTx a), Protocol a) => TNode a where
-    type TNodeTx a :: *
+class ( Eq (TestableTx a)
+      , Ord (Scheduled a)
+      , Ord (Addr a)
+      , Arbitrary (Msg a)
+      , Arbitrary (Addr a)
+      , Protocol a ) => TestableNode a where
+    type TestableTx a :: *
 
-    nodeState :: a -> [TNodeTx a]
+    testableNode :: Addr a -> [Addr a] -> a
+    testableNodeState :: a -> [TestableTx a]
     isResting :: a -> Bool
 
 -- DummyView ------------------------------------------------------------------
 
 type DummyTx = Word8
-type DummyState = [DummyTx]
 
-newtype DummyView a = DummyView (State DummyState a)
+newtype DummyView (f :: * -> *) tx a = DummyView (State (f tx) a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadState DummyState
+             , MonadState (f tx)
              )
 
-runDummyView :: DummyView a -> DummyState -> (a, DummyState)
-runDummyView (DummyView inner) s =
-    runState inner s
+runDummyView :: DummyView f tx a -> f tx -> (a, f tx)
+runDummyView (DummyView inner) xs =
+    runState inner xs
 
-instance Context DummyView where
-    type T DummyView = DummyState
-    type Key DummyView = ()
+instance Context (DummyView f tx) where
+    type T   (DummyView f tx) = f tx
+    type Key (DummyView f tx) = ()
 
     get = notImplemented
     set = notImplemented
     del = notImplemented
 
-instance View DummyView where
-    type Transaction DummyView = DummyTx
-    type BlockHeader DummyView = ()
+instance Ord tx => View (DummyView [] tx) where
+    type Transaction (DummyView [] tx) = tx
+    type BlockHeader (DummyView [] tx) = ()
 
     apply _ txs =
         for_ txs $ \tx ->
-            State.modify (\s -> sort $ tx : s)
+            State.modify (\txs -> sort $ tx : txs)
 
 -- TestNode -------------------------------------------------------------------
 
-data TestNode v = TestNode (Addr (TestNode v)) v [Addr (TestNode v)]
+data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
+    deriving (Eq, Ord, Show)
 
-deriving instance Eq (TestNode DummyState)
-deriving instance Ord (TestNode DummyState)
-deriving instance Show (TestNode DummyState)
-
--- TODO(alexis): Try to make this `Protocol (TestNode s)`
-instance Protocol (TestNode DummyState) where
-    type Msg  (TestNode DummyState) = DummyTx
-    type Addr (TestNode DummyState) = Word8
-    type Tick (TestNode DummyState) = NominalDiffTime
+instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
+    type Msg  (TestNode tx) = tx
+    type Addr (TestNode tx) = Word8
+    type Tick (TestNode tx) = NominalDiffTime
 
     step tn@(TestNode a state peers) _at (Just (from, msg))
         | msg `elem` state = (tn, [])
@@ -92,30 +93,27 @@ instance Protocol (TestNode DummyState) where
 
     epoch _ = 1
 
-instance TNode (TestNode DummyState) where
-    type TNodeTx (TestNode DummyState) = DummyTx
+instance (Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
+    type TestableTx (TestNode tx) = tx
 
-    nodeState (TestNode _ s _) = s
+    testableNode addr peers = TestNode addr [] peers
+    testableNodeState (TestNode _ s _) = s
     isResting _ = True
 
 -- BufferedTestNode -----------------------------------------------------------
 
-data BufferedTestNode s = BufferedTestNode
-    { btnAddr    :: Addr (BufferedTestNode s)
-    , btnPeers   :: [Addr (BufferedTestNode s)]
-    , btnBuffer  :: [Msg (BufferedTestNode s)]
-    , btnTick    :: Tick (BufferedTestNode s)
-    , btnState   :: s
-    }
+data BufferedTestNode tx = BufferedTestNode
+    { btnAddr    :: Addr (BufferedTestNode tx)
+    , btnPeers   :: [Addr (BufferedTestNode tx)]
+    , btnBuffer  :: [Msg (BufferedTestNode tx)]
+    , btnTick    :: Tick (BufferedTestNode tx)
+    , btnState   :: [tx]
+    } deriving (Eq, Ord, Show)
 
-deriving instance Eq (BufferedTestNode DummyState)
-deriving instance Ord (BufferedTestNode DummyState)
-deriving instance Show (BufferedTestNode DummyState)
-
-instance Protocol (BufferedTestNode DummyState) where
-    type Msg  (BufferedTestNode DummyState) = DummyTx
-    type Addr (BufferedTestNode DummyState) = Word8
-    type Tick (BufferedTestNode DummyState) = NominalDiffTime
+instance Ord tx => Protocol (BufferedTestNode tx) where
+    type Msg  (BufferedTestNode tx) = tx
+    type Addr (BufferedTestNode tx) = Word8
+    type Tick (BufferedTestNode tx) = NominalDiffTime
 
     step btn@BufferedTestNode{..} _ (Just (_, msg))
         | msg `elem` btnState =
@@ -135,65 +133,61 @@ instance Protocol (BufferedTestNode DummyState) where
 
     epoch _ = 10
 
-instance TNode (BufferedTestNode DummyState) where
-    type TNodeTx (BufferedTestNode DummyState) = DummyTx
+instance (Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
+    type TestableTx (BufferedTestNode tx) = tx
 
-    nodeState = btnState
+    testableNode addr peers = BufferedTestNode
+        { btnAddr   = addr
+        , btnPeers  = peers
+        , btnBuffer = []
+        , btnTick   = 0
+        , btnState  = []
+        }
+    testableNodeState = btnState
     isResting BufferedTestNode{btnBuffer} = null btnBuffer
 
--- ScheduledMessage -----------------------------------------------------------
+-- Scheduled ------------------------------------------------------------------
 
-data ScheduledMessage a =
-      ScheduledMessage (Tick a) (Addr a) (Msg a)
+data Scheduled a =
+      ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
 
-instance Ord (ScheduledMessage (TestNode DummyState)) where
-    (ScheduledMessage t _ _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledTick t' _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
-        t <= t'
+scheduledTick :: Scheduled a -> Tick a
+scheduledTick (ScheduledMessage t _ _) = t
+scheduledTick (ScheduledTick t _)      = t
 
-instance Ord (ScheduledMessage (BufferedTestNode DummyState)) where
-    (ScheduledMessage t _ _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledTick t' _) =
-        t <= t'
-    (ScheduledTick t _) <= (ScheduledMessage t' _ _) =
-        t <= t'
-    (ScheduledMessage t _ _) <= (ScheduledTick t' _) =
-        t <= t'
+instance Eq tx => Ord (Scheduled (TestNode tx)) where
+    s <= s' = scheduledTick s <= scheduledTick s'
 
-deriving instance Eq   (ScheduledMessage (TestNode DummyState))
-deriving instance Show (ScheduledMessage (TestNode DummyState))
+instance Eq tx => Ord (Scheduled (BufferedTestNode tx)) where
+    s <= s' = scheduledTick s <= scheduledTick s'
 
-deriving instance Eq   (ScheduledMessage (BufferedTestNode DummyState))
-deriving instance Show (ScheduledMessage (BufferedTestNode DummyState))
+deriving instance Eq tx   => Eq   (Scheduled (TestNode tx))
+deriving instance Show tx => Show (Scheduled (TestNode tx))
+
+deriving instance Eq   tx => Eq   (Scheduled (BufferedTestNode tx))
+deriving instance Show tx => Show (Scheduled (BufferedTestNode tx))
 
 -- TestNetwork ----------------------------------------------------------------
 
--- TODO(tyler): Better data structure for scheduled messages.
 data TestNetwork a = TestNetwork
     { tnNodes :: Map (Addr a) a
-    , tnMsgs  :: Set (ScheduledMessage a)
+    , tnMsgs  :: Set (Scheduled a)
     }
 
-deriving instance Show (TestNetwork (TestNode         DummyState))
-deriving instance Show (TestNetwork (BufferedTestNode DummyState))
+deriving instance Show tx => Show (TestNetwork (TestNode         tx))
+deriving instance Show tx => Show (TestNetwork (BufferedTestNode tx))
 
-instance Arbitrary (TestNetwork (TestNode DummyState)) where
+instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
+        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set (Addr a))
 
         nodes <- forM (toList addrs) $ \a ->
-            pure (a, TestNode a [] [x | x <- toList addrs, x /= a])
+            pure (a, testableNode a [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word8]
+            msg <- arbitrary  :: Gen (Addr a, Msg a)
+            dests <- sublistOf (toList addrs) :: Gen [Addr a]
             forM dests $ \d -> do
                 at <- choose (0, 100) :: Gen Int
                 pure $ ScheduledMessage (fromIntegral at) d msg
@@ -206,78 +200,47 @@ instance Arbitrary (TestNetwork (TestNode DummyState)) where
             , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
             }
 
-instance Arbitrary (TestNetwork (BufferedTestNode DummyState)) where
-    arbitrary = do
-        addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set Word8)
-
-        nodes <- forM (toList addrs) $ \addr ->
-            pure (addr, BufferedTestNode { btnAddr   = addr
-                                         , btnPeers  = [x | x <- toList addrs, x /= addr]
-                                         , btnBuffer = []
-                                         , btnTick   = 0
-                                         , btnState  = []
-                                         })
-
-        smsgs <- resize kidSize . listOf1 $ do
-            msg <- arbitrary :: Gen (Msg  (TestNode DummyState))
-            dests <- sublistOf (toList addrs) :: Gen [Word8]
-            forM dests $ \d -> do
-                at <- choose (0, 100) :: Gen Int
-                pure $ ScheduledMessage (fromIntegral at) d msg
-
-        ticks <- forM nodes $ \(addr, n) -> do
-            pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
-
-        pure $ TestNetwork
-            { tnNodes = Map.fromList nodes
-            , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
-            }
-
-runNetwork
-    :: ( Ord (Addr a)
-       , Ord (ScheduledMessage a)
-       , TNode a
-       ) => TestNetwork a -> TestNetwork a
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick addr, ms))) =
-    runNetwork (scheduleMessages tick msgs tn)
+runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms))) =
+    runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverTick tick addr (TestNetwork nodes ms)
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick addr msg, ms))) =
-    runNetwork (scheduleMessages tick msgs tn)
+    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms)
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms))) =
+    runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverMessage tick (addr, msg) (TestNetwork nodes ms)
+    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms)
 runNetwork tn@(TestNetwork nodes ms)
     | Set.null ms && all isResting nodes = tn
     | otherwise                          = runNetwork tn
 
 deliverTick
-    :: (TNode a, Ord (Addr a))
+    :: (TestableNode a)
     => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverTick tick addr tn@TestNetwork{tnNodes}
-    | Just node <- Map.lookup addr tnNodes =
+deliverTick tick to tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick Nothing
-            nodes'        = Map.insert addr node' tnNodes
+            nodes'        = Map.insert to node' tnNodes
          in (tn { tnNodes = nodes' }, msgs)
     | otherwise =
         (tn, [])
 
 deliverMessage
-    :: (TNode a, Ord (Addr a))
-    => Tick a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverMessage tick (addr, msg) tn@TestNetwork{tnNodes}
-    | Just node <- Map.lookup addr tnNodes =
-        let (node', msgs) = step node tick (Just (addr, msg))
-            nodes'        = Map.insert addr node' tnNodes
+    :: (TestableNode a)
+    => Tick a -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
+    | Just node <- Map.lookup to tnNodes =
+        let (node', msgs) = step node tick (Just (from, msg))
+            nodes'        = Map.insert to node' tnNodes
          in (tn { tnNodes = nodes' }, msgs)
     | otherwise =
         (tn, [])
 
 scheduleMessages
-    :: (TNode a, Ord (ScheduledMessage a))
-    => Tick a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
-scheduleMessages t msgs tn@TestNetwork{tnMsgs} =
+    :: (TestableNode a)
+    => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
+scheduleMessages t from msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
-        scheduled     = Set.fromList [ScheduledMessage deliveryTime to msg | (to, msg) <- msgs]
+        scheduled     = Set.fromList [ScheduledMessage deliveryTime to (from, msg) | (to, msg) <- msgs]
         msgs'         = Set.union scheduled tnMsgs
      in tn { tnMsgs = msgs' }
 
@@ -288,19 +251,23 @@ networkHasMessages (TestNetwork _ ms)
 
 -------------------------------------------------------------------------------
 
+mapMsgs :: Ord (Msg a) => Set (Scheduled a) -> Set (Msg a)
+mapMsgs =
+    foldr f Set.empty
+  where
+    f (ScheduledMessage _ _ (_, x)) acc = Set.insert x acc
+    f   _                           acc = acc
+
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (TNodeTx a), Ord (Addr a), Ord (ScheduledMessage a), TNode a)
+    :: (Ord (Msg a), Ord (TestableTx a), TestableNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
-        Set.size mappedInitialMsgs == length (nub firstNodeMsgs)
+        Set.size mappedInitialMsgs == Set.size (Set.fromList firstNodeMsgs)
             && Set.size nodeStates == 1
   where
-    mappedInitialMsgs = foldr (\m acc->
-        case m of
-            ScheduledMessage _ _ x -> Set.insert x acc
-            _                      -> acc) Set.empty initialMsgs
+    mappedInitialMsgs = mapMsgs initialMsgs
     TestNetwork nodes' _ = runNetwork tn
-    firstNodeMsgs = nodeState $ head $ toList nodes'
+    firstNodeMsgs = testableNodeState $ head $ toList nodes'
     -- Deduplicating the different node states should result in a single state.
-    nodeStates = Set.fromList $ map nodeState (toList nodes')
+    nodeStates = Set.fromList $ map testableNodeState (toList nodes')
