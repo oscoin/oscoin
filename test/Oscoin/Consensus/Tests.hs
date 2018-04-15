@@ -26,14 +26,14 @@ tests = [ testProperty "All nodes include all txns"            (propNetworkNodes
 kidSize :: Int
 kidSize = 11
 
--- TNode ----------------------------------------------------------------------
+-- TestableNode ---------------------------------------------------------------
 
 class ( Eq (TNodeTx a)
       , Ord (Scheduled a)
       , Ord (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
-      , Protocol a ) => TNode a where
+      , Protocol a ) => TestableNode a where
     type TNodeTx a :: *
 
     nodeState :: a -> [TNodeTx a]
@@ -97,7 +97,7 @@ instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
 
     epoch _ = 1
 
-instance (Arbitrary tx, Ord tx) => TNode (TestNode tx) where
+instance (Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TNodeTx (TestNode tx) = tx
 
     nodeState (TestNode _ s _) = s
@@ -141,7 +141,7 @@ instance Ord tx => Protocol (BufferedTestNode tx) where
 
     epoch _ = 10
 
-instance (Arbitrary tx, Ord tx) => TNode (BufferedTestNode tx) where
+instance (Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
     type TNodeTx (BufferedTestNode tx) = tx
 
     nodeState = btnState
@@ -186,7 +186,7 @@ data TestNetwork a = TestNetwork
 deriving instance Show tx => Show (TestNetwork (TestNode         tx))
 deriving instance Show tx => Show (TestNetwork (BufferedTestNode tx))
 
-instance TNode a => Arbitrary (TestNetwork a) where
+instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
         addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set (Addr a))
 
@@ -208,7 +208,7 @@ instance TNode a => Arbitrary (TestNetwork a) where
             , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
             }
 
-runNetwork :: TNode a => TestNetwork a -> TestNetwork a
+runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
 runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms))) =
     runNetwork (scheduleMessages tick to msgs tn)
   where
@@ -222,7 +222,7 @@ runNetwork tn@(TestNetwork nodes ms)
     | otherwise                          = runNetwork tn
 
 deliverTick
-    :: (TNode a)
+    :: (TestableNode a)
     => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverTick tick to tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
@@ -233,7 +233,7 @@ deliverTick tick to tn@TestNetwork{tnNodes}
         (tn, [])
 
 deliverMessage
-    :: (TNode a)
+    :: (TestableNode a)
     => Tick a -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
@@ -244,7 +244,7 @@ deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
         (tn, [])
 
 scheduleMessages
-    :: (TNode a)
+    :: (TestableNode a)
     => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
 scheduleMessages t from msgs tn@TestNetwork{tnMsgs} =
     let deliveryTime  = t + 1
@@ -267,7 +267,7 @@ mapMsgs =
     f   _                           acc = acc
 
 propNetworkNodesIncludeAllTxns
-    :: (Ord (Msg a), Ord (TNodeTx a), TNode a)
+    :: (Ord (Msg a), Ord (TNodeTx a), TestableNode a)
     => TestNetwork a -> Property
 propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
     networkHasMessages tn ==>
