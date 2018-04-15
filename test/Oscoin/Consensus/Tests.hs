@@ -36,9 +36,9 @@ class ( Eq (TestableTx a)
       , Protocol a ) => TestableNode a where
     type TestableTx a :: *
 
-    nodeState :: a -> [TestableTx a]
+    testableNode :: Addr a -> [Addr a] -> a
+    testableNodeState :: a -> [TestableTx a]
     isResting :: a -> Bool
-    newNode   :: Addr a -> [Addr a] -> a
 
 -- DummyView ------------------------------------------------------------------
 
@@ -96,9 +96,9 @@ instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
 instance (Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TestableTx (TestNode tx) = tx
 
-    nodeState (TestNode _ s _) = s
+    testableNode addr peers = TestNode addr [] peers
+    testableNodeState (TestNode _ s _) = s
     isResting _ = True
-    newNode addr peers = TestNode addr [] peers
 
 -- BufferedTestNode -----------------------------------------------------------
 
@@ -136,15 +136,15 @@ instance Ord tx => Protocol (BufferedTestNode tx) where
 instance (Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
     type TestableTx (BufferedTestNode tx) = tx
 
-    nodeState = btnState
-    isResting BufferedTestNode{btnBuffer} = null btnBuffer
-    newNode addr peers = BufferedTestNode
+    testableNode addr peers = BufferedTestNode
         { btnAddr   = addr
         , btnPeers  = peers
         , btnBuffer = []
         , btnTick   = 0
         , btnState  = []
         }
+    testableNodeState = btnState
+    isResting BufferedTestNode{btnBuffer} = null btnBuffer
 
 -- Scheduled ------------------------------------------------------------------
 
@@ -183,7 +183,7 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
         addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set (Addr a))
 
         nodes <- forM (toList addrs) $ \a ->
-            pure (a, newNode a [x | x <- toList addrs, x /= a])
+            pure (a, testableNode a [x | x <- toList addrs, x /= a])
 
         smsgs <- resize kidSize . listOf1 $ do
             msg <- arbitrary  :: Gen (Addr a, Msg a)
@@ -268,6 +268,6 @@ propNetworkNodesIncludeAllTxns tn@(TestNetwork _nodes initialMsgs) =
   where
     mappedInitialMsgs = mapMsgs initialMsgs
     TestNetwork nodes' _ = runNetwork tn
-    firstNodeMsgs = nodeState $ head $ toList nodes'
+    firstNodeMsgs = testableNodeState $ head $ toList nodes'
     -- Deduplicating the different node states should result in a single state.
-    nodeStates = Set.fromList $ map nodeState (toList nodes')
+    nodeStates = Set.fromList $ map testableNodeState (toList nodes')
