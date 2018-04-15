@@ -74,10 +74,7 @@ instance Ord tx => View (DummyView [] tx) where
 -- TestNode -------------------------------------------------------------------
 
 data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
-
-deriving instance Eq tx => Eq (TestNode tx)
-deriving instance Ord tx => Ord (TestNode tx)
-deriving instance Show tx => Show (TestNode tx)
+    deriving (Eq, Ord, Show)
 
 -- TODO(alexis): Try to make this `Protocol (TestNode s)`
 instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
@@ -112,11 +109,7 @@ data BufferedTestNode tx = BufferedTestNode
     , btnBuffer  :: [Msg (BufferedTestNode tx)]
     , btnTick    :: Tick (BufferedTestNode tx)
     , btnState   :: [tx]
-    }
-
-deriving instance Eq tx => Eq (BufferedTestNode tx)
-deriving instance Ord tx => Ord (BufferedTestNode tx)
-deriving instance Show tx => Show (BufferedTestNode tx)
+    } deriving (Eq, Ord, Show)
 
 instance Ord tx => Protocol (BufferedTestNode tx) where
     type Msg  (BufferedTestNode tx) = tx
