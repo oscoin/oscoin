@@ -3,7 +3,7 @@ module Oscoin.HTTP.Test.Helpers where
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import           Oscoin.Org (Org, OrgId)
+import           Oscoin.Account (Account, AccId)
 import           Oscoin.HTTP.Internal (mkMiddleware)
 import           Oscoin.HTTP.API (api)
 import qualified Oscoin.Node.State.Mempool as Mempool
@@ -38,11 +38,11 @@ instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: [(OrgId, Org)] -> Session () -> Assertion
-runSession orgs sess = do
+runSession :: [(AccId, Account)] -> Session () -> Assertion
+runSession accs sess = do
     mp <- Mempool.new
     st <- STree.connect
-    spockAsApp (mkMiddleware (api Testing) orgs mp st) >>= Wai.runSession sess
+    spockAsApp (mkMiddleware (api Testing) accs mp st) >>= Wai.runSession sess
 
 infix 1 @?=, @=?
 

@@ -1,7 +1,7 @@
 module Oscoin.Node.State where
 
 import           Oscoin.Prelude
-import           Oscoin.Org (OrgId, OrgPath, OrgKey, OrgVal, mkOrgPath)
+import           Oscoin.Account (AccId, AccPath, AccKey, AccVal, mkAccPath)
 import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.State.Mempool (Mempool)
@@ -36,18 +36,18 @@ getMempool :: (Monad m, MonadSTM m) => StorageT tx m (Mempool (Id tx) tx)
 getMempool = Mempool.read
 
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
--- | Set an org path to the given value.
-setOrgPath :: MonadIO m => OrgId -> OrgPath -> OrgVal -> StorageT tx m ()
-setOrgPath org path =
-    setPath (mkOrgPath org path)
+-- | Set an account path to the given value.
+setAccountPath :: MonadIO m => AccId -> AccPath -> AccVal -> StorageT tx m ()
+setAccountPath acc path =
+    setPath (mkAccPath acc path)
 
-setOrgKey :: MonadIO m => OrgId -> OrgKey -> OrgVal -> StorageT tx m ()
-setOrgKey org key =
-    setPath (mkOrgPath org [key])
+setAccountKey :: MonadIO m => AccId -> AccKey -> AccVal -> StorageT tx m ()
+setAccountKey acc key =
+    setPath (mkAccPath acc [key])
 
-getOrgPath :: MonadIO m => OrgId -> OrgPath -> StorageT tx m (Maybe OrgVal)
-getOrgPath org path =
-    getPath (mkOrgPath org path)
+getAccountPath :: MonadIO m => AccId -> AccPath -> StorageT tx m (Maybe AccVal)
+getAccountPath acc path =
+    getPath (mkAccPath acc path)
 
 -- | Get a state value at the given path.
 getPath :: MonadIO m => Path -> StorageT tx m (Maybe Val)

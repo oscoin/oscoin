@@ -17,7 +17,6 @@ library
       Oscoin.Prelude
 
     , Oscoin.Address
-    , Oscoin.Account
     , Oscoin.Consensus
     , Oscoin.Consensus.Class
     , Oscoin.Environment
@@ -40,11 +39,11 @@ library
     , Oscoin.HTTP.Internal
     , Oscoin.HTTP.API
 
-    , Oscoin.Org
-    , Oscoin.Org.Issue
-    , Oscoin.Org.Membership
-    , Oscoin.Org.Repository
-    , Oscoin.Org.Transaction
+    , Oscoin.Account
+    , Oscoin.Account.Issue
+    , Oscoin.Account.Membership
+    , Oscoin.Account.Repository
+    , Oscoin.Account.Transaction
 
     , Oscoin.State
     , Oscoin.State.Tree
@@ -198,7 +197,7 @@ test-suite test
     , Oscoin.Crypto.Hash.Arbitrary
     , Oscoin.Crypto.PubKey.Arbitrary
     , Oscoin.Crypto.Blockchain.Arbitrary
-    , Oscoin.Org.Arbitrary
+    , Oscoin.Account.Arbitrary
     , Oscoin.Test.Helpers
 
     , Crypto.Tests

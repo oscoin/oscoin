@@ -2,8 +2,8 @@ module Oscoin.View where
 
 import           Oscoin.Prelude
 import qualified Oscoin.Consensus.Class as Consensus
-import qualified Oscoin.Org.Transaction as Org
-import qualified Oscoin.Org             as Org
+import qualified Oscoin.Account.Transaction as Account
+import qualified Oscoin.Account             as Account
 import           Oscoin.State.Tree (Tree, Path, Val)
 import qualified Oscoin.State.Tree as Tree
 
@@ -27,14 +27,14 @@ instance Consensus.Context View where
     del _k = undefined
 
 instance Consensus.View View where
-    type Transaction View = Org.Tx
+    type Transaction View = Account.Tx
     type BlockHeader View = ()
 
     apply Nothing txs =
         for_ txs $ \tx ->
             case tx of
-                Org.SetTx org k v ->
-                    modify $ Tree.set (Org.mkOrgDataPath org [k]) v
+                Account.SetTx acc k v ->
+                    modify $ Tree.set (Account.mkAccDataPath acc [k]) v
                 _ ->
                     notImplemented
     apply _ _ =

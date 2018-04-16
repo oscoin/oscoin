@@ -1,4 +1,4 @@
-module Oscoin.Org.Transaction
+module Oscoin.Account.Transaction
     ( Tx(..)
     , Receipt(..)
     , validateTransaction
@@ -9,7 +9,7 @@ module Oscoin.Org.Transaction
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Org
+import           Oscoin.Account
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -32,7 +32,7 @@ type BranchId = ()
 type RepoId = ()
 type PatchId = ()
 
-data Voice = Yea | Nay
+data Voice = Accept | Reject
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Voice
@@ -40,26 +40,26 @@ instance Binary Voice
 -- | Transaction ID.
 type instance Id Tx = Hashed Tx
 
--- | An org transaction.
+-- | An account transaction.
 data Tx =
       AccountTx     AccountId Address Coin [Permission]
     | PatchTx       RepoId BranchId PatchId [Patch]
     | VoiceIssueTx  IssueId Voice
     | AmmendIssueTx IssueId Text Text [PatchId]
     | SendTx        Address Address Coin
-    | SetTx         OrgId OrgKey OrgVal
+    | SetTx         AccId AccKey AccVal
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
 instance Hashable Tx
 
 instance ToJSON Tx where
-    toJSON (SetTx org key val) =
-        object [ "object" .= ("transaction" :: Text)
-               , "type"   .= ("set" :: Text)
-               , "org"    .= org
-               , "key"    .= key
-               , "value"  .= Base64.encodeLazy val
+    toJSON (SetTx acc key val) =
+        object [ "object"  .= ("transaction" :: Text)
+               , "type"    .= ("set" :: Text)
+               , "account" .= acc
+               , "key"     .= key
+               , "value"   .= Base64.encodeLazy val
                ]
     toJSON _ =
         notImplemented
@@ -69,10 +69,10 @@ instance FromJSON Tx where
         typ :: Text <- o .: "type"
         case typ of
             "set" -> do
-                org <- o .: "org"
+                acc <- o .: "account"
                 key <- o .: "key"
                 val <- o .: "value"
-                pure $ SetTx org key (Base64.decodeLazy val)
+                pure $ SetTx acc key (Base64.decodeLazy val)
             _ ->
                 notImplemented
 
@@ -82,14 +82,14 @@ validateTransaction stx@(Signed tx _) = do
     pure stx
 
 validateTransaction' :: Tx -> Either Error Tx
-validateTransaction' tx@(SetTx orgId orgKey _)
-  | not (T.null orgId)
-  , not (T.null orgKey) = Right tx
-  | otherwise = Left "Invalid org id or key"
+validateTransaction' tx@(SetTx accId accKey _)
+  | not (T.null accId)
+  , not (T.null accKey) = Right tx
+  | otherwise = Left "Invalid account id or key"
 validateTransaction' _ =
     notImplemented
 
-setTx :: OrgId -> OrgKey -> OrgVal -> Tx
+setTx :: AccId -> AccKey -> AccVal -> Tx
 setTx = SetTx
 
 -------------------------------------------------------------------------------
@@ -109,10 +109,10 @@ verifySignature pubKey stx =
        then Right (sigMessage stx)
        else Left  "Invalid signature"
 
--- | Apply a transaction to the org state-tree.
-applyTransaction :: Tx -> OrgTree -> OrgTree
-applyTransaction (SetTx org key val) tree =
-    setPath org ["data", key] val tree
+-- | Apply a transaction to the account state-tree.
+applyTransaction :: Tx -> AccTree -> AccTree
+applyTransaction (SetTx acc key val) tree =
+    setPath acc ["data", key] val tree
 applyTransaction _ _ =
     notImplemented
 

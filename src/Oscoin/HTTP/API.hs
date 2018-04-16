@@ -2,7 +2,7 @@ module Oscoin.HTTP.API where
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import qualified Oscoin.Org.Transaction as Org
+import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Crypto.PubKey (Signed)
 
 import qualified Oscoin.HTTP.Handlers as Handlers
@@ -16,7 +16,7 @@ import qualified Network.Wai.Middleware.Static as Wai
 import           Web.Spock (middleware, get, post, root, json, (<//>), var)
 
 -- | Entry point for API.
-api :: Environment -> Api (Signed Org.Tx) ()
+api :: Environment -> Api (Signed Account.Tx) ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")
@@ -35,30 +35,30 @@ api env = do
 
     get ("node" <//> "mempool" <//> var) Handlers.getTransaction
 
-    -- /blocks/:id ------------------------------------------------------
+    -- /blocks/:id ------------------------------------------------------------
 
-    -- /orgs ------------------------------------------------------------------
+    -- /accounts --------------------------------------------------------------
 
-    get  "orgs" Handlers.getOrgs
+    get  "accounts" Handlers.getAccounts
 
-    -- /orgs/:org -------------------------------------------------------------
+    -- /accounts/:account -----------------------------------------------------
 
-    get ("orgs" <//> var) Handlers.getOrg
+    get ("accounts" <//> var) Handlers.getAccount
 
-    -- /orgs/:org/repos -------------------------------------------------------
+    -- /accounts/:account/repos -----------------------------------------------
 
-    get ("orgs" <//> var <//> "repos") Handlers.getRepos
+    get ("accounts" <//> var <//> "repos") Handlers.getRepos
 
-    -- /orgs/:org/repos/:repo -------------------------------------------------
+    -- /accounts/:account/repos/:repo -----------------------------------------
 
-    get ("orgs" <//> var <//> "repos" <//> var) Handlers.getRepo
+    get ("accounts" <//> var <//> "repos" <//> var) Handlers.getRepo
 
-    -- /orgs/:org/repos/:repo/patches -----------------------------------------
+    -- /accounts/:account/repos/:repo/patches ---------------------------------
 
-    -- /orgs/:org/data/:key ---------------------------------------------------
+    -- /accounts/:account/data/:key -------------------------------------------
 
-    get ("orgs" <//> var <//> "data" <//> var) Handlers.getOrgKey
+    get ("accounts" <//> var <//> "data" <//> var) Handlers.getAccountKey
 
-    -- /orgs/:org/members/:member ---------------------------------------------
+    -- /accounts/:account/members/:member -------------------------------------
 
-    get ("orgs" <//> var <//> "members" <//> var) Handlers.getMember
+    get ("accounts" <//> var <//> "members" <//> var) Handlers.getMember

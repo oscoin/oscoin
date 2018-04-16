@@ -6,7 +6,7 @@ import qualified Oscoin.Node.State.Tree as STree
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import           Oscoin.Org (Org, OrgId)
+import           Oscoin.Account (Account, AccId)
 import qualified Oscoin.HTTP as HTTP
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Consensus as Consensus
@@ -18,7 +18,7 @@ data Config = Config
     { cfgServiceName :: NS.ServiceName
     , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
     , cfgEnv         :: Environment
-    , cfgOrgs        :: [(OrgId, Org)]
+    , cfgAccounts    :: [(AccId, Account)]
     }
 
 data State = State ()
@@ -30,7 +30,7 @@ run Config{..} = do
     mp <- Mempool.new
     st <- lift STree.connect
     threads <- lift . traverse async $
-        [ HTTP.run (HTTP.api cfgEnv) cfgOrgs (read cfgServiceName) mp st
+        [ HTTP.run (HTTP.api cfgEnv) cfgAccounts (read cfgServiceName) mp st
         , P2P.run cfgEnv mp st
         , runReaderT (Consensus.run cfgEnv st) mp
         ]

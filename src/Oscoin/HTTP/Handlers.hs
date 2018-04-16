@@ -5,9 +5,9 @@ import qualified Oscoin.Node.State as State
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.HTTP.Internal
-import           Oscoin.Org (Org, OrgId, OrgKey, MemberId, mkOrgDataPath)
-import qualified Oscoin.Org.Transaction as Org
-import           Oscoin.Org.Repository (RepoId)
+import           Oscoin.Account (Account, AccId, AccKey, MemberId, mkAccDataPath)
+import qualified Oscoin.Account.Transaction as Account
+import           Oscoin.Account.Repository (RepoId)
 
 import           Data.Aeson (FromJSON, ToJSON, encode, toJSON)
 import           Network.HTTP.Types.Status
@@ -31,15 +31,15 @@ submitTransaction = do
     case result of
         Just tx -> do
             -- TODO: Verify signature passed in url.
-            receipt <- storage $ Org.submitTransaction tx
+            receipt <- storage $ Account.submitTransaction tx
             respond accepted202 (Just (toJSON receipt))
         Nothing ->
             respond badRequest400 Nothing
 
--- | Get a key under an organization.
-getOrgKey :: OrgId -> OrgKey -> ApiAction tx ()
-getOrgKey org key = do
-    result <- storage $ State.getPath (mkOrgDataPath org [key])
+-- | Get a key under an account.
+getAccountKey :: AccId -> AccKey -> ApiAction tx ()
+getAccountKey acc key = do
+    result <- storage $ State.getPath (mkAccDataPath acc [key])
     case result of
         Just val ->
             respondBytes ok200 val
@@ -51,31 +51,31 @@ storage :: MonadApi tx m => State.StorageT tx IO a -> m a
 storage s = withHandle $ \h ->
     State.runStorageT h s
 
-getOrgs :: ApiAction tx ()
-getOrgs = do
-    State{stOrgs} <- getState
-    respond ok200 $ Just $ toJSON $ map snd stOrgs
+getAccounts :: ApiAction tx ()
+getAccounts = do
+    State{stAccounts} <- getState
+    respond ok200 $ Just $ toJSON $ map snd stAccounts
 
-getOrg :: OrgId -> ApiAction tx ()
-getOrg orgId = do
-    State{stOrgs} <- getState
-    case lookup orgId stOrgs of
-        Just org ->
-            respond ok200 (Just $ toJSON org)
+getAccount :: AccId -> ApiAction tx ()
+getAccount accId = do
+    State{stAccounts} <- getState
+    case lookup accId stAccounts of
+        Just acc ->
+            respond ok200 (Just $ toJSON acc)
         Nothing ->
             respond notFound404 Nothing
 
-createOrg :: OrgId -> ApiAction tx ()
-createOrg orgId = do
-    Just org :: Maybe Org <- getBody
-    storage $ State.setPath ["orgs", orgId] (encode org)
+createAccount :: AccId -> ApiAction tx ()
+createAccount accId = do
+    Just acc :: Maybe Account <- getBody
+    storage $ State.setPath ["accounts", accId] (encode acc)
     respond created201 Nothing
 
-getRepos :: OrgId -> ApiAction tx ()
+getRepos :: AccId -> ApiAction tx ()
 getRepos _ = notImplemented
 
-getRepo :: OrgId -> RepoId -> ApiAction tx ()
+getRepo :: AccId -> RepoId -> ApiAction tx ()
 getRepo _ _ = notImplemented
 
-getMember :: OrgId -> MemberId -> ApiAction tx ()
+getMember :: AccId -> MemberId -> ApiAction tx ()
 getMember _ _ = notImplemented

@@ -1,4 +1,4 @@
-module Oscoin.Org.Repository where
+module Oscoin.Account.Repository where
 
 import Oscoin.Prelude
 

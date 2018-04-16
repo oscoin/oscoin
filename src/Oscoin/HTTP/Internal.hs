@@ -2,7 +2,7 @@ module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import           Oscoin.Org (Org, OrgId)
+import           Oscoin.Account (Account, AccId)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Node.State.Tree as STree
 import qualified Oscoin.Node.State.Mempool as Mempool
@@ -19,7 +19,7 @@ import qualified Network.Wai.Middleware.RequestLogger as Wai
 
 -- | The global server state.
 data State = State
-    { stOrgs :: [(OrgId, Org)] }
+    { stAccounts :: [(AccId, Account)] }
     deriving (Show)
 
 -- | Storage connection handle.
@@ -39,7 +39,7 @@ type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle tx)
 
 -- | Create an empty state.
 mkState :: State
-mkState = State { stOrgs = [] }
+mkState = State { stAccounts = [] }
 
 getBody :: Aeson.FromJSON a => ApiAction tx (Maybe a)
 getBody = Spock.jsonBody
@@ -79,27 +79,27 @@ errorBody msg = Aeson.object ["error" .= msg]
 
 run
     :: Api tx ()
-    -> [(OrgId, Org)]
+    -> [(AccId, Account)]
     -> Int
     -> Mempool.Handle tx
     -> STree.Handle
     -> IO ()
-run app orgs port mp st =
-    runSpock port (mkMiddleware app orgs mp st)
+run app accs port mp st =
+    runSpock port (mkMiddleware app accs mp st)
 
 mkMiddleware
     :: Api tx ()
-    -> [(OrgId, Org)]
+    -> [(AccId, Account)]
     -> Mempool.Handle tx
     -> STree.Handle
     -> IO Wai.Middleware
-mkMiddleware app orgs mp st = do
+mkMiddleware app accs mp st = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
     conn        = State.open mp st
     connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
-    state       = mkState { stOrgs = orgs }
+    state       = mkState { stAccounts = accs }
 
 loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production = Wai.logStdout

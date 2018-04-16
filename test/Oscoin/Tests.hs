@@ -1,10 +1,10 @@
 module Oscoin.Tests where
 
 import           Oscoin.Prelude
-import           Oscoin.Org (Org(..), OrgTree, mkOrgPath, mkOrgDataPath)
-import qualified Oscoin.Org as Org
-import qualified Oscoin.Org.Transaction as Org
-import           Oscoin.Org.Arbitrary ()
+import           Oscoin.Account (Account(..), AccTree, mkAccPath, mkAccDataPath)
+import qualified Oscoin.Account as Account
+import qualified Oscoin.Account.Transaction as Account
+import           Oscoin.Account.Arbitrary ()
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -32,8 +32,8 @@ import qualified Data.Binary as Binary
 import           Lens.Micro ((^?))
 import           Lens.Micro.Aeson (key, nth, _String)
 
-acme :: Org
-acme = Org { orgName = "Acme", orgId = "acme" }
+acme :: Account
+acme = Account { accName = "Acme", accId = "acme" }
 
 tests :: TestTree
 tests = testGroup "Oscoin"
@@ -51,21 +51,21 @@ tests = testGroup "Oscoin"
 
 testOscoinAPI :: Assertion
 testOscoinAPI = runSession [("acme", acme)] $ do
-    get "/"     >>= assertOK
-    get "/orgs" >>= assertBody [acme]
+    get "/"         >>= assertOK
+    get "/accounts" >>= assertBody [acme]
 
-    -- The "acme" org exists.
-    get  "/orgs/acme" >>= assertBody acme
+    -- The "acme" account exists.
+    get  "/accounts/acme" >>= assertBody acme
 
     -- The mempool is empty.
     get "/node/mempool" >>= assertBody emptyArray
 
-    -- Now let's create a value we want to store in the org.
+    -- Now let's create a value we want to store in the account.
     let value = Aeson.object ["name" .= t "zod"]
 
     -- Let's create a transaction to store that value under the key
     -- "zod".
-    let tx = Org.setTx "acme" "zod" (Aeson.encode value)
+    let tx = Account.setTx "acme" "zod" (Aeson.encode value)
 
     -- Now generate a key pair and sign the transaction.
     (_, priKey) <- Crypto.generateKeyPair
@@ -84,42 +84,42 @@ testOscoinAPI = runSession [("acme", acme)] $ do
 
     get ("/node/mempool/" <> txId)
         >>= assertOK <> assertJSON
-    get "/orgs/acme/data/doz" >>= assertStatus 404
+    get "/accounts/acme/data/doz" >>= assertStatus 404
 
     -- TODO: Once we can wait for transactions to be committed, this test
     -- should pass.
     -- ...
     -- Wait for transaction to be committed.
     -- ...
-    -- get "/orgs/acme/data/zod" >>= assertBody value
+    -- get "/accounts/acme/data/zod" >>= assertBody value
 
 testOscoinTxs :: Assertion
 testOscoinTxs = do
     (pubKey, priKey) <- Crypto.generateKeyPair
 
     -- Create a new, valid `setTx` transaction.
-    let tx = Org.setTx "acme" "home" "~"
+    let tx = Account.setTx "acme" "home" "~"
 
     -- Sign it and verify it.
     tx' <- Crypto.sign priKey tx
     assertValidTx tx'
-    Org.verifySignature pubKey tx' @?= Right tx
+    Account.verifySignature pubKey tx' @?= Right tx
 
     -- Now let's create an empty state tree.
-    let tree  = mempty :: OrgTree
+    let tree  = mempty :: AccTree
 
     -- And apply this transaction to it. This should create a key
-    -- under `/orgs/acme/data`.
-    let tree' = Org.applyTransaction tx tree
+    -- under `/accounts/acme/data`.
+    let tree' = Account.applyTransaction tx tree
 
     -- The updated state should include the newly set key.
-    Org.getPath "acme" ["data", "home"] tree' @?= Just "~"
+    Account.getPath "acme" ["data", "home"] tree' @?= Just "~"
 
 testOscoinPaths :: Assertion
 testOscoinPaths = do
     -- Check that our path creation functions work as expected.
-    mkOrgPath     "acme" ["key"] @?= ["orgs", "acme", "key"]
-    mkOrgDataPath "acme" ["key"] @?= ["orgs", "acme", "data", "key"]
+    mkAccPath     "acme" ["key"] @?= ["accounts", "acme", "key"]
+    mkAccDataPath "acme" ["key"] @?= ["accounts", "acme", "data", "key"]
 
 testOscoinCrypto :: Assertion
 testOscoinCrypto = do
@@ -135,14 +135,14 @@ testOscoinCrypto = do
 testOscoinMempool :: Assertion
 testOscoinMempool = do
     -- Create two subscription tokens.
-    let s1 :: Subscription Org.Tx = Subscription "alice"
-        s2 :: Subscription Org.Tx = Subscription "bob"
+    let s1 :: Subscription Account.Tx = Subscription "alice"
+        s2 :: Subscription Account.Tx = Subscription "bob"
 
-    -- Create a new mempool of org transactions.
-    mp <- Mempool.new @Org.Tx
+    -- Create a new mempool of account transactions.
+    mp <- Mempool.new @Account.Tx
 
     -- Create some arbitrary transactions.
-    txs <- generate arbitrary :: IO [Org.Tx]
+    txs <- generate arbitrary :: IO [Account.Tx]
 
     flip runReaderT mp $ do
         -- Subscribe to the mempool with the subscription tokens.
@@ -169,13 +169,13 @@ testOscoinBlockchain = do
     (_, key') <- Crypto.generateKeyPair
 
     txs <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed Org.Tx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed Account.Tx]
 
     gblock <- generate $ arbitraryGenesisWith txs
     assertNoError $ validateBlock gblock
 
     txs' <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed Org.Tx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed Account.Tx]
 
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
@@ -190,9 +190,9 @@ propHashedJSON x = (Aeson.decode . Aeson.encode) x == Just x
 propHexEncoding :: ByteString -> Bool
 propHexEncoding x = (Crypto.fromHex . Crypto.toHex) x == Right x
 
-assertValidTx :: HasCallStack => Crypto.Signed Org.Tx -> Assertion
+assertValidTx :: HasCallStack => Crypto.Signed Account.Tx -> Assertion
 assertValidTx tx =
-    case Org.validateTransaction tx of
+    case Account.validateTransaction tx of
         Left err ->
             assertFailure (T.unpack $ fromError err)
         _ ->
