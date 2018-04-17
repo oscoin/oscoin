@@ -3,7 +3,6 @@ module Oscoin.View where
 import           Oscoin.Prelude
 import qualified Oscoin.Consensus.Class as Consensus
 import qualified Oscoin.Account.Transaction as Account
-import qualified Oscoin.Account             as Account
 import           Oscoin.State.Tree (Tree, Path, Val)
 import qualified Oscoin.State.Tree as Tree
 
@@ -34,7 +33,7 @@ instance Consensus.View View where
         for_ txs $ \tx ->
             case tx of
                 Account.SetTx acc k v ->
-                    modify $ Tree.set (Account.mkAccDataPath acc [k]) v
+                    modify $ Tree.set (acc : "data" : [k]) v
                 _ ->
                     notImplemented
     apply _ _ =

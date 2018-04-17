@@ -3,9 +3,10 @@ module Oscoin.HTTP.Handlers where
 import           Oscoin.Prelude hiding (notImplemented)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Node.State.Mempool as Mempool
+import           Oscoin.State.Tree (Key)
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.HTTP.Internal
-import           Oscoin.Account (Account, AccId, AccKey, MemberId, mkAccDataPath)
+import           Oscoin.Account (Account, AccId, MemberId)
 import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Account.Repository (RepoId)
 
@@ -36,10 +37,10 @@ submitTransaction = do
         Nothing ->
             respond badRequest400 Nothing
 
--- | Get a key under an account.
-getAccountKey :: AccId -> AccKey -> ApiAction tx ()
-getAccountKey acc key = do
-    result <- storage $ State.getPath (mkAccDataPath acc [key])
+-- | Get a data key under an account.
+getAccountDataKey :: AccId -> Key -> ApiAction tx ()
+getAccountDataKey acc key = do
+    result <- storage $ State.getPath (acc : "data" : [key])
     case result of
         Just val ->
             respondBytes ok200 val

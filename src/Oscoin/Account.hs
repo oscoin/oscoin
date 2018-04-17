@@ -1,7 +1,15 @@
-module Oscoin.Account where
+module Oscoin.Account
+    ( Account(..)
+    , AccId
+    , MemberId
+    , getPath
+    , setPath
+    , getDataPath
+    , pattern AccountsPrefix
+    ) where
 
 import           Oscoin.Prelude
-import           Oscoin.State.Tree (Tree, Key, Val, Path)
+import           Oscoin.State.Tree (Tree, Path)
 import qualified Oscoin.State.Tree as Tree
 
 import           Data.Aeson ( FromJSON(..), ToJSON(..)
@@ -9,11 +17,6 @@ import           Data.Aeson ( FromJSON(..), ToJSON(..)
                             )
 
 type AccId = Text
-type AccKey = Key
-type AccPath = [Text]
-type AccVal = Val
-type AccTree = Tree AccPath AccVal
-
 type MemberId = Text
 
 data Account = Account
@@ -34,22 +37,16 @@ instance ToJSON Account where
                , "name" .= accName
                ]
 
-mkAccPath :: AccId -> Path -> AccPath
-mkAccPath acc path =
-    "accounts" : acc : path
+pattern AccountsPrefix :: (IsString a, Eq a) => a
+pattern AccountsPrefix = "accounts"
+-- pattern DataPrefix     = "data" :: Text
 
-mkAccDataPath :: AccId -> AccPath -> AccPath
-mkAccDataPath acc =
-    mkAccPath acc . mkDataPath
+-- TODO: Rewrite with `Id Account`.
+getPath :: AccId -> Path -> Tree Path v -> Maybe v
+getPath acc path = Tree.get (AccountsPrefix : acc : path)
 
-mkDataPath :: Path -> Path
-mkDataPath = (:) "data"
+getDataPath :: AccId -> Path -> Tree Path v -> Maybe v
+getDataPath acc path = getPath acc ("data" : path)
 
-getPath :: AccId -> AccPath -> AccTree -> Maybe AccVal
-getPath acc = Tree.get . mkAccPath acc
-
-getDataPath :: AccId -> AccPath -> AccTree -> Maybe AccVal
-getDataPath acc = getPath acc . mkDataPath
-
-setPath :: AccId -> AccPath -> AccVal -> AccTree -> AccTree
-setPath acc = Tree.set . mkAccPath acc
+setPath :: AccId -> Path -> v -> Tree Path v -> Tree Path v
+setPath acc path = Tree.set ("accounts" : acc : path)

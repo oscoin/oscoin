@@ -14,6 +14,7 @@ import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex)
+import           Oscoin.State.Tree (Tree, Key, Path, Val)
 import qualified Oscoin.Node.State as State
 import qualified Oscoin.Node.State.Mempool as Mempool
 
@@ -47,7 +48,7 @@ data Tx =
     | VoiceIssueTx  IssueId Voice
     | AmmendIssueTx IssueId Text Text [PatchId]
     | SendTx        Address Address Coin
-    | SetTx         AccId AccKey AccVal
+    | SetTx         AccId Key Val
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
@@ -89,7 +90,7 @@ validateTransaction' tx@(SetTx accId accKey _)
 validateTransaction' _ =
     notImplemented
 
-setTx :: AccId -> AccKey -> AccVal -> Tx
+setTx :: AccId -> Key -> Val -> Tx
 setTx = SetTx
 
 -------------------------------------------------------------------------------
@@ -110,7 +111,7 @@ verifySignature pubKey stx =
        else Left  "Invalid signature"
 
 -- | Apply a transaction to the account state-tree.
-applyTransaction :: Tx -> AccTree -> AccTree
+applyTransaction :: Tx -> Tree Path Val -> Tree Path Val
 applyTransaction (SetTx acc key val) tree =
     setPath acc ["data", key] val tree
 applyTransaction _ _ =

@@ -57,7 +57,7 @@ api env = do
 
     -- /accounts/:account/data/:key -------------------------------------------
 
-    get ("accounts" <//> var <//> "data" <//> var) Handlers.getAccountKey
+    get ("accounts" <//> var <//> "data" <//> var) Handlers.getAccountDataKey
 
     -- /accounts/:account/members/:member -------------------------------------
 

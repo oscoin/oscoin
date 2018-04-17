@@ -1,7 +1,7 @@
 module Oscoin.Tests where
 
 import           Oscoin.Prelude
-import           Oscoin.Account (Account(..), AccTree, mkAccPath, mkAccDataPath)
+import           Oscoin.Account (Account(..))
 import qualified Oscoin.Account as Account
 import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Account.Arbitrary ()
@@ -14,6 +14,7 @@ import           Oscoin.Crypto.Blockchain (validateBlockchain)
 import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.Channel (Subscription(..), fromEvent)
+import           Oscoin.State.Tree (Tree, Path)
 
 import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Test.Helpers
@@ -39,7 +40,6 @@ tests :: TestTree
 tests = testGroup "Oscoin"
     [ testCase       "API"                            testOscoinAPI
     , testCase       "Tx"                             testOscoinTxs
-    , testCase       "Paths"                          testOscoinPaths
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
@@ -106,7 +106,7 @@ testOscoinTxs = do
     Account.verifySignature pubKey tx' @?= Right tx
 
     -- Now let's create an empty state tree.
-    let tree  = mempty :: AccTree
+    let tree  = mempty :: Tree Path v
 
     -- And apply this transaction to it. This should create a key
     -- under `/accounts/acme/data`.
@@ -114,12 +114,6 @@ testOscoinTxs = do
 
     -- The updated state should include the newly set key.
     Account.getPath "acme" ["data", "home"] tree' @?= Just "~"
-
-testOscoinPaths :: Assertion
-testOscoinPaths = do
-    -- Check that our path creation functions work as expected.
-    mkAccPath     "acme" ["key"] @?= ["accounts", "acme", "key"]
-    mkAccDataPath "acme" ["key"] @?= ["accounts", "acme", "data", "key"]
 
 testOscoinCrypto :: Assertion
 testOscoinCrypto = do

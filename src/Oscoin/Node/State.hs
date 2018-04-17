@@ -1,7 +1,7 @@
 module Oscoin.Node.State where
 
 import           Oscoin.Prelude
-import           Oscoin.Account (AccId, AccPath, AccKey, AccVal, mkAccPath)
+import           Oscoin.Account (AccId, pattern AccountsPrefix)
 import           Oscoin.State.Tree (Val, Path)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.State.Mempool (Mempool)
@@ -37,17 +37,13 @@ getMempool = Mempool.read
 
 -- TODO: Shouldn't be a MonadIO, we need our own restricted class.
 -- | Set an account path to the given value.
-setAccountPath :: MonadIO m => AccId -> AccPath -> AccVal -> StorageT tx m ()
+setAccountPath :: MonadIO m => AccId -> Path -> Val -> StorageT tx m ()
 setAccountPath acc path =
-    setPath (mkAccPath acc path)
+    setPath (AccountsPrefix : acc : path)
 
-setAccountKey :: MonadIO m => AccId -> AccKey -> AccVal -> StorageT tx m ()
-setAccountKey acc key =
-    setPath (mkAccPath acc [key])
-
-getAccountPath :: MonadIO m => AccId -> AccPath -> StorageT tx m (Maybe AccVal)
+getAccountPath :: MonadIO m => AccId -> Path -> StorageT tx m (Maybe Val)
 getAccountPath acc path =
-    getPath (mkAccPath acc path)
+    getPath (AccountsPrefix : acc : path)
 
 -- | Get a state value at the given path.
 getPath :: MonadIO m => Path -> StorageT tx m (Maybe Val)
