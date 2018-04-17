@@ -109,7 +109,7 @@ noBody = Nothing
 
 -- | Helper for string literals.
 t :: Text -> Text
-t = id
+t = identity
 
 responseBody :: Wai.SResponse -> LBS.ByteString
 responseBody = Wai.simpleBody

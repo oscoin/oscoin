@@ -1,6 +1,6 @@
 module Oscoin.Consensus.Tests (tests) where
 
-import           Prelude (Show (..), (++), (+))
+import           Prelude (Show (..), (+))
 
 import           Oscoin.Prelude hiding ((+))
 import           Oscoin.Consensus.Class

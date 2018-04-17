@@ -30,7 +30,7 @@ run Config{..} = do
     mp <- Mempool.new
     st <- lift STree.connect
     threads <- lift . traverse async $
-        [ HTTP.run (HTTP.api cfgEnv) cfgAccounts (read cfgServiceName) mp st
+        [ HTTP.run (HTTP.api cfgEnv) cfgAccounts (readStr cfgServiceName) mp st
         , P2P.run cfgEnv mp st
         , runReaderT (Consensus.run cfgEnv st) mp
         ]

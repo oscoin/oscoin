@@ -104,4 +104,4 @@ mkMiddleware app accs mp st = do
 loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production = Wai.logStdout
 loggingMiddleware Development = Wai.logStdoutDev
-loggingMiddleware Testing = id
+loggingMiddleware Testing = identity
