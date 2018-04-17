@@ -195,7 +195,7 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
 
         pure $ TestNetwork
             { tnNodes = Map.fromList nodes
-            , tnMsgs  = Set.fromList (mconcat $ smsgs ++ ticks)
+            , tnMsgs  = Set.fromList (concat $ smsgs ++ ticks)
             }
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
