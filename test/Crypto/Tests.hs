@@ -119,6 +119,7 @@ testUnion :: Assertion
 testUnion =
     Tree.union t1 t2 @?= Tree.fromList [('a', 1), ('b', 1), ('d', 2)]
   where
+    t1, t2 :: Tree Char Int
     t1 = Tree.fromList [('a', 1), ('b', 1)]
     t2 = Tree.fromList [('a', 2), ('d', 2)]
 
