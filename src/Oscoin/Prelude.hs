@@ -26,6 +26,7 @@ module Oscoin.Prelude
     , module Data.Functor
     , module Data.String
     , module Data.Word
+    , module Data.Set
     , module GHC.Stack
     , module GHC.Generics
     , module Debug.Trace
@@ -66,6 +67,7 @@ import           Data.Text.Encoding.Error (lenientDecode)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Map (Map)
+import           Data.Set (Set)
 import           Data.Semigroup (Semigroup, (<>))
 import           Data.IORef (IORef)
 import           Data.Traversable (Traversable(..), sequence, traverse)
