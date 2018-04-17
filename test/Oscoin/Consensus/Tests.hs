@@ -8,8 +8,8 @@ import           Test.Tasty.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 import           Control.Monad.Reader
-import           Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
+import           Control.Monad.State (State)
 import           Data.List (sort)
 import qualified Data.Map as Map
 import           Data.Set (Set)

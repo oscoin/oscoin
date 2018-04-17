@@ -42,6 +42,7 @@ module Oscoin.Prelude
     , readIO
     , readFile
     , (<&>)
+    , map
     , foreach
     , encodeUtf8
     , decodeUtf8
@@ -54,44 +55,44 @@ module Oscoin.Prelude
     , identity
     ) where
 
-import Prelude hiding ( fail, read, readIO, readFile
-                      , (++), concat, sum, product, id )
+import           Prelude hiding ( fail, read, readIO, readFile
+                                , (++), concat, sum, product, id, map )
 import qualified Prelude
-import Data.Text (Text)
+import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import Data.Text.Encoding.Error (lenientDecode)
-import Data.ByteString (ByteString)
+import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
+import           Data.Text.Encoding.Error (lenientDecode)
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
-import Data.Map (Map)
-import Data.Semigroup (Semigroup, (<>))
-import Data.IORef (IORef)
-import Control.Applicative (liftA2)
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class (MonadTrans, lift)
-import Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)
-import Control.Monad.State (MonadState)
-import Control.Monad.STM.Class (MonadSTM, liftSTM)
-import Control.Concurrent.STM (STM, atomically)
-import Control.Monad.Fail (MonadFail, fail)
-import Data.Traversable (Traversable(..), sequence, traverse)
-import Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl')
-import Data.Sequence (Seq)
-import Data.List.NonEmpty (NonEmpty(..))
+import           Data.Map (Map)
+import           Data.Semigroup (Semigroup, (<>))
+import           Data.IORef (IORef)
+import           Data.Traversable (Traversable(..), sequence, traverse)
+import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl')
+import           Data.Sequence (Seq)
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List
-import Data.Has
-import Data.Either (isRight, isLeft)
-import Data.Default (def, Default)
-import Data.ByteArray (ByteArrayAccess)
-import Data.Function ((&))
-import Data.Maybe (fromJust, isJust, isNothing)
-import Data.Functor (void)
-import Data.String (IsString)
-import Data.Word
-import GHC.Stack (HasCallStack)
-import GHC.Generics (Generic)
-import Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
+import           Data.Has
+import           Data.Either (isRight, isLeft)
+import           Data.Default (def, Default)
+import           Data.ByteArray (ByteArrayAccess)
+import           Data.Function ((&))
+import           Data.Functor (void)
+import           Data.Maybe (fromJust, isJust, isNothing)
+import           Data.String (IsString)
+import           Data.Word
+import           Control.Applicative (liftA2)
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Class (MonadTrans, lift)
+import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)
+import           Control.Monad.State (MonadState, runState, runStateT, execStateT, evalStateT)
+import           Control.Monad.STM.Class (MonadSTM, liftSTM)
+import           Control.Concurrent.STM (STM, atomically)
+import           Control.Monad.Fail (MonadFail, fail)
+import           GHC.Stack (HasCallStack)
+import           GHC.Generics (Generic)
+import           Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
 
 type LByteString = LBS.ByteString
 
@@ -150,6 +151,10 @@ tshow = T.pack . Prelude.show
 infixl 4 <&>
 (<&>) :: Functor f => f a -> (a -> b) -> f b
 (<&>) = foreach
+
+-- | > map = fmap
+map :: Functor f => (a -> b) -> f a -> f b
+map = fmap
 
 -- | > foreach = flip fmap
 foreach :: Functor f => f a -> (a -> b) -> f b
