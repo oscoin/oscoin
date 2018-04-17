@@ -54,7 +54,8 @@ module Oscoin.Prelude
     , identity
     ) where
 
-import Prelude hiding (fail, read, readIO, readFile, (++), concat, sum, product, id)
+import Prelude hiding ( fail, read, readIO, readFile
+                      , (++), concat, sum, product, id )
 import qualified Prelude
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -165,7 +166,7 @@ concat = mconcat
 
 -- | > intercalate = mconcat .: intersperse
 intercalate :: Monoid w => w -> [w] -> w
-intercalate xs xss = mconcat (Data.List.intersperse xs xss)
+intercalate xs xss = Prelude.mconcat (Data.List.intersperse xs xss)
 
 -- | Compute the sum of a finite list of numbers.
 sum :: (Foldable f, Num a) => f a -> a
