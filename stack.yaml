@@ -1,4 +1,4 @@
-resolver: lts-11.1
+resolver: lts-11.5
 
 packages:
 - .
@@ -6,12 +6,9 @@ packages:
 extra-deps:
 - acid-state-0.14.3
 - kademlia-1.1.0.0
-- tasty-hunit-0.10.0.1
-- tasty-1.0.0.1
 - merkle-tree-0.1.0
 - base58-bytestring-0.1.0
 - monad-stm-0.1.0.2
-- stm-2.4.5.0
 - git: git@github.com:cloudhead/wai
   commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
   subdirs:
