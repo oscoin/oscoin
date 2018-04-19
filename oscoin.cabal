@@ -196,6 +196,10 @@ test-suite test
   other-modules:
       Oscoin.Tests
     , Oscoin.Consensus.Tests
+    , Oscoin.Consensus.Test.Node
+    , Oscoin.Consensus.Test.Network
+    , Oscoin.Consensus.Test.Network.Arbitrary
+    , Oscoin.Consensus.Test.View
     , Oscoin.HTTP.Test.Helpers
     , Oscoin.Crypto.Hash.Arbitrary
     , Oscoin.Crypto.PubKey.Arbitrary

@@ -30,7 +30,7 @@ import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Text as T
 import qualified Data.Binary as Binary
-import           Lens.Micro ((^?))
+import           Lens.Micro ((^?), (^?!))
 import           Lens.Micro.Aeson (key, nth, _String)
 
 acme :: Account

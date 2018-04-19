@@ -11,6 +11,7 @@ import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Either (isLeft, isRight)
+import           Data.Maybe (isNothing)
 import           Control.Monad.Fail
 import           Test.Tasty
 import           Test.Tasty.QuickCheck

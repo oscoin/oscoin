@@ -8,6 +8,7 @@ module Oscoin.Prelude
     , module Control.Monad.STM.Class
     , module Control.Concurrent.STM
     , module Control.Monad.Fail
+    , module Control.Monad
     , module Data.Semigroup
     , module Data.Traversable
     , module Data.Foldable
@@ -90,6 +91,7 @@ import           Control.Monad.Trans.Class (MonadTrans, lift)
 import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)
 import           Control.Monad.State (MonadState, runState, runStateT, execStateT, evalStateT)
 import           Control.Monad.STM.Class (MonadSTM, liftSTM)
+import           Control.Monad (forM, mapM)
 import           Control.Concurrent.STM (STM, atomically)
 import           Control.Monad.Fail (MonadFail, fail)
 import           GHC.Stack (HasCallStack)
