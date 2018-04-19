@@ -180,3 +180,4 @@ language_extensions:
   - ViewPatterns
   - TypeApplications
   - RecordWildCards
+  - FlexibleContexts
