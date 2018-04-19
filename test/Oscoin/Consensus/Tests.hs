@@ -1,18 +1,19 @@
 module Oscoin.Consensus.Tests (tests) where
 
 import           Oscoin.Prelude
+
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.Test.Node
-import           Oscoin.Consensus.Test.View
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
+import           Oscoin.Consensus.Test.Node
+import           Oscoin.Consensus.Test.View
 
+import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
-import           Test.QuickCheck.Instances ()
 
-import qualified Data.Set as Set
 import           Data.Maybe (catMaybes)
+import qualified Data.Set as Set
 
 tests :: [TestTree]
 tests =

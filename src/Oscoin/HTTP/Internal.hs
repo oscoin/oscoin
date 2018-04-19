@@ -1,21 +1,23 @@
 module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
+
+import           Oscoin.Account (AccId, Account)
 import           Oscoin.Environment
-import           Oscoin.Account (Account, AccId)
 import qualified Oscoin.Node.State as State
-import qualified Oscoin.Node.State.Tree as STree
 import qualified Oscoin.Node.State.Mempool as Mempool
-import qualified Web.Spock as Spock
-import           Web.HttpApiData (FromHttpApiData)
-import           Web.Spock (SpockAction, SpockM, HasSpock, SpockConn, runSpock, spock)
-import           Web.Spock.Config (defaultSpockCfg, PoolOrConn(..), ConnBuilder(..), PoolCfg(..))
-import qualified Data.Aeson as Aeson
+import qualified Oscoin.Node.State.Tree as STree
+
 import           Data.Aeson ((.=))
+import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
+import           Web.HttpApiData (FromHttpApiData)
+import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
+import qualified Web.Spock as Spock
+import           Web.Spock.Config (ConnBuilder(..), PoolCfg(..), PoolOrConn(..), defaultSpockCfg)
 
 -- | The global server state.
 data State = State
