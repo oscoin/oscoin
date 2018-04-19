@@ -120,4 +120,4 @@ jsonBody resp =
         in case Aeson.decode body of
             Just obj -> pure obj
             Nothing  -> io $ assertFailure
-                ("Could not decode body as JSON:\n`" <> (L8.unpack body) <> "`\n")
+                ("Could not decode body as JSON:\n`" <> L8.unpack body <> "`\n")

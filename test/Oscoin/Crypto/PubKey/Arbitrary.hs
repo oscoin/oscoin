@@ -11,9 +11,8 @@ import Test.QuickCheck
 import Test.QuickCheck.Instances ()
 
 instance MonadRandom Gen where
-    getRandomBytes n = do
-        bs <- resize n $ (arbitrary :: Gen ByteString)
-        pure (convert bs)
+    getRandomBytes n =
+        convert <$> resize n (arbitrary :: Gen ByteString)
 
 arbitrarySignedWith
     :: forall tx. (Arbitrary tx, Binary tx)

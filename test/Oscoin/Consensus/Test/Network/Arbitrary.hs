@@ -32,10 +32,10 @@ arbitraryHealthyNetwork = do
             at <- choose (0, 100) :: Gen Int
             pure $ ScheduledMessage (fromIntegral at) d msg
 
-    ticks <- forM nodes $ \(addr, n) -> do
+    ticks <- forM nodes $ \(addr, n) ->
         pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
 
-    pure $ TestNetwork
+    pure TestNetwork
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
@@ -67,6 +67,6 @@ filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
 filterNetwork (TestNetwork nodes msgs partitions) =
     TestNetwork nodes (Set.filter f msgs) partitions
   where
-    f msg = all (flip Map.member nodes) $
+    f msg = all (`Map.member` nodes) $
         scheduledReceivers msg ++ catMaybes [scheduledSender msg]
 

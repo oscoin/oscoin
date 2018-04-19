@@ -15,12 +15,12 @@ import           Network.HTTP.Types.Status
 
 getAllTransactions :: (ToJSON (Id tx), ToJSON tx) => ApiAction tx ()
 getAllTransactions = do
-    mp <- storage $ State.getMempool
+    mp <- storage State.getMempool
     respond ok200 (Just (toJSON mp))
 
 getTransaction :: (Ord (Id tx), ToJSON tx) => Id tx -> ApiAction tx ()
 getTransaction txId = do
-    mp <- storage $ State.getMempool
+    mp <- storage State.getMempool
     case Mempool.lookup txId mp of
         Just tx -> respond ok200 (Just (toJSON tx))
         Nothing -> respond notFound404 Nothing

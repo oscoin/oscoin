@@ -39,8 +39,8 @@ import           Crypto.Hash (HashAlgorithm, Digest)
 import           Data.Binary (Binary)
 import           Data.ByteArray (ByteArrayAccess)
 
-import qualified Prelude as Prelude
-import           Prelude hiding (lookup, null, elem, foldr, map, traverse, pred, succ, last)
+import qualified Prelude
+import           Prelude hiding (lookup, null, map, pred, succ)
 import qualified Data.List as List
 import           GHC.Generics
 

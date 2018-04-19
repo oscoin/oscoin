@@ -27,7 +27,7 @@ class ( Eq (TestableTx a)
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TestableTx (TestNode tx) = tx
 
-    testableNode addr peers = TestNode addr [] peers
+    testableNode addr = TestNode addr []
     testableNodeState (TestNode _ s _) = s
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
@@ -106,9 +106,8 @@ scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions} =
     let deliveryTime = t + 1
         msgs'        = Set.union scheduled tnMsgs
         scheduled    = Set.fromList [ScheduledMessage deliveryTime to (from, msg) | (to, msg) <- msgs, reachable to]
-        reachable to = maybe True not $ do
-            blacklist <- Map.lookup from tnPartitions
-            pure $ Set.member to blacklist
+        reachable to = maybe True not $
+            Set.member to <$> Map.lookup from tnPartitions
      in tn { tnMsgs = msgs' }
 
 networkNonTrivial :: TestNetwork v -> Bool

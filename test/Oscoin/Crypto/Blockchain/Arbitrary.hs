@@ -59,7 +59,7 @@ arbitraryValidBlockWith prevHeader txs = do
 
 arbitraryGenesis :: forall tx. (Binary tx, Arbitrary tx) => Gen (Block tx)
 arbitraryGenesis = do
-    txs <- resize 20 $ arbitrary :: Gen [tx]
+    txs <- resize 20 arbitrary :: Gen [tx]
     arbitraryGenesisWith txs
 
 arbitraryGenesisWith :: Binary tx => [tx] -> Gen (Block tx)

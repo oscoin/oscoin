@@ -4,9 +4,9 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude
 
-import qualified Prelude as Prelude
+import qualified Prelude
 
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
@@ -50,14 +50,14 @@ printBlockchain :: Binary tx => Blockchain tx -> IO ()
 printBlockchain blks = do
     printf "\n"
     for_ (zip heights (toList blks)) $ \(h, Block bh@BlockHeader{..} txs) -> do
-        printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (BS.unpack $ toHex $ headerHash bh)
-        printf "│ prevHash:   %-64s │\n" (BS.unpack $ toHex blockPrevHash)
+        printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (C8.unpack $ toHex $ headerHash bh)
+        printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
         printf "│ timestamp:  %-64d │\n" blockTimestamp
-        printf "│ rootHash:   %-64s │\n" (BS.unpack blockRootHash)
+        printf "│ rootHash:   %-64s │\n" (C8.unpack blockRootHash)
         printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
 
         for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) ->
-            printf "│ %03d:  %-64s       │\n" n (BS.unpack $ toHex $ hashTx tx)
+            printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hashTx tx)
 
         printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
   where

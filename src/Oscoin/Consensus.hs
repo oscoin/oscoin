@@ -29,6 +29,6 @@ loop st sub = do
     -- TODO: Obviously consensus shouldn't just apply the mempool transactions
     -- directly to the state tree.
     --
-    for_ evs $ \(Event tx) -> do
+    for_ evs $ \(Event tx) ->
         STree.update st (Account.applyTransaction (unsign tx))
     loop st sub

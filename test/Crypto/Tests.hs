@@ -27,7 +27,7 @@ type Key = Word8
 type Val = Word8
 
 instance MonadFail Gen where
-    fail err = error err
+    fail = error
 
 instance ByteArrayAccess Word8 where
     length = const 1
@@ -176,7 +176,7 @@ instance ( ByteArrayAccess k
          ) => Arbitrary (TreeTest k v) where
     arbitrary = do
         -- Create a non-empty tree.
-        tree <- arbitrary `suchThat` (\t -> not (Tree.null t)) :: Gen (Tree k v)
+        tree <- arbitrary `suchThat` (not . Tree.null) :: Gen (Tree k v)
         -- Select an arbitrary key from the tree.
         present <- elements (Tree.keys tree)
         -- Create an arbitrary key which isn't in the tree.
@@ -199,7 +199,7 @@ propProofAbsenceNotVerify TreeTest{..} = pure $
     root = Tree.merkleHash tTree
 
 testEmptyTreeProof :: Assertion
-testEmptyTreeProof = do
+testEmptyTreeProof =
     case Tree.lookupProof @SHA256 @Key @Val 1 Tree.empty of
         (Nothing, proof) -> Tree.verify proof Tree.emptyHash 1 Nothing @?= Right ()
         _                -> assertFailure "Key was found in empty tree"
@@ -213,8 +213,8 @@ propPredSucc t =
     preconditions :: Bool
     preconditions =
         and [ not $ Tree.null t
-            , not $ (fst <$> Tree.lookupMax t)  == Just maxBound
-            , not $ (fst <$> Tree.lookupMin t) == Just minBound
+            , (fst <$> Tree.lookupMax t) /= Just maxBound
+            , (fst <$> Tree.lookupMin t) /= Just minBound
             ]
     predicate :: Key -> Bool
     predicate k

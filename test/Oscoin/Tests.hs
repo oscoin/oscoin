@@ -173,7 +173,7 @@ testOscoinBlockchain = do
 
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
-    assertNoError $ validateBlockchain (block :| gblock : [])
+    assertNoError $ validateBlockchain (block :| [gblock])
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

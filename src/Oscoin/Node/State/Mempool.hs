@@ -91,7 +91,7 @@ new
     :: (Ord (Id tx), Monad m, MonadSTM m)
     => m (Handle tx)
 new =
-    Handle <$> (liftSTM $ newTVar $ evented mempty)
+    Handle <$> liftSTM (newTVar (evented mempty))
 
 -- | Add transactions to the mempool, notifying all subscribers.
 addTxs

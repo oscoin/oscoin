@@ -162,7 +162,7 @@ map = fmap
 
 -- | > foreach = flip fmap
 foreach :: Functor f => f a -> (a -> b) -> f b
-foreach = flip fmap
+foreach = flip map
 
 -- | > (++) = mappend
 infixr 5 ++
@@ -175,7 +175,7 @@ concat = mconcat
 
 -- | > intercalate = mconcat .: intersperse
 intercalate :: Monoid w => w -> [w] -> w
-intercalate xs xss = Prelude.mconcat (Data.List.intersperse xs xss)
+intercalate xs xss = concat (Data.List.intersperse xs xss)
 
 -- | Compute the sum of a finite list of numbers.
 sum :: (Foldable f, Num a) => f a -> a

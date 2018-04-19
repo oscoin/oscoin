@@ -54,6 +54,6 @@ notifySubscribers
     => Evented ev prod
     -> ev
     -> m ()
-notifySubscribers (Evented{evSubscribers}) ev =
+notifySubscribers Evented{evSubscribers} ev =
     for_ (Map.toList evSubscribers) $ \(_, chan) ->
         liftSTM $ writeTQueue chan (Event ev)

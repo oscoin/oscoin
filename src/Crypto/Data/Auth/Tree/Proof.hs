@@ -1,7 +1,7 @@
 module Crypto.Data.Auth.Tree.Proof where
 
-import           Prelude hiding (lookup, null, elem, foldr, map, traverse, pred, succ, last)
-import           Crypto.Data.Auth.Tree hiding (lookup)
+import           Prelude hiding (pred, succ)
+import           Crypto.Data.Auth.Tree
 import           Crypto.Data.Auth.Tree.Internal
 import           Crypto.Hash (HashAlgorithm, Digest)
 import           Data.ByteArray (ByteArrayAccess)
