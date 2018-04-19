@@ -15,7 +15,9 @@ class ( Eq (TestableTx a)
       , Eq a
       , Show (TestableTx a)
       , Ord (Scheduled a)
+      , Show (Scheduled a)
       , Ord (Addr a)
+      , Show (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
       , Protocol a ) => TestableNode a where
@@ -23,12 +25,14 @@ class ( Eq (TestableTx a)
 
     testableNode :: Addr a -> [Addr a] -> a
     testableNodeState :: a -> [TestableTx a]
+    testableNodeAddr :: a -> Addr a
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TestableTx (TestNode tx) = tx
 
     testableNode addr = TestNode addr []
     testableNodeState (TestNode _ s _) = s
+    testableNodeAddr (TestNode a _ _) = a
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
     type TestableTx (BufferedTestNode tx) = tx
@@ -41,6 +45,7 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
         , btnState  = []
         }
     testableNodeState = btnState
+    testableNodeAddr = btnAddr
 
 -- TestNetwork ----------------------------------------------------------------
 
@@ -50,8 +55,15 @@ data TestNetwork a = TestNetwork
     , tnPartitions :: Map (Addr a) (Set (Addr a))
     }
 
-deriving instance Show tx => Show (TestNetwork (TestNode         tx))
-deriving instance Show tx => Show (TestNetwork (BufferedTestNode tx))
+instance (TestableNode a, Show a) => Show (TestNetwork a) where
+    show TestNetwork{..} =
+        unlines [ "TestNetwork"
+                , " nodes: "      ++ show (map testableNodeAddr (toList tnNodes))
+                , " scheduled:\n" ++ scheduled
+                ]
+      where
+        scheduled = unlines
+            ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
 runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions) =
@@ -143,6 +155,10 @@ scheduledSender _                             = Nothing
 scheduledMessage :: Scheduled a -> Maybe (Msg a)
 scheduledMessage (ScheduledMessage _ _ (_, x)) = Just x
 scheduledMessage _                             = Nothing
+
+isTick :: Scheduled a -> Bool
+isTick (ScheduledTick _ _) = True
+isTick _                   = False
 
 instance Eq tx => Ord (Scheduled (TestNode tx)) where
     s <= s' = scheduledTick s <= scheduledTick s'

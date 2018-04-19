@@ -58,10 +58,10 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
     shrink (TestNetwork nodes msgs partitions) =
         map filterNetwork lessNodes ++ lessMsgs
       where
-        -- TODO: Don't shrink ticks.
-        msgs'     = shrinkList shrinkNothing (toList msgs)
+        msgs'     = shrinkList shrinkNothing (Set.toList $ Set.filter (not . isTick) msgs)
+        msgs''    = [xs <> toList (Set.filter isTick msgs) | xs <- msgs']
         nodes'    = shrinkList shrinkNothing (Map.toList nodes)
-        lessMsgs  = [TestNetwork nodes (Set.fromList ms) partitions | ms <- msgs']
+        lessMsgs  = [TestNetwork nodes (Set.fromList ms) partitions | ms <- msgs'']
         lessNodes = [TestNetwork (Map.fromList ns) msgs partitions  | ns <- nodes']
 
 filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
