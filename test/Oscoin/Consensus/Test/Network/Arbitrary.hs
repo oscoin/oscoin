@@ -56,8 +56,9 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
         pure $ network { tnMsgs = tnMsgs ++ Set.fromList disconnects }
 
     shrink (TestNetwork nodes msgs partitions) =
-        lessNodes ++ map filterNetwork lessMsgs
+        map filterNetwork lessNodes ++ lessMsgs
       where
+        -- TODO: Don't shrink ticks.
         msgs'     = shrinkList shrinkNothing (toList msgs)
         nodes'    = shrinkList shrinkNothing (Map.toList nodes)
         lessMsgs  = [TestNetwork nodes (Set.fromList ms) partitions | ms <- msgs']
