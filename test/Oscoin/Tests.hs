@@ -76,7 +76,7 @@ testOscoinAPI = runSession [("acme", acme)] $ do
 
     -- The response is a transaction receipt, with the transaction
     -- id (hash).
-    let txId = fromJust $ responseBody resp ^? key "tx" . _String
+    let txId = responseBody resp ^?! key "tx" . _String
 
     -- Get the mempool once again, make sure the transaction is in there.
     mp <- responseBody <$> get "/node/mempool"

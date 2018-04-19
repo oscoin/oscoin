@@ -49,8 +49,8 @@ newtype DummyView (f :: * -> *) tx a = DummyView (State (f tx) a)
              )
 
 runDummyView :: DummyView f tx a -> f tx -> (a, f tx)
-runDummyView (DummyView inner) xs =
-    runState inner xs
+runDummyView (DummyView inner) =
+    runState inner
 
 instance Context (DummyView f tx) where
     type T   (DummyView f tx) = f tx
@@ -93,7 +93,7 @@ instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
 instance (Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TestableTx (TestNode tx) = tx
 
-    testableNode addr peers = TestNode addr [] peers
+    testableNode addr = TestNode addr []
     testableNodeState (TestNode _ s _) = s
     isResting _ = True
 

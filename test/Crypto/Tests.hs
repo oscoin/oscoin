@@ -250,16 +250,16 @@ propFirst :: Tree Key Val -> Property
 propFirst tree =
     not (Tree.null tree) ==>
         case Tree.lookupMin tree of
-            Just (k, _) -> Tree.pred k tree == Nothing
-            _            -> False
+            Just (k, _) -> isNothing (Tree.pred k tree)
+            _           -> False
 
 -- | The last element of a tree has no successor.
 propLast :: Tree Key Val -> Property
 propLast tree =
     not (Tree.null tree) ==>
         case Tree.lookupMax tree of
-            Just (k, _) -> Tree.succ k tree == Nothing
-            _            -> False
+            Just (k, _) -> isNothing (Tree.succ k tree)
+            _           -> False
 
 propSize :: Tree Key Val -> Bool
 propSize tree =
