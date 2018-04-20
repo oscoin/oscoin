@@ -3,6 +3,7 @@ module Oscoin.Consensus.Test.Network where
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Class
+import           Oscoin.Consensus.Simple
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -46,6 +47,19 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
         }
     testableNodeState = btnState
     testableNodeAddr = btnAddr
+
+instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode tx) where
+    type TestableTx (SimpleNode tx) = tx
+
+    testableNode addr peers = SimpleNode
+        { snAddr   = addr
+        , snPeers  = peers
+        , snBuffer = []
+        , snTick   = 0
+        , snState  = []
+        }
+    testableNodeState = snState
+    testableNodeAddr = snAddr
 
 -- TestNetwork ----------------------------------------------------------------
 
@@ -166,9 +180,14 @@ instance Eq tx => Ord (Scheduled (TestNode tx)) where
 instance Eq tx => Ord (Scheduled (BufferedTestNode tx)) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
+instance Eq tx => Ord (Scheduled (SimpleNode tx)) where
+    s <= s' = scheduledTick s <= scheduledTick s'
+
 deriving instance Eq tx   => Eq   (Scheduled (TestNode tx))
 deriving instance Show tx => Show (Scheduled (TestNode tx))
 
 deriving instance Eq   tx => Eq   (Scheduled (BufferedTestNode tx))
 deriving instance Show tx => Show (Scheduled (BufferedTestNode tx))
 
+deriving instance Eq   tx => Eq   (Scheduled (SimpleNode tx))
+deriving instance Show tx => Show (Scheduled (SimpleNode tx))

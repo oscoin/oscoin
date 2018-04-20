@@ -60,4 +60,3 @@ instance Ord tx => Protocol (BufferedTestNode tx) where
         outgoing = [(p, msg) | msg <- btnBuffer, p <- btnPeers]
 
     epoch _ = 10
-
