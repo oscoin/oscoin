@@ -21,6 +21,9 @@ class ( Eq (TestableTx a)
       , Show (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
+      , Eq (Msg a)
+      , Show (Tick a)
+      , Show (Msg a)
       , Protocol a ) => TestableNode a where
     type TestableTx a :: *
 
@@ -150,6 +153,12 @@ data Scheduled a =
     | Disconnect       (Tick a) (Addr a) (Addr a)
     | Reconnect        (Tick a) (Addr a) (Addr a)
 
+deriving instance TestableNode a => Eq (Scheduled a)
+deriving instance TestableNode a => Show (Scheduled a)
+
+instance TestableNode a => Ord (Scheduled a) where
+    s <= s' = scheduledTick s <= scheduledTick s'
+
 scheduledTick :: Scheduled a -> Tick a
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
@@ -173,21 +182,3 @@ scheduledMessage _                             = Nothing
 isTick :: Scheduled a -> Bool
 isTick (ScheduledTick _ _) = True
 isTick _                   = False
-
-instance Eq tx => Ord (Scheduled (TestNode tx)) where
-    s <= s' = scheduledTick s <= scheduledTick s'
-
-instance Eq tx => Ord (Scheduled (BufferedTestNode tx)) where
-    s <= s' = scheduledTick s <= scheduledTick s'
-
-instance Eq tx => Ord (Scheduled (SimpleNode tx)) where
-    s <= s' = scheduledTick s <= scheduledTick s'
-
-deriving instance Eq tx   => Eq   (Scheduled (TestNode tx))
-deriving instance Show tx => Show (Scheduled (TestNode tx))
-
-deriving instance Eq   tx => Eq   (Scheduled (BufferedTestNode tx))
-deriving instance Show tx => Show (Scheduled (BufferedTestNode tx))
-
-deriving instance Eq   tx => Eq   (Scheduled (SimpleNode tx))
-deriving instance Show tx => Show (Scheduled (SimpleNode tx))
