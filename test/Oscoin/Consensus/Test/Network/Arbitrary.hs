@@ -41,6 +41,12 @@ arbitraryHealthyNetwork = do
         , tnPartitions = Map.empty
         }
 
+arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Gen (TestNetwork a)
+arbitraryPartitionedNetwork t = do
+    net@TestNetwork{..} <- arbitraryHealthyNetwork
+    part                <- arbitraryBisectPartition t (Map.keys tnNodes)
+    pure $ net { tnMsgs = Set.insert part tnMsgs }
+
 arbitraryDisconnects :: TestableNode a => [Addr a] -> Gen [Scheduled a]
 arbitraryDisconnects addrs =
     vectorOf kidSize $ do
@@ -58,7 +64,8 @@ arbitraryBisectPartition t addrs = do
     middle = length addrs `div` 2
     partitions = do
         (l, r) <- splitAt middle <$> shuffle addrs
-        pure $ Map.fromList [(addr, Set.fromList r) | addr <- l]
+        pure $ Map.fromList $ [(addr, Set.fromList r) | addr <- l]
+                           ++ [(addr, Set.fromList l) | addr <- r]
 
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
