@@ -49,6 +49,17 @@ arbitraryDisconnects addrs =
         to <- elements addrs
         pure $ Disconnect (fromIntegral at) from to
 
+arbitraryBisectPartition :: TestableNode a => Tick a -> [Addr a] -> Gen (Scheduled a)
+arbitraryBisectPartition t [] =
+    pure (Partition t mempty)
+arbitraryBisectPartition t addrs = do
+    Partition t <$> partitions
+  where
+    middle = length addrs `div` 2
+    partitions = do
+        (l, r) <- splitAt middle <$> shuffle addrs
+        pure $ Map.fromList [(addr, Set.fromList r) | addr <- l]
+
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
         network@TestNetwork{..} <- arbitraryHealthyNetwork

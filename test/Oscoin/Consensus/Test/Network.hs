@@ -69,8 +69,10 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode tx) where
 data TestNetwork a = TestNetwork
     { tnNodes      :: Map (Addr a) a
     , tnMsgs       :: Set (Scheduled a)
-    , tnPartitions :: Map (Addr a) (Set (Addr a))
+    , tnPartitions :: Partitions a
     }
+
+type Partitions a = Map (Addr a) (Set (Addr a))
 
 instance (TestableNode a, Show a) => Show (TestNetwork a) where
     show TestNetwork{..} =
@@ -150,11 +152,12 @@ networkNonTrivial (TestNetwork ns ms _)
 data Scheduled a =
       ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
+    | Partition        (Tick a) (Partitions a)
     | Disconnect       (Tick a) (Addr a) (Addr a)
     | Reconnect        (Tick a) (Addr a) (Addr a)
 
-deriving instance TestableNode a => Eq (Scheduled a)
 deriving instance TestableNode a => Show (Scheduled a)
+deriving instance TestableNode a => Eq (Scheduled a)
 
 instance TestableNode a => Ord (Scheduled a) where
     s <= s' = scheduledTick s <= scheduledTick s'
@@ -162,12 +165,14 @@ instance TestableNode a => Ord (Scheduled a) where
 scheduledTick :: Scheduled a -> Tick a
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
+scheduledTick (Partition t _)          = t
 scheduledTick (Disconnect t _ _)       = t
 scheduledTick (Reconnect t _ _)        = t
 
 scheduledReceivers :: Scheduled a -> [Addr a]
 scheduledReceivers (ScheduledMessage _ a _) = [a]
 scheduledReceivers (ScheduledTick _ a)      = [a]
+scheduledReceivers (Partition _ _)          = [] -- XXX
 scheduledReceivers (Disconnect _ f t)       = [t, f]
 scheduledReceivers (Reconnect _ f t)        = [t, f]
 
