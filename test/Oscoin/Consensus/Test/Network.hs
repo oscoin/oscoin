@@ -182,3 +182,7 @@ scheduledMessage _                             = Nothing
 isTick :: Scheduled a -> Bool
 isTick (ScheduledTick _ _) = True
 isTick _                   = False
+
+isMsg :: Scheduled a -> Bool
+isMsg (ScheduledMessage _ _ _) = True
+isMsg _                        = False
