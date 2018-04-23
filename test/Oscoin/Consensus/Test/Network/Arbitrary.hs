@@ -67,6 +67,18 @@ arbitraryPerfectPartition t addrs = do
         pure $ Map.fromList $ [(addr, Set.fromList r) | addr <- l]
                            ++ [(addr, Set.fromList l) | addr <- r]
 
+arbitraryLonerPartition :: TestableNode a => Tick a -> [Addr a] -> Gen (Scheduled a)
+arbitraryLonerPartition t addrs =
+    Partition t <$> partitions
+  where
+    partitions = do
+        addrs' <- shuffle addrs
+        pure . Map.fromList $ case addrs' of
+            a : as ->
+                [(a, mempty)] ++ [(addr, Set.fromList as) | addr <- as]
+            [] ->
+                mempty
+
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
         network@TestNetwork{..} <- arbitraryHealthyNetwork
