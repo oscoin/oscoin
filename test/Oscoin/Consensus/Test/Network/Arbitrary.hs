@@ -42,10 +42,10 @@ arbitraryHealthyNetwork = do
         }
 
 arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Gen (TestNetwork a)
-arbitraryPartitionedNetwork t = do
+arbitraryPartitionedNetwork at = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
-    part                <- arbitraryPerfectPartition t (Map.keys tnNodes)
-    pure $ net { tnMsgs = Set.insert part tnMsgs }
+    part                <- arbitraryPerfectPartition (Map.keys tnNodes)
+    pure $ net { tnMsgs = Set.insert (Partition at part) tnMsgs }
 
 arbitraryDisconnects :: TestableNode a => [Addr a] -> Gen [Scheduled a]
 arbitraryDisconnects addrs =
@@ -55,29 +55,24 @@ arbitraryDisconnects addrs =
         to <- elements addrs
         pure $ Disconnect (fromIntegral at) from to
 
-arbitraryPerfectPartition :: TestableNode a => Tick a -> [Addr a] -> Gen (Scheduled a)
-arbitraryPerfectPartition t [] =
-    pure (Partition t mempty)
-arbitraryPerfectPartition t addrs = do
-    Partition t <$> partitions
+arbitraryPerfectPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryPerfectPartition [] =
+    pure mempty
+arbitraryPerfectPartition addrs = do
+    (l, r) <- splitAt middle <$> shuffle addrs
+    pure $ Map.fromList $ [(addr, Set.fromList r) | addr <- l]
+                       ++ [(addr, Set.fromList l) | addr <- r]
   where
     middle = length addrs `div` 2
-    partitions = do
-        (l, r) <- splitAt middle <$> shuffle addrs
-        pure $ Map.fromList $ [(addr, Set.fromList r) | addr <- l]
-                           ++ [(addr, Set.fromList l) | addr <- r]
 
-arbitraryLonerPartition :: TestableNode a => Tick a -> [Addr a] -> Gen (Scheduled a)
-arbitraryLonerPartition t addrs =
-    Partition t <$> partitions
-  where
-    partitions = do
-        addrs' <- shuffle addrs
-        pure . Map.fromList $ case addrs' of
-            a : as ->
-                [(a, mempty)] ++ [(addr, Set.fromList as) | addr <- as]
-            [] ->
-                mempty
+arbitraryLonerPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryLonerPartition addrs = do
+    addrs' <- shuffle addrs
+    pure . Map.fromList $ case addrs' of
+        a : as ->
+            [(a, mempty)] ++ [(addr, Set.fromList as) | addr <- as]
+        [] ->
+            mempty
 
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = do
