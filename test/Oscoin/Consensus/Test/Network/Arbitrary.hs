@@ -44,7 +44,8 @@ arbitraryHealthyNetwork = do
 arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Gen (TestNetwork a)
 arbitraryPartitionedNetwork at = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
-    part                <- arbitraryPerfectPartition (Map.keys tnNodes)
+    part                <- oneof [ arbitraryPerfectPartition (Map.keys tnNodes)
+                                 , arbitraryLonerPartition   (Map.keys tnNodes) ]
     pure $ net { tnMsgs = Set.insert (Partition at part) tnMsgs }
 
 arbitraryDisconnects :: TestableNode a => [Addr a] -> Gen [Scheduled a]
