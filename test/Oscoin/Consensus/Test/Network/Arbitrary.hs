@@ -61,8 +61,8 @@ arbitraryPerfectPartition [] =
     pure mempty
 arbitraryPerfectPartition addrs = do
     (l, r) <- splitAt middle <$> shuffle addrs
-    pure $ Map.fromList $ [(addr, Set.fromList (filter (/= addr) l)) | addr <- l]
-                       ++ [(addr, Set.fromList (filter (/= addr) r)) | addr <- r]
+    pure $ Map.fromList $ [(addr, Set.fromList r) | addr <- l]
+                       ++ [(addr, Set.fromList l) | addr <- r]
   where
     middle = length addrs `div` 2
 
@@ -71,7 +71,19 @@ arbitraryLonerPartition addrs = do
     addrs' <- shuffle addrs
     pure . Map.fromList $ case addrs' of
         a' : as ->
-            [(a', mempty)] ++ [(a, Set.fromList (filter (/= a) as)) | a <- as]
+            (a', Set.fromList as) : [(a, Set.singleton a') | a <- as]
+        [] ->
+            mempty
+
+arbitraryBridgePartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryBridgePartition addrs = do
+    addrs' <- shuffle addrs
+    pure . Map.fromList $ case addrs' of
+        _ : as | middle <- length as `div` 2
+               , (l, r) <- splitAt middle as ->
+            concat [ [(a, Set.fromList r) | a <- l]
+                   , [(a, Set.fromList l) | a <- r]
+                   ]
         [] ->
             mempty
 
