@@ -93,6 +93,8 @@ runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg
     runNetwork (scheduleMessages tick to msgs tn)
   where
     (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _)  =
+    runNetwork (TestNetwork nodes ms partitions)
 runNetwork (TestNetwork nodes (Set.minView -> Just (Disconnect _ from to, ms)) partitions)  =
     runNetwork (TestNetwork nodes ms newPartitions)
   where
