@@ -41,11 +41,13 @@ arbitraryHealthyNetwork = do
         , tnPartitions = Map.empty
         }
 
-arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Gen (TestNetwork a)
-arbitraryPartitionedNetwork at = do
+arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Maybe (Tick a) -> Gen (TestNetwork a)
+arbitraryPartitionedNetwork partAt mayHeal = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
     part                <- arbitraryPartition (Map.keys tnNodes)
-    pure $ net { tnMsgs = Set.insert (Partition at part) tnMsgs }
+    pure $ net { tnMsgs = (Set.insert (Partition partAt part) . heal) tnMsgs }
+  where
+    heal = maybe identity (Set.insert . Heal) mayHeal
 
 arbitraryDisconnects :: TestableNode a => [Addr a] -> Gen [Scheduled a]
 arbitraryDisconnects addrs =
