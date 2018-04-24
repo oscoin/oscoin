@@ -168,7 +168,6 @@ library
     -fno-warn-name-shadowing
     -fno-warn-unused-do-bind
     -fno-warn-unused-local-binds
-    -fprint-unicode-syntax
     -fno-print-expanded-synonyms
 
 executable oscoin
@@ -265,7 +264,6 @@ test-suite test
     -fno-warn-name-shadowing
     -fno-warn-unused-do-bind
     -fno-warn-unused-local-binds
-    -fprint-unicode-syntax
     -threaded -rtsopts -with-rtsopts=-N
 
 source-repository head
