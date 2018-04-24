@@ -93,6 +93,10 @@ runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg
     runNetwork (scheduleMessages tick to msgs tn)
   where
     (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _)  =
+    runNetwork (TestNetwork nodes ms partitions)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _)  =
+    runNetwork (TestNetwork nodes ms mempty)
 runNetwork (TestNetwork nodes (Set.minView -> Just (Disconnect _ from to, ms)) partitions)  =
     runNetwork (TestNetwork nodes ms newPartitions)
   where
@@ -153,6 +157,7 @@ data Scheduled a =
       ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
     | ScheduledTick    (Tick a) (Addr a)
     | Partition        (Tick a) (Partitions a)
+    | Heal             (Tick a)
     | Disconnect       (Tick a) (Addr a) (Addr a)
     | Reconnect        (Tick a) (Addr a) (Addr a)
 
@@ -166,6 +171,7 @@ scheduledTick :: Scheduled a -> Tick a
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 scheduledTick (Partition t _)          = t
+scheduledTick (Heal t)                 = t
 scheduledTick (Disconnect t _ _)       = t
 scheduledTick (Reconnect t _ _)        = t
 
@@ -173,6 +179,7 @@ scheduledReceivers :: Scheduled a -> [Addr a]
 scheduledReceivers (ScheduledMessage _ a _) = [a]
 scheduledReceivers (ScheduledTick _ a)      = [a]
 scheduledReceivers (Partition _ _)          = [] -- XXX
+scheduledReceivers (Heal _)                 = []
 scheduledReceivers (Disconnect _ f t)       = [t, f]
 scheduledReceivers (Reconnect _ f t)        = [t, f]
 
