@@ -44,8 +44,7 @@ arbitraryHealthyNetwork = do
 arbitraryPartitionedNetwork :: TestableNode a => Tick a -> Gen (TestNetwork a)
 arbitraryPartitionedNetwork at = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
-    part                <- oneof [ arbitraryPerfectPartition (Map.keys tnNodes)
-                                 , arbitraryLonerPartition   (Map.keys tnNodes) ]
+    part                <- arbitraryPartition (Map.keys tnNodes)
     pure $ net { tnMsgs = Set.insert (Partition at part) tnMsgs }
 
 arbitraryDisconnects :: TestableNode a => [Addr a] -> Gen [Scheduled a]
@@ -55,6 +54,13 @@ arbitraryDisconnects addrs =
         from <- elements addrs
         to <- elements addrs
         pure $ Disconnect (fromIntegral at) from to
+
+arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryPartition addrs =
+    oneof [ arbitraryPerfectPartition addrs
+          , arbitraryLonerPartition   addrs
+          , arbitraryBridgePartition  addrs
+          ]
 
 arbitraryPerfectPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPerfectPartition [] =
