@@ -1,20 +1,21 @@
 module Oscoin.Crypto.PubKey
     ( Signed(..)
+    , PublicKey
+    , PrivateKey
     , generateKeyPair
     , sign
     , signed
     , unsign
     , verify
-    , module Crypto.PubKey.ECC.ECDSA
     ) where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed)
 
 import           Crypto.PubKey.ECC.Generate (generate)
-import           Crypto.PubKey.ECC.ECDSA (PublicKey(..), PrivateKey, Signature(..))
+import           Crypto.PubKey.ECC.ECDSA (Signature(..))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), Point(..), getCurveByName)
+import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import           Crypto.Random.Types (MonadRandom)
 
 import           Data.Binary (Binary)
@@ -24,6 +25,18 @@ import           Data.Aeson (FromJSON(..), ToJSON(..), withText, withObject, obj
 import qualified Data.ByteString.Base64.Extended as Base64
 import           Data.ByteString.Base64.Extended (Base64(..))
 import           Web.HttpApiData
+
+data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
+    deriving (Show)
+
+instance Eq PublicKey where
+    (==) (PublicKey _ h) (PublicKey _ h') = h == h'
+
+instance Ord PublicKey where
+    (<=) (PublicKey _ h) (PublicKey _ h') = h <= h'
+
+newtype PrivateKey = PrivateKey ECDSA.PrivateKey
+    deriving (Show, Eq)
 
 instance Ord Signature where
     (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
@@ -72,25 +85,20 @@ instance FromJSON msg => FromJSON (Signed msg) where
         pure $ signed sig msg
 
 instance Binary PublicKey where
-    put (PublicKey curve (Point x y)) | curve == getCurveByName SEC_p256k1 =
-        Binary.put x >> Binary.put y
-    put _ =
-        error "can't encode PublicKey curve or point type"
+    put (PublicKey key _) = Binary.put key
     get = do
-        x <- Binary.get @Integer
-        y <- Binary.get @Integer
-
-        pure $ PublicKey (getCurveByName SEC_p256k1) (Point x y)
+        key <- Binary.get
+        pure $ PublicKey key (hash key)
 
 -- | Generate a new random keypair.
 generateKeyPair :: MonadRandom m => m (PublicKey, PrivateKey)
 generateKeyPair = do
     (pk, sk) <- generate (getCurveByName SEC_p256k1)
-    pure (pk, sk)
+    pure (PublicKey pk (hash pk), PrivateKey sk)
 
 -- | Sign a message with a private key.
 sign :: (MonadRandom m, Binary msg) => PrivateKey -> msg -> m (Signed msg)
-sign key msg =
+sign (PrivateKey key) msg =
     Signed msg <$> ECDSA.sign key hashAlgorithm (LBS.toStrict $ Binary.encode msg)
 
 -- | Create a signed message from a message and a signature.
@@ -103,5 +111,5 @@ unsign = sigMessage
 
 -- | Verify a signed message with the public key.
 verify :: Binary msg => PublicKey -> Signed msg -> Bool
-verify key (Signed msg sig) =
+verify (PublicKey key _) (Signed msg sig) =
     ECDSA.verify hashAlgorithm key sig (LBS.toStrict $ Binary.encode msg)

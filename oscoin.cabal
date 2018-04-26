@@ -65,7 +65,8 @@ library
     , Crypto.Data.Auth.Tree.Proof
 
   other-modules:
-      Data.ByteString.Base64.Extended
+      Crypto.PubKey.ECC.ECDSA.Extended
+    , Data.ByteString.Base64.Extended
 
   build-depends:
       base

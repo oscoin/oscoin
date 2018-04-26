@@ -15,6 +15,8 @@ import           Oscoin.Prelude
 
 import           Crypto.Hash (Digest, Blake2b_256(..))
 import qualified Crypto.Hash as Crypto
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import           Crypto.PubKey.ECC.ECDSA.Extended ()
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Put as Binary
 import qualified Data.Binary.Get as Binary
@@ -121,3 +123,5 @@ instance Hashable ByteString where
 instance (Binary a, ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)
     hash Nothing  = Hashed zeroHash
+
+instance Hashable ECDSA.PublicKey
