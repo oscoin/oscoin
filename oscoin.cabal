@@ -30,6 +30,8 @@ library
     , Oscoin.Patch
     , Oscoin.User
 
+    , Oscoin.Prototype.V1
+
     , Oscoin.Crypto.Blockchain
     , Oscoin.Crypto.Blockchain.Block
     , Oscoin.Crypto.Hash
