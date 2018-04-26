@@ -5,8 +5,10 @@ import           Prelude
 import           Data.ByteString
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Aeson
+import           Data.Aeson hiding (encode)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import qualified Data.Binary as Binary
+import           Data.Binary (Binary)
 
 newtype Base64 a = Base64 ByteString
     deriving (Show, Eq, Ord)
@@ -23,6 +25,9 @@ encode bs = Base64 (Base64.encode bs)
 
 encodeLazy :: LBS.ByteString -> Base64 a
 encodeLazy bs = Base64 (Base64.encode (LBS.toStrict bs))
+
+encodeBinary :: Binary a => a -> Base64 a
+encodeBinary x = encodeLazy (Binary.encode x)
 
 decode :: Base64 a -> ByteString
 decode (Base64 bs) = Base64.decodeLenient bs
