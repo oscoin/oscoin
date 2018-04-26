@@ -41,37 +41,42 @@ data Patch = Patch
     , patchHash      :: Hashed Patch
     , patchMessage   :: Text
     , patchChangeset :: Text
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Ord)
 
 -- Chain ----------------------------------------------------------------------
 
+-- | A chain has a path which can be used as a unique identifier, and a folding
+-- function.
 data Chain tx m s = Chain
-    { fold :: Fold (Tx tx) m s }
+    { chainPath   :: [Key]
+    , chainFold   :: Fold (Tx tx) m s
+    , chainReadTx :: ByteString -> Maybe tx
+    }
 
 genesisChain :: MonadFork m => Chain GenesisTx m GenesisState
 genesisChain = Chain
-    { fold = genesisFold }
+    { chainPath = [], chainFold = genesisFold, chainReadTx = const Nothing }
 
-accountChain :: MonadFork m => Chain AccountTx m AccountState
-accountChain = Chain
-    { fold = accountFold }
+accountChain :: MonadFork m => [Key] -> Chain AccountTx m AccountState
+accountChain path = Chain
+    { chainPath = path, chainFold = accountFold, chainReadTx = const Nothing }
 
-repoChain :: MonadFork m => Chain RepoTx m RepoState
-repoChain = Chain
-    { fold = repoFold }
+repoChain :: MonadFork m => [Key] -> Chain RepoTx m RepoState
+repoChain path = Chain
+    { chainPath = path, chainFold = repoFold, chainReadTx = const Nothing }
 
 -- FOLDS ----------------------------------------------------------------------
 
 type Fold tx m s = [tx] -> s -> m s
 
 class Monad m => MonadFork m where
-    fork :: Fold tx m s -> s -> m ()
+    fork :: [Key] -> Fold tx m s -> s -> m ()
 
 genesisFold :: MonadFork m => Fold (Tx GenesisTx) m GenesisState
 genesisFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenAccount id addr pk -> do
-            fork accountFold (accountState id addr)
+            fork [id] accountFold (accountState id addr)
             genesisFold txs s { genesisAccounts = Map.insert id pk (genesisAccounts s) }
         Bond from to val ->
             let bond       = Bonded from to val
@@ -81,7 +86,16 @@ genesisFold (Tx{txPayload = tx}:txs) s =
 genesisFold [] s = pure s
 
 accountFold :: MonadFork m => Fold (Tx AccountTx) m AccountState
-accountFold _txs s = pure s
+accountFold (Tx{txPayload = tx}:txs) s =
+    case tx of
+        OpenRepository id -> do
+            fork [accountId s, id] repoFold (repoState id (accountKeys s))
+            accountFold txs s { accountRepos = Set.insert id (accountRepos s) }
+        CloseRepository id ->
+            accountFold txs s { accountRepos = Set.delete id (accountRepos s) }
+        AccountKeys pks ->
+            accountFold txs s { accountKeys = Set.union (Set.fromList pks) (accountKeys s) }
+accountFold [] s = pure s
 
 repoFold :: MonadFork m => Fold (Tx RepoTx) m RepoState
 repoFold _txs s = pure s
@@ -160,3 +174,7 @@ data RepoState = RepoState
     , repoPatches :: Set Patch
     , repoKeys    :: Set PublicKey
     } deriving (Show)
+
+repoState :: RepoId -> Set PublicKey -> RepoState
+repoState id keys =
+    RepoState id mempty keys
