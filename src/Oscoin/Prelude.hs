@@ -12,6 +12,7 @@ module Oscoin.Prelude
     , module Data.Semigroup
     , module Data.Traversable
     , module Data.Foldable
+    , module Data.Functor.Identity
     , module Data.Text
     , module Data.ByteString
     , module Data.Map
@@ -82,6 +83,7 @@ import           Data.Default (def, Default)
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.Function ((&))
 import           Data.Functor (void)
+import           Data.Functor.Identity (Identity)
 import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
 import           Data.String (IsString)
 import           Data.Word
