@@ -10,13 +10,12 @@ import           Oscoin.Crypto.Hash
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
-import           Data.Time.Clock (NominalDiffTime)
 
 data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
     , snPeers   :: [Addr (SimpleNode tx)]
     , snBuffer  :: Set tx
-    , snTick    :: Tick (SimpleNode tx)
+    , snTick    :: Tick
     , snStore   :: BlockStore tx
     } deriving (Eq, Show)
 
@@ -75,7 +74,7 @@ offset SimpleNode{..} =
   where
     peersLtUs = filter (< snAddr) snPeers
 
-shouldCutBlock :: (Ord tx, Binary tx) => SimpleNode tx -> Tick (SimpleNode tx) -> Bool
+shouldCutBlock :: (Ord tx, Binary tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
@@ -93,7 +92,6 @@ shouldCutBlock sn@SimpleNode{..} at =
 instance (Binary tx, Ord tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
     type Addr (SimpleNode tx) = Word8
-    type Tick (SimpleNode tx) = NominalDiffTime
 
     step sn@SimpleNode{..} _ (Just (_, ClientTx msg))
         | isNovelTx msg sn =

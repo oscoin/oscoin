@@ -21,7 +21,6 @@ class ( Eq (TestableTx a)
       , Eq (Msg a)
       , Show (Scheduled a)
       , Show (Addr a)
-      , Show (Tick a)
       , Show (Msg a)
       , Protocol a ) => TestableNode a where
     type TestableTx a :: *
@@ -123,7 +122,7 @@ runNetwork tn@(TestNetwork _ ms _)
 
 deliverTick
     :: (TestableNode a)
-    => Tick a -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+    => Tick -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverTick tick to tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick Nothing
@@ -134,7 +133,7 @@ deliverTick tick to tn@TestNetwork{tnNodes}
 
 deliverMessage
     :: (TestableNode a)
-    => Tick a -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
+    => Tick -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
 deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick (Just (from, msg))
@@ -145,7 +144,7 @@ deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
 
 scheduleMessages
     :: (TestableNode a)
-    => Tick a -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
+    => Tick -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
 scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions} =
     let deliveryTime = t + 1
         msgs'        = Set.union scheduled tnMsgs
@@ -163,12 +162,12 @@ networkNonTrivial (TestNetwork ns ms _)
 -- Scheduled ------------------------------------------------------------------
 
 data Scheduled a =
-      ScheduledMessage (Tick a) (Addr a) (Addr a, Msg a)
-    | ScheduledTick    (Tick a) (Addr a)
-    | Partition        (Tick a) (Partitions a)
-    | Heal             (Tick a)
-    | Disconnect       (Tick a) (Addr a) (Addr a)
-    | Reconnect        (Tick a) (Addr a) (Addr a)
+      ScheduledMessage Tick (Addr a) (Addr a, Msg a)
+    | ScheduledTick    Tick (Addr a)
+    | Partition        Tick (Partitions a)
+    | Heal             Tick
+    | Disconnect       Tick (Addr a) (Addr a)
+    | Reconnect        Tick (Addr a) (Addr a)
 
 deriving instance TestableNode a => Show (Scheduled a)
 deriving instance TestableNode a => Eq (Scheduled a)
@@ -176,7 +175,7 @@ deriving instance TestableNode a => Eq (Scheduled a)
 instance TestableNode a => Ord (Scheduled a) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-scheduledTick :: Scheduled a -> Tick a
+scheduledTick :: Scheduled a -> Tick
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 scheduledTick (Partition t _)          = t

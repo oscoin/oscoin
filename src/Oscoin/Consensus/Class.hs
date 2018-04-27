@@ -2,6 +2,8 @@ module Oscoin.Consensus.Class where
 
 import           Oscoin.Prelude
 
+import           Data.Time.Clock (NominalDiffTime)
+
 class Context m where
     type T m
     type Key m
@@ -11,6 +13,7 @@ class Context m where
     del :: Key m -> m (T m)
 
 type Score = [ByteString]
+type Tick  = NominalDiffTime
 
 class View m where
     type Transaction m
@@ -18,10 +21,9 @@ class View m where
 
     apply :: Maybe (BlockHeader m) -> [Transaction m] -> m ()
 
-class (Ord (Addr a), Ord (Tick a), Num (Tick a)) => Protocol a where
+class Ord (Addr a) => Protocol a where
     type Msg a
     type Addr a
-    type Tick a
 
-    step :: a -> Tick a -> Maybe (Addr a, Msg a) -> (a, [(Addr a, Msg a)])
-    epoch :: a -> Tick a
+    step :: a -> Tick -> Maybe (Addr a, Msg a) -> (a, [(Addr a, Msg a)])
+    epoch :: a -> Tick

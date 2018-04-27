@@ -7,15 +7,12 @@ import Oscoin.Prelude
 import Oscoin.Consensus.Test.View
 import Oscoin.Consensus.Class
 
-import Data.Time.Clock (NominalDiffTime)
-
 data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
     deriving (Eq, Ord, Show)
 
 instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
     type Msg  (TestNode tx) = tx
     type Addr (TestNode tx) = Word8
-    type Tick (TestNode tx) = NominalDiffTime
 
     step tn@(TestNode a state peers) _at (Just (_, msg))
         | msg `elem` state = (tn, [])
@@ -34,14 +31,13 @@ data BufferedTestNode tx = BufferedTestNode
     { btnAddr    :: Addr (BufferedTestNode tx)
     , btnPeers   :: [Addr (BufferedTestNode tx)]
     , btnBuffer  :: [Msg (BufferedTestNode tx)]
-    , btnTick    :: Tick (BufferedTestNode tx)
+    , btnTick    :: Tick
     , btnState   :: [tx]
     } deriving (Eq, Ord, Show)
 
 instance Ord tx => Protocol (BufferedTestNode tx) where
     type Msg  (BufferedTestNode tx) = tx
     type Addr (BufferedTestNode tx) = Word8
-    type Tick (BufferedTestNode tx) = NominalDiffTime
 
     step btn@BufferedTestNode{..} _ (Just (_, msg))
         | msg `elem` btnState =
