@@ -23,6 +23,7 @@
 
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 
+- ignore: {name: Use ++}
 - ignore: {name: Use &&}
 - ignore: {name: Eta reduce}
 - ignore: {name: Use lambda-case}
