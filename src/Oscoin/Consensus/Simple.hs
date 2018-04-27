@@ -78,9 +78,9 @@ shouldCutBlock :: (Ord tx, Binary tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
-    time = fromIntegral $ round at :: Int
-    lastTick = fromIntegral $ round snTick :: Int
-    stepTime = fromIntegral . round $ epoch sn :: Int
+    time = round at
+    lastTick = round snTick
+    stepTime = round (epoch sn)
     nTotalPeers = 1 + length snPeers
     relativeBlockTime = stepTime * nTotalPeers
     beenAWhile = (time - lastTick) >= relativeBlockTime
