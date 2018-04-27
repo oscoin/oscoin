@@ -82,7 +82,7 @@ import           Data.Default (def, Default)
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.Function ((&))
 import           Data.Functor (void)
-import           Data.Maybe (fromJust, isJust, isNothing)
+import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
 import           Data.String (IsString)
 import           Data.Word
 import           Control.Applicative (liftA2)

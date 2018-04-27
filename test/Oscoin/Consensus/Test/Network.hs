@@ -4,7 +4,9 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
+import           Oscoin.Consensus.Simple.Arbitrary ()
 
+import           Data.Binary (Binary)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
@@ -28,14 +30,17 @@ class ( Eq (TestableTx a)
     type TestableTx a :: *
 
     testableNode :: Addr a -> [Addr a] -> a
-    testableNodeState :: a -> [TestableTx a]
+    testablePostState :: a -> [TestableTx a]
+    testablePreState :: a -> Msg a -> [TestableTx a]
     testableNodeAddr :: a -> Addr a
+
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     type TestableTx (TestNode tx) = tx
 
     testableNode addr = TestNode addr []
-    testableNodeState (TestNode _ s _) = s
+    testablePreState _ tx = [tx]
+    testablePostState (TestNode _ s _) = s
     testableNodeAddr (TestNode a _ _) = a
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
@@ -48,20 +53,27 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
         , btnTick   = 0
         , btnState  = []
         }
-    testableNodeState = btnState
+    testablePreState _ tx = [tx]
+    testablePostState = btnState
     testableNodeAddr = btnAddr
 
-instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode tx) where
+instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode tx) where
     type TestableTx (SimpleNode tx) = tx
 
     testableNode addr peers = SimpleNode
         { snAddr   = addr
         , snPeers  = peers
-        , snBuffer = []
+        , snBuffer = mempty
         , snTick   = 0
-        , snState  = []
+        , snStore  = emptyBlockStore
         }
-    testableNodeState = snState
+
+    testablePreState _ (ClientTx tx) = [tx]
+    testablePreState _ _             = []
+
+    testablePostState :: SimpleNode tx -> [TestableTx (SimpleNode tx)]
+    testablePostState node = chainTxs $ bestChain $ snStore node
+
     testableNodeAddr = snAddr
 
 -- TestNetwork ----------------------------------------------------------------
@@ -196,5 +208,5 @@ isTick (ScheduledTick _ _) = True
 isTick _                   = False
 
 isMsg :: Scheduled a -> Bool
-isMsg (ScheduledMessage _ _ _) = True
-isMsg _                        = False
+isMsg ScheduledMessage{} = True
+isMsg _                  = False
