@@ -43,9 +43,9 @@ isNovelTx tx SimpleNode { snBuffer, snStore } =
     not inBuffer && not inChains
   where
     inBuffer = Set.member tx snBuffer
-    bc = bestChain snStore
-    ctxs = chainTxs bc
-    setTxs = Set.fromList ctxs
+    chain    = bestChain snStore
+    ctxs     = chainTxs chain
+    setTxs   = Set.fromList ctxs
     inChains = Set.member tx setTxs
 
 bestChain :: Binary tx => BlockStore tx -> Blockchain tx
@@ -78,16 +78,16 @@ shouldCutBlock :: (Ord tx, Binary tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
-    time = round at
-    lastTick = round snTick
-    stepTime = round (epoch sn)
-    nTotalPeers = 1 + length snPeers
+    time              = round at
+    lastTick          = round snTick
+    stepTime          = round (epoch sn)
+    nTotalPeers       = 1 + length snPeers
     relativeBlockTime = stepTime * nTotalPeers
-    beenAWhile = (time - lastTick) >= relativeBlockTime
-    step = time `div` stepTime
-    ourOffset = offset sn
-    currentOffset = step `mod` nTotalPeers
-    ourTurn = currentOffset == ourOffset
+    beenAWhile        = time - lastTick >= relativeBlockTime
+    step              = time `div` stepTime
+    ourOffset         = offset sn
+    currentOffset     = step `mod` nTotalPeers
+    ourTurn           = currentOffset == ourOffset
 
 instance (Binary tx, Ord tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
@@ -109,13 +109,12 @@ instance (Binary tx, Ord tx) => Protocol (SimpleNode tx) where
         | otherwise =
             (sn, [])
       where
-        chain = bestChain snStore
-        height = 1 + length chain
-        lastBlock = NonEmpty.head chain
+        chain      = bestChain snStore
+        height     = 1 + length chain
+        lastBlock  = NonEmpty.head chain
         lastHeader = blockHeader lastBlock
         parentHash = hash lastHeader
-        b = block parentHash 0 snBuffer :: Block tx
-        msg = BroadcastBlock b :: NodeMsg tx
-        outgoing = [(p, msg) | p <- snPeers]
+        msg        = BroadcastBlock $ block parentHash 0 snBuffer
+        outgoing   = [(p, msg) | p <- snPeers]
 
     epoch _ = 10
