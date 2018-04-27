@@ -18,7 +18,7 @@ class View m where
 
     apply :: Maybe (BlockHeader m) -> [Transaction m] -> m ()
 
-class (Ord (Tick a), Num (Tick a)) => Protocol a where
+class (Ord (Addr a), Ord (Tick a), Num (Tick a)) => Protocol a where
     type Msg a
     type Addr a
     type Tick a

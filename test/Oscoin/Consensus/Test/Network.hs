@@ -15,15 +15,12 @@ import           Test.QuickCheck
 -- TestableNode ---------------------------------------------------------------
 
 class ( Eq (TestableTx a)
-      , Eq a
       , Show (TestableTx a)
-      , Ord (Scheduled a)
-      , Show (Scheduled a)
-      , Ord (Addr a)
-      , Show (Addr a)
       , Arbitrary (Msg a)
       , Arbitrary (Addr a)
       , Eq (Msg a)
+      , Show (Scheduled a)
+      , Show (Addr a)
       , Show (Tick a)
       , Show (Msg a)
       , Protocol a ) => TestableNode a where
