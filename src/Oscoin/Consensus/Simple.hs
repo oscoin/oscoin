@@ -55,7 +55,7 @@ bestChain BlockStore { bsChains } =
     scored = [(length chain, chain) | chain <- toList bsChains]
     genesis = (1, NonEmpty.fromList [genesisBlock 0 []])
     (_, longestChain) =
-        foldl (\(accLen, accChain) (chainLen, chain) ->
+        foldl' (\(accLen, accChain) (chainLen, chain) ->
             if chainLen > accLen
                 then (chainLen, chain)
                 else (accLen, accChain))

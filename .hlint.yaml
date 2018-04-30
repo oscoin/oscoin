@@ -20,6 +20,7 @@
 
 - warn: {lhs: fmap, rhs: map}
 - warn: {lhs: mconcat, rhs: concat}
+- warn: {lhs: foldl, rhs: foldl'}
 
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 
