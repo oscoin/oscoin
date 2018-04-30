@@ -12,7 +12,15 @@ import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Base64.Extended as Base64
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Binary as Binary
+import qualified Data.ByteString.Lazy as LBS
+import           Data.Binary
 import           Control.Monad.State
+
+incoming :: [Tx a]
+incoming = []
+
+-------------------------------------------------------------------------------
 
 -- | The fold function.
 type Fold tx m c = [tx] -> c -> m c
@@ -29,7 +37,7 @@ newtype BlockTree m = BlockTree
     { fromBlockTree :: Map [Key] (Branch m) }
 
 -- | The genesis state.
-genesis :: MonadFork m => BlockTree m
+genesis :: (Binary (Tx AccountTx), Binary (Tx RepoTx), MonadFork m) => BlockTree m
 genesis = BlockTree . Map.fromList $
     [([], Branch (GenesisChain mempty mempty))]
 
@@ -40,15 +48,22 @@ data Branch m =
 -- | A branch that can be folded onto itself, given a list of @tx@.
 class MonadFork m => HasFold c tx m | c -> tx where
     fold :: Fold tx m c
+    fromTx :: Binary tx => c -> Tx LBS.ByteString -> m (Tx tx)
 
-instance MonadFork m => HasFold GenesisChain (Tx GenesisTx) m where
+instance (Binary (Tx AccountTx), Binary (Tx RepoTx), MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
     fold = genesisFold
+    fromTx _ (tx@Tx{txPayload}) =
+        pure $ tx {txPayload = Binary.decode txPayload}
 
-instance MonadFork m => HasFold AccountChain (Tx AccountTx) m where
+instance (Binary (Tx RepoTx), MonadFork m) => HasFold AccountChain (Tx AccountTx) m where
     fold = accountFold
+    fromTx _ (tx@Tx{txPayload}) =
+        pure $ tx {txPayload = Binary.decode txPayload}
 
 instance MonadFork m => HasFold RepoChain (Tx RepoTx) m where
     fold = repoFold
+    fromTx _ (tx@Tx{txPayload}) =
+        pure $ tx {txPayload = Binary.decode txPayload}
 
 newtype ForkT m a = ForkT (StateT (BlockTree m) m a)
     deriving (Functor, Applicative, Monad, MonadState (BlockTree m))
@@ -62,7 +77,9 @@ instance (Monad m, Fork (ForkT m) ~ ForkT m) => MonadFork (ForkT m) where
             BlockTree (Map.insert path branch cs)
 
 newtype Ascii = Ascii ByteString
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Generic)
+
+instance Binary Ascii
 
 instance ToJSON Ascii where
     toJSON (Ascii bs) = toJSON (decodeUtf8 bs)
@@ -79,6 +96,8 @@ type Key = Ascii
 newtype Value = Value Word64
     deriving (Show, Num, Eq, Ord, Generic)
 
+instance Binary Value
+
 deriving instance ToJSON Value
 
 type Fee = Value
@@ -93,7 +112,7 @@ data Patch = Patch
 
 -- FOLDS ----------------------------------------------------------------------
 
-genesisFold :: MonadFork m => Fold (Tx GenesisTx) m GenesisChain
+genesisFold :: (MonadFork m, Binary (Tx AccountTx), Binary (Tx RepoTx)) => Fold (Tx GenesisTx) m GenesisChain
 genesisFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenAccount id addr pk -> do
@@ -106,7 +125,7 @@ genesisFold (Tx{txPayload = tx}:txs) s =
              in genesisFold txs s { genesisBonds = Map.alter f to (genesisBonds s) }
 genesisFold [] s = pure s
 
-accountFold :: MonadFork m => Fold (Tx AccountTx) m AccountChain
+accountFold :: (MonadFork m, Binary (Tx RepoTx)) => Fold (Tx AccountTx) m AccountChain
 accountFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenRepository id -> do
@@ -135,6 +154,8 @@ data GenesisTx =
       OpenAccount AccountId Address PublicKey
     | Bond        Address Address Value
     deriving (Generic)
+
+instance Binary GenesisTx
 
 instance ToJSON GenesisTx where
     toJSON (OpenAccount key addr pk) =
