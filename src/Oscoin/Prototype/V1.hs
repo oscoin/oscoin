@@ -37,7 +37,7 @@ newtype BlockTree m = BlockTree
     { fromBlockTree :: Map [Key] (Branch m) }
 
 -- | The genesis state.
-genesis :: (Binary (Tx AccountTx), Binary (Tx RepoTx), MonadFork m) => BlockTree m
+genesis :: (Binary (Tx AccountTx), MonadFork m) => BlockTree m
 genesis = BlockTree . Map.fromList $
     [([], Branch (GenesisChain mempty mempty))]
 
@@ -50,12 +50,12 @@ class MonadFork m => HasFold c tx m | c -> tx where
     fold :: Fold tx m c
     fromTx :: Binary tx => c -> Tx LBS.ByteString -> m (Tx tx)
 
-instance (Binary (Tx AccountTx), Binary (Tx RepoTx), MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
+instance (Binary (Tx AccountTx), MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
     fold = genesisFold
     fromTx _ (tx@Tx{txPayload}) =
         pure $ tx {txPayload = Binary.decode txPayload}
 
-instance (Binary (Tx RepoTx), MonadFork m) => HasFold AccountChain (Tx AccountTx) m where
+instance MonadFork m => HasFold AccountChain (Tx AccountTx) m where
     fold = accountFold
     fromTx _ (tx@Tx{txPayload}) =
         pure $ tx {txPayload = Binary.decode txPayload}
@@ -112,7 +112,7 @@ data Patch = Patch
 
 -- FOLDS ----------------------------------------------------------------------
 
-genesisFold :: (MonadFork m, Binary (Tx AccountTx), Binary (Tx RepoTx)) => Fold (Tx GenesisTx) m GenesisChain
+genesisFold :: (MonadFork m, Binary (Tx AccountTx)) => Fold (Tx GenesisTx) m GenesisChain
 genesisFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenAccount id addr pk -> do
@@ -125,7 +125,7 @@ genesisFold (Tx{txPayload = tx}:txs) s =
              in genesisFold txs s { genesisBonds = Map.alter f to (genesisBonds s) }
 genesisFold [] s = pure s
 
-accountFold :: (MonadFork m, Binary (Tx RepoTx)) => Fold (Tx AccountTx) m AccountChain
+accountFold :: MonadFork m => Fold (Tx AccountTx) m AccountChain
 accountFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenRepository id -> do
