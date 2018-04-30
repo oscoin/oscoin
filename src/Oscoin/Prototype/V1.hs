@@ -14,13 +14,17 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Control.Monad.State
 
+-- | The fold function.
 type Fold tx m s = [tx] -> s -> m s
 
+-- | The class of Monads that can fork branches.
 class (Monad m, Fork m ~ m) => MonadFork m where
     type Fork m :: * -> *
 
+    -- | Create a new branch, given a path and initial branch state.
     fork :: [Key] -> Branch (Fork m) -> m ()
 
+-- | A tree of branches, accessed by path.
 newtype BlockTree m = BlockTree
     { fromBlockTree :: Map [Key] (Branch m) }
 
@@ -29,9 +33,11 @@ genesis :: MonadFork m => BlockTree m
 genesis = BlockTree . Map.fromList $
     [([], Branch (GenesisChain mempty mempty))]
 
+-- | A branch. (Note the use of existential type.)
 data Branch m =
       forall c tx. IsBranch c tx m => Branch c
 
+-- | A branch that can be folded onto itself, given a list of @tx@.
 class MonadFork m => IsBranch c tx m | c -> tx where
     foldBranch :: [tx] -> c -> m c
 
