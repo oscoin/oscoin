@@ -39,16 +39,16 @@ data Branch m =
 
 -- | A branch that can be folded onto itself, given a list of @tx@.
 class MonadFork m => HasFold c tx m | c -> tx where
-    foldBranch :: Fold tx m c
+    fold :: Fold tx m c
 
 instance MonadFork m => HasFold GenesisChain (Tx GenesisTx) m where
-    foldBranch = genesisFold
+    fold = genesisFold
 
 instance MonadFork m => HasFold AccountChain (Tx AccountTx) m where
-    foldBranch = accountFold
+    fold = accountFold
 
 instance MonadFork m => HasFold RepoChain (Tx RepoTx) m where
-    foldBranch = repoFold
+    fold = repoFold
 
 newtype ForkT m a = ForkT (StateT (BlockTree m) m a)
     deriving (Functor, Applicative, Monad, MonadState (BlockTree m))
