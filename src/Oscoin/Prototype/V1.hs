@@ -41,10 +41,10 @@ data Branch m =
 class MonadFork m => HasFold c tx m | c -> tx where
     foldBranch :: Fold tx m c
 
-instance (MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
+instance MonadFork m => HasFold GenesisChain (Tx GenesisTx) m where
     foldBranch = genesisFold
 
-instance (MonadFork m) => HasFold AccountChain (Tx AccountTx) m where
+instance MonadFork m => HasFold AccountChain (Tx AccountTx) m where
     foldBranch = accountFold
 
 instance MonadFork m => HasFold RepoChain (Tx RepoTx) m where
