@@ -12,6 +12,48 @@ import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Base64.Extended as Base64
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Control.Monad.State
+
+type Fold tx m s = [tx] -> s -> m s
+
+class (Monad m, Fork m ~ m) => MonadFork m where
+    type Fork m :: * -> *
+
+    fork :: [Key] -> Branch (Fork m) -> m ()
+
+newtype BlockTree m = BlockTree
+    { fromBlockTree :: Map [Key] (Branch m) }
+
+-- | The genesis state.
+genesis :: MonadFork m => BlockTree m
+genesis = BlockTree . Map.fromList $
+    [([], Branch (GenesisChain mempty mempty))]
+
+data Branch m =
+      forall c tx. IsBranch c tx m => Branch c
+
+class MonadFork m => IsBranch c tx m | c -> tx where
+    foldBranch :: [tx] -> c -> m c
+
+instance (MonadFork m) => IsBranch GenesisChain (Tx GenesisTx) m where
+    foldBranch = genesisFold
+
+instance (MonadFork m) => IsBranch AccountChain (Tx AccountTx) m where
+    foldBranch = accountFold
+
+instance MonadFork m => IsBranch RepoChain (Tx RepoTx) m where
+    foldBranch = repoFold
+
+newtype ForkT m a = ForkT (StateT (BlockTree m) m a)
+    deriving (Functor, Applicative, Monad, MonadState (BlockTree m))
+
+instance (Monad m, Fork (ForkT m) ~ ForkT m) => MonadFork (ForkT m) where
+    type Fork (ForkT m) = m
+
+    fork :: [Key] -> Branch (Fork (ForkT m)) -> ForkT m ()
+    fork path branch =
+        modify $ \(BlockTree cs) ->
+            BlockTree (Map.insert path branch cs)
 
 newtype Ascii = Ascii ByteString
     deriving (Show, Eq, Ord)
@@ -43,40 +85,13 @@ data Patch = Patch
     , patchChangeset :: Text
     } deriving (Show, Eq, Ord)
 
--- Chain ----------------------------------------------------------------------
-
--- | A chain has a path which can be used as a unique identifier, and a folding
--- function.
-data Chain tx m s = Chain
-    { chainPath   :: [Key]
-    , chainFold   :: Fold (Tx tx) m s
-    , chainReadTx :: ByteString -> Maybe tx
-    }
-
-genesisChain :: MonadFork m => Chain GenesisTx m GenesisState
-genesisChain = Chain
-    { chainPath = [], chainFold = genesisFold, chainReadTx = const Nothing }
-
-accountChain :: MonadFork m => [Key] -> Chain AccountTx m AccountState
-accountChain path = Chain
-    { chainPath = path, chainFold = accountFold, chainReadTx = const Nothing }
-
-repoChain :: MonadFork m => [Key] -> Chain RepoTx m RepoState
-repoChain path = Chain
-    { chainPath = path, chainFold = repoFold, chainReadTx = const Nothing }
-
 -- FOLDS ----------------------------------------------------------------------
 
-type Fold tx m s = [tx] -> s -> m s
-
-class Monad m => MonadFork m where
-    fork :: [Key] -> Fold tx m s -> s -> m ()
-
-genesisFold :: MonadFork m => Fold (Tx GenesisTx) m GenesisState
+genesisFold :: MonadFork m => Fold (Tx GenesisTx) m GenesisChain
 genesisFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenAccount id addr pk -> do
-            fork [id] accountFold (accountState id addr)
+            fork [id] (Branch $ accountChain id addr)
             genesisFold txs s { genesisAccounts = Map.insert id pk (genesisAccounts s) }
         Bond from to val ->
             let bond       = Bonded from to val
@@ -85,11 +100,11 @@ genesisFold (Tx{txPayload = tx}:txs) s =
              in genesisFold txs s { genesisBonds = Map.alter f to (genesisBonds s) }
 genesisFold [] s = pure s
 
-accountFold :: MonadFork m => Fold (Tx AccountTx) m AccountState
+accountFold :: MonadFork m => Fold (Tx AccountTx) m AccountChain
 accountFold (Tx{txPayload = tx}:txs) s =
     case tx of
         OpenRepository id -> do
-            fork [accountId s, id] repoFold (repoState id (accountKeys s))
+            fork [accountId s, id] (Branch $ repoChain id (accountKeys s))
             accountFold txs s { accountRepos = Set.insert id (accountRepos s) }
         CloseRepository id ->
             accountFold txs s { accountRepos = Set.delete id (accountRepos s) }
@@ -97,7 +112,7 @@ accountFold (Tx{txPayload = tx}:txs) s =
             accountFold txs s { accountKeys = Set.union (Set.fromList pks) (accountKeys s) }
 accountFold [] s = pure s
 
-repoFold :: MonadFork m => Fold (Tx RepoTx) m RepoState
+repoFold :: MonadFork m => Fold (Tx RepoTx) m RepoChain
 repoFold _txs s = pure s
 
 -- TXs ------------------------------------------------------------------------
@@ -143,38 +158,38 @@ data AccountTx =
 
 -- POST /:account/:repo/
 data RepoTx =
-      Record Patch                     -- ^ Record a new given patch.
-    | Pick   [Key] (Hashed Patch)      -- ^ Pick a patch from another repository, given its path and hash.
-    | Branch [Key] (Hashed Patch) Key  -- ^ Branch from another repository@ref.
+      Record  Patch                     -- ^ Record a new given patch.
+    | Pick    [Key] (Hashed Patch)      -- ^ Pick a patch from another repository, given its path and hash.
+    | Branch' [Key] (Hashed Patch) Key  -- ^ Branch from another repository@ref.
 
 -- States ---------------------------------------------------------------------
 
 data Bonded = Bonded Address Address Value
     deriving (Show, Eq, Ord)
 
-data GenesisState = GenesisState
+data GenesisChain = GenesisChain
     { genesisAccounts :: Map AccountId PublicKey
     , genesisBonds    :: Map Address (Set Bonded)
     } deriving (Show)
 
-data AccountState = AccountState
+data AccountChain = AccountChain
     { accountId    :: AccountId
     , accountAddr  :: Address
     , accountRepos :: Set RepoId
     , accountKeys  :: Set PublicKey
     } deriving (Show)
 
-accountState :: AccountId -> Address -> AccountState
-accountState id addr = AccountState id addr mempty mempty
+accountChain :: AccountId -> Address -> AccountChain
+accountChain id addr = AccountChain id addr mempty mempty
 
 -- TODO: Should `accountRepos` be a `Map RepoId (Set PublicKey)`?
 
-data RepoState = RepoState
+data RepoChain = RepoChain
     { repoId      :: RepoId
     , repoPatches :: Set Patch
     , repoKeys    :: Set PublicKey
     } deriving (Show)
 
-repoState :: RepoId -> Set PublicKey -> RepoState
-repoState id keys =
-    RepoState id mempty keys
+repoChain :: RepoId -> Set PublicKey -> RepoChain
+repoChain id keys =
+    RepoChain id mempty keys
