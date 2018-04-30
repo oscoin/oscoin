@@ -15,7 +15,7 @@ import qualified Data.Set as Set
 import           Control.Monad.State
 
 -- | The fold function.
-type Fold tx m s = [tx] -> s -> m s
+type Fold tx m c = [tx] -> c -> m c
 
 -- | The class of Monads that can fork branches.
 class (Monad m, Fork m ~ m) => MonadFork m where
@@ -35,19 +35,19 @@ genesis = BlockTree . Map.fromList $
 
 -- | A branch. (Note the use of existential type.)
 data Branch m =
-      forall c tx. IsBranch c tx m => Branch c
+      forall c tx. HasFold c tx m => Branch c
 
 -- | A branch that can be folded onto itself, given a list of @tx@.
-class MonadFork m => IsBranch c tx m | c -> tx where
+class MonadFork m => HasFold c tx m | c -> tx where
     foldBranch :: Fold tx m c
 
-instance (MonadFork m) => IsBranch GenesisChain (Tx GenesisTx) m where
+instance (MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
     foldBranch = genesisFold
 
-instance (MonadFork m) => IsBranch AccountChain (Tx AccountTx) m where
+instance (MonadFork m) => HasFold AccountChain (Tx AccountTx) m where
     foldBranch = accountFold
 
-instance MonadFork m => IsBranch RepoChain (Tx RepoTx) m where
+instance MonadFork m => HasFold RepoChain (Tx RepoTx) m where
     foldBranch = repoFold
 
 newtype ForkT m a = ForkT (StateT (BlockTree m) m a)
