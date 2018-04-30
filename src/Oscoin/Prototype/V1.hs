@@ -39,7 +39,7 @@ data Branch m =
 
 -- | A branch that can be folded onto itself, given a list of @tx@.
 class MonadFork m => IsBranch c tx m | c -> tx where
-    foldBranch :: [tx] -> c -> m c
+    foldBranch :: Fold tx m c
 
 instance (MonadFork m) => IsBranch GenesisChain (Tx GenesisTx) m where
     foldBranch = genesisFold
