@@ -21,6 +21,9 @@
 - warn: {lhs: fmap, rhs: map}
 - warn: {lhs: mconcat, rhs: concat}
 - warn: {lhs: foldl, rhs: foldl'}
+- warn: {lhs: return, rhs: pure}
+- warn: {lhs: liftM, rhs: map}
+- warn: {lhs: ap, rhs: (<*>)}
 
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 
