@@ -27,7 +27,7 @@ instance Consensus.Context View where
 
 instance Consensus.View View where
     type Transaction View = Account.Tx
-    type BlockHeader View = ()
+    type TransactionContext View = ()
 
     apply Nothing txs =
         for_ txs $ \tx ->

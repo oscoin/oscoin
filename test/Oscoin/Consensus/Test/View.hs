@@ -36,7 +36,7 @@ instance Context (DummyView f tx) where
 
 instance Ord tx => View (DummyView [] tx) where
     type Transaction (DummyView [] tx) = tx
-    type BlockHeader (DummyView [] tx) = ()
+    type TransactionContext (DummyView [] tx) = ()
 
     apply _ txs =
         for_ txs $ \tx ->

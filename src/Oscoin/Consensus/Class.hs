@@ -17,9 +17,9 @@ type Tick  = NominalDiffTime
 
 class View m where
     type Transaction m
-    type BlockHeader m
+    type TransactionContext m
 
-    apply :: Maybe (BlockHeader m) -> [Transaction m] -> m ()
+    apply :: Maybe (TransactionContext m) -> [Transaction m] -> m ()
 
 class Ord (Addr a) => Protocol a where
     type Msg a
