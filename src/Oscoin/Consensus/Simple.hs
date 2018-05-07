@@ -24,9 +24,9 @@ type Step = Word64
 type Score = Word64
 
 data NodeMsg tx =
-      BroadcastBlock (Block tx)
+      BroadcastBlock              (Block tx)
+    | BlockAtHeight        Height (Block tx)
     | RequestBlockAtHeight Height
-    | BlockAtHeight (Block tx)
     | ClientTx tx
     deriving (Eq, Show)
 
