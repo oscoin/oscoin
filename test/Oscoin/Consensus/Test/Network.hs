@@ -61,7 +61,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode 
         , snPeers  = peers
         , snBuffer = mempty
         , snTick   = 0
-        , snStore  = emptyBlockStore
+        , snStore  = genesisBlockStore
         }
 
     testablePreState _ (ClientTx tx) = [tx]

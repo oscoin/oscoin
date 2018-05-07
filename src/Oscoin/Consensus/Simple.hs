@@ -41,6 +41,11 @@ data BlockStore tx = BlockStore
 emptyBlockStore :: BlockStore tx
 emptyBlockStore = BlockStore mempty Set.empty
 
+genesisBlockStore :: Binary tx => BlockStore tx
+genesisBlockStore = BlockStore (Map.fromList [(blockHash gen, gen :| [])]) Set.empty
+  where
+    gen = genesisBlock 0 []
+
 addToDangling :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
 addToDangling blk bs@BlockStore{..} =
     bs { bsDangling = Set.insert blk bsDangling }
@@ -96,7 +101,7 @@ offset SimpleNode{..} =
   where
     peersLtUs = filter (< snAddr) snPeers
 
-shouldCutBlock :: (Ord tx, Binary tx) => SimpleNode tx -> Tick -> Bool
+shouldCutBlock :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
@@ -111,7 +116,7 @@ shouldCutBlock sn@SimpleNode{..} at =
     currentOffset     = step `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset
 
-instance (Binary tx, Ord tx) => Protocol (SimpleNode tx) where
+instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
     type Addr (SimpleNode tx) = Word8
 
