@@ -1,15 +1,18 @@
+-- TODO: When committing a block, filter the mempool of all transactions in that
+-- block.
 module Oscoin.Consensus.Simple where
 
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
-import           Oscoin.Crypto.Blockchain (Blockchain)
+import           Oscoin.Crypto.Blockchain (Blockchain, blockHash)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
-
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
+import           Data.List.NonEmpty ((<|))
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
@@ -31,22 +34,41 @@ data NodeMsg tx =
     deriving (Eq, Show)
 
 data BlockStore tx = BlockStore
-    { bsChains   :: Map (Hashed BlockId) (Blockchain tx)
+    { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)
     , bsDangling :: Set (Block tx)
     } deriving (Eq, Show)
 
 emptyBlockStore :: BlockStore tx
 emptyBlockStore = BlockStore mempty Set.empty
 
-isNovelTx :: (Binary tx, Ord tx) => tx -> SimpleNode tx -> Bool
-isNovelTx tx SimpleNode { snBuffer, snStore } =
-    not inBuffer && not inChains
+addToDangling :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
+addToDangling blk bs@BlockStore{..} =
+    bs { bsDangling = Set.insert blk bsDangling }
+
+applyDanglings :: Ord tx => BlockStore tx -> BlockStore tx
+applyDanglings bs@BlockStore{..} =
+    go (Set.toList bsDangling) bs
+  where
+    go []         bs = bs
+    go (blk:blks) bs =
+        case applyDangling blk bs of
+            Nothing  -> go blks bs
+            Just bs' -> go blks bs'
+
+applyDangling :: Ord tx => Block tx -> BlockStore tx -> Maybe (BlockStore tx)
+applyDangling blk@Block{blockHeader} bs@BlockStore{..} =
+    case Map.lookup (blockPrevHash blockHeader) bsChains of
+        Nothing    -> Nothing
+        Just chain -> Just $
+            bs { bsDangling = Set.delete blk bsDangling
+               , bsChains   = Map.insert (blockHash blk) (blk <| chain) bsChains
+               }
+
+isNovelTx :: Ord tx => tx -> SimpleNode tx -> Bool
+isNovelTx tx SimpleNode { snBuffer } =
+    not inBuffer
   where
     inBuffer = Set.member tx snBuffer
-    chain    = bestChain snStore
-    ctxs     = chainTxs chain
-    setTxs   = Set.fromList ctxs
-    inChains = Set.member tx setTxs
 
 bestChain :: Binary tx => BlockStore tx -> Blockchain tx
 bestChain BlockStore { bsChains } =
@@ -98,10 +120,16 @@ instance (Binary tx, Ord tx) => Protocol (SimpleNode tx) where
             (sn { snBuffer = Set.insert msg snBuffer }, [])
         | otherwise =
             (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, BroadcastBlock _)) =
+    step sn@SimpleNode{..} _ (Just (_, BroadcastBlock blk)) =
+        case validateBlock blk of
+            Left _ ->
+                (sn, [])
+            Right _ ->
+                (sn { snStore = (applyDanglings . addToDangling blk) snStore }, [])
+    step sn@SimpleNode{..} _ (Just (_, BlockAtHeight _h _b)) =
         (sn, [])
-    -- TODO(tyler): Fill in other types of messages.
-    step sn@SimpleNode{..} _ (Just (_, _)) = (sn, [])
+    step sn@SimpleNode{..} _ (Just (_, RequestBlockAtHeight _h)) =
+        (sn, [])
 
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =

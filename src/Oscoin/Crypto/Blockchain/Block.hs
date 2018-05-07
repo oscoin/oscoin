@@ -19,7 +19,7 @@ data BlockHeader = BlockHeader
     { blockPrevHash   :: Hashed BlockHeader
     , blockRootHash   :: ByteString -- TODO: Should be Digest.
     , blockTimestamp  :: Timestamp
-    } deriving (Show, Eq, Generic)
+    } deriving (Show, Eq, Ord, Generic)
 
 instance Binary BlockHeader
 instance Hashable BlockHeader
@@ -40,6 +40,7 @@ data Block tx = Block
 
 instance (Binary tx) => Binary (Block tx)
 deriving instance Eq tx => Eq (Block tx)
+deriving instance Ord tx => Ord (Block tx)
 
 validateBlock :: Block tx -> Either Error (Block tx)
 validateBlock blk
