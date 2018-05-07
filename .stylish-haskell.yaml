@@ -181,3 +181,4 @@ language_extensions:
   - TypeApplications
   - RecordWildCards
   - FlexibleContexts
+  - MultiWayIf

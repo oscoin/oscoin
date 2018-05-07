@@ -19,6 +19,7 @@ import           Oscoin.State.Tree (Tree, Path)
 import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Test.Helpers
 import qualified Oscoin.Consensus.Tests as Consensus
+import qualified Oscoin.Prototype.V2.Tests as PrototypeV2
 
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
@@ -47,6 +48,7 @@ tests = testGroup "Oscoin"
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
     , testGroup      "Consensus"                      Consensus.tests
+    , testGroup      "Prototype v2"                   PrototypeV2.tests
     ]
 
 testOscoinAPI :: Assertion

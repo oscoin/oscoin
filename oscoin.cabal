@@ -31,6 +31,7 @@ library
     , Oscoin.User
 
     , Oscoin.Prototype.V1
+    , Oscoin.Prototype.V2
 
     , Oscoin.Crypto.Blockchain
     , Oscoin.Crypto.Blockchain.Block
@@ -96,6 +97,7 @@ library
     , filepath
     , http-types
     , http-api-data
+    , megaparsec
     , memory
     , merkle-tree
     , microlens
@@ -128,6 +130,7 @@ library
     , OverloadedStrings
     , BangPatterns
     , TypeOperators
+    , MultiWayIf
 
     -- Deriving
     , DeriveFunctor
@@ -209,6 +212,7 @@ test-suite test
     , Oscoin.Crypto.PubKey.Arbitrary
     , Oscoin.Crypto.Blockchain.Arbitrary
     , Oscoin.Account.Arbitrary
+    , Oscoin.Prototype.V2.Tests
     , Oscoin.Test.Helpers
 
     , Crypto.Tests
@@ -232,6 +236,7 @@ test-suite test
     , tasty-hunit >= 0.10.0.1
     , tasty-quickcheck
     , text
+    , megaparsec
     , microlens
     , microlens-aeson
     , bytestring
