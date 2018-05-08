@@ -68,7 +68,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode 
     testablePreState _ _             = []
 
     testablePostState :: SimpleNode tx -> [TestableTx (SimpleNode tx)]
-    testablePostState node = chainTxs $ bestChain $ snStore node
+    testablePostState = chainTxs . bestChain . snStore
 
     testableNodeAddr = snAddr
 

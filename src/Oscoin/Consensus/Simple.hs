@@ -81,6 +81,10 @@ applyDangling blk@Block{blockHeader} bs@BlockStore{..} =
                , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
                }
 
+applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
+applyBlock blk sn@SimpleNode{..} =
+    sn { snStore = (applyDanglings . addToDangling blk) snStore }
+
 isNovelTx :: Ord tx => tx -> SimpleNode tx -> Bool
 isNovelTx tx SimpleNode { snBuffer } =
     not inBuffer
@@ -134,8 +138,8 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         case validateBlock blk of
             Left _ ->
                 (sn, [])
-            Right _ ->
-                (sn { snStore = (applyDanglings . addToDangling blk) snStore }, [])
+            Right blk ->
+                (applyBlock blk sn, [])
     step sn@SimpleNode{..} _ (Just (_, BlockAtHeight _h _b)) =
         (sn, [])
     step sn@SimpleNode{..} _ (Just (_, RequestBlockAtHeight _h)) =
@@ -143,7 +147,7 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
 
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =
-            (sn { snTick = tick, snBuffer = mempty }, outgoing)
+            (applyBlock blk $ sn { snTick = tick, snBuffer = mempty }, outgoing)
         | otherwise =
             (sn, [])
       where
@@ -152,7 +156,8 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         lastBlock  = tip chain
         lastHeader = blockHeader lastBlock
         parentHash = hash lastHeader
-        msg        = BroadcastBlock $ block parentHash 0 snBuffer
+        blk        = block parentHash 0 snBuffer
+        msg        = BroadcastBlock blk
         outgoing   = [(p, msg) | p <- snPeers]
 
     epoch _ = 10

@@ -12,7 +12,6 @@ import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-import           Data.List (nub, sort)
 import qualified Data.Set as Set
 
 tests :: [TestTree]
@@ -45,9 +44,12 @@ propNetworkNodesIncludeAllTxns testNetworks =
             let TestNetwork nodes _ _ log = runNetwork tn
                 scheduledMsgs             = mapMaybe scheduledMessage
                                           $ Set.toList scheduled
-                expectations              = nub
-                                          $ sort
+                expectations              = Set.fromList
                                           $ concatMap (testablePreState (undefined :: a)) scheduledMsgs
                 prettyLog                 = unlines $ " log:" : reverse ["  " ++ show l | l <- log]
+                prettyStates              = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
+                prettyExps                = unlines $ [" expected:", "  " ++ show expectations]
 
-             in counterexample prettyLog (all (\ns -> testablePostState ns == expectations) (toList nodes))
+             in counterexample (prettyLog ++ prettyStates ++ prettyExps)
+                               (all (\ns -> Set.fromList (testablePostState ns) == expectations)
+                               (toList nodes))
