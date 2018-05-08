@@ -138,7 +138,7 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         case validateBlock blk of
             Left _ ->
                 (sn, [])
-            Right blk ->
+            Right _ ->
                 (applyBlock blk sn, [])
     step sn@SimpleNode{..} _ (Just (_, BlockAtHeight _h _b)) =
         (sn, [])
