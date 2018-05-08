@@ -48,6 +48,6 @@ propNetworkNodesIncludeAllTxns testNetworks =
                 expectations              = nub
                                           $ sort
                                           $ concatMap (testablePreState (undefined :: a)) scheduledMsgs
-                prettyLog                 = unlines $ " log:" : ["  " ++ show l | l <- log]
+                prettyLog                 = unlines $ " log:" : reverse ["  " ++ show l | l <- log]
 
              in counterexample prettyLog (all (\ns -> testablePostState ns == expectations) (toList nodes))
