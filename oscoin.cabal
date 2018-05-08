@@ -172,7 +172,6 @@ library
     -Wincomplete-record-updates
     -Wredundant-constraints
     -fno-warn-orphans
-    -fno-warn-name-shadowing
     -fno-warn-unused-do-bind
     -fno-warn-unused-local-binds
     -fno-print-expanded-synonyms
