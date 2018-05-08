@@ -78,6 +78,7 @@ data TestNetwork a = TestNetwork
     { tnNodes      :: Map (Addr a) a
     , tnMsgs       :: Set (Scheduled a)
     , tnPartitions :: Partitions a
+    , tnLog        :: [Scheduled a]
     }
 
 type Partitions a = Map (Addr a) (Set (Addr a))
@@ -93,30 +94,30 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions) =
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions log) =
     runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms partitions)
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms)) partitions)  =
+    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms partitions log)
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms)) partitions log)  =
     runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _)  =
-    runNetwork (TestNetwork nodes ms partitions)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _)  =
-    runNetwork (TestNetwork nodes ms mempty)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Disconnect _ from to, ms)) partitions)  =
-    runNetwork (TestNetwork nodes ms newPartitions)
+    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions log)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _ log)  =
+    runNetwork (TestNetwork nodes ms partitions log)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _ log)  =
+    runNetwork (TestNetwork nodes ms mempty log)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Disconnect _ from to, ms)) partitions log)  =
+    runNetwork (TestNetwork nodes ms newPartitions log)
   where
     newPartitions             = Map.alter alteration from partitions
     alteration (Just current) = Just (Set.insert to current)
     alteration Nothing        = Just (Set.singleton to)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Reconnect _ from to, ms)) partitions)  =
-    runNetwork (TestNetwork nodes ms newPartitions)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Reconnect _ from to, ms)) partitions log)  =
+    runNetwork (TestNetwork nodes ms newPartitions log)
   where
     alteration    = map (Set.delete to)
     newPartitions = Map.alter alteration from partitions
-runNetwork tn@(TestNetwork _ ms _)
+runNetwork tn@(TestNetwork _ ms _ _)
     | Set.null ms = tn
     | otherwise   = runNetwork tn
 
@@ -145,16 +146,17 @@ deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
 scheduleMessages
     :: (TestableNode a)
     => Tick -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
-scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions} =
+scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog} =
     let deliveryTime = t + 1
-        msgs'        = Set.union scheduled tnMsgs
-        scheduled    = Set.fromList [ScheduledMessage deliveryTime to (from, msg) | (to, msg) <- msgs, reachable to]
+        msgs'        = Set.union (Set.fromList scheduled) tnMsgs
+        log          = scheduled ++ tnLog
+        scheduled    = [ScheduledMessage deliveryTime to (from, msg) | (to, msg) <- msgs, reachable to]
         reachable to = maybe True not $
             Set.member to <$> Map.lookup from tnPartitions
-     in tn { tnMsgs = msgs' }
+     in tn { tnMsgs = msgs', tnLog = log }
 
 networkNonTrivial :: TestNetwork v -> Bool
-networkNonTrivial (TestNetwork ns ms _)
+networkNonTrivial (TestNetwork ns ms _ _)
     | Map.null ns = False
     | Set.null ms = False
     | otherwise   = True

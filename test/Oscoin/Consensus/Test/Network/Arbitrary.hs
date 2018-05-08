@@ -39,6 +39,7 @@ arbitraryHealthyNetwork = do
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
+        , tnLog        = []
         }
 
 arbitraryPartitionedNetwork :: TestableNode a => Tick -> Maybe Tick -> Gen (TestNetwork a)
@@ -101,13 +102,13 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
         disconnects             <- arbitraryDisconnects (Map.keys tnNodes)
         pure $ network { tnMsgs = tnMsgs ++ Set.fromList disconnects }
 
-    shrink (TestNetwork nodes msgs partitions) =
+    shrink (TestNetwork nodes msgs partitions _) =
         map filterNetwork lessNodes ++ lessMsgs
       where
         msgs'     = shrinkScheduledMsgs msgs
         nodes'    = shrinkList shrinkNothing (Map.toList nodes)
-        lessMsgs  = [TestNetwork nodes ms partitions                | ms <- msgs' ]
-        lessNodes = [TestNetwork (Map.fromList ns) msgs partitions  | ns <- nodes']
+        lessMsgs  = [TestNetwork nodes ms partitions []               | ms <- msgs' ]
+        lessNodes = [TestNetwork (Map.fromList ns) msgs partitions [] | ns <- nodes']
 
 shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
 shrinkScheduledMsgs msgs =
@@ -121,8 +122,8 @@ shrinkScheduledMsgs msgs =
             (Set.filter isMsg msgs)
 
 filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
-filterNetwork (TestNetwork nodes msgs partitions) =
-    TestNetwork nodes (Set.filter f msgs) partitions
+filterNetwork (TestNetwork nodes msgs partitions _) =
+    TestNetwork nodes (Set.filter f msgs) partitions []
   where
     f msg = all (`Map.member` nodes) $
         scheduledReceivers msg ++ catMaybes [scheduledSender msg]

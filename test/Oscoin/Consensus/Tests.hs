@@ -40,13 +40,14 @@ propNetworkNodesIncludeAllTxns
     => Gen (TestNetwork a)
     -> Property
 propNetworkNodesIncludeAllTxns testNetworks =
-    forAllShrink testNetworks shrink $ \tn@(TestNetwork _ scheduled _) ->
+    forAllShrink testNetworks shrink $ \tn@(TestNetwork _ scheduled _ _) ->
         networkNonTrivial tn ==>
-            let TestNetwork nodes _ _ = runNetwork tn
-                scheduledMsgs         = mapMaybe scheduledMessage
-                                      $ Set.toList scheduled
-                expectations          = nub
-                                      $ sort
-                                      $ concatMap (testablePreState (undefined :: a)) scheduledMsgs
+            let TestNetwork nodes _ _ log = runNetwork tn
+                scheduledMsgs             = mapMaybe scheduledMessage
+                                          $ Set.toList scheduled
+                expectations              = nub
+                                          $ sort
+                                          $ concatMap (testablePreState (undefined :: a)) scheduledMsgs
+                prettyLog                 = unlines $ " log:" : ["  " ++ show l | l <- log]
 
-             in all (\ns -> testablePostState ns == expectations) (toList nodes)
+             in counterexample prettyLog (all (\ns -> testablePostState ns == expectations) (toList nodes))

@@ -8,6 +8,7 @@ import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
+import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.List.NonEmpty ((<|))
@@ -31,7 +32,17 @@ data NodeMsg tx =
     | BlockAtHeight        Height (Block tx)
     | RequestBlockAtHeight Height
     | ClientTx tx
-    deriving (Eq, Show)
+    deriving (Eq)
+
+instance Show tx => Show (NodeMsg tx) where
+    show (BroadcastBlock blk) =
+        "BroadcastBlock " ++ C8.unpack (shortHash (blockHash blk))
+    show (ClientTx tx) =
+        "ClientTx " ++ show tx
+    show (BlockAtHeight h blk) =
+        "BlockAtHeight " ++ show h ++ C8.unpack (shortHash (blockHash blk))
+    show (RequestBlockAtHeight h) =
+        "RequestBlockAtHeight " ++ show h
 
 data BlockStore tx = BlockStore
     { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)

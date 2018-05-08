@@ -9,6 +9,7 @@ module Oscoin.Crypto.Hash
     , zeroHash
     , toHex
     , fromHex
+    , shortHash
     ) where
 
 import           Oscoin.Prelude
@@ -26,6 +27,7 @@ import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString.Base16 as Base16
 import           Data.Maybe (fromJust)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
 import           Data.Aeson (FromJSON(..), ToJSON(..), Value(String), withText)
 import qualified Data.Text as T
 import           Web.HttpApiData (FromHttpApiData(..))
@@ -104,6 +106,10 @@ fromHex bs =
     case Base16.decode bs of
         (valid, "")  -> Right valid
         (_, invalid) -> Left $ Error ("Can't parse " <> tshow invalid)
+
+shortHash :: Hashed a -> ByteString
+shortHash =
+    BS.take 7 . toHex
 
 -------------------------------------------------------------------------------
 
