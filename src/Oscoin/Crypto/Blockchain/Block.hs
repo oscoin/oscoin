@@ -36,7 +36,7 @@ emptyHeader = BlockHeader
 data Block tx = Block
     { blockHeader :: BlockHeader
     , blockData   :: Seq tx
-    } deriving (Show, Generic)
+    } deriving (Show, Generic, Functor, Foldable, Traversable)
 
 instance (Binary tx) => Binary (Block tx)
 deriving instance Eq tx => Eq (Block tx)

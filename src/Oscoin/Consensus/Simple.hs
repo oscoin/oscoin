@@ -4,7 +4,7 @@ module Oscoin.Consensus.Simple where
 
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
-import           Oscoin.Crypto.Blockchain (Blockchain, blockHash)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
@@ -42,7 +42,7 @@ emptyBlockStore :: BlockStore tx
 emptyBlockStore = BlockStore mempty Set.empty
 
 genesisBlockStore :: Binary tx => BlockStore tx
-genesisBlockStore = BlockStore (Map.fromList [(blockHash gen, gen :| [])]) Set.empty
+genesisBlockStore = BlockStore (Map.fromList [(blockHash gen, Blockchain (gen :| []))]) Set.empty
   where
     gen = genesisBlock 0 []
 
@@ -63,10 +63,10 @@ applyDanglings bs@BlockStore{..} =
 applyDangling :: Ord tx => Block tx -> BlockStore tx -> Maybe (BlockStore tx)
 applyDangling blk@Block{blockHeader} bs@BlockStore{..} =
     case Map.lookup (blockPrevHash blockHeader) bsChains of
-        Nothing    -> Nothing
-        Just chain -> Just $
+        Nothing                 -> Nothing
+        Just (Blockchain chain) -> Just $
             bs { bsDangling = Set.delete blk bsDangling
-               , bsChains   = Map.insert (blockHash blk) (blk <| chain) bsChains
+               , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
                }
 
 isNovelTx :: Ord tx => tx -> SimpleNode tx -> Bool
@@ -77,9 +77,9 @@ isNovelTx tx SimpleNode { snBuffer } =
 
 bestChain :: Binary tx => BlockStore tx -> Blockchain tx
 bestChain BlockStore { bsChains } =
-    longestChain
+    Blockchain longestChain
   where
-    scored = [(length chain, chain) | chain <- toList bsChains]
+    scored = [(length chain, fromBlockchain chain) | chain <- toList bsChains]
     genesis = (1, NonEmpty.fromList [genesisBlock 0 []])
     (_, longestChain) =
         foldl' (\(accLen, accChain) (chainLen, chain) ->
@@ -90,7 +90,7 @@ bestChain BlockStore { bsChains } =
             scored
 
 chainTxs :: Blockchain tx -> [tx]
-chainTxs chain =
+chainTxs (Blockchain chain) =
     concat blocks
   where
     blocks = map (toList . blockData) $ toList chain
@@ -144,7 +144,7 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
       where
         chain      = bestChain snStore
         height     = 1 + length chain
-        lastBlock  = NonEmpty.head chain
+        lastBlock  = tip chain
         lastHeader = blockHeader lastBlock
         parentHash = hash lastHeader
         msg        = BroadcastBlock $ block parentHash 0 snBuffer

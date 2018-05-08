@@ -12,19 +12,23 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import           Text.Printf
 
--- TODO: Use this representation for Blockchain.
---
--- data Blockchain
---     = Genesis    (Block tx)
---     | Blockchain (Block tx) Blockchain
+newtype Blockchain tx = Blockchain { fromBlockchain :: NonEmpty (Block tx) }
+    deriving (Ord, Eq, Functor, Foldable, Traversable)
 
-type Blockchain tx = NonEmpty (Block tx)
+instance Binary tx => Show (Blockchain tx) where
+    show = showBlockchain
+
+fromList :: [Block tx] -> Blockchain tx
+fromList = Blockchain . NonEmpty.fromList
+
+tip :: Blockchain tx -> Block tx
+tip (Blockchain blks) = NonEmpty.head blks
 
 validateBlockchain :: Blockchain tx -> Either Error (Blockchain tx)
-validateBlockchain (blk :| []) = do
+validateBlockchain (Blockchain (blk :| [])) = do
     blk' <- validateBlock blk
-    pure $ NonEmpty.fromList [blk']
-validateBlockchain (blk :| blk' : blks)
+    pure $ fromList [blk']
+validateBlockchain (Blockchain (blk :| blk' : blks))
     | blockPrevHash (blockHeader blk) /= headerHash (blockHeader blk') =
         Left (Error "previous hash does not match")
     | t < t' =
@@ -32,7 +36,7 @@ validateBlockchain (blk :| blk' : blks)
     | t - t' > 2 * hours =
         Left (Error "block timestamp should be less than two hours in future")
     | otherwise =
-        validateBlock blk *> validateBlockchain (blk' :| blks)
+        validateBlock blk *> validateBlockchain (Blockchain (blk' :| blks))
   where
     t  = blockTimestamp (blockHeader blk)
     t' = blockTimestamp (blockHeader blk')
@@ -45,20 +49,19 @@ headerHash :: BlockHeader -> Hashed BlockHeader
 headerHash header =
     hash header
 
--- TODO: Don't use Prelude.replicate.
-printBlockchain :: Binary tx => Blockchain tx -> IO ()
-printBlockchain blks = do
-    printf "\n"
+showBlockchain :: Binary tx => Blockchain tx -> String
+showBlockchain (Blockchain blks) = execWriter $ do
+    tell "\n"
     for_ (zip heights (toList blks)) $ \(h, Block bh@BlockHeader{..} txs) -> do
-        printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (C8.unpack $ toHex $ headerHash bh)
-        printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
-        printf "│ timestamp:  %-64d │\n" blockTimestamp
-        printf "│ rootHash:   %-64s │\n" (C8.unpack blockRootHash)
-        printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
+        tell $ printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (C8.unpack $ toHex $ headerHash bh)
+        tell $ printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
+        tell $ printf "│ timestamp:  %-64d │\n" blockTimestamp
+        tell $ printf "│ rootHash:   %-64s │\n" (C8.unpack blockRootHash)
+        tell $ printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
 
         for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) ->
-            printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hashTx tx)
+            tell $ printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hashTx tx)
 
-        printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
+        tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
   where
-    heights = reverse [0..NonEmpty.length blks - 1]
+    heights = reverse [0..length blks - 1]

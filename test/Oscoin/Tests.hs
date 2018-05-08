@@ -10,7 +10,7 @@ import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
 import           Oscoin.Crypto.Blockchain.Block (validateBlock, blockHeader)
-import           Oscoin.Crypto.Blockchain (validateBlockchain)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain)
 import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
 import qualified Oscoin.Node.State.Mempool as Mempool
 import           Oscoin.Node.Channel (Subscription(..), fromEvent)
@@ -175,7 +175,7 @@ testOscoinBlockchain = do
 
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
-    assertNoError $ validateBlockchain (block :| [gblock])
+    assertNoError $ validateBlockchain $ Blockchain (block :| [gblock])
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

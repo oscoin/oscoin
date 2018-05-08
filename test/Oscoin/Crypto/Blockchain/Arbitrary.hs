@@ -28,7 +28,7 @@ arbitraryBlockchain :: forall tx. (Arbitrary tx, Binary tx) => Gen (Blockchain t
 arbitraryBlockchain = do
     genesis <- arbitraryGenesis
     rest <- arbitrary :: Gen [Block tx]
-    pure $ genesis :| rest
+    pure $ Blockchain $ genesis :| rest
 
 instance Arbitrary (Crypto.Digest HashAlgorithm) where
     arbitrary = do
@@ -43,7 +43,7 @@ instance Arbitrary BlockHeader where
             <*> arbitrary
 
 arbitraryValidBlock :: forall tx. (Binary tx, Arbitrary tx) => Blockchain tx -> Gen (Block tx)
-arbitraryValidBlock (Block prevHeader _ :| _) = do
+arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
     arbitraryValidBlockWith prevHeader txs
 
@@ -74,7 +74,7 @@ arbitraryValidBlockchain = do
     go (gen :| []) height
   where
     go blks 0 =
-        pure blks
+        pure $ Blockchain blks
     go blks n = do
-        blk <- arbitraryValidBlock blks
+        blk <- arbitraryValidBlock (Blockchain blks)
         go (blk <| blks) (n - 1)
