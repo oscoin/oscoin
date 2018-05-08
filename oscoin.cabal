@@ -173,7 +173,6 @@ library
     -Wredundant-constraints
     -fno-warn-orphans
     -fno-warn-unused-do-bind
-    -fno-warn-unused-local-binds
     -fno-print-expanded-synonyms
 
 executable oscoin

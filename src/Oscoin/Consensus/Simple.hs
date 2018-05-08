@@ -152,7 +152,6 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
             (sn, [])
       where
         chain      = bestChain snStore
-        height     = 1 + length chain
         lastBlock  = tip chain
         lastHeader = blockHeader lastBlock
         parentHash = hash lastHeader
