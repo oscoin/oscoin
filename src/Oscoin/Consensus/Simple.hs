@@ -4,7 +4,7 @@ module Oscoin.Consensus.Simple where
 
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
@@ -90,7 +90,7 @@ bestChain :: BlockStore tx -> Blockchain tx
 bestChain BlockStore{bsChains} =
     Blockchain longest
   where
-    scored = [(length chain, fromBlockchain chain) | chain <- toList bsChains]
+    scored = [(height chain, fromBlockchain chain) | chain <- toList bsChains]
     (_, longest) = maximumBy (comparing fst) scored
 
 chainTxs :: Blockchain tx -> [tx]

@@ -24,6 +24,9 @@ fromList = Blockchain . NonEmpty.fromList
 tip :: Blockchain tx -> Block tx
 tip (Blockchain blks) = NonEmpty.head blks
 
+height :: Blockchain tx -> Int
+height = length . fromBlockchain
+
 validateBlockchain :: Blockchain tx -> Either Error (Blockchain tx)
 validateBlockchain (Blockchain (blk :| [])) = do
     blk' <- validateBlock blk
