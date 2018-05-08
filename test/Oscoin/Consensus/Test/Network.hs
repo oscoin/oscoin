@@ -57,11 +57,12 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode 
     type TestableTx (SimpleNode tx) = tx
 
     testableNode addr peers = SimpleNode
-        { snAddr   = addr
-        , snPeers  = peers
-        , snBuffer = mempty
-        , snTick   = 0
-        , snStore  = genesisBlockStore
+        { snAddr    = addr
+        , snPeers   = peers
+        , snBuffer  = mempty
+        , snLastBlk = 0
+        , snLastAsk = 0
+        , snStore   = genesisBlockStore
         }
 
     testablePreState _ (ClientTx tx) = [tx]

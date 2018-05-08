@@ -18,7 +18,8 @@ data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
     , snPeers   :: [Addr (SimpleNode tx)]
     , snBuffer  :: Set tx
-    , snTick    :: Tick
+    , snLastBlk :: Tick
+    , snLastAsk :: Tick
     , snStore   :: BlockStore tx
     } deriving (Eq, Show)
 
@@ -28,8 +29,7 @@ type Score = Word64
 
 data NodeMsg tx =
       BroadcastBlock              (Block tx)
-    | BlockAtHeight        Height (Block tx)
-    | RequestBlockAtHeight Height
+    | RequestBlock                (Hashed BlockHeader)
     | ClientTx tx
     deriving (Eq)
 
@@ -40,10 +40,8 @@ instance Show tx => Show (NodeMsg tx) where
                 , show (toList (blockData blk)) ]
     show (ClientTx tx) =
         "ClientTx " ++ show tx
-    show (BlockAtHeight h blk) =
-        "BlockAtHeight " ++ show h ++ C8.unpack (shortHash (blockHash blk))
-    show (RequestBlockAtHeight h) =
-        "RequestBlockAtHeight " ++ show h
+    show (RequestBlock h) =
+        "RequestBlock " ++ C8.unpack (shortHash h)
 
 data BlockStore tx = BlockStore
     { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)
@@ -110,12 +108,27 @@ offset SimpleNode{..} =
   where
     peersLtUs = filter (< snAddr) snPeers
 
+lookupBlock :: Hashed BlockHeader -> SimpleNode tx -> Maybe (Block tx)
+lookupBlock header SimpleNode{..} =
+    map tip chain
+  where
+    chains = bsChains snStore
+    chain = Map.lookup header chains
+
+shouldReconcile :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
+shouldReconcile sn@SimpleNode { snLastAsk } at =
+    time - lastTick >= 2 * stepTime
+  where
+    time     = round at
+    lastTick = round snLastAsk
+    stepTime = round (epoch sn)
+
 shouldCutBlock :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
     time              = round at
-    lastTick          = round snTick
+    lastTick          = round snLastBlk
     stepTime          = round (epoch sn)
     nTotalPeers       = 1 + length snPeers
     relativeBlockTime = stepTime * nTotalPeers
@@ -124,6 +137,15 @@ shouldCutBlock sn@SimpleNode{..} at =
     ourOffset         = offset sn
     currentOffset     = step `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset
+
+orphanParentHashes :: SimpleNode tx -> [Hashed BlockHeader]
+orphanParentHashes SimpleNode{..} =
+    orphanHashes
+  where
+    dangling        = bsDangling snStore
+    danglingHashes  = Set.map (\blk -> blockHash blk) dangling
+    parentHashes    = Set.map (\blk -> blockPrevHash $ blockHeader blk) dangling
+    orphanHashes    = Set.toList $ Set.difference parentHashes danglingHashes
 
 instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
@@ -140,23 +162,27 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
                 (sn, [])
             Right _ ->
                 (applyBlock blk sn, [])
-    step sn@SimpleNode{..} _ (Just (_, BlockAtHeight _h _b)) =
-        (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, RequestBlockAtHeight _h)) =
-        (sn, [])
 
+    step sn@SimpleNode{..} _ (Just (requestor, RequestBlock blkHash)) =
+        case lookupBlock blkHash sn of
+            Just blk -> (sn, [(requestor, (BroadcastBlock blk))])
+            Nothing  -> (sn, [])
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =
-            (applyBlock blk $ sn { snTick = tick, snBuffer = mempty }, outgoing)
+            (applyBlock blk $ sn { snLastBlk = tick, snBuffer = mempty }, outgoingBlk)
+        | shouldReconcile sn tick =
+            (sn { snLastAsk = tick }, outgoingAsks)
         | otherwise =
             (sn, [])
       where
-        chain      = bestChain snStore
-        lastBlock  = tip chain
-        lastHeader = blockHeader lastBlock
-        parentHash = hash lastHeader
-        blk        = block parentHash 0 snBuffer
-        msg        = BroadcastBlock blk
-        outgoing   = [(p, msg) | p <- snPeers]
+        chain         = bestChain snStore
+        lastBlock     = tip chain
+        lastHeader    = blockHeader lastBlock
+        parentHash    = hash lastHeader
+        blk           = block parentHash 0 snBuffer
+        msg           = BroadcastBlock blk
+        outgoingBlk   = [(p, msg) | p <- snPeers]
+        orphanParents = orphanParentHashes sn
+        outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
 
     epoch _ = 10

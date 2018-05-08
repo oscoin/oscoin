@@ -121,6 +121,7 @@ shrinkScheduledMsgs msgs =
             (shrinkList shrinkNothing)
             (Set.filter isMsg msgs)
 
+-- TODO nodes will still contain previously present nodes in their address books
 filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
 filterNetwork (TestNetwork nodes msgs partitions _) =
     TestNetwork nodes (Set.filter f msgs) partitions []
