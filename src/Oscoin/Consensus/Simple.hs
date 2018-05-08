@@ -10,7 +10,6 @@ import           Oscoin.Crypto.Hash
 
 import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
-import qualified Data.List.NonEmpty as NonEmpty
 import           Data.List.NonEmpty ((<|))
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -88,19 +87,12 @@ isNovelTx tx SimpleNode { snBuffer } =
   where
     inBuffer = Set.member tx snBuffer
 
-bestChain :: Binary tx => BlockStore tx -> Blockchain tx
-bestChain BlockStore { bsChains } =
-    Blockchain longestChain
+bestChain :: BlockStore tx -> Blockchain tx
+bestChain BlockStore{bsChains} =
+    Blockchain longest
   where
     scored = [(length chain, fromBlockchain chain) | chain <- toList bsChains]
-    genesis = (1, NonEmpty.fromList [genesisBlock 0 []])
-    (_, longestChain) =
-        foldl' (\(accLen, accChain) (chainLen, chain) ->
-            if chainLen > accLen
-                then (chainLen, chain)
-                else (accLen, accChain))
-            genesis
-            scored
+    (_, longest) = maximumBy (comparing fst) scored
 
 chainTxs :: Blockchain tx -> [tx]
 chainTxs (Blockchain chain) =

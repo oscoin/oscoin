@@ -14,6 +14,7 @@ module Oscoin.Prelude
     , module Data.Traversable
     , module Data.Foldable
     , module Data.Functor.Identity
+    , module Data.Ord
     , module Data.Text
     , module Data.ByteString
     , module Data.Map
@@ -74,7 +75,8 @@ import           Data.Set (Set)
 import           Data.Semigroup (Semigroup, (<>))
 import           Data.IORef (IORef)
 import           Data.Traversable (Traversable(..), sequence, traverse)
-import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl')
+import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl', maximumBy, minimumBy)
+import           Data.Ord (comparing)
 import           Data.Sequence (Seq)
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List
