@@ -61,23 +61,20 @@ addToDangling blk bs@BlockStore{..} =
     bs { bsDangling = Set.insert blk bsDangling }
 
 applyDanglings :: Ord tx => BlockStore tx -> BlockStore tx
-applyDanglings bs@BlockStore{..} =
-    go (Set.toList bsDangling) bs
+applyDanglings blockStore =
+    go (Set.toList (bsDangling blockStore)) blockStore
   where
-    go []         bs = bs
-    go (blk:blks) bs =
-        case applyDangling blk bs of
-            Nothing  -> go blks bs
-            Just bs' -> go blks bs'
-
-applyDangling :: Ord tx => Block tx -> BlockStore tx -> Maybe (BlockStore tx)
-applyDangling blk@Block{blockHeader} bs@BlockStore{..} =
-    case Map.lookup (blockPrevHash blockHeader) bsChains of
-        Nothing                 -> Nothing
-        Just (Blockchain chain) -> Just $
-            bs { bsDangling = Set.delete blk bsDangling
-               , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
-               }
+    go []                            bs                = bs -- Nothing dangling, do nothing.
+    go (blk@Block{blockHeader}:blks) bs@BlockStore{..} =    -- Something's dangling.
+        case Map.lookup (blockPrevHash blockHeader) bsChains of
+            Nothing ->                 -- The dangler has no known parent.
+                go blks bs
+            Just (Blockchain chain) -> -- The dangler has a parent.
+                let dangling = Set.delete blk bsDangling
+                 in go (Set.toList dangling) bs
+                     { bsDangling = dangling
+                     , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
+                     }
 
 applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
 applyBlock blk sn@SimpleNode{..} =
