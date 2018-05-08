@@ -36,7 +36,9 @@ data NodeMsg tx =
 
 instance Show tx => Show (NodeMsg tx) where
     show (BroadcastBlock blk) =
-        "BroadcastBlock " ++ C8.unpack (shortHash (blockHash blk))
+        unwords [ "BroadcastBlock"
+                , C8.unpack (shortHash (blockHash blk))
+                , show (toList (blockData blk)) ]
     show (ClientTx tx) =
         "ClientTx " ++ show tx
     show (BlockAtHeight h blk) =

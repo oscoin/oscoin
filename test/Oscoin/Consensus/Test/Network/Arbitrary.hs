@@ -112,7 +112,7 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
 
 shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
 shrinkScheduledMsgs msgs =
-    [Set.filter (not . isMsg) msgs <> msgs | msgs <- shrinkedMsgs]
+    [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
   where
     shrinkedMsgs =
         shrinkMapBy
