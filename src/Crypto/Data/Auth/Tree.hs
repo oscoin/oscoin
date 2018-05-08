@@ -208,7 +208,7 @@ delete k tree =
         | otherwise = rebalance $ Node leftmostKey l (go r)
       where
         leftmostKey = fst (findMin (go r))
-    go tree = tree
+    go t = t
 {-# INLINABLE delete #-}
 
 -- | Convert a tree into a list of @(k, v)@ pairs.

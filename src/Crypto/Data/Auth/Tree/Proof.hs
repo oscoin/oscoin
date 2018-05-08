@@ -46,19 +46,19 @@ adjacent l' r' =
   where
     (l, r) = stripCommonPrefix l' r'
 
-    -- | If the given paths have a common prefix branch, return them without
-    -- the path elements in common.
-    stripCommonPrefix :: [PathElem a] -> [PathElem a] -> ([PathElem a], [PathElem a])
-    stripCommonPrefix (reverse -> ls) (reverse -> rs) =
-        let (l, r) = go ls rs in
-            ( reverse l
-            , reverse r
-            )
-      where
-        go (l:ls) (r:rs)
-            | l == r    = go ls rs
-            | otherwise = (ls, rs)
-        go ls rs = (ls, rs)
+-- | If the given paths have a common prefix branch, return them without
+-- the path elements in common.
+stripCommonPrefix :: [PathElem a] -> [PathElem a] -> ([PathElem a], [PathElem a])
+stripCommonPrefix (reverse -> ls') (reverse -> rs') =
+    let (l', r') = go ls' rs' in
+        ( reverse l'
+        , reverse r'
+        )
+  where
+    go (l:ls) (r:rs)
+        | l == r    = go ls rs
+        | otherwise = (ls, rs)
+    go ls rs = (ls, rs)
 
 isLeftmost :: [PathElem a] -> Bool
 isLeftmost (R _ : xs) = isLeftmost xs
@@ -122,8 +122,8 @@ lookupProof
     => k
     -> Tree k v
     -> (Maybe v, Proof a k v)
-lookupProof k tree =
-    f k tree []
+lookupProof key tree =
+    f key tree []
   where
     f k (Leaf k' v) path
         | k == k'   = (Just v, KeyExistsProof (Path path ()))
