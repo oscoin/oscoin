@@ -50,7 +50,8 @@ propNetworkNodesIncludeAllTxns testNetworks =
                 prettyStates              = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
                 prettyExps                = unlines $ [" expected:", "  " ++ show expectations]
                 prettyNodes               = unlines $ [" nodes:", "  " ++ show (length nodes)]
+                prettyInfo                = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
 
-             in counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyExps)
+             in counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyExps ++ prettyInfo)
                                (all (\ns -> Set.fromList (testablePostState ns) == expectations)
                                (toList nodes))

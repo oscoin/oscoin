@@ -5,6 +5,7 @@ import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Simple.Arbitrary ()
+import           Oscoin.Crypto.Blockchain (showChainDigest)
 
 import           Data.Binary (Binary)
 import qualified Data.Set as Set
@@ -29,6 +30,7 @@ class ( Eq (TestableTx a)
     testablePostState :: a -> [TestableTx a]
     testablePreState :: a -> Msg a -> [TestableTx a]
     testableNodeAddr :: a -> Addr a
+    testableShow :: a -> String
 
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
@@ -38,6 +40,7 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     testablePreState _ tx = [tx]
     testablePostState (TestNode _ s _) = s
     testableNodeAddr (TestNode a _ _) = a
+    testableShow _ = "-"
 
 instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
     type TestableTx (BufferedTestNode tx) = tx
@@ -52,6 +55,7 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
     testablePreState _ tx = [tx]
     testablePostState = btnState
     testableNodeAddr = btnAddr
+    testableShow _ = "-"
 
 instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode tx) where
     type TestableTx (SimpleNode tx) = tx
@@ -72,6 +76,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx) => TestableNode (SimpleNode 
     testablePostState = chainTxs . bestChain . snStore
 
     testableNodeAddr = snAddr
+    testableShow SimpleNode{..} = showChainDigest $ bestChain $ snStore
 
 -- TestNetwork ----------------------------------------------------------------
 

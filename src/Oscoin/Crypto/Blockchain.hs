@@ -52,6 +52,14 @@ headerHash :: BlockHeader -> Hashed BlockHeader
 headerHash header =
     hash header
 
+showChainDigest :: Blockchain tx -> String
+showChainDigest =
+    unwords . intersperse "←"
+            . reverse
+            . toList
+            . map (C8.unpack . shortHash . blockHash)
+            . fromBlockchain
+
 showBlockchain :: Binary tx => Blockchain tx -> String
 showBlockchain (Blockchain blks) = execWriter $ do
     tell "\n"
