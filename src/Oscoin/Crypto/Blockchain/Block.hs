@@ -43,11 +43,7 @@ deriving instance Eq tx => Eq (Block tx)
 deriving instance Ord tx => Ord (Block tx)
 
 validateBlock :: Block tx -> Either Error (Block tx)
-validateBlock blk
-    | Seq.null (blockData blk) =
-        Left (Error "block data is null")
-    | otherwise =
-        Right blk
+validateBlock = Right
 
 block
     :: (Foldable t, Binary tx)
