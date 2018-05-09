@@ -8,6 +8,7 @@ import           Oscoin.Consensus.Test.Network
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Data.Maybe (catMaybes)
+import           Data.List (nub)
 
 import           Test.QuickCheck
 
@@ -20,12 +21,13 @@ arbitraryNetwork = arbitrary
 
 arbitraryHealthyNetwork :: forall a. TestableNode a => Gen (TestNetwork a)
 arbitraryHealthyNetwork = do
-    addrs <- Set.fromList <$> vectorOf kidSize arbitrary :: Gen (Set (Addr a))
+    addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
+        `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set (Addr a))
 
     nodes <- forM (toList addrs) $ \a ->
         pure (a, testableNode a [x | x <- toList addrs, x /= a])
 
-    smsgs <- resize kidSize . listOf1 $ do
+    smsgs <- listOf1 $ do
         msg <- arbitrary  :: Gen (Addr a, Msg a)
         dests <- sublistOf (toList addrs) :: Gen [Addr a]
         forM dests $ \d -> do
@@ -103,12 +105,14 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
         pure $ network { tnMsgs = tnMsgs ++ Set.fromList disconnects }
 
     shrink (TestNetwork nodes msgs partitions _) =
-        map filterNetwork lessNodes ++ lessMsgs
+        lessMsgs
       where
         msgs'     = shrinkScheduledMsgs msgs
         nodes'    = shrinkList shrinkNothing (Map.toList nodes)
         lessMsgs  = [TestNetwork nodes ms partitions []               | ms <- msgs' ]
-        lessNodes = [TestNetwork (Map.fromList ns) msgs partitions [] | ns <- nodes']
+
+        -- NB. Not in use currently.
+        _lessNodes = map filterNetwork [TestNetwork (Map.fromList ns) msgs partitions [] | ns <- nodes']
 
 shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
 shrinkScheduledMsgs msgs =
