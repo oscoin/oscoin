@@ -27,15 +27,17 @@ arbitraryHealthyNetwork = do
     nodes <- forM (toList addrs) $ \a ->
         pure (a, testableNode a [x | x <- toList addrs, x /= a])
 
+    e <- pure (epoch (snd (head nodes)))
+
     smsgs <- listOf1 $ do
         msg <- arbitrary  :: Gen (Addr a, Msg a)
         dests <- sublistOf (toList addrs) :: Gen [Addr a]
         forM dests $ \d -> do
-            at <- choose (0, 100) :: Gen Int
+            at <- choose (0, 10) :: Gen Int
             pure $ ScheduledMessage (fromIntegral at) d msg
 
     ticks <- forM nodes $ \(addr, n) ->
-        pure [ScheduledTick (epoch n * fromIntegral x) addr | x <- [0..100] :: [Int]]
+        pure [ScheduledTick (e * fromIntegral x) addr | x <- [0..20] :: [Int]]
 
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
