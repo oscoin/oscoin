@@ -11,6 +11,7 @@ import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import           Text.Printf
+import           Data.Time.Clock (NominalDiffTime)
 
 newtype Blockchain tx = Blockchain { fromBlockchain :: NonEmpty (Block tx) }
     deriving (Ord, Eq, Functor, Foldable, Traversable)
@@ -23,6 +24,9 @@ fromList = Blockchain . NonEmpty.fromList
 
 tip :: Blockchain tx -> Block tx
 tip (Blockchain blks) = NonEmpty.head blks
+
+height :: Blockchain tx -> Int
+height = length . fromBlockchain
 
 validateBlockchain :: Blockchain tx -> Either Error (Blockchain tx)
 validateBlockchain (Blockchain (blk :| [])) = do
@@ -48,6 +52,20 @@ blockHash blk = headerHash (blockHeader blk)
 headerHash :: BlockHeader -> Hashed BlockHeader
 headerHash header =
     hash header
+
+showChainDigest :: Blockchain tx -> String
+showChainDigest =
+    unwords . intersperse "←"
+            . reverse
+            . toList
+            . map showBlockDigest
+            . fromBlockchain
+
+showBlockDigest :: Block tx -> String
+showBlockDigest b@Block{blockHeader} =
+    printf "%s (%s)" (C8.unpack . shortHash . blockHash $ b) (show time)
+  where
+    time :: NominalDiffTime = toEnum (fromIntegral $ blockTimestamp blockHeader)
 
 showBlockchain :: Binary tx => Blockchain tx -> String
 showBlockchain (Blockchain blks) = execWriter $ do

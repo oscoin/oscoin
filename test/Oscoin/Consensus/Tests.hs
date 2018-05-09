@@ -22,7 +22,7 @@ tests =
         , testProperty "All nodes DON'T include all txns (buffered test)" $
             expectFailure $ propNetworkNodesIncludeAllTxns (arbitraryNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesIncludeAllTxns (arbitraryNetwork @(SimpleNode DummyTx))
+            propNetworkNodesIncludeAllTxns (arbitraryPartitionedNetwork @(SimpleNode DummyTx) 50 (Just 100))
         ]
     , testGroup "Without Partitions"
         [ testProperty "All nodes include all txns (simple test)" $
@@ -49,7 +49,9 @@ propNetworkNodesIncludeAllTxns testNetworks =
                 prettyLog                 = unlines $ " log:" : reverse ["  " ++ show l | l <- log]
                 prettyStates              = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
                 prettyExps                = unlines $ [" expected:", "  " ++ show expectations]
+                prettyNodes               = unlines $ [" nodes:", "  " ++ show (length nodes)]
+                prettyInfo                = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
 
-             in counterexample (prettyLog ++ prettyStates ++ prettyExps)
+             in counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyExps ++ prettyInfo)
                                (all (\ns -> Set.fromList (testablePostState ns) == expectations)
                                (toList nodes))

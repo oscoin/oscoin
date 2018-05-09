@@ -55,6 +55,7 @@ module Oscoin.Prelude
     , (++)
     , concat
     , intercalate
+    , intersperse
     , sum
     , product
     , identity
@@ -79,7 +80,7 @@ import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, 
 import           Data.Ord (comparing)
 import           Data.Sequence (Seq)
 import           Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List
+import           Data.List (intersperse)
 import           Data.Has
 import           Data.Either (isRight, isLeft)
 import           Data.Default (def, Default)
@@ -110,7 +111,7 @@ newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)
 
 -- | Unix timestamp.
-type Timestamp = Word32
+type Timestamp = Word64
 
 -- | 'Id' maps a type to its identifier type. Example: 'Hashed' @tx@ for @tx@.
 type family Id a :: *

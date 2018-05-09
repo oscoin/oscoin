@@ -4,7 +4,7 @@ module Oscoin.Consensus.Simple where
 
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
@@ -18,7 +18,8 @@ data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
     , snPeers   :: [Addr (SimpleNode tx)]
     , snBuffer  :: Set tx
-    , snTick    :: Tick
+    , snLastBlk :: Tick
+    , snLastAsk :: Tick
     , snStore   :: BlockStore tx
     } deriving (Eq, Show)
 
@@ -27,23 +28,25 @@ type Step = Word64
 type Score = Word64
 
 data NodeMsg tx =
-      BroadcastBlock              (Block tx)
-    | BlockAtHeight        Height (Block tx)
-    | RequestBlockAtHeight Height
+      SendBlock                   (Block tx)
+    | ProposeBlock                (Block tx)
+    | RequestBlock                (Hashed BlockHeader)
     | ClientTx tx
     deriving (Eq)
 
 instance Show tx => Show (NodeMsg tx) where
-    show (BroadcastBlock blk) =
-        unwords [ "BroadcastBlock"
+    show (ProposeBlock blk) =
+        unwords [ "ProposeBlock"
+                , C8.unpack (shortHash (blockHash blk))
+                , show (toList (blockData blk)) ]
+    show (SendBlock blk) =
+        unwords [ "SendBlock"
                 , C8.unpack (shortHash (blockHash blk))
                 , show (toList (blockData blk)) ]
     show (ClientTx tx) =
         "ClientTx " ++ show tx
-    show (BlockAtHeight h blk) =
-        "BlockAtHeight " ++ show h ++ C8.unpack (shortHash (blockHash blk))
-    show (RequestBlockAtHeight h) =
-        "RequestBlockAtHeight " ++ show h
+    show (RequestBlock h) =
+        "RequestBlock " ++ C8.unpack (shortHash h)
 
 data BlockStore tx = BlockStore
     { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)
@@ -63,23 +66,20 @@ addToDangling blk bs@BlockStore{..} =
     bs { bsDangling = Set.insert blk bsDangling }
 
 applyDanglings :: Ord tx => BlockStore tx -> BlockStore tx
-applyDanglings bs@BlockStore{..} =
-    go (Set.toList bsDangling) bs
+applyDanglings blockStore =
+    go (Set.toList (bsDangling blockStore)) blockStore
   where
-    go []         bs = bs
-    go (blk:blks) bs =
-        case applyDangling blk bs of
-            Nothing  -> go blks bs
-            Just bs' -> go blks bs'
-
-applyDangling :: Ord tx => Block tx -> BlockStore tx -> Maybe (BlockStore tx)
-applyDangling blk@Block{blockHeader} bs@BlockStore{..} =
-    case Map.lookup (blockPrevHash blockHeader) bsChains of
-        Nothing                 -> Nothing
-        Just (Blockchain chain) -> Just $
-            bs { bsDangling = Set.delete blk bsDangling
-               , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
-               }
+    go []                            bs                = bs -- Nothing dangling, do nothing.
+    go (blk@Block{blockHeader}:blks) bs@BlockStore{..} =    -- Something's dangling.
+        case Map.lookup (blockPrevHash blockHeader) bsChains of
+            Nothing ->                 -- The dangler has no known parent.
+                go blks bs
+            Just (Blockchain chain) -> -- The dangler has a parent.
+                let dangling = Set.delete blk bsDangling
+                 in go (Set.toList dangling) bs
+                     { bsDangling = dangling
+                     , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
+                     }
 
 applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
 applyBlock blk sn@SimpleNode{..} =
@@ -95,7 +95,7 @@ bestChain :: BlockStore tx -> Blockchain tx
 bestChain BlockStore{bsChains} =
     Blockchain longest
   where
-    scored = [(length chain, fromBlockchain chain) | chain <- toList bsChains]
+    scored = [(height chain, fromBlockchain chain) | chain <- toList bsChains]
     (_, longest) = maximumBy (comparing fst) scored
 
 chainTxs :: Blockchain tx -> [tx]
@@ -110,12 +110,27 @@ offset SimpleNode{..} =
   where
     peersLtUs = filter (< snAddr) snPeers
 
+lookupBlock :: Hashed BlockHeader -> SimpleNode tx -> Maybe (Block tx)
+lookupBlock header SimpleNode{..} =
+    map tip chain
+  where
+    chains = bsChains snStore
+    chain = Map.lookup header chains
+
+shouldReconcile :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
+shouldReconcile sn@SimpleNode { snLastAsk } at =
+    time - lastTick >= 2 * stepTime
+  where
+    time     = round at
+    lastTick = round snLastAsk
+    stepTime = round (epoch sn)
+
 shouldCutBlock :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
     beenAWhile && ourTurn
   where
     time              = round at
-    lastTick          = round snTick
+    lastTick          = round snLastBlk
     stepTime          = round (epoch sn)
     nTotalPeers       = 1 + length snPeers
     relativeBlockTime = stepTime * nTotalPeers
@@ -124,6 +139,15 @@ shouldCutBlock sn@SimpleNode{..} at =
     ourOffset         = offset sn
     currentOffset     = step `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset
+
+orphanParentHashes :: SimpleNode tx -> [Hashed BlockHeader]
+orphanParentHashes SimpleNode{..} =
+    orphanHashes
+  where
+    dangling        = bsDangling snStore
+    danglingHashes  = Set.map (\blk -> blockHash blk) dangling
+    parentHashes    = Set.map (\blk -> blockPrevHash $ blockHeader blk) dangling
+    orphanHashes    = Set.toList $ Set.difference parentHashes danglingHashes
 
 instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
@@ -134,29 +158,36 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
             (sn { snBuffer = Set.insert msg snBuffer }, [])
         | otherwise =
             (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, BroadcastBlock blk)) =
+    step sn@SimpleNode{..} _ (Just (_, SendBlock blk)) =
         case validateBlock blk of
             Left _ ->
                 (sn, [])
             Right _ ->
                 (applyBlock blk sn, [])
-    step sn@SimpleNode{..} _ (Just (_, BlockAtHeight _h _b)) =
-        (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, RequestBlockAtHeight _h)) =
-        (sn, [])
+    step sn t (Just (from, ProposeBlock blk)) =
+        step sn t (Just (from, SendBlock blk))
 
+    step sn@SimpleNode{..} _ (Just (requestor, RequestBlock blkHash)) =
+        case lookupBlock blkHash sn of
+            Just blk -> (sn, [(requestor, (SendBlock blk))])
+            Nothing  -> (sn, [])
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =
-            (applyBlock blk $ sn { snTick = tick, snBuffer = mempty }, outgoing)
+            (applyBlock blk $ sn { snLastBlk = tick, snBuffer = mempty }, outgoingBlk)
+        | shouldReconcile sn tick =
+            (sn { snLastAsk = tick }, outgoingAsks)
         | otherwise =
             (sn, [])
       where
-        chain      = bestChain snStore
-        lastBlock  = tip chain
-        lastHeader = blockHeader lastBlock
-        parentHash = hash lastHeader
-        blk        = block parentHash 0 snBuffer
-        msg        = BroadcastBlock blk
-        outgoing   = [(p, msg) | p <- snPeers]
+        chain         = bestChain snStore
+        lastBlock     = tip chain
+        lastHeader    = blockHeader lastBlock
+        parentHash    = hash lastHeader
+        timestamp     = fromIntegral (fromEnum tick)
+        blk           = block parentHash timestamp snBuffer
+        msg           = ProposeBlock blk
+        outgoingBlk   = [(p, msg) | p <- snPeers]
+        orphanParents = orphanParentHashes sn
+        outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
 
     epoch _ = 10
