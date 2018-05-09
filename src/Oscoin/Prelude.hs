@@ -111,7 +111,7 @@ newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)
 
 -- | Unix timestamp.
-type Timestamp = Word32
+type Timestamp = Word64
 
 -- | 'Id' maps a type to its identifier type. Example: 'Hashed' @tx@ for @tx@.
 type family Id a :: *
