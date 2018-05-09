@@ -28,14 +28,19 @@ type Step = Word64
 type Score = Word64
 
 data NodeMsg tx =
-      BroadcastBlock              (Block tx)
+      SendBlock                   (Block tx)
+    | ProposeBlock                (Block tx)
     | RequestBlock                (Hashed BlockHeader)
     | ClientTx tx
     deriving (Eq)
 
 instance Show tx => Show (NodeMsg tx) where
-    show (BroadcastBlock blk) =
-        unwords [ "BroadcastBlock"
+    show (ProposeBlock blk) =
+        unwords [ "ProposeBlock"
+                , C8.unpack (shortHash (blockHash blk))
+                , show (toList (blockData blk)) ]
+    show (SendBlock blk) =
+        unwords [ "SendBlock"
                 , C8.unpack (shortHash (blockHash blk))
                 , show (toList (blockData blk)) ]
     show (ClientTx tx) =
@@ -153,16 +158,18 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
             (sn { snBuffer = Set.insert msg snBuffer }, [])
         | otherwise =
             (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, BroadcastBlock blk)) =
+    step sn@SimpleNode{..} _ (Just (_, SendBlock blk)) =
         case validateBlock blk of
             Left _ ->
                 (sn, [])
             Right _ ->
                 (applyBlock blk sn, [])
+    step sn t (Just (from, ProposeBlock blk)) =
+        step sn t (Just (from, SendBlock blk))
 
     step sn@SimpleNode{..} _ (Just (requestor, RequestBlock blkHash)) =
         case lookupBlock blkHash sn of
-            Just blk -> (sn, [(requestor, (BroadcastBlock blk))])
+            Just blk -> (sn, [(requestor, (SendBlock blk))])
             Nothing  -> (sn, [])
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =
@@ -178,7 +185,7 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         parentHash    = hash lastHeader
         timestamp     = fromIntegral (fromEnum tick)
         blk           = block parentHash timestamp snBuffer
-        msg           = BroadcastBlock blk
+        msg           = ProposeBlock blk
         outgoingBlk   = [(p, msg) | p <- snPeers]
         orphanParents = orphanParentHashes sn
         outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
