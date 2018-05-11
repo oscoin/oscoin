@@ -14,6 +14,9 @@ import           Data.List.NonEmpty ((<|))
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
+epochLen :: Tick
+epochLen = 10
+
 data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
     , snPeers   :: [Addr (SimpleNode tx)]
@@ -95,8 +98,19 @@ bestChain :: BlockStore tx -> Blockchain tx
 bestChain BlockStore{bsChains} =
     Blockchain longest
   where
-    scored = [(height chain, fromBlockchain chain) | chain <- toList bsChains]
+    scored = [(scoreChain chain, fromBlockchain chain) | chain <- toList bsChains]
     (_, longest) = maximumBy (comparing fst) scored
+
+scoreChain :: forall tx . Blockchain tx -> Int
+scoreChain bc =
+    (2526041640 * h) - stepDuration
+  where
+    h            = height bc
+    lastBlock    = tip bc :: Block tx
+    timestampNs  = blockTimestamp $ blockHeader lastBlock
+    timestamp    = timestampNs `div` 1000000000
+    e            = round epochLen
+    stepDuration = fromIntegral timestamp `div` e :: Int
 
 chainTxs :: Blockchain tx -> [tx]
 chainTxs (Blockchain chain) =
@@ -119,11 +133,11 @@ lookupBlock header SimpleNode{..} =
 
 shouldReconcile :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
 shouldReconcile sn@SimpleNode { snLastAsk } at =
-    time - lastTick >= 2 * stepTime
+    time - lastTick >= stepTime
   where
     time     = round at
     lastTick = round snLastAsk
-    stepTime = round (epoch sn)
+    stepTime = round (epoch sn) :: Int
 
 shouldCutBlock :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
 shouldCutBlock sn@SimpleNode{..} at =
@@ -135,9 +149,9 @@ shouldCutBlock sn@SimpleNode{..} at =
     nTotalPeers       = 1 + length snPeers
     relativeBlockTime = stepTime * nTotalPeers
     beenAWhile        = time - lastTick >= relativeBlockTime
-    step              = time `div` stepTime
+    stepNumber        = time `div` stepTime
     ourOffset         = offset sn
-    currentOffset     = step `mod` nTotalPeers
+    currentOffset     = stepNumber `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset
 
 orphanParentHashes :: SimpleNode tx -> [Hashed BlockHeader]
@@ -145,8 +159,8 @@ orphanParentHashes SimpleNode{..} =
     orphanHashes
   where
     dangling        = bsDangling snStore
-    danglingHashes  = Set.map (\blk -> blockHash blk) dangling
-    parentHashes    = Set.map (\blk -> blockPrevHash $ blockHeader blk) dangling
+    danglingHashes  = Set.map blockHash dangling
+    parentHashes    = Set.map (blockPrevHash . blockHeader) dangling
     orphanHashes    = Set.toList $ Set.difference parentHashes danglingHashes
 
 instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
@@ -169,7 +183,7 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
 
     step sn@SimpleNode{..} _ (Just (requestor, RequestBlock blkHash)) =
         case lookupBlock blkHash sn of
-            Just blk -> (sn, [(requestor, (SendBlock blk))])
+            Just blk -> (sn, [(requestor, SendBlock blk)])
             Nothing  -> (sn, [])
     step sn@SimpleNode{..} tick Nothing
         | shouldCutBlock sn tick =
@@ -190,4 +204,4 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         orphanParents = orphanParentHashes sn
         outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
 
-    epoch _ = 10
+    epoch _ = epochLen

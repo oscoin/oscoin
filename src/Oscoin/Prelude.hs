@@ -59,6 +59,7 @@ module Oscoin.Prelude
     , sum
     , product
     , identity
+    , equal
     ) where
 
 import           Prelude hiding ( fail, read, readIO, readFile
@@ -195,3 +196,7 @@ product = Data.Foldable.foldl' (*) 1
 -- | The identity function.
 identity :: a -> a
 identity = Prelude.id
+
+-- | Returns True if all values are equal to each other.
+equal :: Eq a => [a] -> Bool
+equal xs = and $ map (== head xs) (tail xs)
