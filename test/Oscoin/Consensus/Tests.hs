@@ -22,7 +22,7 @@ tests =
         , testProperty "All nodes DON'T include all txns (buffered test)" $
             expectFailure $ propNetworkNodesIncludeAllTxns (arbitraryNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesConverge (arbitraryPartitionedNetwork @(SimpleNode DummyTx) 50 (Just 100))
+            propNetworkNodesConverge (arbitraryPartitionedNetwork @(SimpleNode DummyTx))
         ]
     , testGroup "Without Partitions"
         [ testProperty "All nodes include all txns (simple test)" $

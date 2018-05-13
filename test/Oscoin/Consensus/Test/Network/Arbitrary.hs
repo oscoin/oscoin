@@ -46,13 +46,15 @@ arbitraryHealthyNetwork = do
         , tnLog        = []
         }
 
-arbitraryPartitionedNetwork :: TestableNode a => Tick -> Maybe Tick -> Gen (TestNetwork a)
-arbitraryPartitionedNetwork partAt mayHeal = do
+arbitraryPartitionedNetwork :: TestableNode a => Gen (TestNetwork a)
+arbitraryPartitionedNetwork = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
     part                <- arbitraryPartition (Map.keys tnNodes)
-    pure $ net { tnMsgs = (Set.insert (Partition partAt part) . heal) tnMsgs }
-  where
-    heal = maybe identity (Set.insert . Heal) mayHeal
+    partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 3) :: Gen Tick
+    healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 2) :: Gen Tick
+    pure $ net { tnMsgs = (Set.insert (Partition partitionAt part) . Set.insert (Heal healAt)) tnMsgs }
 
 arbitraryDisconnects :: [Addr a] -> Gen [Scheduled a]
 arbitraryDisconnects addrs =
