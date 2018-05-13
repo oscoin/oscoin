@@ -112,17 +112,6 @@ runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms))
     runNetwork (TestNetwork nodes ms partitions log)
 runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _ log)  =
     runNetwork (TestNetwork nodes ms mempty log)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Disconnect _ from to, ms)) partitions log)  =
-    runNetwork (TestNetwork nodes ms newPartitions log)
-  where
-    newPartitions             = Map.alter alteration from partitions
-    alteration (Just current) = Just (Set.insert to current)
-    alteration Nothing        = Just (Set.singleton to)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Reconnect _ from to, ms)) partitions log)  =
-    runNetwork (TestNetwork nodes ms newPartitions log)
-  where
-    alteration    = map (Set.delete to)
-    newPartitions = Map.alter alteration from partitions
 runNetwork tn@(TestNetwork _ ms _ _)
     | Set.null ms = tn
     | otherwise   = runNetwork tn
@@ -174,8 +163,6 @@ data Scheduled a =
     | ScheduledTick    Tick (Addr a)
     | Partition        Tick (Partitions a)
     | Heal             Tick
-    | Disconnect       Tick (Addr a) (Addr a)
-    | Reconnect        Tick (Addr a) (Addr a)
 
 deriving instance TestableNode a => Show (Scheduled a)
 deriving instance TestableNode a => Eq (Scheduled a)
@@ -188,16 +175,12 @@ scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 scheduledTick (Partition t _)          = t
 scheduledTick (Heal t)                 = t
-scheduledTick (Disconnect t _ _)       = t
-scheduledTick (Reconnect t _ _)        = t
 
 scheduledReceivers :: Scheduled a -> [Addr a]
 scheduledReceivers (ScheduledMessage _ a _) = [a]
 scheduledReceivers (ScheduledTick _ a)      = [a]
 scheduledReceivers (Partition _ _)          = [] -- XXX
 scheduledReceivers (Heal _)                 = []
-scheduledReceivers (Disconnect _ f t)       = [t, f]
-scheduledReceivers (Reconnect _ f t)        = [t, f]
 
 scheduledSender :: Scheduled a -> Maybe (Addr a)
 scheduledSender (ScheduledMessage _ _ (a, _)) = Just a

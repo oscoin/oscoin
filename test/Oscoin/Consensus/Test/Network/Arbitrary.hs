@@ -62,14 +62,6 @@ arbitraryPartitionedNetwork = do
                                              , fromEnum $ scheduledTick (maximum tnMsgs) / 1.5) :: Gen Tick
     pure $ net { tnMsgs = tnMsgs ++ Set.fromList [Partition partitionAt partition, Heal healAt] }
 
-arbitraryDisconnects :: [Addr a] -> Gen [Scheduled a]
-arbitraryDisconnects addrs =
-    vectorOf kidSize $ do
-        at <- choose (0, 100) :: Gen Int
-        from <- elements addrs
-        to <- elements addrs
-        pure $ Disconnect (fromIntegral at) from to
-
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPartition addrs =
     oneof [ arbitraryPerfectPartition addrs
