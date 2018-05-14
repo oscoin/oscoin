@@ -16,6 +16,10 @@ import           Test.QuickCheck
 kidSize :: Int
 kidSize = 11
 
+-- | Converts a Tick to seconds.
+toSeconds :: Tick -> Int
+toSeconds t = fromEnum t `div` 1000000000000
+
 arbitraryNetwork :: TestableNode a => Gen (TestNetwork a)
 arbitraryNetwork = arbitrary
 
@@ -29,15 +33,17 @@ arbitraryHealthyNetwork = do
 
     e <- pure . epoch . snd . head $ nodes
 
+    let lastTick = (length addrs * 3) * toSeconds e :: Int
+
     smsgs <- listOf1 $ do
         msg <- arbitrary  :: Gen (Addr a, Msg a)
         dests <- sublistOf (toList addrs) :: Gen [Addr a]
         forM dests $ \d -> do
-            at <- choose (0, 10 * fromEnum e) :: Gen Int
-            pure $ ScheduledMessage (toEnum at) d msg
+            at <- choose (0, lastTick `div` 2) :: Gen Int
+            pure $ ScheduledMessage (fromIntegral at) d msg
 
-    ticks <- forM nodes $ \(addr, _) ->
-        pure [ScheduledTick (e * fromIntegral x) addr | x <- [0..20] :: [Int]]
+    let ticks = foreach nodes $ \(addr, _) ->
+         [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
 
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
@@ -46,21 +52,15 @@ arbitraryHealthyNetwork = do
         , tnLog        = []
         }
 
-arbitraryPartitionedNetwork :: TestableNode a => Tick -> Maybe Tick -> Gen (TestNetwork a)
-arbitraryPartitionedNetwork partAt mayHeal = do
+arbitraryPartitionedNetwork :: TestableNode a => Gen (TestNetwork a)
+arbitraryPartitionedNetwork = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
-    part                <- arbitraryPartition (Map.keys tnNodes)
-    pure $ net { tnMsgs = (Set.insert (Partition partAt part) . heal) tnMsgs }
-  where
-    heal = maybe identity (Set.insert . Heal) mayHeal
-
-arbitraryDisconnects :: [Addr a] -> Gen [Scheduled a]
-arbitraryDisconnects addrs =
-    vectorOf kidSize $ do
-        at <- choose (0, 100) :: Gen Int
-        from <- elements addrs
-        to <- elements addrs
-        pure $ Disconnect (fromIntegral at) from to
+    partition           <- arbitraryPartition (Map.keys tnNodes)
+    partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 2) :: Gen Tick
+    healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 1.5) :: Gen Tick
+    pure $ net { tnMsgs = tnMsgs ++ Set.fromList [Partition partitionAt partition, Heal healAt] }
 
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPartition addrs =
@@ -101,10 +101,7 @@ arbitraryBridgePartition addrs = do
             mempty
 
 instance TestableNode a => Arbitrary (TestNetwork a) where
-    arbitrary = do
-        network@TestNetwork{..} <- arbitraryHealthyNetwork
-        disconnects             <- arbitraryDisconnects (Map.keys tnNodes)
-        pure $ network { tnMsgs = tnMsgs ++ Set.fromList disconnects }
+    arbitrary = arbitraryPartitionedNetwork
 
     shrink (TestNetwork nodes msgs partitions _) =
         lessMsgs

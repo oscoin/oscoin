@@ -22,7 +22,7 @@ tests =
         , testProperty "All nodes DON'T include all txns (buffered test)" $
             expectFailure $ propNetworkNodesIncludeAllTxns (arbitraryNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesIncludeAllTxns (arbitraryPartitionedNetwork @(SimpleNode DummyTx) 50 (Just 100))
+            propNetworkNodesConverge (arbitraryPartitionedNetwork @(SimpleNode DummyTx))
         ]
     , testGroup "Without Partitions"
         [ testProperty "All nodes include all txns (simple test)" $
@@ -55,3 +55,21 @@ propNetworkNodesIncludeAllTxns testNetworks =
              in counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyExps ++ prettyInfo)
                                (all (\ns -> Set.fromList (testablePostState ns) == expectations)
                                (toList nodes))
+
+propNetworkNodesConverge
+    :: forall a . (Show (TestNetwork a), Ord (TestableTx a), TestableNode a)
+    => Gen (TestNetwork a)
+    -> Property
+propNetworkNodesConverge testNetworks =
+    forAllShrink testNetworks shrink $ \tn@(TestNetwork _ scheduled _ _) ->
+        networkNonTrivial tn ==>
+            let TestNetwork nodes _ _ log = runNetwork tn
+                scheduledMsgs             = mapMaybe scheduledMessage
+                                          $ Set.toList scheduled
+                prettyLog                 = unlines $ " log:" : reverse ["  " ++ show l | l <- log]
+                prettyStates              = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
+                prettyNodes               = unlines $ [" nodes:", "  " ++ show (length nodes)]
+                prettyInfo                = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
+
+             in counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo)
+                               (equal $ map testablePostState (toList nodes))
