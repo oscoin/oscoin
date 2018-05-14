@@ -108,18 +108,18 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions log rng) =
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions log lats) =
     runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms partitions log rng)
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms)) partitions log rng)  =
+    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms partitions log lats)
+runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms)) partitions log lats)  =
     runNetwork (scheduleMessages tick to msgs tn)
   where
-    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions log rng)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _ log rng)  =
-    runNetwork (TestNetwork nodes ms partitions log rng)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _ log rng)  =
-    runNetwork (TestNetwork nodes ms mempty log rng)
+    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions log lats)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _ log lats)  =
+    runNetwork (TestNetwork nodes ms partitions log lats)
+runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _ log lats)  =
+    runNetwork (TestNetwork nodes ms mempty log lats)
 runNetwork tn = tn
 
 deliverTick
@@ -151,9 +151,8 @@ scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog, tnLaten
     let
         msgs'                = Set.union (Set.fromList scheduled) tnMsgs
         (lats, tnLatencies') = splitAt (length msgs) tnLatencies
-        timedMsgs            = zipWith (\l (d, m) -> (l, d, m)) lats msgs
         log                  = scheduled ++ tnLog
-        scheduled            = [ScheduledMessage (t + lat) to (from, msg) | (lat, to, msg) <- timedMsgs, reachable to]
+        scheduled            = [ScheduledMessage (t + lat) to (from, msg) | (lat, (to, msg)) <- zip lats msgs, reachable to]
         reachable to         = maybe True not $
             Set.member to <$> Map.lookup from tnPartitions
      in tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies' }

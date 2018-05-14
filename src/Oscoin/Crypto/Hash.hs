@@ -127,7 +127,7 @@ instance Hashable ByteString where
     hash = Hashed . Crypto.hash
 
 instance Hashable Word8 where
-    hash w = Hashed . Crypto.hash $ BS.singleton w
+    hash = Hashed . Crypto.hash . BS.singleton
 
 instance (Binary a, ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)

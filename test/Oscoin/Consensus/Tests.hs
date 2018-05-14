@@ -51,4 +51,4 @@ propNetworkNodesConverge testNetworks =
 
              in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
                       counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo)
-                      (equal $ map testablePostState (toList nodes))
+                                     (equal $ map testablePostState (toList nodes))
