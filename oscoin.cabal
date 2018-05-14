@@ -20,6 +20,7 @@ library
     , Oscoin.Consensus
     , Oscoin.Consensus.Class
     , Oscoin.Consensus.Simple
+    , Oscoin.Consensus.Nakamoto
     , Oscoin.Environment
     , Oscoin.Node
     , Oscoin.Node.State
