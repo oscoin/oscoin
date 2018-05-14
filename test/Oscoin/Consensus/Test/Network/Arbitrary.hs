@@ -11,6 +11,7 @@ import           Data.Maybe (catMaybes)
 import           Data.List (nub)
 
 import           Test.QuickCheck
+import           System.Random
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
@@ -45,11 +46,14 @@ arbitraryHealthyNetwork = do
     let ticks = foreach nodes $ \(addr, _) ->
          [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
 
+    seed <- arbitrary :: Gen Int
+
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
         , tnLog        = []
+        , tnLatencies  = map fromIntegral (randomRs (1 :: Int, 1 + 2 * toSeconds e) (mkStdGen seed))
         }
 
 arbitraryPartitionedNetwork :: TestableNode a => Gen (TestNetwork a)
@@ -57,9 +61,9 @@ arbitraryPartitionedNetwork = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork
     partition           <- arbitraryPartition (Map.keys tnNodes)
     partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 2) :: Gen Tick
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 4) :: Gen Tick
     healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 1.5) :: Gen Tick
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 3) :: Gen Tick
     pure $ net { tnMsgs = tnMsgs ++ Set.fromList [Partition partitionAt partition, Heal healAt] }
 
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
@@ -103,15 +107,15 @@ arbitraryBridgePartition addrs = do
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = arbitraryPartitionedNetwork
 
-    shrink (TestNetwork nodes msgs partitions _) =
+    shrink (TestNetwork nodes msgs partitions _ rng) =
         lessMsgs
       where
         msgs'     = shrinkScheduledMsgs msgs
         nodes'    = shrinkList shrinkNothing (Map.toList nodes)
-        lessMsgs  = [TestNetwork nodes ms partitions [] | ms <- msgs']
+        lessMsgs  = [TestNetwork nodes ms partitions [] rng | ms <- msgs']
 
         -- NB. Not in use currently.
-        _lessNodes = map filterNetwork [TestNetwork (Map.fromList ns) msgs partitions [] | ns <- nodes']
+        _lessNodes = map filterNetwork [TestNetwork (Map.fromList ns) msgs partitions [] rng | ns <- nodes']
 
 shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
 shrinkScheduledMsgs msgs =
@@ -127,8 +131,8 @@ shrinkScheduledMsgs msgs =
 -- TODO: Nodes will still contain previously present nodes in their address
 -- books.
 filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
-filterNetwork (TestNetwork nodes msgs partitions _) =
-    TestNetwork nodes (Set.filter f msgs) partitions []
+filterNetwork (TestNetwork nodes msgs partitions _ rng) =
+    TestNetwork nodes (Set.filter f msgs) partitions [] rng
   where
     f msg = all (`Map.member` nodes) $
         scheduledReceivers msg ++ catMaybes [scheduledSender msg]

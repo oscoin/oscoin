@@ -231,6 +231,7 @@ test-suite test
     , oscoin
     , QuickCheck
     , quickcheck-instances
+    , random
     , tasty       >= 1.0.0.1
     , tasty-hunit >= 0.10.0.1
     , tasty-quickcheck
