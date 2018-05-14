@@ -14,8 +14,8 @@ import           Data.List.NonEmpty ((<|))
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
-epochLen :: Tick
-epochLen = 10
+epochLength :: Tick
+epochLength = 10
 
 data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
@@ -98,19 +98,20 @@ bestChain :: BlockStore tx -> Blockchain tx
 bestChain BlockStore{bsChains} =
     Blockchain longest
   where
-    scored = [(scoreChain chain, fromBlockchain chain) | chain <- toList bsChains]
+    scored = [(chainScore chain, fromBlockchain chain) | chain <- toList bsChains]
     (_, longest) = maximumBy (comparing fst) scored
 
-scoreChain :: forall tx . Blockchain tx -> Int
-scoreChain bc =
-    (2526041640 * h) - stepDuration
+chainScore :: forall tx . Blockchain tx -> Int
+chainScore bc =
+    (bigMagicNumber * h) - steps
   where
-    h            = height bc
-    lastBlock    = tip bc :: Block tx
-    timestampNs  = blockTimestamp $ blockHeader lastBlock
-    timestamp    = timestampNs `div` 1000000000
-    e            = round epochLen
-    stepDuration = fromIntegral timestamp `div` e :: Int
+    h              = height bc
+    lastBlock      = tip bc :: Block tx
+    timestampNs    = blockTimestamp $ blockHeader lastBlock
+    timestamp      = timestampNs `div` 1000000000
+    e              = round epochLength
+    steps          = fromIntegral timestamp `div` e :: Int
+    bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
 chainTxs :: Blockchain tx -> [tx]
 chainTxs (Blockchain chain) =
@@ -204,4 +205,4 @@ instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
         orphanParents = orphanParentHashes sn
         outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
 
-    epoch _ = epochLen
+    epoch _ = epochLength
