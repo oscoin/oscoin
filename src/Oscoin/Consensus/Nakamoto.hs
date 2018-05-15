@@ -24,9 +24,9 @@ minDifficulty :: Difficulty
 minDifficulty =
     0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
--- | The difficulty at genesis.
-genesisDifficulty :: Difficulty
-genesisDifficulty =
+-- | The default difficulty at genesis.
+defaultGenesisDifficulty :: Difficulty
+defaultGenesisDifficulty =
     0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     -- ^ This is the original difficulty of Bitcoin at genesis.
 
