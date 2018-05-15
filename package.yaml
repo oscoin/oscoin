@@ -1,0 +1,123 @@
+name: oscoin
+version: '0.1.0.0'
+synopsis: open-source collaboration network
+author: Alexis Sellier
+maintainer: alexis@monadic.xyz
+copyright: 2018 Monadic
+license: BSD3
+github: oscoin/oscoin
+
+
+library:
+  source-dirs: src
+dependencies:
+  - base
+  - acid-state
+  - aeson
+  - ansi-terminal
+  - async
+  - base16-bytestring
+  - base58-bytestring
+  - base64-bytestring
+  - binary
+  - bytestring
+  - containers
+  - cryptonite
+  - data-default
+  - data-has
+  - filepath
+  - foundation
+  - http-api-data
+  - http-types
+  - kademlia
+  - megaparsec
+  - memory
+  - merkle-tree
+  - microlens
+  - microlens-aeson
+  - microlens-contra
+  - microlens-mtl
+  - monad-logger
+  - monad-stm
+  - mtl
+  - network
+  - network-simple
+  - semigroups
+  - Spock
+  - stm
+  - stm >=2.4.5.0
+  - text
+  - text-format
+  - time
+  - transformers
+  - unordered-containers
+  - wai
+  - wai-extra
+  - wai-middleware-static
+  - writer-cps-mtl
+
+executables:
+  oscoin:
+    main: src/Main.hs
+    dependencies:
+    - base >=4.10 && <4.11
+    - oscoin
+
+tests:
+  test:
+    main: Main.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - oscoin
+    - QuickCheck
+    - quickcheck-instances
+    - tasty >=1.0.0.1
+    - tasty-hunit >=0.10.0.1
+    - tasty-quickcheck
+    - random
+
+
+default-extensions:
+- BangPatterns
+- ConstraintKinds
+- DeriveFoldable
+- DeriveFunctor
+- DeriveGeneric
+- DeriveTraversable
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GADTs
+- GeneralizedNewtypeDeriving
+- InstanceSigs
+- MonadFailDesugaring
+- MultiParamTypeClasses
+- MultiWayIf
+- NamedFieldPuns
+- NoImplicitPrelude
+- OverloadedStrings
+- ParallelListComp
+- PatternSynonyms
+- RankNTypes
+- RecordWildCards
+- ScopedTypeVariables
+- StandaloneDeriving
+- TypeApplications
+- TypeFamilies
+- TypeOperators
+- TypeSynonymInstances
+- ViewPatterns
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Wincomplete-uni-patterns
+- -Wincomplete-record-updates
+- -Wredundant-constraints
+- -fno-warn-orphans
+- -fno-warn-unused-do-bind
+- -fno-print-expanded-synonyms
