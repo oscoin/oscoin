@@ -5,7 +5,7 @@ import           Prelude
 import           Data.ByteString
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Aeson hiding (encode)
+import           Data.Aeson
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Binary as Binary
 import           Data.Binary (Binary)
