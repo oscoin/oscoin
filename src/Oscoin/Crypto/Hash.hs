@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Crypto.Hash
     ( Hashed
     , Hashable(..)
