@@ -23,7 +23,6 @@ library
     , Oscoin.Consensus.Nakamoto
     , Oscoin.Environment
     , Oscoin.Node
-    , Oscoin.Node.State
     , Oscoin.Node.State.Mempool
     , Oscoin.Node.State.Tree
     , Oscoin.Node.Service
