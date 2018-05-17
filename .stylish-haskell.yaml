@@ -182,3 +182,4 @@ language_extensions:
   - RecordWildCards
   - FlexibleContexts
   - MultiWayIf
+  - PatternSynonyms
