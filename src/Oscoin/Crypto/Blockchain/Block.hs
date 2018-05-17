@@ -11,6 +11,9 @@ import           Data.ByteArray (zero)
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
 
+-- | Block difficulty.
+type Difficulty = Integer
+
 -- | Block height.
 type Height = Integer
 
@@ -19,6 +22,7 @@ data BlockHeader = BlockHeader
     { blockPrevHash   :: Hashed BlockHeader
     , blockRootHash   :: ByteString -- TODO: Should be Digest.
     , blockTimestamp  :: Timestamp
+    , blockDifficulty :: Difficulty
     } deriving (Show, Eq, Ord, Generic)
 
 instance Binary BlockHeader
@@ -30,6 +34,7 @@ emptyHeader = BlockHeader
     { blockPrevHash = toHashed zeroHash
     , blockRootHash = zero 32
     , blockTimestamp = 0
+    , blockDifficulty = 0
     }
 
 -- | Block. @tx@ is the type of transaction stored in this block.
@@ -54,9 +59,10 @@ block
 block prev t txs =
     Block
         BlockHeader
-            { blockPrevHash  = prev
-            , blockTimestamp = t
-            , blockRootHash  = hashTxs txs
+            { blockPrevHash   = prev
+            , blockTimestamp  = t
+            , blockRootHash   = hashTxs txs
+            , blockDifficulty = 0
             }
         (Seq.fromList (toList txs))
 

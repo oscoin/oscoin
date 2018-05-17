@@ -9,12 +9,6 @@ import           Oscoin.Crypto.Hash (hash)
 import           Crypto.Number.Serialize (os2ip)
 import qualified Data.List.NonEmpty as NonEmpty
 
--- | Block difficulty.
-type Difficulty = Integer
-
-blockDifficulty :: BlockHeader -> Difficulty
-blockDifficulty = notImplemented
-
 -- | Calculate block difficulty.
 difficulty :: BlockHeader -> Difficulty
 difficulty = os2ip . hash
