@@ -130,7 +130,8 @@ findBlock
     -> t tx
     -> Maybe (Block tx)
 findBlock t prevHash target txs = do
-    fmap (flip mkBlock txs) headerWithPoW
+    header <- headerWithPoW
+    pure $ mkBlock header txs
   where
     headerWithPoW    = findPoW headerWithoutPoW
     headerWithoutPoW = BlockHeader
