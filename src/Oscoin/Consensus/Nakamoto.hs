@@ -70,7 +70,7 @@ mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers} =
             (node, [])
     else (node, [])
   where
-    broadcast msg peers = zip peers (cycle [msg])
+    broadcast msg peers = zip peers (repeat msg)
     r = head nkRandom
 
 -- | Calculate block difficulty.
