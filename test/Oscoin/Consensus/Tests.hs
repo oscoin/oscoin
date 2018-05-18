@@ -9,6 +9,8 @@ import           Oscoin.Consensus.Test.View
 import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Nakamoto (Nakamoto)
 
+import           Data.List (sort)
+
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -45,7 +47,7 @@ propNetworkNodesConverge testNetworks =
             let TestNetwork nodes _ _ log _ = runNetwork tn
                 scheduledMsgs               = mapMaybe scheduledMessage
                                             $ Set.toList scheduled
-                prettyLog                   = unlines $ " log:" : reverse ["  " ++ show l | l <- log]
+                prettyLog                   = unlines $ " log:" : reverse ["  " ++ show l | l <- reverse $ sort log]
                 prettyStates                = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
                 prettyNodes                 = unlines $ [" nodes:", "  " ++ show (length nodes)]
                 prettyInfo                  = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]

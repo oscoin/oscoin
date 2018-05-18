@@ -14,9 +14,11 @@ import           Data.Binary
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 data Nakamoto tx = Nakamoto
     { nkChain   :: Blockchain tx
+    , nkStore   :: Map (Hashed BlockHeader) (Block tx)
     , nkRandom  :: [Float]
     , nkMempool :: Mempool (Hashed tx) tx
     , nkPeers   :: Set (Addr (Nakamoto tx))
@@ -30,6 +32,7 @@ nakamoto :: Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] ->
 nakamoto addr genesis peers random =
     Nakamoto
         { nkChain = Blockchain (genesis :| [])
+        , nkStore = mempty
         , nkRandom = random
         , nkMempool = mempty
         , nkPeers = Set.fromList peers
@@ -51,7 +54,7 @@ instance Show tx => Show (NodeMsg tx) where
 
 instance Binary tx => Binary (NodeMsg tx)
 
-instance (Hashable tx, Binary tx) => Protocol (Nakamoto tx) where
+instance Hashable tx => Protocol (Nakamoto tx) where
     type Addr (Nakamoto tx) = Word8
     type Msg  (Nakamoto tx) = NodeMsg tx
 
@@ -59,11 +62,14 @@ instance (Hashable tx, Binary tx) => Protocol (Nakamoto tx) where
          -> Tick
          -> Maybe (Addr (Nakamoto tx), NodeMsg tx)
          -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-    step node@Nakamoto{nkPeers, nkChain} _ (Just (_from, msg)) =
+    step node@Nakamoto{nkPeers, nkChain, nkStore} _ (Just (_from, msg)) =
         case msg of
-            BlockMsg blk | blockPrevHash (blockHeader blk) == blockHash (tip nkChain)
-                         , Right _ <- validateBlock blk ->
-                (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
+            BlockMsg blk | Right _ <- validateBlock blk ->
+                if   blockPrevHash (blockHeader blk) == blockHash (tip nkChain)
+                then (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
+                else if   Map.member (blockHash blk) nkStore
+                     then (node,                [])
+                     else (storeBlock blk node, broadcast (BlockMsg blk) nkPeers)
             TxMsg tx | isNovel tx node -> -- TODO: Validate tx.
                 (receiveTx tx node, broadcast (TxMsg tx) nkPeers)
             _ ->
@@ -80,15 +86,38 @@ isNovel tx Nakamoto{nkMempool} =
 broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
 broadcast msg peers = zip (toList peers) (repeat msg)
 
+storeBlock :: Block tx -> Nakamoto tx -> Nakamoto tx
+storeBlock blk node@Nakamoto{nkStore} =
+    applyDanglings $ node { nkStore = Map.insert (blockHash blk) blk nkStore }
+
 receiveTx :: Hashable tx => tx -> Nakamoto tx -> Nakamoto tx
 receiveTx tx node = node { nkMempool = Mempool.insert tx (nkMempool node) }
 
-commitBlock :: Block tx -> Nakamoto tx -> Nakamoto tx
+commitBlock :: Hashable tx => Block tx -> Nakamoto tx -> Nakamoto tx
 commitBlock blk node =
-    node { nkChain = blk |> nkChain node }
+    reapMempool (toList blk) $ applyDanglings $ node { nkChain = blk |> nkChain node }
+
+reapMempool :: (Functor t, Foldable t, Hashable tx) => t tx -> Nakamoto tx -> Nakamoto tx
+reapMempool txs node =
+    node { nkMempool = Mempool.removeTxs (map hash txs) (nkMempool node) }
+
+applyDanglings :: Nakamoto tx -> Nakamoto tx
+applyDanglings n =
+    go (Map.elems (nkStore n)) n
+  where
+    go [] node =
+        node
+    go (blk:blks) node
+        | blockPrevHash (blockHeader blk) == blockHash (tip (nkChain node)) =
+            let store = Map.delete (blockHash blk) (nkStore node)
+             in go (Map.elems store) node { nkStore = store
+                                          , nkChain = blk |> nkChain node
+                                          }
+        | otherwise =
+            go blks node
 
 mineBlock
-    :: Binary tx
+    :: Hashable tx
     => Tick
     -> Nakamoto tx
     -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
