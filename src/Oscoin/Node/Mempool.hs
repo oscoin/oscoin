@@ -2,6 +2,7 @@ module Oscoin.Node.Mempool
     ( -- * Mempool
       Mempool(..)
     , lookup
+    , member
     , insert
     , removeTxs
 
@@ -47,6 +48,10 @@ instance (Aeson.ToJSON k, Aeson.ToJSON tx) => Aeson.ToJSON (Mempool k tx) where
 -- | Lookup a transaction in a mempool.
 lookup :: Ord k => k -> Mempool k tx -> Maybe tx
 lookup k (Mempool txs) = Map.lookup k txs
+
+-- | Check for key membership.
+member :: Ord k => k -> Mempool k tx -> Bool
+member k (Mempool txs) = Map.member k txs
 
 -- | Add a transaction to a mempool.
 insert

@@ -22,6 +22,9 @@ data Nakamoto tx = Nakamoto
     , nkAddr    :: Addr (Nakamoto tx)
     }
 
+instance Show (Nakamoto tx) where
+    show Nakamoto{} = "Nakamoto{}"
+
 nakamoto :: Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
 nakamoto addr genesis peers random =
     Nakamoto
@@ -47,19 +50,23 @@ instance (Hashable tx, Binary tx) => Protocol (Nakamoto tx) where
          -> Tick
          -> Maybe (Addr (Nakamoto tx), NodeMsg tx)
          -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-    step node@Nakamoto{nkPeers} _ (Just (_from, msg)) =
+    step node@Nakamoto{nkPeers, nkChain} _ (Just (_from, msg)) =
         case msg of
-            BlockMsg blk ->
-                case validateBlock blk of
-                    Right _ -> (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
-                    Left  _ -> (node, [])
-            TxMsg tx ->
-                -- TODO: Validate tx.
+            BlockMsg blk | blockPrevHash (blockHeader blk) == blockHash (tip nkChain)
+                         , Right _ <- validateBlock blk ->
+                (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
+            TxMsg tx | isNovel tx node -> -- TODO: Validate tx.
                 (receiveTx tx node, broadcast (TxMsg tx) nkPeers)
+            _ ->
+                (node, [])
     step node t Nothing =
         mineBlock t node
 
     epoch _ = 1
+
+isNovel :: Hashable tx => tx -> Nakamoto tx -> Bool
+isNovel tx Nakamoto{nkMempool} =
+    not $ Mempool.member (hash tx) nkMempool
 
 broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
 broadcast msg peers = zip (toList peers) (repeat msg)
@@ -155,4 +162,4 @@ findBlock t prevHash target txs = do
         , blockTimestamp    = toSeconds t
         , blockNonce        = 0
         }
-    toSeconds tick = fromIntegral $ fromEnum tick `div` 1000000000000
+    toSeconds = fromIntegral . fromEnum

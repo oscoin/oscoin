@@ -39,7 +39,10 @@ type Hashed a = Hashed' HashAlgorithm a
 -- | Represents data that has been hashed with @algo@. In general, it's
 -- recommended to use 'Hashed' instead.
 newtype Hashed' algo a = Hashed { fromHashed :: Digest algo }
-    deriving (Eq, Ord, Show, Functor, ByteArrayAccess)
+    deriving (Eq, Ord, Functor, ByteArrayAccess)
+
+instance Show (Hashed' algo a) where
+    show = show . fromHashed
 
 instance ToJSON (Hashed' Blake2b_256 a) where
     toJSON (Hashed digest) = toJSON digest

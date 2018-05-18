@@ -7,6 +7,7 @@ import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Test.View
 import           Oscoin.Consensus.Simple
+import           Oscoin.Consensus.Nakamoto (Nakamoto)
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
