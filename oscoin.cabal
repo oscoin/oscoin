@@ -31,7 +31,6 @@ library
     , Oscoin.User
 
     , Oscoin.Prototype.V1
-    , Oscoin.Prototype.V2
 
     , Oscoin.Crypto.Blockchain
     , Oscoin.Crypto.Blockchain.Block
@@ -211,7 +210,6 @@ test-suite test
     , Oscoin.Crypto.PubKey.Arbitrary
     , Oscoin.Crypto.Blockchain.Arbitrary
     , Oscoin.Account.Arbitrary
-    , Oscoin.Prototype.V2.Tests
     , Oscoin.Test.Helpers
 
     , Crypto.Tests
