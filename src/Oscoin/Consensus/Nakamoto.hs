@@ -5,36 +5,50 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (hash, Hashed)
-import           Oscoin.Node.Mempool (Mempool)
+import           Oscoin.Crypto.Hash (hash)
+import qualified Oscoin.Node as Node
 
 import           Crypto.Number.Serialize (os2ip)
+import           Data.Binary
 import qualified Data.List.NonEmpty as NonEmpty
 import           Network.Socket (SockAddr)
 
-data Node tx = Node
-    { nodeChains  :: [Blockchain tx]
-    , nodeMempool :: Mempool (Hashed tx) tx
-    }
+newtype Nakamoto node = Nakamoto { fromNakamoto :: node }
 
 data NodeMsg tx =
-      MsgPropose (Block tx)
-    | MsgBlock   (Block tx)
+      MsgBlock   (Block tx)
+    | MsgTx      tx
+    deriving (Show, Eq, Generic)
 
-instance Protocol (Node tx) where
-    type Addr (Node tx) = SockAddr
-    type Msg  (Node tx) = NodeMsg tx
+instance Binary tx => Binary (NodeMsg tx)
 
-    step :: Node tx
+instance Protocol (Nakamoto (Node.Handle tx)) where
+    type Addr (Nakamoto (Node.Handle tx)) = SockAddr
+    type Msg  (Nakamoto (Node.Handle tx)) = NodeMsg tx
+
+    step :: Nakamoto (Node.Handle tx)
          -> Tick
          -> Maybe (SockAddr, NodeMsg tx)
-         -> (Node tx, [(SockAddr, NodeMsg tx)])
-    step node _ (Just (_from, _msg)) =
-        (node, [])
+         -> (Nakamoto (Node.Handle tx), [(SockAddr, NodeMsg tx)])
+    step node _ (Just (_from, msg)) =
+        case msg of
+            MsgBlock blk ->
+                receiveBlock node blk
+            MsgTx tx ->
+                receiveTx node tx
     step node _ Nothing =
-        (node, [])
+        mineBlock node
 
     epoch _ = 1
+
+receiveBlock :: a
+receiveBlock = notImplemented
+
+receiveTx :: a
+receiveTx = notImplemented
+
+mineBlock :: a
+mineBlock = notImplemented
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader -> Difficulty
