@@ -23,6 +23,7 @@ data BlockHeader = BlockHeader
     , blockRootHash   :: ByteString -- TODO: Should be Digest.
     , blockTimestamp  :: Timestamp
     , blockDifficulty :: Difficulty
+    , blockNonce      :: Word32
     } deriving (Show, Eq, Ord, Generic)
 
 instance Binary BlockHeader
@@ -35,6 +36,7 @@ emptyHeader = BlockHeader
     , blockRootHash = zero 32
     , blockTimestamp = 0
     , blockDifficulty = 0
+    , blockNonce = 0
     }
 
 -- | Block. @tx@ is the type of transaction stored in this block.
@@ -58,13 +60,21 @@ block
     -> Block tx
 block prev t txs =
     Block
-        BlockHeader
+        emptyHeader
             { blockPrevHash   = prev
             , blockTimestamp  = t
             , blockRootHash   = hashTxs txs
             , blockDifficulty = 0
             }
         (Seq.fromList (toList txs))
+
+mkBlock
+    :: Foldable t
+    => BlockHeader
+    -> t tx
+    -> Block tx
+mkBlock header txs =
+    Block header (Seq.fromList (toList txs))
 
 genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx
 genesisBlock t xs =

@@ -9,6 +9,7 @@ import qualified Prelude
 import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
 import qualified Data.List.NonEmpty as NonEmpty
+import           Data.List.NonEmpty ((<|))
 import qualified Data.Sequence as Seq
 import           Text.Printf
 import           Data.Time.Clock (NominalDiffTime)
@@ -21,6 +22,11 @@ instance Binary tx => Show (Blockchain tx) where
 
 fromList :: [Block tx] -> Blockchain tx
 fromList = Blockchain . NonEmpty.fromList
+
+infixr 5 |>
+
+(|>) :: Block tx -> Blockchain tx -> Blockchain tx
+(|>) blk (Blockchain blks) = Blockchain (blk <| blks)
 
 tip :: Blockchain tx -> Block tx
 tip (Blockchain blks) = NonEmpty.head blks
