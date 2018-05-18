@@ -50,20 +50,20 @@ lookup k (Mempool txs) = Map.lookup k txs
 
 -- | Add a transaction to a mempool.
 insert
-    :: (Hashable tx, Id tx ~ Hashed tx)
+    :: Hashable tx
     => tx
-    -> Mempool (Id tx) tx
-    -> Mempool (Id tx) tx
+    -> Mempool (Hashed tx) tx
+    -> Mempool (Hashed tx) tx
 insert tx (Mempool txs) =
     Mempool (Map.insert (hash tx) tx txs)
 
 -- TODO: We shouldn't need this function. Use foldr instead.
 -- | Add multiple transactions to a mempool.
 insertMany
-    :: (Foldable t, Hashable tx, Id tx ~ Hashed tx)
+    :: (Foldable t, Hashable tx)
     => t tx
-    -> Mempool (Id tx) tx
-    -> Mempool (Id tx) tx
+    -> Mempool (Hashed tx) tx
+    -> Mempool (Hashed tx) tx
 insertMany txs' (Mempool txs) =
     Mempool . Map.union txs
             . Map.fromList

@@ -5,8 +5,9 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import           Oscoin.Node.Mempool (Mempool)
+import qualified Oscoin.Node.Mempool as Mempool
 
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Binary
@@ -27,7 +28,7 @@ data NodeMsg tx =
 
 instance Binary tx => Binary (NodeMsg tx)
 
-instance Binary tx => Protocol (Nakamoto tx) where
+instance (Hashable tx, Binary tx) => Protocol (Nakamoto tx) where
     type Addr (Nakamoto tx) = SockAddr
     type Msg  (Nakamoto tx) = NodeMsg tx
 
@@ -35,22 +36,25 @@ instance Binary tx => Protocol (Nakamoto tx) where
          -> Tick
          -> Maybe (SockAddr, NodeMsg tx)
          -> (Nakamoto tx, [(SockAddr, NodeMsg tx)])
-    step node _ (Just (_from, msg)) =
+    step node@Nakamoto{nkPeers} _ (Just (_from, msg)) =
         case msg of
             MsgBlock blk ->
-                receiveBlock node blk
+                case validateBlock blk of
+                    Right _ -> (commitBlock blk node, broadcast (MsgBlock blk) nkPeers)
+                    Left  _ -> (node, [])
             MsgTx tx ->
-                receiveTx node tx
+                -- TODO: Validate tx.
+                (receiveTx tx node, broadcast (MsgTx tx) nkPeers)
     step node t Nothing =
         mineBlock t node
 
     epoch _ = 1
 
-receiveBlock :: a
-receiveBlock = notImplemented
+broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
+broadcast msg peers = zip (toList peers) (repeat msg)
 
-receiveTx :: a
-receiveTx = notImplemented
+receiveTx :: Hashable tx => tx -> Nakamoto tx -> Nakamoto tx
+receiveTx tx node = node { nkMempool = Mempool.insert tx (nkMempool node) }
 
 commitBlock :: Block tx -> Nakamoto tx -> Nakamoto tx
 commitBlock blk node =
@@ -70,7 +74,6 @@ mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers} =
             (node, [])
     else (node, [])
   where
-    broadcast msg peers = zip peers (repeat msg)
     r = head nkRandom
 
 -- | Calculate block difficulty.
