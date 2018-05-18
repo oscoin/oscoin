@@ -2,12 +2,39 @@ module Oscoin.Consensus.Nakamoto where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.Crypto.Hash (hash, Hashed)
+import           Oscoin.Node.Mempool (Mempool)
 
 import           Crypto.Number.Serialize (os2ip)
 import qualified Data.List.NonEmpty as NonEmpty
+import           Network.Socket (SockAddr)
+
+data Node tx = Node
+    { nodeChains  :: [Blockchain tx]
+    , nodeMempool :: Mempool (Hashed tx) tx
+    }
+
+data NodeMsg tx =
+      MsgPropose (Block tx)
+    | MsgBlock   (Block tx)
+
+instance Protocol (Node tx) where
+    type Addr (Node tx) = SockAddr
+    type Msg  (Node tx) = NodeMsg tx
+
+    step :: Node tx
+         -> Tick
+         -> Maybe (SockAddr, NodeMsg tx)
+         -> (Node tx, [(SockAddr, NodeMsg tx)])
+    step node _ (Just (_from, _msg)) =
+        (node, [])
+    step node _ Nothing =
+        (node, [])
+
+    epoch _ = 1
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader -> Difficulty
