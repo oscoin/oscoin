@@ -121,16 +121,17 @@ mineBlock
     => Tick
     -> Nakamoto tx
     -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers} =
-    if   r < 0.1
-    then case findBlock t (hash $ blockHeader $ tip $ nkChain) minDifficulty nkMempool of
-        Just blk ->
-            (commitBlock blk node, broadcast (BlockMsg blk) (toList nkPeers))
-        Nothing ->
-            (node, [])
-    else (node, [])
+mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers}
+    | head nkRandom < 0.1 =
+        case findBlock t (hash $ blockHeader $ tip $ nkChain) minDifficulty nkMempool of
+            Just blk ->
+                (commitBlock blk node', broadcast (BlockMsg blk) (toList nkPeers))
+            Nothing ->
+                (node', [])
+    | otherwise =
+        (node', [])
   where
-    r = head nkRandom
+    node' = node { nkRandom = tail nkRandom }
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader -> Difficulty
