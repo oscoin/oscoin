@@ -200,6 +200,7 @@ test-suite test
   other-modules:
       Oscoin.Tests
     , Oscoin.Consensus.Simple.Arbitrary
+    , Oscoin.Consensus.Nakamoto.Arbitrary
     , Oscoin.Consensus.Tests
     , Oscoin.Consensus.Test.Node
     , Oscoin.Consensus.Test.Network

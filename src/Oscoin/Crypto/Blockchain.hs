@@ -20,6 +20,9 @@ newtype Blockchain tx = Blockchain { fromBlockchain :: NonEmpty (Block tx) }
 instance Binary tx => Show (Blockchain tx) where
     show = showBlockchain
 
+instance Semigroup (Blockchain tx) where
+    (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)
+
 fromList :: [Block tx] -> Blockchain tx
 fromList = Blockchain . NonEmpty.fromList
 

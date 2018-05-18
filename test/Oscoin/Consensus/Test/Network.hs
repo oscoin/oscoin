@@ -5,13 +5,16 @@ import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Simple.Arbitrary ()
-import           Oscoin.Crypto.Blockchain.Block (blockHeader, BlockHeader)
+import           Oscoin.Consensus.Nakamoto.Arbitrary ()
+import           Oscoin.Consensus.Nakamoto (nakamoto, Nakamoto(..), NodeMsg(..))
+import           Oscoin.Crypto.Blockchain.Block (genesisBlock, blockHeader, BlockHeader)
 import           Oscoin.Crypto.Blockchain (showChainDigest, fromBlockchain)
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 
 import           Data.Binary (Binary)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import           System.Random (mkStdGen, randomRs)
 
 import           Test.QuickCheck
 
@@ -84,6 +87,22 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
 
     testableNodeAddr = snAddr
     testableShow SimpleNode{..} = showChainDigest $ bestChain $ snStore
+
+instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode (Nakamoto tx) where
+    type TestableTx (Nakamoto tx) = tx
+    type TestableResult (Nakamoto tx) = Hashed BlockHeader
+
+    testableNode addr peers =
+        nakamoto addr (genesisBlock 0 []) peers (randomRs (0, 1) rng)
+      where
+        rng = mkStdGen (fromIntegral addr)
+
+    testablePreState _ (TxMsg tx) = [tx]
+    testablePreState _ _          = []
+
+    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . nkChain
+    testableNodeAddr = nkAddr
+    testableShow = showChainDigest . nkChain
 
 -- TestNetwork ----------------------------------------------------------------
 

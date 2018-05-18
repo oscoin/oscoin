@@ -12,39 +12,50 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Binary
 import qualified Data.List.NonEmpty as NonEmpty
-import           Network.Socket (SockAddr)
+import qualified Data.Set as Set
 
 data Nakamoto tx = Nakamoto
     { nkChain   :: Blockchain tx
     , nkRandom  :: [Float]
     , nkMempool :: Mempool (Hashed tx) tx
-    , nkPeers   :: Set SockAddr
+    , nkPeers   :: Set (Addr (Nakamoto tx))
+    , nkAddr    :: Addr (Nakamoto tx)
     }
 
+nakamoto :: Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
+nakamoto addr genesis peers random =
+    Nakamoto
+        { nkChain = Blockchain (genesis :| [])
+        , nkRandom = random
+        , nkMempool = mempty
+        , nkPeers = Set.fromList peers
+        , nkAddr = addr
+        }
+
 data NodeMsg tx =
-      MsgBlock   (Block tx)
-    | MsgTx      tx
+      BlockMsg   (Block tx)
+    | TxMsg      tx
     deriving (Show, Eq, Generic)
 
 instance Binary tx => Binary (NodeMsg tx)
 
 instance (Hashable tx, Binary tx) => Protocol (Nakamoto tx) where
-    type Addr (Nakamoto tx) = SockAddr
+    type Addr (Nakamoto tx) = Word8
     type Msg  (Nakamoto tx) = NodeMsg tx
 
     step :: Nakamoto tx
          -> Tick
-         -> Maybe (SockAddr, NodeMsg tx)
-         -> (Nakamoto tx, [(SockAddr, NodeMsg tx)])
+         -> Maybe (Addr (Nakamoto tx), NodeMsg tx)
+         -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
     step node@Nakamoto{nkPeers} _ (Just (_from, msg)) =
         case msg of
-            MsgBlock blk ->
+            BlockMsg blk ->
                 case validateBlock blk of
-                    Right _ -> (commitBlock blk node, broadcast (MsgBlock blk) nkPeers)
+                    Right _ -> (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
                     Left  _ -> (node, [])
-            MsgTx tx ->
+            TxMsg tx ->
                 -- TODO: Validate tx.
-                (receiveTx tx node, broadcast (MsgTx tx) nkPeers)
+                (receiveTx tx node, broadcast (TxMsg tx) nkPeers)
     step node t Nothing =
         mineBlock t node
 
@@ -64,12 +75,12 @@ mineBlock
     :: Binary tx
     => Tick
     -> Nakamoto tx
-    -> (Nakamoto tx, [(SockAddr, NodeMsg tx)])
+    -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
 mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers} =
     if   r < 0.1
     then case findBlock t (hash $ blockHeader $ tip $ nkChain) minDifficulty nkMempool of
         Just blk ->
-            (commitBlock blk node, broadcast (MsgBlock blk) (toList nkPeers))
+            (commitBlock blk node, broadcast (BlockMsg blk) (toList nkPeers))
         Nothing ->
             (node, [])
     else (node, [])
