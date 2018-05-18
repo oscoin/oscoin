@@ -6,7 +6,7 @@ import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Simple.Arbitrary ()
 import           Oscoin.Consensus.Nakamoto.Arbitrary ()
-import           Oscoin.Consensus.Nakamoto (nakamoto, Nakamoto(..), NodeMsg(..))
+import           Oscoin.Consensus.Nakamoto (nakamoto, Nakamoto(..), NodeMsg(..), longestChain)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock, blockHeader, BlockHeader)
 import           Oscoin.Crypto.Blockchain (showChainDigest, fromBlockchain)
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
@@ -100,9 +100,9 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
     testablePreState _ (TxMsg tx) = [tx]
     testablePreState _ _          = []
 
-    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . nkChain
+    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . longestChain
     testableNodeAddr = nkAddr
-    testableShow = showChainDigest . nkChain
+    testableShow = showChainDigest . longestChain
 
 -- TestNetwork ----------------------------------------------------------------
 

@@ -15,7 +15,7 @@ import           System.Random
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
-kidSize = 11
+kidSize = 13
 
 -- | Converts a Tick to seconds.
 toSeconds :: Tick -> Int

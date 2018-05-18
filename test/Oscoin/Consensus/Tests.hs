@@ -34,6 +34,8 @@ tests =
             propNetworkNodesConverge (arbitraryHealthyNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
             propNetworkNodesConverge (arbitraryHealthyNetwork @(SimpleNode DummyTx))
+        , testProperty "All nodes include all txns (nakamoto)" $
+            propNetworkNodesConverge (arbitraryHealthyNetwork @(Nakamoto DummyTx))
         ]
     ]
 

@@ -16,9 +16,11 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
+type BlockHash = Hashed BlockHeader
+
 data Nakamoto tx = Nakamoto
-    { nkChain   :: Blockchain tx
-    , nkStore   :: Map (Hashed BlockHeader) (Block tx)
+    { nkForks   :: Map BlockHash (Blockchain tx)
+    , nkStore   :: Set (Block tx)
     , nkRandom  :: [Float]
     , nkMempool :: Mempool (Hashed tx) tx
     , nkPeers   :: Set (Addr (Nakamoto tx))
@@ -28,16 +30,18 @@ data Nakamoto tx = Nakamoto
 instance Show (Nakamoto tx) where
     show Nakamoto{} = "Nakamoto{}"
 
-nakamoto :: Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
+nakamoto :: Ord tx => Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
 nakamoto addr genesis peers random =
     Nakamoto
-        { nkChain = Blockchain (genesis :| [])
+        { nkForks = Map.singleton (blockHash genesis) chain
         , nkStore = mempty
         , nkRandom = random
         , nkMempool = mempty
         , nkPeers = Set.fromList peers
         , nkAddr = addr
         }
+  where
+    chain = Blockchain (genesis :| [])
 
 data NodeMsg tx =
       BlockMsg   (Block tx)
@@ -54,7 +58,7 @@ instance Show tx => Show (NodeMsg tx) where
 
 instance Binary tx => Binary (NodeMsg tx)
 
-instance Hashable tx => Protocol (Nakamoto tx) where
+instance (Ord tx, Hashable tx) => Protocol (Nakamoto tx) where
     type Addr (Nakamoto tx) = Word8
     type Msg  (Nakamoto tx) = NodeMsg tx
 
@@ -62,16 +66,15 @@ instance Hashable tx => Protocol (Nakamoto tx) where
          -> Tick
          -> Maybe (Addr (Nakamoto tx), NodeMsg tx)
          -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-    step node@Nakamoto{nkPeers, nkChain, nkStore} _ (Just (_from, msg)) =
+    step node _ (Just (_from, msg)) =
         case msg of
             BlockMsg blk | Right _ <- validateBlock blk ->
-                if   blockPrevHash (blockHeader blk) == blockHash (tip nkChain)
-                then (commitBlock blk node, broadcast (BlockMsg blk) nkPeers)
-                else if   Map.member (blockHash blk) nkStore
-                     then (node,                [])
-                     else (storeBlock blk node, broadcast (BlockMsg blk) nkPeers)
+                (commitBlock blk node, [])
             TxMsg tx | isNovel tx node -> -- TODO: Validate tx.
-                (receiveTx tx node, broadcast (TxMsg tx) nkPeers)
+                -- NB. Normally, the node would flood the network with the
+                -- transaction, but this slows things down considerably
+                -- for our tests.
+                (receiveTx tx node, [])
             _ ->
                 (node, [])
     step node t Nothing =
@@ -86,44 +89,50 @@ isNovel tx Nakamoto{nkMempool} =
 broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
 broadcast msg peers = zip (toList peers) (repeat msg)
 
-storeBlock :: Block tx -> Nakamoto tx -> Nakamoto tx
-storeBlock blk node@Nakamoto{nkStore} =
-    applyDanglings $ node { nkStore = Map.insert (blockHash blk) blk nkStore }
-
 receiveTx :: Hashable tx => tx -> Nakamoto tx -> Nakamoto tx
 receiveTx tx node = node { nkMempool = Mempool.insert tx (nkMempool node) }
 
-commitBlock :: Hashable tx => Block tx -> Nakamoto tx -> Nakamoto tx
-commitBlock blk node =
-    reapMempool (toList blk) $ applyDanglings $ node { nkChain = blk |> nkChain node }
+commitBlock :: (Ord tx, Hashable tx) => Block tx -> Nakamoto tx -> Nakamoto tx
+commitBlock blk =
+    reapMempool (toList blk) . storeBlock blk
+
+storeBlock :: Ord tx => Block tx -> Nakamoto tx -> Nakamoto tx
+storeBlock blk node@Nakamoto{nkStore} =
+    constructChains $ node { nkStore = Set.insert blk nkStore }
+
+longestChain :: Nakamoto tx -> Blockchain tx
+longestChain = maximumBy (comparing height) . Map.elems . nkForks
 
 reapMempool :: (Functor t, Foldable t, Hashable tx) => t tx -> Nakamoto tx -> Nakamoto tx
 reapMempool txs node =
     node { nkMempool = Mempool.removeTxs (map hash txs) (nkMempool node) }
 
-applyDanglings :: Nakamoto tx -> Nakamoto tx
-applyDanglings n =
-    go (Map.elems (nkStore n)) n
+constructChains :: Ord tx => Nakamoto tx -> Nakamoto tx
+constructChains n =
+    go (Set.elems (nkStore n)) n
   where
     go [] node =
         node
-    go (blk:blks) node
-        | blockPrevHash (blockHeader blk) == blockHash (tip (nkChain node)) =
-            let store = Map.delete (blockHash blk) (nkStore node)
-             in go (Map.elems store) node { nkStore = store
-                                          , nkChain = blk |> nkChain node
-                                          }
-        | otherwise =
-            go blks node
+    go (blk:blks) node =
+        case Map.lookup (blockPrevHash (blockHeader blk)) (nkForks node) of
+            Just chain ->
+                let store = Set.delete blk (nkStore node)
+                 in go (Set.elems store) node
+                     { nkStore  = store
+                     , nkForks  = Map.insert (blockHash blk)
+                                             (blk |> chain)
+                                             (nkForks node) }
+            Nothing ->
+                go blks node
 
 mineBlock
-    :: Hashable tx
+    :: (Ord tx, Hashable tx)
     => Tick
     -> Nakamoto tx
     -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-mineBlock t node@Nakamoto{nkChain, nkRandom, nkMempool, nkPeers}
+mineBlock t node@Nakamoto{nkRandom, nkMempool, nkPeers}
     | head nkRandom < 0.1 =
-        case findBlock t (hash $ blockHeader $ tip $ nkChain) minDifficulty nkMempool of
+        case findBlock t (hash . blockHeader . tip $ longestChain node) minDifficulty nkMempool of
             Just blk ->
                 (commitBlock blk node', broadcast (BlockMsg blk) (toList nkPeers))
             Nothing ->
@@ -140,7 +149,7 @@ difficulty = os2ip . hash
 -- | The minimum difficulty.
 minDifficulty :: Difficulty
 minDifficulty =
-    0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    0xEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | The default difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty
