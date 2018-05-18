@@ -12,7 +12,7 @@ import           Oscoin.Crypto.Hash.Arbitrary ()
 import           Oscoin.Crypto.Blockchain.Block (validateBlock, blockHeader)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain)
 import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
-import qualified Oscoin.Node.State.Mempool as Mempool
+import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Channel (Subscription(..), fromEvent)
 import           Oscoin.State.Tree (Tree, Path)
 

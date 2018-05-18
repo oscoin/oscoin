@@ -6,8 +6,8 @@ import           Oscoin.Environment
 import           Oscoin.Account (Account, AccId)
 import           Oscoin.HTTP.Internal (mkMiddleware)
 import           Oscoin.HTTP.API (api)
-import qualified Oscoin.Node.State.Mempool as Mempool
-import qualified Oscoin.Node.State.Tree as STree
+import qualified Oscoin.Node.Mempool as Mempool
+import qualified Oscoin.Node.Tree as STree
 
 import Test.Tasty.HUnit (Assertion, assertFailure)
 import qualified Test.Tasty.HUnit as Tasty

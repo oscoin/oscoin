@@ -1,4 +1,4 @@
-module Oscoin.Node.State.Tree where
+module Oscoin.Node.Tree where
 
 import           Oscoin.Prelude
 import qualified Oscoin.State.Tree as Tree

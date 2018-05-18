@@ -1,4 +1,4 @@
-module Oscoin.Node.State.Mempool
+module Oscoin.Node.Mempool
     ( -- * Mempool
       Mempool(..)
     , lookup

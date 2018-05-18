@@ -4,9 +4,9 @@ import           Oscoin.Prelude
 
 import           Oscoin.Account (AccId, Account)
 import           Oscoin.Environment
-import qualified Oscoin.Node.State as State
-import qualified Oscoin.Node.State.Mempool as Mempool
-import qualified Oscoin.Node.State.Tree as STree
+import qualified Oscoin.Node as Node
+import qualified Oscoin.Node.Mempool as Mempool
+import qualified Oscoin.Node.Tree as STree
 
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
@@ -25,7 +25,7 @@ data State = State
     deriving (Show)
 
 -- | Storage connection handle.
-type Handle = State.Handle
+type Handle = Node.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction tx = SpockAction (Handle tx) () State
@@ -99,8 +99,8 @@ mkMiddleware app accs mp st = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
-    conn        = State.open mp st
-    connBuilder = ConnBuilder conn State.close (PoolCfg 1 1 30)
+    conn        = Node.open mp st
+    connBuilder = ConnBuilder conn Node.close (PoolCfg 1 1 30)
     state       = mkState { stAccounts = accs }
 
 loggingMiddleware :: Environment -> Wai.Middleware

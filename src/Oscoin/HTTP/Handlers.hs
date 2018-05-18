@@ -1,8 +1,8 @@
 module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude hiding (notImplemented)
-import qualified Oscoin.Node.State as State
-import qualified Oscoin.Node.State.Mempool as Mempool
+import qualified Oscoin.Node as Node
+import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.State.Tree (Key)
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.HTTP.Internal
@@ -15,12 +15,12 @@ import           Network.HTTP.Types.Status
 
 getAllTransactions :: (ToJSON (Id tx), ToJSON tx) => ApiAction tx ()
 getAllTransactions = do
-    mp <- storage State.getMempool
+    mp <- storage Node.getMempool
     respond ok200 (Just (toJSON mp))
 
 getTransaction :: (Ord (Id tx), ToJSON tx) => Id tx -> ApiAction tx ()
 getTransaction txId = do
-    mp <- storage State.getMempool
+    mp <- storage Node.getMempool
     case Mempool.lookup txId mp of
         Just tx -> respond ok200 (Just (toJSON tx))
         Nothing -> respond notFound404 Nothing
@@ -40,7 +40,7 @@ submitTransaction = do
 -- | Get a data key under an account.
 getAccountDataKey :: AccId -> Key -> ApiAction tx ()
 getAccountDataKey acc key = do
-    result <- storage $ State.getPath (acc : "data" : [key])
+    result <- storage $ Node.getPath (acc : "data" : [key])
     case result of
         Just val ->
             respondBytes ok200 val
@@ -48,9 +48,9 @@ getAccountDataKey acc key = do
             respond notFound404 (Just $ errorBody "Not found")
 
 -- | Runs a StorageT action in a MonadApi monad.
-storage :: MonadApi tx m => State.StorageT tx IO a -> m a
+storage :: MonadApi tx m => Node.StorageT tx IO a -> m a
 storage s = withHandle $ \h ->
-    State.runStorageT h s
+    Node.runStorageT h s
 
 getAccounts :: ApiAction tx ()
 getAccounts = do
@@ -69,7 +69,7 @@ getAccount accId = do
 createAccount :: AccId -> ApiAction tx ()
 createAccount accId = do
     Just acc :: Maybe Account <- getBody
-    storage $ State.setPath ["accounts", accId] (encode acc)
+    storage $ Node.setPath ["accounts", accId] (encode acc)
     respond created201 Nothing
 
 getRepos :: AccId -> ApiAction tx ()

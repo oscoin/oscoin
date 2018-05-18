@@ -2,9 +2,9 @@ module Oscoin.Consensus where
 
 import           Oscoin.Prelude
 import           Oscoin.Environment
-import qualified Oscoin.Node.State.Mempool as Mempool
-import           Oscoin.Node.State.Mempool (MonadMempool)
-import qualified Oscoin.Node.State.Tree as STree
+import qualified Oscoin.Node.Mempool as Mempool
+import           Oscoin.Node.Mempool (MonadMempool)
+import qualified Oscoin.Node.Tree as STree
 import           Oscoin.Node.Channel
 import           Oscoin.Crypto.PubKey (Signed, unsign)
 
