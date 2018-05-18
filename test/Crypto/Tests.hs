@@ -129,8 +129,8 @@ propProofVerify :: Tree Key Val -> Key -> Val -> Bool
 propProofVerify tree' k v | tree <- Tree.insert k v tree'
                           , root <- Tree.merkleHash tree =
     case Tree.lookupProof @SHA256 k tree of
-        (Just v, proof) -> isRight (Tree.verify proof root k (Just v))
-        _               -> False
+        (Just val, proof) -> isRight (Tree.verify proof root k (Just val))
+        _                 -> False
 
 -- | Valid proofs of key existence against the wrong key verify negatively.
 propProofNotVerify :: Tree Key Val -> Key -> Val -> Gen Bool
@@ -143,8 +143,8 @@ propProofNotVerify tree k v = do
 
     pure $ case Tree.lookupProof @SHA256 k t of
         (Just _, proof) ->
-            all isLeft [ Tree.verify proof root k' (Just v)
-                       | (k', v) <- Tree.toList t
+            all isLeft [ Tree.verify proof root k' (Just v')
+                       | (k', v') <- Tree.toList t
                        , k' /= k ]
         _ ->
             False

@@ -40,7 +40,7 @@ instance Ord tx => View (DummyView [] tx) where
 
     apply _ txs =
         for_ txs $ \tx ->
-            State.modify (\txs -> sort $ tx : txs)
+            State.modify (\xs -> sort $ tx : xs)
 
 -------------------------------------------------------------------------------
 

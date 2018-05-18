@@ -1,6 +1,6 @@
 module Oscoin.Consensus.Tests (tests) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (log)
 
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
@@ -14,8 +14,6 @@ import           Data.List (sort)
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
-
-import qualified Data.Set as Set
 
 tests :: [TestTree]
 tests =
@@ -44,11 +42,9 @@ propNetworkNodesConverge
     => Gen (TestNetwork a)
     -> Property
 propNetworkNodesConverge testNetworks =
-    forAllShrink testNetworks shrink $ \tn@(TestNetwork _ scheduled _ _ _) ->
+    forAllShrink testNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
             let TestNetwork nodes _ _ log _ = runNetwork tn
-                scheduledMsgs               = mapMaybe scheduledMessage
-                                            $ Set.toList scheduled
                 prettyLog                   = unlines $ " log:" : reverse ["  " ++ show l | l <- reverse $ sort log]
                 prettyStates                = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
                 prettyNodes                 = unlines $ [" nodes:", "  " ++ show (length nodes)]

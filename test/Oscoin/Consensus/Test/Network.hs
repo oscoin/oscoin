@@ -1,6 +1,6 @@
 module Oscoin.Consensus.Test.Network where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (log)
 import           Oscoin.Consensus.Test.Node
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple

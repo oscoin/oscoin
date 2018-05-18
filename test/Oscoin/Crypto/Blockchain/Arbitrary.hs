@@ -73,8 +73,8 @@ arbitraryGenesisWith txs = do
 arbitraryValidBlockchain :: forall tx. (Binary tx, Arbitrary tx) => Gen (Blockchain tx)
 arbitraryValidBlockchain = do
     gen <- arbitraryGenesis :: (Gen (Block tx))
-    height <- choose (8, 9) :: Gen Int
-    go (gen :| []) height
+    h   <- choose (8, 9) :: Gen Int
+    go (gen :| []) h
   where
     go blks 0 =
         pure $ Blockchain blks
