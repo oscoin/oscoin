@@ -5,12 +5,13 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
+import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, shortHash)
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Binary
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 
@@ -38,7 +39,15 @@ nakamoto addr genesis peers random =
 data NodeMsg tx =
       BlockMsg   (Block tx)
     | TxMsg      tx
-    deriving (Show, Eq, Generic)
+    deriving (Eq, Generic)
+
+instance Show tx => Show (NodeMsg tx) where
+    show (BlockMsg blk) =
+        unwords [ "BlockMsg"
+                , C8.unpack (shortHash (blockHash blk))
+                , show (toList (blockData blk)) ]
+    show (TxMsg tx) =
+        "TxMsg " ++ show tx
 
 instance Binary tx => Binary (NodeMsg tx)
 
