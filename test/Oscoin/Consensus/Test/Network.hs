@@ -127,45 +127,38 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledTick tick to, ms)) partitions log lats) =
-    runNetwork (scheduleMessages tick to msgs tn)
-  where
-    (tn, msgs) = deliverTick tick to (TestNetwork nodes ms partitions log lats)
-runNetwork (TestNetwork nodes (Set.minView -> Just (ScheduledMessage tick to msg, ms)) partitions log lats)  =
-    runNetwork (scheduleMessages tick to msgs tn)
-  where
-    (tn, msgs) = deliverMessage tick to msg (TestNetwork nodes ms partitions log lats)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Partition _ partitions, ms)) _ log lats)  =
-    runNetwork (TestNetwork nodes ms partitions log lats)
-runNetwork (TestNetwork nodes (Set.minView -> Just (Heal _, ms)) _ log lats)  =
-    runNetwork (TestNetwork nodes ms mempty log lats)
-runNetwork tn = tn
+runNetwork tn@TestNetwork{tnMsgs}
+    | Just (sm, sms) <- Set.minView tnMsgs
+    , tn' <- tn { tnMsgs = sms } =
+        runNetwork $ case sm of
+            ScheduledTick tick to        -> deliver tick to Nothing tn'
+            ScheduledMessage tick to msg -> deliver tick to (Just msg) tn'
+            Partition _ ps               -> tn' { tnPartitions = ps }
+            Heal _                       -> tn' { tnPartitions = mempty }
+    | otherwise = tn
 
-deliverTick
+deliver
     :: (TestableNode a)
-    => Tick -> Addr a -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverTick tick to tn@TestNetwork{tnNodes}
+    => Tick
+    -> Addr a
+    -> Maybe (Addr a, Msg a)
+    -> TestNetwork a
+    -> TestNetwork a
+deliver tick to msg tn@TestNetwork{tnNodes}
     | Just node <- Map.lookup to tnNodes =
-        let (node', msgs) = step node tick Nothing
-            nodes'        = Map.insert to node' tnNodes
-         in (tn { tnNodes = nodes' }, msgs)
+        let (node', msgs) = step node tick msg
+            tn'           = tn { tnNodes = Map.insert to node' tnNodes }
+         in scheduleMessages tick to msgs tn'
     | otherwise =
-        (tn, [])
-
-deliverMessage
-    :: (TestableNode a)
-    => Tick -> Addr a -> (Addr a, Msg a) -> TestNetwork a -> (TestNetwork a, [(Addr a, Msg a)])
-deliverMessage tick to (from, msg) tn@TestNetwork{tnNodes}
-    | Just node <- Map.lookup to tnNodes =
-        let (node', msgs) = step node tick (Just (from, msg))
-            nodes'        = Map.insert to node' tnNodes
-         in (tn { tnNodes = nodes' }, msgs)
-    | otherwise =
-        (tn, [])
+        tn
 
 scheduleMessages
-    :: (TestableNode a)
-    => Tick -> Addr a -> [(Addr a, Msg a)] -> TestNetwork a -> TestNetwork a
+    :: TestableNode a
+    => Tick
+    -> Addr a
+    -> [(Addr a, Msg a)]
+    -> TestNetwork a
+    -> TestNetwork a
 scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog, tnLatencies} =
     let
         msgs'                = Set.union (Set.fromList scheduled) tnMsgs
