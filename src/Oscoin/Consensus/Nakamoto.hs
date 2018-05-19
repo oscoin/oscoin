@@ -83,8 +83,7 @@ instance (Ord tx, Hashable tx) => Protocol (Nakamoto tx) where
     epoch _ = 1
 
 isNovel :: Hashable tx => tx -> Nakamoto tx -> Bool
-isNovel tx Nakamoto{nkMempool} =
-    not $ Mempool.member (hash tx) nkMempool
+isNovel tx = not . Mempool.member (hash tx) . nkMempool
 
 broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
 broadcast msg peers = zip (toList peers) (repeat msg)
@@ -113,15 +112,15 @@ constructChains n =
   where
     go [] node =
         node
-    go (blk:blks) node =
-        case Map.lookup (blockPrevHash (blockHeader blk)) (nkForks node) of
+    go (blk:blks) node@Nakamoto{nkForks, nkStore} =
+        case Map.lookup (blockPrevHash (blockHeader blk)) nkForks of
             Just chain ->
-                let store = Set.delete blk (nkStore node)
+                let store = Set.delete blk nkStore
                  in go (Set.elems store) node
                      { nkStore  = store
                      , nkForks  = Map.insert (blockHash blk)
                                              (blk |> chain)
-                                             (nkForks node) }
+                                             nkForks }
             Nothing ->
                 go blks node
 
