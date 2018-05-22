@@ -2,6 +2,7 @@ module Oscoin.Consensus.Test.Network where
 
 import           Oscoin.Prelude hiding (log)
 import           Oscoin.Consensus.Test.Node
+import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Simple.Arbitrary ()
@@ -77,7 +78,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
         , snBuffer  = mempty
         , snLastBlk = 0
         , snLastAsk = 0
-        , snStore   = genesisBlockStore
+        , snStore   = genesisBlockStore (genesisBlock 0 [])
         }
 
     testablePreState _ (ClientTx tx) = [tx]

@@ -4,13 +4,13 @@ module Oscoin.Consensus.Simple where
 
 import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
+import           Oscoin.Consensus.BlockStore
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
 import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
-import           Data.List.NonEmpty ((<|))
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
@@ -51,42 +51,9 @@ instance Show tx => Show (NodeMsg tx) where
     show (RequestBlock h) =
         "RequestBlock " ++ C8.unpack (shortHash h)
 
-data BlockStore tx = BlockStore
-    { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)
-    , bsDangling :: Set (Block tx)
-    } deriving (Eq, Show)
-
-emptyBlockStore :: BlockStore tx
-emptyBlockStore = BlockStore mempty Set.empty
-
-genesisBlockStore :: Binary tx => BlockStore tx
-genesisBlockStore = BlockStore (Map.fromList [(blockHash gen, Blockchain (gen :| []))]) Set.empty
-  where
-    gen = genesisBlock 0 []
-
-addToDangling :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
-addToDangling blk bs@BlockStore{..} =
-    bs { bsDangling = Set.insert blk bsDangling }
-
-applyDanglings :: Ord tx => BlockStore tx -> BlockStore tx
-applyDanglings blockStore =
-    go (Set.toList (bsDangling blockStore)) blockStore
-  where
-    go []                            bs                = bs -- Nothing dangling, do nothing.
-    go (blk@Block{blockHeader}:blks) bs@BlockStore{..} =    -- Something's dangling.
-        case Map.lookup (blockPrevHash blockHeader) bsChains of
-            Nothing ->                 -- The dangler has no known parent.
-                go blks bs
-            Just (Blockchain chain) -> -- The dangler has a parent.
-                let dangling = Set.delete blk bsDangling
-                 in go (Set.toList dangling) bs
-                     { bsDangling = dangling
-                     , bsChains   = Map.insert (blockHash blk) (Blockchain $ blk <| chain) bsChains
-                     }
-
 applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
 applyBlock blk sn@SimpleNode{..} =
-    sn { snStore = (applyDanglings . addToDangling blk) snStore }
+    sn { snStore = storeBlock blk snStore }
 
 isNovelTx :: Ord tx => tx -> SimpleNode tx -> Bool
 isNovelTx tx SimpleNode { snBuffer } =

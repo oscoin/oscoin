@@ -3,6 +3,7 @@ module Oscoin.Consensus.Nakamoto where
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Class
+import           Oscoin.Consensus.BlockStore
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, shortHash)
@@ -19,8 +20,7 @@ import qualified Data.Map as Map
 type BlockHash = Hashed BlockHeader
 
 data Nakamoto tx = Nakamoto
-    { nkForks   :: Map BlockHash (Blockchain tx)
-    , nkStore   :: Set (Block tx)
+    { nkStore   :: BlockStore tx
     , nkRandom  :: [Float]
     , nkMempool :: Mempool (Hashed tx) tx
     , nkPeers   :: Set (Addr (Nakamoto tx))
@@ -31,17 +31,14 @@ instance Show (Nakamoto tx) where
     show Nakamoto{} = "Nakamoto{}"
 
 nakamoto :: Ord tx => Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
-nakamoto addr genesis peers random =
+nakamoto addr gen peers random =
     Nakamoto
-        { nkForks = Map.singleton (blockHash genesis) chain
-        , nkStore = mempty
+        { nkStore = genesisBlockStore gen
         , nkRandom = random
         , nkMempool = mempty
         , nkPeers = Set.fromList peers
         , nkAddr = addr
         }
-  where
-    chain = Blockchain (genesis :| [])
 
 data NodeMsg tx =
       BlockMsg   (Block tx)
@@ -93,36 +90,18 @@ receiveTx tx node = node { nkMempool = Mempool.insert tx (nkMempool node) }
 
 commitBlock :: (Ord tx, Hashable tx) => Block tx -> Nakamoto tx -> Nakamoto tx
 commitBlock blk =
-    reapMempool (toList blk) . storeBlock blk
+    reapMempool (toList blk) . withBlockStore (storeBlock blk)
 
-storeBlock :: Ord tx => Block tx -> Nakamoto tx -> Nakamoto tx
-storeBlock blk node@Nakamoto{nkStore} =
-    constructChains $ node { nkStore = Set.insert blk nkStore }
+withBlockStore :: (BlockStore tx -> BlockStore tx) -> Nakamoto tx -> Nakamoto tx
+withBlockStore f node =
+    node { nkStore = f (nkStore node) }
 
 longestChain :: Nakamoto tx -> Blockchain tx
-longestChain = maximumBy (comparing height) . Map.elems . nkForks
+longestChain = maximumBy (comparing height) . Map.elems . bsChains . nkStore
 
 reapMempool :: (Functor t, Foldable t, Hashable tx) => t tx -> Nakamoto tx -> Nakamoto tx
 reapMempool txs node =
     node { nkMempool = Mempool.removeTxs (map hash txs) (nkMempool node) }
-
-constructChains :: Ord tx => Nakamoto tx -> Nakamoto tx
-constructChains n =
-    go (Set.elems (nkStore n)) n
-  where
-    go [] node =
-        node
-    go (blk:blks) node@Nakamoto{nkForks, nkStore} =
-        case Map.lookup (blockPrevHash (blockHeader blk)) nkForks of
-            Just chain ->
-                let store = Set.delete blk nkStore
-                 in go (Set.elems store) node
-                     { nkStore  = store
-                     , nkForks  = Map.insert (blockHash blk)
-                                             (blk |> chain)
-                                             nkForks }
-            Nothing ->
-                go blks node
 
 mineBlock
     :: (Ord tx, Hashable tx)
