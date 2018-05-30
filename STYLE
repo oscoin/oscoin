@@ -280,6 +280,14 @@ Type classes
 
 In general, prefer *associated type synonyms* over *functional dependencies*.
 
+.. code:: haskell
+
+  class Protocol m where
+      step :: Tick -> [Message] -> m ()
+
+It's preferable to always put methods on their own line, even if the class
+has only one method. This makes things more consistent and helps readability.
+
 Guards
 ------
 
