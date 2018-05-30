@@ -320,6 +320,12 @@ Lambdas
 
   \x y -> x + y
 
+Smart constructors
+------------------
+
+These should use the ``mk`` prefix, e.g. ``mkUser``, ``mkMessage``, or in
+cases where there is no ambiguity, simply ``user`` and ``message``.
+
 Pure exceptions
 ---------------
 
