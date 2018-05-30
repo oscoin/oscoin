@@ -13,6 +13,7 @@ import qualified Data.ByteString.Char8 as C8
 import           Data.Binary (Binary)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import           Network.Socket
 
 epochLength :: Tick
 epochLength = 10
@@ -35,7 +36,9 @@ data NodeMsg tx =
     | ProposeBlock                (Block tx)
     | RequestBlock                (Hashed BlockHeader)
     | ClientTx tx
-    deriving (Eq)
+    deriving (Eq, Generic)
+
+instance Binary tx => Binary (NodeMsg tx)
 
 instance Show tx => Show (NodeMsg tx) where
     show (ProposeBlock blk) =
@@ -133,7 +136,7 @@ orphanParentHashes SimpleNode{..} =
 
 instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
     type Msg  (SimpleNode tx) = NodeMsg tx
-    type Addr (SimpleNode tx) = Word8
+    type Addr (SimpleNode tx) = SockAddr
 
     step sn@SimpleNode{..} _ (Just (_, ClientTx msg))
         | isNovelTx msg sn =

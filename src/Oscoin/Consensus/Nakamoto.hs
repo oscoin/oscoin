@@ -185,7 +185,7 @@ findBlock t prevHash target txs = do
         { blockPrevHash     = prevHash
         , blockRootHash     = hashTxs txs
         , blockDifficulty   = target
-        , blockTimestamp    = toSeconds t
+        , blockTimestamp    = toSecs t
         , blockNonce        = 0
         }
-    toSeconds = fromIntegral . fromEnum
+    toSecs = fromIntegral . fromEnum

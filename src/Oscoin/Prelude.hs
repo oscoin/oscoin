@@ -60,6 +60,7 @@ module Oscoin.Prelude
     , product
     , identity
     , equal
+    , toSeconds
     ) where
 
 import           Prelude hiding ( fail, read, readIO, readFile
@@ -91,6 +92,7 @@ import           Data.Functor (void)
 import           Data.Functor.Identity (Identity)
 import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
 import           Data.String (IsString)
+import           Data.Time.Clock(NominalDiffTime)
 import           Data.Word
 import           Control.Applicative (liftA2)
 import           Control.Monad.IO.Class
@@ -200,3 +202,7 @@ identity = Prelude.id
 -- | Returns True if all values are equal to each other.
 equal :: Eq a => [a] -> Bool
 equal xs = and $ map (== head xs) (tail xs)
+
+-- | Converts a NominalDiffTime to seconds.
+toSeconds :: NominalDiffTime -> Int
+toSeconds t = fromEnum t `div` 1000000000000

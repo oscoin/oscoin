@@ -29,6 +29,7 @@ dependencies:
   - foundation
   - http-api-data
   - http-types
+  - iproute
   - kademlia
   - megaparsec
   - memory
@@ -41,8 +42,10 @@ dependencies:
   - monad-stm
   - mtl
   - network
+  - network-multicast
   - network-simple
   - semigroups
+  - split
   - Spock
   - stm
   - stm >=2.4.5.0
