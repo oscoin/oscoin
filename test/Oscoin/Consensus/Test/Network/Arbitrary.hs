@@ -17,10 +17,6 @@ import           System.Random
 kidSize :: Int
 kidSize = 13
 
--- | Converts a Tick to seconds.
-toSeconds :: Tick -> Int
-toSeconds t = fromEnum t `div` 1000000000000
-
 arbitraryNetwork :: TestableNode a => Gen (TestNetwork a)
 arbitraryNetwork = arbitrary
 

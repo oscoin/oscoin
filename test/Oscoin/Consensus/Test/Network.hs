@@ -15,10 +15,10 @@ import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import           Data.Binary (Binary)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import           Network.Socket
 import           System.Random (mkStdGen, randomRs)
 
 import           Test.QuickCheck
-
 -- TestableNode ---------------------------------------------------------------
 
 class ( Eq (TestableTx a)
@@ -217,3 +217,9 @@ isTick _                   = False
 isMsg :: Scheduled a -> Bool
 isMsg ScheduledMessage{} = True
 isMsg _                  = False
+
+instance Arbitrary SockAddr where
+    arbitrary = do
+        port <- arbitrary :: Gen Int
+        host <- arbitrary
+        pure $ SockAddrInet (fromIntegral port) host
