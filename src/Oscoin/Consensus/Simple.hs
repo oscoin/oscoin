@@ -55,11 +55,11 @@ instance Show tx => Show (NodeMsg tx) where
         "RequestBlock " ++ C8.unpack (shortHash h)
 
 addPeer :: SockAddr -> SimpleNode tx -> SimpleNode tx
-addPeer addr sn = do
+addPeer addr sn =
     sn { snPeers = peers' }
   where
     peers  = snPeers sn
-    peers' = if addr == (snAddr sn)
+    peers' = if addr == snAddr sn
         then peers
         else Set.toList $ Set.insert addr $ Set.fromList peers
 
