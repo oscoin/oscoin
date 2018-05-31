@@ -12,6 +12,10 @@ jobs:
                   - stack-work-v1-
                 paths:
                     - ~/.stack
+            - run: stack install hlint
+            - run:
+                name: Lint
+                command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint "$@"
             - run:
                 name: Build
                 command: stack build --no-terminal --fast --ghc-options "-Werror"
