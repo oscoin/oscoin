@@ -15,7 +15,6 @@ import           Data.Binary (Binary)
 import qualified Data.Binary as Binary (encode, decode)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.ByteString (ByteString)
-import qualified Data.Set as Set
 
 mcastDiscoGroup :: NS.HostName
 mcastDiscoGroup = "226.111.111.104"
