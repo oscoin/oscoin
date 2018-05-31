@@ -92,7 +92,7 @@ import           Data.Functor (void)
 import           Data.Functor.Identity (Identity)
 import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
 import           Data.String (IsString)
-import           Data.Time.Clock(NominalDiffTime)
+import           Data.Time.Clock (NominalDiffTime)
 import           Data.Word
 import           Control.Applicative (liftA2)
 import           Control.Monad.IO.Class

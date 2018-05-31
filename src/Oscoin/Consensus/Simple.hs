@@ -54,6 +54,15 @@ instance Show tx => Show (NodeMsg tx) where
     show (RequestBlock h) =
         "RequestBlock " ++ C8.unpack (shortHash h)
 
+addPeer :: SockAddr -> SimpleNode tx -> SimpleNode tx
+addPeer addr sn = do
+    sn { snPeers = peers' }
+  where
+    peers  = snPeers sn
+    peers' = if addr == (snAddr sn)
+        then peers
+        else Set.toList $ Set.insert addr $ Set.fromList peers
+
 applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
 applyBlock blk sn@SimpleNode{..} =
     sn { snStore = storeBlock blk snStore }
