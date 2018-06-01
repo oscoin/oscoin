@@ -19,6 +19,7 @@ import           Network.Socket
 import           System.Random (mkStdGen, randomRs)
 
 import           Test.QuickCheck
+
 -- TestableNode ---------------------------------------------------------------
 
 class ( Eq (TestableTx a)

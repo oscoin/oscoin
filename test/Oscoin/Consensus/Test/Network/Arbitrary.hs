@@ -132,4 +132,3 @@ filterNetwork (TestNetwork nodes msgs partitions _ rng) =
   where
     f msg = all (`Map.member` nodes) $
         scheduledReceivers msg ++ catMaybes [scheduledSender msg]
-

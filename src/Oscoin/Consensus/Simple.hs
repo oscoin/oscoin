@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 import           Network.Socket
 
 epochLength :: Tick
-epochLength = 10
+epochLength = 1
 
 data SimpleNode tx = SimpleNode
     { snAddr    :: Addr (SimpleNode tx)
@@ -87,7 +87,7 @@ chainScore bc =
     h              = height bc
     lastBlock      = tip bc :: Block tx
     timestampNs    = blockTimestamp $ blockHeader lastBlock
-    timestamp      = timestampNs `div` 1000000000
+    timestamp      = timestampNs `div` 1000000000000
     e              = round epochLength
     steps          = fromIntegral timestamp `div` e :: Int
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug

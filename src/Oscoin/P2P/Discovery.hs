@@ -1,6 +1,9 @@
 module Oscoin.P2P.Discovery
     ( localAdvertiser
     , localPeerDiscovery
+    , discoverPeer
+    , mcastDiscoGroup
+    , mcastDiscoPort
     ) where
 
 import           Oscoin.Prelude
@@ -60,11 +63,15 @@ discoveryLoop
     -> NS.Socket
     -> IO ()
 discoveryLoop mvar sock = do
-    (msg, addr) <- NSB.recvFrom sock packetSize
-    let port  = fromIntegral (Binary.decode $ LBS.fromStrict msg :: Int)
-        addr' = replacePort addr port
-     in modifyMVar_ mvar (pure . addPeer addr')
+    addr <- discoverPeer sock
+    modifyMVar_ mvar (pure . addPeer addr)
     discoveryLoop mvar sock
+
+discoverPeer :: NS.Socket -> IO NS.SockAddr
+discoverPeer sock = NS.withSocketsDo $ do
+    (msg, addr) <- NSB.recvFrom sock packetSize
+    let port = fromIntegral (Binary.decode $ LBS.fromStrict msg :: Int)
+    pure $ replacePort addr port
   where
     replacePort :: NS.SockAddr -> NS.PortNumber -> NS.SockAddr
     replacePort (NS.SockAddrInet _ host) port =
