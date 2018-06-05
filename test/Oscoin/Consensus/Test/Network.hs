@@ -114,6 +114,7 @@ data TestNetwork a = TestNetwork
     , tnPartitions :: Partitions a
     , tnLog        :: [Scheduled a]
     , tnLatencies  :: [Tick]
+    , tnMsgCount   :: Int
     }
 
 type Partitions a = Map (Addr a) (Set (Addr a))
@@ -146,10 +147,10 @@ deliver
     -> Maybe (Addr a, Msg a)
     -> TestNetwork a
     -> TestNetwork a
-deliver tick to msg tn@TestNetwork{tnNodes}
+deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick msg
-            tn'           = tn { tnNodes = Map.insert to node' tnNodes }
+            tn'           = tn { tnNodes = Map.insert to node' tnNodes, tnMsgCount = tnMsgCount + 1 }
          in scheduleMessages tick to msgs tn'
     | otherwise =
         tn
@@ -172,7 +173,7 @@ scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog, tnLaten
      in tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies' }
 
 networkNonTrivial :: TestNetwork v -> Bool
-networkNonTrivial (TestNetwork ns ms _ _ _)
+networkNonTrivial (TestNetwork ns ms _ _ _ _)
     | Map.null ns = False
     | Set.null ms = False
     | otherwise   = True
