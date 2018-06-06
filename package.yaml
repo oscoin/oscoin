@@ -44,6 +44,7 @@ dependencies:
   - network
   - network-multicast
   - network-simple
+  - safe-exceptions
   - semigroups
   - split
   - Spock
@@ -138,3 +139,4 @@ ghc-options:
 - -fno-warn-orphans
 - -fno-warn-unused-do-bind
 - -fno-print-expanded-synonyms
+- -funbox-small-strict-fields
