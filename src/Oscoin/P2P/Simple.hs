@@ -8,7 +8,7 @@ import           Oscoin.P2P.Discovery
 import qualified Oscoin.P2P.Discovery.Multicast as MCast
 import           Oscoin.Prelude
 
-import           Control.Concurrent (MVar, newMVar, putMVar, takeMVar, threadDelay, withMVar)
+import           Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, readMVar, threadDelay)
 import           Control.Concurrent.Async (race_)
 import           Control.Monad (forever)
 import           Data.Binary (Binary)
@@ -36,14 +36,14 @@ runPeriodic
     :: forall p . p ~ SimpleNode Text
     => NS.Socket -> MVar p -> IO ()
 runPeriodic s protoVar = forever $ do
-    proto <- takeMVar protoVar
-    now <- getPOSIXTime
-    let (proto', outbound) = step proto now Nothing
-    putMVar protoVar proto'
+    outbound <-
+        modifyMVar protoVar $ \proto -> do
+            now <- getPOSIXTime
+            pure $ step proto now Nothing
 
     sendMessages outbound s
 
-    let sleep = epoch proto'
+    sleep <- epoch <$> readMVar protoVar
     threadDelay (toSeconds sleep * second)
 
 runListener
@@ -57,10 +57,10 @@ runListener s protoVar = forever $ do
     (bytes, from) <- NSB.recvFrom s packetSize
     let deserialized = Binary.decode $ LBS.fromStrict bytes
 
-    proto <- takeMVar protoVar
-    now   <- getPOSIXTime
-    let (proto', outbound) = step proto now (Just (from, deserialized))
-    putMVar protoVar proto'
+    outbound <-
+        modifyMVar protoVar $ \proto -> do
+            now <- getPOSIXTime
+            pure $ step proto now (Just (from, deserialized))
 
     sendMessages outbound s
 
@@ -90,7 +90,7 @@ runProto addr port = do
         withDisco (MCast.mkDisco (MCast.mkConfig port)) $ \disco ->
             forever $ do
                 peers <- knownPeers disco
-                withMVar protoVar $ \p ->
+                modifyMVar_ protoVar $ \p ->
                     pure $ p { snPeers = toList peers }
                 threadDelay (3 * second)
 
