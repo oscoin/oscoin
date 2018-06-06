@@ -122,6 +122,7 @@ default-extensions:
 - RecordWildCards
 - ScopedTypeVariables
 - StandaloneDeriving
+- StrictData
 - TypeApplications
 - TypeFamilies
 - TypeOperators
