@@ -174,9 +174,11 @@ scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog, tnLaten
 
 networkNonTrivial :: TestNetwork v -> Bool
 networkNonTrivial (TestNetwork ns ms _ _ _ _)
-    | Map.null ns = False
-    | Set.null ms = False
-    | otherwise   = True
+    | Map.null ns   = False
+    | Set.null msgs = False
+    | otherwise     = True
+  where
+    msgs = Set.filter isMsg ms
 
 -- Scheduled ------------------------------------------------------------------
 

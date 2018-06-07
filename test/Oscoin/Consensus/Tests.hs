@@ -52,7 +52,7 @@ propNetworkNodesConverge testNetworks =
                 prettyNodes                          = unlines $ [" nodes:", "  " ++ show (length nodes)]
                 prettyInfo                           = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
                 filteredInitialMsgs                  = Set.filter isMsg (tnMsgs tn)
-                msgAmp                               = msgCount `div` (1 + length filteredInitialMsgs)
+                msgAmp                               = msgCount `div` length filteredInitialMsgs
                 prettyMsgAmp                         = unlines $ [" message amplification:" ++ show msgAmp]
 
              in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
