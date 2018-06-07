@@ -51,17 +51,19 @@ propNetworkNodesConverge testNetworks =
                 prettyStates                         = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
                 prettyNodes                          = unlines $ [" nodes:", "  " ++ show (length nodes)]
                 prettyInfo                           = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
-                filteredInitialMsgs                  = Set.filter (not . isTick) (tnMsgs tn)
+                filteredInitialMsgs                  = Set.filter isMsg (tnMsgs tn)
                 msgAmp                               = msgCount `div` (1 + length filteredInitialMsgs)
                 prettyMsgAmp                         = unlines $ [" message amplification:" ++ show msgAmp]
 
              in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
                       counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo ++ prettyMsgAmp)
-                                     (nodesMatch nodes && msgAmp <= 9000)
+                                     (nodesMatch nodes && msgAmp <= maximumMsgAmp)
+  where
+    maximumMsgAmp = 9000
 
 nodesMatch :: TestableNode a => Map (Addr a) a -> Bool
 nodesMatch nodes =
     let states = map testablePostState (toList nodes)
-        minLen = length $ minimumBy (\a b -> compare (length a) (length b)) states
-        shorts = map (\s -> take minLen s) states
+        minLen = minimum $ map length states
+        shorts = map (take minLen) states
      in equal shorts
