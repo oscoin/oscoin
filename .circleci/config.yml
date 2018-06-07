@@ -7,7 +7,7 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                  - stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "oscoin.cabal" }}
+                  - stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                   # If an exact match is unavailable, use the most recent one
                   - stack-work-v1-
                 paths:
@@ -23,6 +23,6 @@ jobs:
                 name: Test
                 command: stack test --no-terminal --fast --ghc-options "-Werror"
             - save_cache:
-                key: stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "oscoin.cabal" }}
+                key: stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                 paths:
                     - ~/.stack
