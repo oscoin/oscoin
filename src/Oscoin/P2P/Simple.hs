@@ -25,7 +25,7 @@ second = 1000000
 sendMessages
     :: Binary msg
     => [(NS.SockAddr, msg)] -> NS.Socket -> IO ()
-sendMessages outbound s = do
+sendMessages outbound s =
     for_ outbound (\(to, out) -> do
         let serialized = LBS.toStrict $ Binary.encode out
         NSB.sendAllTo s serialized to)
