@@ -2,6 +2,7 @@ module Oscoin.Consensus.Tests (tests) where
 
 import           Oscoin.Prelude hiding (log)
 
+import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node
@@ -10,6 +11,7 @@ import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Nakamoto (Nakamoto)
 
 import           Data.List (sort)
+import qualified Data.Set as Set
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -44,12 +46,24 @@ propNetworkNodesConverge
 propNetworkNodesConverge testNetworks =
     forAllShrink testNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
-            let TestNetwork nodes _ _ log _ = runNetwork tn
-                prettyLog                   = unlines $ " log:" : reverse ["  " ++ show l | l <- reverse $ sort log]
-                prettyStates                = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
-                prettyNodes                 = unlines $ [" nodes:", "  " ++ show (length nodes)]
-                prettyInfo                  = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
+            let TestNetwork nodes _ _ log _ msgCount = runNetwork tn
+                prettyLog                            = unlines $ " log:" : reverse ["  " ++ show l | l <- reverse $ sort log]
+                prettyStates                         = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
+                prettyNodes                          = unlines $ [" nodes:", "  " ++ show (length nodes)]
+                prettyInfo                           = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
+                filteredInitialMsgs                  = Set.filter isMsg (tnMsgs tn)
+                msgAmp                               = msgCount `div` length filteredInitialMsgs
+                prettyMsgAmp                         = unlines $ [" message amplification:" ++ show msgAmp]
 
              in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
-                      counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo)
-                                     (equal $ map testablePostState (toList nodes))
+                      counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo ++ prettyMsgAmp)
+                                     (nodesMatch nodes && msgAmp <= maximumMsgAmp)
+  where
+    maximumMsgAmp = 9000
+
+nodesMatch :: TestableNode a => Map (Addr a) a -> Bool
+nodesMatch nodes =
+    let states = map testablePostState (toList nodes)
+        minLen = minimum $ map length states
+        shorts = map (take minLen) states
+     in equal shorts
