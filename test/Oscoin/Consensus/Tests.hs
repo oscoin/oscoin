@@ -73,16 +73,15 @@ nodePrefixesMatch nodes =
      in equal shorts
 
 commonPrefixLen :: Eq a => [[a]] -> Int
-commonPrefixLen = length . commonPrefix []
-
-commonPrefix :: Eq a => [a] -> [[a]] -> [a]
-commonPrefix common ass
-    | null ass      = common
-    | [] `elem` ass = common
-    | equal heads   = commonPrefix common' tails
-    | otherwise     = common
+commonPrefixLen [] = 0
+commonPrefixLen xs = length (go [] xs)
   where
-    heads   = map head ass
-    h       = head heads
-    tails   = map tail ass
-    common' = h : common
+    go :: Eq a => [a] -> [[a]] -> [a]
+    go common ass
+        | [] `elem` ass = common
+        | equal heads   = go common' tails
+        | otherwise     = common
+      where
+        common' = head heads : common
+        heads   = map head ass
+        tails   = map tail ass
