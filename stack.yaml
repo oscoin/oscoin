@@ -5,14 +5,23 @@ packages:
 
 extra-deps:
 - acid-state-0.14.3
-- kademlia-1.1.0.0
 - merkle-tree-0.1.0
 - base58-bytestring-0.1.0
 - monad-stm-0.1.0.2
+
 - git: git@github.com:cloudhead/wai
   commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
   subdirs:
     - wai-extra
+
+# Using the serokell/cardano fork as they have added a number of bug fixes and
+# improvements (eg. configuration, logging).
+#
+# cf. https://github.com/froozen/kademlia/compare/master...serokell:master
+#
+# Unfortunately, it does not seem like they intend to upstream their changes.
+- git: https://github.com/serokell/kademlia.git
+  commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f
 
 ghc-options:
   "$locals": -fhide-source-paths

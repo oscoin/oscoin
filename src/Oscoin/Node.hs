@@ -35,7 +35,7 @@ type StorageT tx m a = ReaderT (Handle tx) m a
 -- | Connect to state storage.
 open :: Mempool.Handle tx -> STree.Handle -> IO (Handle tx)
 open hMempool hStateTree = do
-    hBlockStore <- pure undefined
+    hBlockStore <- pure ()
     pure Handle{..}
 
 -- | Close the connection to state storage.
