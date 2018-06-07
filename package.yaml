@@ -9,55 +9,56 @@ github: oscoin/oscoin
 
 library:
   source-dirs: src
-  dependencies:
-    - base
-    - acid-state
-    - aeson
-    - ansi-terminal
-    - async
-    - base16-bytestring
-    - base58-bytestring
-    - base64-bytestring
-    - binary
-    - bytestring
-    - containers
-    - cryptonite
-    - data-default
-    - data-has
-    - filepath
-    - foundation
-    - http-api-data
-    - http-types
-    - iproute
-    - kademlia
-    - megaparsec
-    - memory
-    - merkle-tree
-    - microlens
-    - microlens-aeson
-    - microlens-contra
-    - microlens-mtl
-    - monad-logger
-    - monad-stm
-    - mtl
-    - network
-    - network-multicast
-    - network-simple
-    - safe-exceptions
-    - semigroups
-    - split
-    - Spock
-    - stm
-    - stm >=2.4.5.0
-    - text
-    - text-format
-    - time
-    - transformers
-    - unordered-containers
-    - wai
-    - wai-extra
-    - wai-middleware-static
-    - writer-cps-mtl
+
+dependencies:
+  - base
+  - acid-state
+  - aeson
+  - ansi-terminal
+  - async
+  - base16-bytestring
+  - base58-bytestring
+  - base64-bytestring
+  - binary
+  - bytestring
+  - containers
+  - cryptonite
+  - data-default
+  - data-has
+  - filepath
+  - foundation
+  - http-api-data
+  - http-types
+  - iproute
+  - kademlia
+  - megaparsec
+  - memory
+  - merkle-tree
+  - microlens
+  - microlens-aeson
+  - microlens-contra
+  - microlens-mtl
+  - monad-logger
+  - monad-stm
+  - mtl
+  - network
+  - network-multicast
+  - network-simple
+  - safe-exceptions
+  - semigroups
+  - split
+  - Spock
+  - stm
+  - stm >=2.4.5.0
+  - text
+  - text-format
+  - time
+  - transformers
+  - unordered-containers
+  - wai
+  - wai-extra
+  - wai-middleware-static
+  - writer-cps-mtl
 
 executables:
   oscoin:
