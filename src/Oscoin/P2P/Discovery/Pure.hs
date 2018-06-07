@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 -- | Trivial 'Disco' based on the state monad.
 module Oscoin.P2P.Discovery.Pure
     ( mkDisco

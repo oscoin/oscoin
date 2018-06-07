@@ -177,9 +177,11 @@ columns: 120
 newline: native
 
 language_extensions:
-  - ViewPatterns
-  - TypeApplications
-  - RecordWildCards
   - FlexibleContexts
+  - MultiParamTypeClasses
   - MultiWayIf
   - PatternSynonyms
+  - RankNTypes
+  - RecordWildCards
+  - TypeApplications
+  - ViewPatterns
