@@ -1,20 +1,22 @@
 module Oscoin.P2P.Simple (runProto) where
 
-import           Oscoin.P2P.Discovery
-import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Simple
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
+import           Oscoin.P2P.Discovery
+import qualified Oscoin.P2P.Discovery.Multicast as MCast
+import           Oscoin.Prelude
 
-import           Control.Concurrent.Async (async, waitAny)
-import           Control.Concurrent (newMVar, takeMVar, putMVar, MVar, threadDelay)
-import qualified Network.Socket.ByteString as NSB
-import qualified Network.Socket as NS
+import           Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, readMVar, threadDelay)
+import           Control.Concurrent.Async (race_)
+import           Control.Monad (forever)
 import           Data.Binary (Binary)
-import qualified Data.Binary as Binary (encode, decode)
+import qualified Data.Binary as Binary (decode, encode)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Time.Clock.POSIX (getPOSIXTime)
+import qualified Network.Socket as NS
+import qualified Network.Socket.ByteString as NSB
 
 packetSize :: Int
 packetSize = 65536
@@ -25,7 +27,7 @@ second = 1000000
 sendMessages
     :: Binary msg
     => [(NS.SockAddr, msg)] -> NS.Socket -> IO ()
-sendMessages outbound s = do
+sendMessages outbound s =
     for_ outbound (\(to, out) -> do
         let serialized = LBS.toStrict $ Binary.encode out
         NSB.sendAllTo s serialized to)
@@ -33,37 +35,34 @@ sendMessages outbound s = do
 runPeriodic
     :: forall p . p ~ SimpleNode Text
     => NS.Socket -> MVar p -> IO ()
-runPeriodic s protoVar = do
-    proto <- takeMVar protoVar
-    now <- getPOSIXTime
-    let (proto', outbound) = step proto now Nothing
-    putMVar protoVar proto'
+runPeriodic s protoVar = forever $ do
+    outbound <-
+        modifyMVar protoVar $ \proto -> do
+            now <- getPOSIXTime
+            pure $ step proto now Nothing
 
     sendMessages outbound s
 
-    let sleep = epoch proto'
+    sleep <- epoch <$> readMVar protoVar
     threadDelay (toSeconds sleep * second)
 
-    runPeriodic s protoVar
-
 runListener
-    :: ( Show (Msg p)
-       , Binary (Msg p)
+    :: ( Binary (Msg p)
        , Addr p ~ NS.SockAddr
        , Protocol p )
-    => NS.Socket -> MVar p -> IO ()
-runListener s protoVar = do
+    => NS.Socket
+    -> MVar p
+    -> IO ()
+runListener s protoVar = forever $ do
     (bytes, from) <- NSB.recvFrom s packetSize
     let deserialized = Binary.decode $ LBS.fromStrict bytes
 
-    proto <- takeMVar protoVar
-    now <- getPOSIXTime
-    let (proto', outbound) = step proto now (Just (from, deserialized))
-    putMVar protoVar proto'
+    outbound <-
+        modifyMVar protoVar $ \proto -> do
+            now <- getPOSIXTime
+            pure $ step proto now (Just (from, deserialized))
 
     sendMessages outbound s
-
-    runListener s protoVar
 
 runProto :: NS.SockAddr -> NS.PortNumber -> IO ()
 runProto addr port = do
@@ -81,11 +80,17 @@ runProto addr port = do
     s <- NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol
     NS.bind s addr
 
-    cron       <- async $ runPeriodic s protoVar
-    receiver   <- async $ runListener s protoVar
-    advertiser <- async $ localAdvertiser port
-    discovery  <- async $ localPeerDiscovery protoVar
+    let cron      = runPeriodic s protoVar
+    let receiver  = runListener s protoVar
+    let discovery = runDisco protoVar
 
-    waitAny [ cron, receiver, advertiser, discovery ]
+    race_ discovery (race_ cron receiver)
+  where
+    runDisco protoVar =
+        withDisco (MCast.mkDisco (MCast.mkConfig port)) $ \disco ->
+            forever $ do
+                peers <- knownPeers disco
+                modifyMVar_ protoVar $ \p ->
+                    pure $ p { snPeers = toList peers }
+                threadDelay (3 * second)
 
-    pure ()
