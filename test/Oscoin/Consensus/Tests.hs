@@ -21,29 +21,30 @@ tests :: [TestTree]
 tests =
     [ testGroup "With Partitions"
         [ testProperty "All nodes DON'T include all txns (simple test)" $
-            expectFailure $ propNetworkNodesConverge (arbitraryNetwork @(TestNode DummyTx))
+            expectFailure $ propNetworkNodesConverge nodesMatch (arbitraryNetwork @(TestNode DummyTx))
         , testProperty "All nodes DON'T include all txns (buffered test)" $
-            expectFailure $ propNetworkNodesConverge (arbitraryNetwork @(BufferedTestNode DummyTx))
+            expectFailure $ propNetworkNodesConverge nodesMatch (arbitraryNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesConverge (arbitraryPartitionedNetwork @(SimpleNode DummyTx))
+            propNetworkNodesConverge nodePrefixesMatch (arbitraryPartitionedNetwork @(SimpleNode DummyTx))
         ]
     , testGroup "Without Partitions"
         [ testProperty "All nodes include all txns (simple test)" $
-            propNetworkNodesConverge (arbitraryHealthyNetwork @(TestNode DummyTx))
+            propNetworkNodesConverge nodesMatch (arbitraryHealthyNetwork @(TestNode DummyTx))
         , testProperty "All nodes include all txns (buffered test)" $
-            propNetworkNodesConverge (arbitraryHealthyNetwork @(BufferedTestNode DummyTx))
+            propNetworkNodesConverge nodesMatch (arbitraryHealthyNetwork @(BufferedTestNode DummyTx))
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesConverge (arbitraryHealthyNetwork @(SimpleNode DummyTx))
+            propNetworkNodesConverge nodePrefixesMatch (arbitraryHealthyNetwork @(SimpleNode DummyTx))
         , testProperty "All nodes include all txns (nakamoto)" $
-            propNetworkNodesConverge (arbitraryHealthyNetwork @(Nakamoto DummyTx))
+            propNetworkNodesConverge nodePrefixesMatch (arbitraryHealthyNetwork @(Nakamoto DummyTx))
         ]
     ]
 
 propNetworkNodesConverge
     :: forall a . (Show (TestNetwork a), TestableNode a)
-    => Gen (TestNetwork a)
+    => (Map (Addr a) a -> Bool)
+    -> Gen (TestNetwork a)
     -> Property
-propNetworkNodesConverge testNetworks =
+propNetworkNodesConverge stateCmp testNetworks =
     forAllShrink testNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
             let TestNetwork nodes _ _ log _ msgCount = runNetwork tn
@@ -57,13 +58,30 @@ propNetworkNodesConverge testNetworks =
 
              in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
                       counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo ++ prettyMsgAmp)
-                                     (nodesMatch nodes && msgAmp <= maximumMsgAmp)
+                                     (stateCmp nodes && msgAmp <= maximumMsgAmp)
   where
     maximumMsgAmp = 9000
 
 nodesMatch :: TestableNode a => Map (Addr a) a -> Bool
-nodesMatch nodes =
+nodesMatch nodes = equal $ map testablePostState (toList nodes)
+
+nodePrefixesMatch :: TestableNode a => Map (Addr a) a -> Bool
+nodePrefixesMatch nodes =
     let states = map testablePostState (toList nodes)
-        minLen = minimum $ map length states
+        minLen = commonPrefixLen states
         shorts = map (take minLen) states
      in equal shorts
+
+commonPrefixLen :: Eq a => [[a]] -> Int
+commonPrefixLen [] = 0
+commonPrefixLen xs = length (go [] xs)
+  where
+    go :: Eq a => [a] -> [[a]] -> [a]
+    go common ass
+        | [] `elem` ass = common
+        | equal heads   = go common' tails
+        | otherwise     = common
+      where
+        common' = head heads : common
+        heads   = map head ass
+        tails   = map tail ass

@@ -131,6 +131,7 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
 runNetwork tn@TestNetwork{tnMsgs}
+    | noTicksLeft = tn
     | Just (sm, sms) <- Set.minView tnMsgs
     , tn' <- tn { tnMsgs = sms } =
         runNetwork $ case sm of
@@ -139,6 +140,9 @@ runNetwork tn@TestNetwork{tnMsgs}
             Partition _ ps               -> tn' { tnPartitions = ps }
             Heal _                       -> tn' { tnPartitions = mempty }
     | otherwise = tn
+  where
+    ticks       = Set.filter isTick tnMsgs
+    noTicksLeft = Set.null ticks
 
 deliver
     :: (TestableNode a)
