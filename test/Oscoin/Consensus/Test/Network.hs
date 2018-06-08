@@ -8,7 +8,7 @@ import           Oscoin.Consensus.Simple
 import           Oscoin.Consensus.Simple.Arbitrary ()
 import           Oscoin.Consensus.Nakamoto.Arbitrary ()
 import           Oscoin.Consensus.Nakamoto (nakamoto, Nakamoto(..), NodeMsg(..), longestChain)
-import           Oscoin.Crypto.Blockchain.Block (genesisBlock, blockHeader, BlockHeader)
+import           Oscoin.Crypto.Blockchain.Block (genesisBlock, blockData, blockHeader, BlockHeader)
 import           Oscoin.Crypto.Blockchain (showChainDigest, fromBlockchain)
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 
@@ -71,7 +71,7 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
 
 instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode (SimpleNode tx) where
     type TestableTx (SimpleNode tx) = tx
-    type TestableResult (SimpleNode tx) = Hashed BlockHeader
+    type TestableResult (SimpleNode tx) = tx
 
     testableNode addr peers = SimpleNode
         { snAddr    = addr
@@ -85,7 +85,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
     testablePreState _ (ClientTx tx) = [tx]
     testablePreState _ _             = []
 
-    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . bestChain . snStore
+    testablePostState = concatMap (toList . blockData) . toList . fromBlockchain . bestChain . snStore
 
     testableNodeAddr = snAddr
     testableShow SimpleNode{..} = showChainDigest $ bestChain $ snStore
