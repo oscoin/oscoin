@@ -120,6 +120,7 @@ data TestNetwork a = TestNetwork
     , tnLog        :: [Scheduled a]
     , tnLatencies  :: [Tick]
     , tnMsgCount   :: Int
+    , tnLastTick   :: Tick
     }
 
 type Partitions a = Map (Addr a) (Set (Addr a))
@@ -135,9 +136,9 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
-runNetwork tn@TestNetwork{tnMsgs}
-    | noTicksLeft = tn
+runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | Just (sm, sms) <- Set.minView tnMsgs
+    , scheduledTick sm <= tnLastTick
     , tn' <- tn { tnMsgs = sms } =
         runNetwork $ case sm of
             ScheduledTick tick to        -> deliver tick to Nothing tn'
@@ -145,9 +146,6 @@ runNetwork tn@TestNetwork{tnMsgs}
             Partition _ ps               -> tn' { tnPartitions = ps }
             Heal _                       -> tn' { tnPartitions = mempty }
     | otherwise = tn
-  where
-    ticks       = Set.filter isTick tnMsgs
-    noTicksLeft = Set.null ticks
 
 deliver
     :: (TestableNode a)

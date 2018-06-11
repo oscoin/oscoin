@@ -51,6 +51,7 @@ arbitraryHealthyNetwork = do
         , tnLog        = []
         , tnLatencies  = map fromIntegral (randomRs (1 :: Int, 1 + 2 * toSeconds e) (mkStdGen seed))
         , tnMsgCount   = 0
+        , tnLastTick   = fromIntegral lastTick
         }
 
 arbitraryPartitionedNetwork :: TestableNode a => Gen (TestNetwork a)
@@ -128,8 +129,8 @@ shrinkScheduledMsgs msgs =
 -- TODO: Nodes will still contain previously present nodes in their address
 -- books.
 filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
-filterNetwork (TestNetwork nodes msgs partitions _ rng count) =
-    TestNetwork nodes (Set.filter f msgs) partitions [] rng count
+filterNetwork (TestNetwork nodes msgs partitions _ rng count lt) =
+    TestNetwork nodes (Set.filter f msgs) partitions [] rng count lt
   where
     f msg = all (`Map.member` nodes) $
         scheduledReceivers msg ++ catMaybes [scheduledSender msg]
