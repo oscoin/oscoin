@@ -1,6 +1,6 @@
 module Oscoin.Consensus.Tests (tests) where
 
-import           Oscoin.Prelude hiding (log)
+import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
@@ -81,8 +81,8 @@ nodesMatch :: TestableNode a => TestNetwork a -> Bool
 nodesMatch TestNetwork{..} = equal $ map testablePostState (toList tnNodes)
 
 nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
-nodePrefixesMatch tn =
-    length (commonPrefix (nodePrefixes tn)) > 0
+nodePrefixesMatch =
+    not . null .commonPrefix . nodePrefixes
 
 nodePrefixes :: TestableNode a => TestNetwork a -> [[TestableResult a]]
 nodePrefixes TestNetwork{..} =
