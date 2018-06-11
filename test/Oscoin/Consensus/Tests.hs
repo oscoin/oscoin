@@ -41,7 +41,7 @@ tests =
 
 propNetworkNodesConverge
     :: forall a . (Show (TestNetwork a), TestableNode a)
-    => (Map (Addr a) a -> Bool)
+    => (TestNetwork a -> Bool)
     -> Gen (TestNetwork a)
     -> Property
 propNetworkNodesConverge stateCmp testNetworks =
@@ -67,17 +67,17 @@ prettyCounterexample TestNetwork{..} maxMsgAmp =
     prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList tnNodes]]
     prettyMsgAmp = unlines $ [" message amplification: " ++ show maxMsgAmp]
 
-nodesMatch :: TestableNode a => Map (Addr a) a -> Bool
-nodesMatch nodes = equal $ map testablePostState (toList nodes)
+nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
+nodePrefixesMatch tn =
+    length (commonPrefix (nodePrefixes tn)) > 0
 
-nodePrefixesMatch :: TestableNode a => Map (Addr a) a -> Bool
-nodePrefixesMatch nodes =
-    let states = map (reverse . testablePostState) (toList nodes)
-     in commonPrefixLen states > 0
+nodePrefixes :: TestableNode a => TestNetwork a -> [[TestableResult a]]
+nodePrefixes TestNetwork{..} =
+    map (reverse . testablePostState) (toList tnNodes)
 
-commonPrefixLen :: Eq a => [[a]] -> Int
-commonPrefixLen [] = 0
-commonPrefixLen xs = length (go [] xs)
+commonPrefix :: Eq a => [[a]] -> [a]
+commonPrefix [] = []
+commonPrefix xs = go [] xs
   where
     go :: Eq a => [a] -> [[a]] -> [a]
     go common ass
