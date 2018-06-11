@@ -73,9 +73,7 @@ nodesMatch nodes = equal $ map testablePostState (toList nodes)
 nodePrefixesMatch :: TestableNode a => Map (Addr a) a -> Bool
 nodePrefixesMatch nodes =
     let states = map (reverse . testablePostState) (toList nodes)
-        minLen = commonPrefixLen states
-        shorts = map (take minLen) states
-     in equal shorts
+     in commonPrefixLen states > 0
 
 commonPrefixLen :: Eq a => [[a]] -> Int
 commonPrefixLen [] = 0
