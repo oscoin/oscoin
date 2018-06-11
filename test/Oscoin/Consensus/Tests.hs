@@ -51,7 +51,7 @@ propNetworkNodesConverge stateCmp testNetworks =
                 filteredInitialMsgs  = Set.filter isMsg (tnMsgs tn)
                 msgAmp               = tnMsgCount tn' `div` length filteredInitialMsgs
 
-             in cover (not . null . testablePostState . head . toList $ tnNodes tn') 90 "replicated any data" $
+             in cover (not . null . testableIncludedTxs . head . toList $ tnNodes tn') 90 "replicated any data" $
                  counterexample (prettyCounterexample tn' maximumMsgAmp)
                                 (stateCmp (tnNodes tn') && msgAmp <= maximumMsgAmp)
   where

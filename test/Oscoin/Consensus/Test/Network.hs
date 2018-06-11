@@ -38,6 +38,7 @@ class ( Eq (TestableTx a)
 
     testableNode :: Addr a -> [Addr a] -> a
     testablePostState :: a -> [TestableResult a]
+    testableIncludedTxs :: a -> [TestableTx a]
     testablePreState :: a -> Msg a -> [TestableTx a]
     testableNodeAddr :: a -> Addr a
     testableShow :: a -> String
@@ -50,6 +51,7 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
     testableNode addr = TestNode addr []
     testablePreState _ tx = [tx]
     testablePostState (TestNode _ s _) = s
+    testableIncludedTxs = testablePostState
     testableNodeAddr (TestNode a _ _) = a
     testableShow _ = "-"
 
@@ -66,12 +68,13 @@ instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) w
         }
     testablePreState _ tx = [tx]
     testablePostState = btnState
+    testableIncludedTxs = testablePostState
     testableNodeAddr = btnAddr
     testableShow _ = "-"
 
 instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode (SimpleNode tx) where
     type TestableTx (SimpleNode tx) = tx
-    type TestableResult (SimpleNode tx) = tx
+    type TestableResult (SimpleNode tx) = Hashed BlockHeader
 
     testableNode addr peers = SimpleNode
         { snAddr    = addr
@@ -85,7 +88,8 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
     testablePreState _ (ClientTx tx) = [tx]
     testablePreState _ _             = []
 
-    testablePostState = concatMap (toList . blockData) . toList . fromBlockchain . bestChain . snStore
+    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . bestChain . snStore
+    testableIncludedTxs = concatMap (toList . blockData) . toList . fromBlockchain . bestChain . snStore
 
     testableNodeAddr = snAddr
     testableShow SimpleNode{..} = showChainDigest $ bestChain $ snStore
@@ -103,6 +107,7 @@ instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode
     testablePreState _ _          = []
 
     testablePostState = map (hash . blockHeader) . toList . fromBlockchain . longestChain
+    testableIncludedTxs = concatMap (toList . blockData) . toList . fromBlockchain . longestChain
     testableNodeAddr = nkAddr
     testableShow = showChainDigest . longestChain
 
