@@ -47,20 +47,25 @@ propNetworkNodesConverge
 propNetworkNodesConverge stateCmp testNetworks =
     forAllShrink testNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
-            let TestNetwork nodes _ _ log _ msgCount = runNetwork tn
-                prettyLog                            = unlines $ " log:" : reverse ["  " ++ show l | l <- reverse $ sort log]
-                prettyStates                         = unlines $ [" states:", "  " ++ show (map testablePostState nodes)]
-                prettyNodes                          = unlines $ [" nodes:", "  " ++ show (length nodes)]
-                prettyInfo                           = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList nodes]]
-                filteredInitialMsgs                  = Set.filter isMsg (tnMsgs tn)
-                msgAmp                               = msgCount `div` length filteredInitialMsgs
-                prettyMsgAmp                         = unlines $ [" message amplification:" ++ show msgAmp]
+            let tn'                  = runNetwork tn
+                filteredInitialMsgs  = Set.filter isMsg (tnMsgs tn)
+                msgAmp               = tnMsgCount tn' `div` length filteredInitialMsgs
 
-             in cover (not $ null $ testablePostState $ head $ toList nodes) 90 "replicated any data" $
-                      counterexample (prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo ++ prettyMsgAmp)
-                                     (stateCmp nodes && msgAmp <= maximumMsgAmp)
+             in cover (not . null . testablePostState . head . toList $ tnNodes tn') 90 "replicated any data" $
+                 counterexample (prettyCounterexample tn' maximumMsgAmp)
+                                (stateCmp (tnNodes tn') && msgAmp <= maximumMsgAmp)
   where
     maximumMsgAmp = 9000
+
+prettyCounterexample :: TestableNode a => TestNetwork a -> Int -> String
+prettyCounterexample TestNetwork{..} maxMsgAmp =
+    prettyLog ++ prettyNodes ++ prettyStates ++ prettyInfo ++ prettyMsgAmp
+  where
+    prettyLog    = unlines $  " log:" : reverse ["  " ++ show l | l <- reverse $ sort tnLog]
+    prettyStates = unlines $ [" states:", "  " ++ show (map testablePostState tnNodes)]
+    prettyNodes  = unlines $ [" nodes:", "  " ++ show (length tnNodes)]
+    prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList tnNodes]]
+    prettyMsgAmp = unlines $ [" message amplification: " ++ show maxMsgAmp]
 
 nodesMatch :: TestableNode a => Map (Addr a) a -> Bool
 nodesMatch nodes = equal $ map testablePostState (toList nodes)
