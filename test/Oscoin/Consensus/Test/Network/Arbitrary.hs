@@ -104,15 +104,15 @@ arbitraryBridgePartition addrs = do
 instance TestableNode a => Arbitrary (TestNetwork a) where
     arbitrary = arbitraryPartitionedNetwork
 
-    shrink (TestNetwork nodes msgs partitions _ rng count) =
+    shrink tn@TestNetwork{..} =
         lessMsgs
       where
-        msgs'     = shrinkScheduledMsgs msgs
-        nodes'    = shrinkList shrinkNothing (Map.toList nodes)
-        lessMsgs  = [TestNetwork nodes ms partitions [] rng count | ms <- msgs']
+        msgs'     = shrinkScheduledMsgs tnMsgs
+        nodes'    = shrinkList shrinkNothing (Map.toList tnNodes)
+        lessMsgs  = [tn { tnMsgs = ms, tnLatencies = [] } | ms <- msgs']
 
         -- NB. Not in use currently.
-        _lessNodes = map filterNetwork [TestNetwork (Map.fromList ns) msgs partitions [] rng count | ns <- nodes']
+        _lessNodes = map filterNetwork [tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
 shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
 shrinkScheduledMsgs msgs =
