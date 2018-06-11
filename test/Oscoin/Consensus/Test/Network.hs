@@ -154,7 +154,8 @@ deliver
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
         let (node', msgs) = step node tick msg
-            tn'           = tn { tnNodes = Map.insert to node' tnNodes, tnMsgCount = tnMsgCount + 1 }
+            tnMsgCount'   = if isJust msg then tnMsgCount + 1 else tnMsgCount
+            tn'           = tn { tnNodes = Map.insert to node' tnNodes, tnMsgCount = tnMsgCount' }
          in scheduleMessages tick to msgs tn'
     | otherwise =
         tn
