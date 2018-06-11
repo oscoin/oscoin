@@ -84,9 +84,8 @@ commonPrefixLen xs = length (go [] xs)
     go :: Eq a => [a] -> [[a]] -> [a]
     go common ass
         | [] `elem` ass = common
-        | equal heads   = go common' tails
+        | equal heads   = head heads : go common tails
         | otherwise     = common
       where
-        common' = head heads : common
         heads   = map head ass
         tails   = map tail ass
