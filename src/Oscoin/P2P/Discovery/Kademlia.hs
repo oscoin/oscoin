@@ -7,6 +7,7 @@ module Oscoin.P2P.Discovery.Kademlia
     , mkDisco
     ) where
 
+import           Oscoin.Logging (Logger, err, info)
 import           Oscoin.P2P.Discovery.Internal (Disco(..))
 import           Oscoin.Prelude
 
@@ -15,6 +16,7 @@ import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Set as Set
+import           Formatting (string)
 import qualified Network.Kademlia as K
 import           Network.Socket (HostName)
 
@@ -33,6 +35,7 @@ data Config i = Config
     { cfgBindAddress     :: (HostName, Word16)
     , cfgExternalAddress :: (HostName, Word16)
     , cfgNodeId          :: i
+    , cfgLogger          :: Logger
     }
 
 data KademliaDiscoError =
@@ -42,8 +45,8 @@ data KademliaDiscoError =
 
 instance Exception KademliaDiscoError
 
-mkConfig :: (HostName, Word16) -> (HostName, Word16) -> i -> Config i
-mkConfig cfgBindAddress cfgExternalAddress cfgNodeId = Config{..}
+mkConfig :: Logger -> (HostName, Word16) -> (HostName, Word16) -> i -> Config i
+mkConfig cfgLogger cfgBindAddress cfgExternalAddress cfgNodeId = Config{..}
 
 mkDisco
     :: forall i. (Binary i, Show i, Ord i)
@@ -69,5 +72,5 @@ mkDisco Config{..} peer = do
                   cfgExternalAddress
                   (KSerialize cfgNodeId)
                   K.defaultConfig
-                  putStrLn
-                  putStrLn
+                  (info cfgLogger string)
+                  (err  cfgLogger string)
