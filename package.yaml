@@ -20,11 +20,15 @@ dependencies:
   - cryptonite
   - data-default
   - data-has
+  - dlist
+  - fast-logger
+  - formatting
   - http-api-data
   - http-types
   - kademlia
   - memory
   - merkle-tree
+  - microlens
   - monad-stm
   - mtl
   - network
