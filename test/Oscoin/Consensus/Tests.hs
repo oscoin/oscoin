@@ -82,7 +82,7 @@ nodesMatch TestNetwork{..} = equal $ map testablePostState (toList tnNodes)
 
 nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
 nodePrefixesMatch =
-    not . null .commonPrefix . nodePrefixes
+    not . null . commonPrefix . nodePrefixes
 
 nodePrefixes :: TestableNode a => TestNetwork a -> [[TestableResult a]]
 nodePrefixes TestNetwork{..} =
