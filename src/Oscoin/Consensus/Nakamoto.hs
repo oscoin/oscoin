@@ -133,7 +133,7 @@ minDifficulty =
 defaultGenesisDifficulty :: Difficulty
 defaultGenesisDifficulty =
     0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-    -- ^ This is the original difficulty of Bitcoin at genesis.
+    -- This is the original difficulty of Bitcoin at genesis.
 
 -- | Return whether or not a block has a valid difficulty.
 hasPoW :: BlockHeader -> Bool
