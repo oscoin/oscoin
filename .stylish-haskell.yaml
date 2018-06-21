@@ -177,11 +177,33 @@ columns: 120
 newline: native
 
 language_extensions:
+  - BangPatterns
+  - ConstraintKinds
+  - DeriveFoldable
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveTraversable
   - FlexibleContexts
+  - FlexibleInstances
+  - FunctionalDependencies
+  - GADTs
+  - GeneralizedNewtypeDeriving
+  - InstanceSigs
+  - MonadFailDesugaring
   - MultiParamTypeClasses
   - MultiWayIf
+  - NamedFieldPuns
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - ParallelListComp
   - PatternSynonyms
   - RankNTypes
   - RecordWildCards
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - StrictData
   - TypeApplications
+  - TypeFamilies
+  - TypeOperators
+  - TypeSynonymInstances
   - ViewPatterns
