@@ -1,124 +1,111 @@
-module Oscoin.Consensus.Nakamoto where
+{-# LANGUAGE LambdaCase #-}
+
+module Oscoin.Consensus.Nakamoto
+    ( NakamotoT
+
+    , runNakamotoT
+    , evalNakamotoT
+
+    , epochLength
+
+    , difficulty
+    , defaultGenesisDifficulty
+    , chainDifficulty
+    ) where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.BlockStore
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, shortHash)
-import           Oscoin.Node.Mempool (Mempool)
-import qualified Oscoin.Node.Mempool as Mempool
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.P2P as P2P
 
+import           Control.Monad.State (StateT, evalStateT, state)
 import           Crypto.Number.Serialize (os2ip)
-import           Data.Binary
-import qualified Data.ByteString.Char8 as C8
+import           Data.Binary (Binary)
+import           Data.Bool (bool)
+import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Set as Set
-import qualified Data.Map as Map
+import           Data.Maybe (maybeToList)
+import           Data.Traversable (for)
+import           System.Random (StdGen, randomR)
 
-type BlockHash = Hashed BlockHeader
+epochLength :: Tick
+epochLength = 1
 
-data Nakamoto tx = Nakamoto
-    { nkStore   :: BlockStore tx
-    , nkRandom  :: [Float]
-    , nkMempool :: Mempool (Hashed tx) tx
-    , nkPeers   :: Set (Addr (Nakamoto tx))
-    , nkAddr    :: Addr (Nakamoto tx)
-    }
+newtype NakamotoT tx m a = NakamotoT (StateT StdGen m a)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadIO
+             , MonadState StdGen
+             )
 
-instance Show (Nakamoto tx) where
-    show Nakamoto{} = "Nakamoto{}"
+instance MonadTrans (NakamotoT tx) where
+    lift = NakamotoT . lift
+    {-# INLINE lift #-}
 
-nakamoto :: Ord tx => Addr (Nakamoto tx) -> Block tx -> [Addr (Nakamoto tx)] -> [Float] -> Nakamoto tx
-nakamoto addr gen peers random =
-    Nakamoto
-        { nkStore = genesisBlockStore gen
-        , nkRandom = random
-        , nkMempool = mempty
-        , nkPeers = Set.fromList peers
-        , nkAddr = addr
-        }
+instance MonadClock m => MonadClock (NakamotoT tx m) where
+    currentTick = lift currentTick
+    {-# INLINE currentTick #-}
 
-data NodeMsg tx =
-      BlockMsg   (Block tx)
-    | TxMsg      tx
-    deriving (Eq, Generic)
+instance ( MonadMempool    tx m
+         , MonadBlockStore tx m
+         , Hashable        tx
+         ) => MonadProtocol tx (NakamotoT tx m)
+  where
+    stepM _ = \case
+        P2P.BlockMsg blk -> do
+            for_ (validateBlock blk) $ \blk' -> do
+                storeBlock blk'
+                delTxs (toList blk')
+            pure mempty
 
-instance Show tx => Show (NodeMsg tx) where
-    show (BlockMsg blk) =
-        unwords [ "BlockMsg"
-                , C8.unpack (shortHash (blockHash blk))
-                , show (toList (blockData blk)) ]
-    show (TxMsg tx) =
-        "TxMsg " ++ show tx
+        -- TODO: Validate tx.
+        P2P.TxMsg txs ->
+            addTxs txs $> mempty
 
-instance Binary tx => Binary (NodeMsg tx)
+        P2P.ReqBlockMsg blk ->
+            map P2P.BlockMsg . maybeToList <$> lookupBlock blk
 
-instance (Ord tx, Hashable tx) => Protocol (Nakamoto tx) where
-    type Addr (Nakamoto tx) = Word8
-    type Msg  (Nakamoto tx) = NodeMsg tx
+    tickM t = do
+        blk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t)
+        pure . maybeToList . map P2P.BlockMsg $ blk
 
-    step :: Nakamoto tx
-         -> Tick
-         -> Maybe (Addr (Nakamoto tx), NodeMsg tx)
-         -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-    step node _ (Just (_from, msg)) =
-        case msg of
-            BlockMsg blk | Right _ <- validateBlock blk ->
-                (commitBlock blk node, [])
-            TxMsg tx | isNovel tx node -> -- TODO: Validate tx.
-                -- NB. Normally, the node would flood the network with the
-                -- transaction, but this slows things down considerably
-                -- for our tests.
-                (receiveTx tx node, [])
-            _ ->
-                (node, [])
-    step node t Nothing =
-        mineBlock t node
+    {-# INLINE stepM #-}
+    {-# INLINE tickM #-}
 
-    epoch _ = 1
+runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
+runNakamotoT rng (NakamotoT ma) = runStateT ma rng
 
-isNovel :: Hashable tx => tx -> Nakamoto tx -> Bool
-isNovel tx = not . Mempool.member (hash tx) . nkMempool
+evalNakamotoT :: Monad m => StdGen -> NakamotoT tx m a -> m a
+evalNakamotoT rng (NakamotoT ma) = evalStateT ma rng
 
-broadcast :: Foldable t => msg -> t peer -> [(peer, msg)]
-broadcast msg peers = zip (toList peers) (repeat msg)
-
-receiveTx :: Hashable tx => tx -> Nakamoto tx -> Nakamoto tx
-receiveTx tx node = node { nkMempool = Mempool.insert tx (nkMempool node) }
-
-commitBlock :: (Ord tx, Hashable tx) => Block tx -> Nakamoto tx -> Nakamoto tx
-commitBlock blk =
-    reapMempool (toList blk) . withBlockStore (storeBlock blk)
-
-withBlockStore :: (BlockStore tx -> BlockStore tx) -> Nakamoto tx -> Nakamoto tx
-withBlockStore f node =
-    node { nkStore = f (nkStore node) }
-
-longestChain :: Nakamoto tx -> Blockchain tx
-longestChain = maximumBy (comparing height) . Map.elems . bsChains . nkStore
-
-reapMempool :: (Functor t, Foldable t, Hashable tx) => t tx -> Nakamoto tx -> Nakamoto tx
-reapMempool txs node =
-    node { nkMempool = Mempool.removeTxs (map hash txs) (nkMempool node) }
+shouldCutBlock :: Monad m => NakamotoT tx m Bool
+shouldCutBlock = do
+    v <- state $ randomR (0, 1)
+    pure $ v < p
+  where
+    p = 0.1 :: Float
 
 mineBlock
-    :: (Ord tx, Hashable tx)
+    :: ( MonadMempool    tx m
+       , MonadBlockStore tx m
+       , Binary          tx
+       )
     => Tick
-    -> Nakamoto tx
-    -> (Nakamoto tx, [(Addr (Nakamoto tx), NodeMsg tx)])
-mineBlock t node@Nakamoto{nkRandom, nkMempool, nkPeers}
-    | head nkRandom < 0.1 =
-        case findBlock t (hash . blockHeader . tip $ longestChain node) minDifficulty nkMempool of
-            Just blk ->
-                (commitBlock blk node', broadcast (BlockMsg blk) (toList nkPeers))
-            Nothing ->
-                (node', [])
-    | otherwise =
-        (node', [])
-  where
-    node' = node { nkRandom = tail nkRandom }
+    -> NakamotoT tx m (Maybe (Block tx))
+mineBlock tick = do
+    txs   <- map snd <$> getTxs
+    chain <- maximumChainBy (comparing height)
+    let prevHash = hash . blockHeader $ tip chain
+    for (findBlock tick prevHash minDifficulty txs) $ \blk -> do
+        delTxs (toList blk)
+        storeBlock blk
+        pure blk
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader -> Difficulty

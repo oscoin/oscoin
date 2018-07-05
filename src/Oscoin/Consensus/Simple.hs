@@ -1,84 +1,116 @@
--- TODO: When committing a block, filter the mempool of all transactions in that
--- block.
-module Oscoin.Consensus.Simple where
+{-# LANGUAGE LambdaCase #-}
 
-import           Oscoin.Prelude
-import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.BlockStore
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
-import           Oscoin.Crypto.Blockchain.Block
+module Oscoin.Consensus.Simple
+    ( Env
+    , LastTime (..)
+    , SimpleT
+
+    , mkEnv
+
+    , runSimpleT
+    , evalSimpleT
+
+    , epochLength
+
+    , chainScore
+
+    , shouldCutBlock
+    , shouldReconcile
+    ) where
+
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
+import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
+import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
+import           Oscoin.Crypto.Blockchain.Block (Block, block, blockHeader, blockTimestamp, validateBlock)
 import           Oscoin.Crypto.Hash
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.P2P as P2P
+import           Oscoin.Prelude
 
-import qualified Data.ByteString.Char8 as C8
-import           Data.Binary (Binary)
+import           Control.Monad.State
+import           Data.Bool (bool)
+import           Data.Functor (($>))
+import           Data.Maybe (maybeToList)
 import qualified Data.Set as Set
-import qualified Data.Map as Map
-import           Network.Socket
 
 epochLength :: Tick
 epochLength = 1
 
-data SimpleNode tx = SimpleNode
-    { snAddr    :: Addr (SimpleNode tx)
-    , snPeers   :: [Addr (SimpleNode tx)]
-    , snBuffer  :: Set tx
-    , snLastBlk :: Tick
-    , snLastAsk :: Tick
-    , snStore   :: BlockStore tx
-    } deriving (Eq, Show)
+data Env i = Env
+    { envSelf  :: i
+    , envPeers :: Set i
+    } deriving Show
 
-type BlockId = Word64
-type Step = Word64
-type Score = Word64
+data LastTime = LastTime
+    { ltLastBlk :: Tick
+    , ltLastAsk :: Tick
+    } deriving Show
 
-data NodeMsg tx =
-      SendBlock                   (Block tx)
-    | ProposeBlock                (Block tx)
-    | RequestBlock                (Hashed BlockHeader)
-    | ClientTx tx
-    deriving (Eq, Generic)
+newtype SimpleT tx i m a = SimpleT (ReaderT (Env i) (StateT LastTime m) a)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadReader (Env i)
+             , MonadState  LastTime
+             )
 
-instance Binary tx => Binary (NodeMsg tx)
+instance MonadTrans (SimpleT tx i) where
+    lift = SimpleT . lift . lift
+    {-# INLINE lift #-}
 
-instance Show tx => Show (NodeMsg tx) where
-    show (ProposeBlock blk) =
-        unwords [ "ProposeBlock"
-                , C8.unpack (shortHash (blockHash blk))
-                , show (toList (blockData blk)) ]
-    show (SendBlock blk) =
-        unwords [ "SendBlock"
-                , C8.unpack (shortHash (blockHash blk))
-                , show (toList (blockData blk)) ]
-    show (ClientTx tx) =
-        "ClientTx " ++ show tx
-    show (RequestBlock h) =
-        "RequestBlock " ++ C8.unpack (shortHash h)
-
-addPeer :: SockAddr -> SimpleNode tx -> SimpleNode tx
-addPeer addr sn =
-    sn { snPeers = peers' }
+instance ( MonadMempool    tx m
+         , MonadBlockStore tx m
+         , Hashable        tx
+         , Ord i
+         ) => MonadProtocol tx (SimpleT tx i m)
   where
-    peers  = snPeers sn
-    peers' = if addr == snAddr sn
-        then peers
-        else Set.toList $ Set.insert addr $ Set.fromList peers
+    stepM _ = \case
+        P2P.BlockMsg blk -> do
+            for_ (validateBlock blk) $ \blk' -> do
+                storeBlock blk'
+                delTxs (toList blk')
+            pure mempty
 
-applyBlock :: Ord tx => Block tx -> SimpleNode tx -> SimpleNode tx
-applyBlock blk sn@SimpleNode{..} =
-    sn { snStore = storeBlock blk snStore }
+        -- TODO: Validate tx.
+        P2P.TxMsg txs ->
+            addTxs txs $> mempty
 
-isNovelTx :: Ord tx => tx -> SimpleNode tx -> Bool
-isNovelTx tx SimpleNode { snBuffer } =
-    not inBuffer
-  where
-    inBuffer = Set.member tx snBuffer
+        P2P.ReqBlockMsg blk ->
+            map P2P.BlockMsg . maybeToList <$> lookupBlock blk
 
-bestChain :: BlockStore tx -> Blockchain tx
-bestChain BlockStore{bsChains} =
-    Blockchain longest
-  where
-    scored = [(chainScore chain, fromBlockchain chain) | chain <- toList bsChains]
-    (_, longest) = maximumBy (comparing fst) scored
+    tickM tick = do
+        blks <-
+            shouldCutBlockM tick >>= bool (pure mempty) (do
+                txs   <- map snd <$> getTxs
+                chain <- maximumChainBy (comparing chainScore)
+                let prevHash  = hash . blockHeader $ tip chain
+                let timestamp = fromIntegral (fromEnum tick)
+                let blk       = block prevHash timestamp txs
+
+                storeBlock blk
+                delTxs (toList blk)
+                modify' (\s -> s { ltLastBlk = tick })
+
+                pure [P2P.BlockMsg blk])
+
+        reqs <-
+            shouldReconcileM tick >>= bool (pure mempty) (do
+                modify' (\s -> s { ltLastAsk = tick })
+                map P2P.ReqBlockMsg . toList <$> orphans)
+
+        pure $ blks <> reqs
+
+    {-# INLINE stepM #-}
+    {-# INLINE tickM #-}
+
+mkEnv :: i -> Set i -> Env i
+mkEnv = Env
+
+runSimpleT :: Env i -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
+runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
+
+evalSimpleT :: Monad m => Env i -> LastTime -> SimpleT tx i m a -> m a
+evalSimpleT env lt (SimpleT ma) = evalStateT (runReaderT ma env) lt
 
 chainScore :: forall tx . Blockchain tx -> Int
 chainScore bc =
@@ -92,96 +124,33 @@ chainScore bc =
     steps          = fromIntegral timestamp `div` e :: Int
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
-chainTxs :: Blockchain tx -> [tx]
-chainTxs (Blockchain chain) =
-    concat blocks
-  where
-    blocks = map (toList . blockData) $ toList chain
+shouldReconcileM :: Monad m => Tick -> SimpleT tx i m Bool
+shouldReconcileM at = do
+    lastAsk <- gets ltLastAsk
+    pure $ shouldReconcile lastAsk at
 
-offset :: SimpleNode tx -> Int
-offset SimpleNode{..} =
-    length peersLtUs
+shouldReconcile :: Tick -> Tick -> Bool
+shouldReconcile lastAsk at = time - round lastAsk >= stepTime
   where
-    peersLtUs = filter (< snAddr) snPeers
+    time     = round at :: Int
+    stepTime = round epochLength
 
-lookupBlock :: Hashed BlockHeader -> SimpleNode tx -> Maybe (Block tx)
-lookupBlock header SimpleNode{..} =
-    map tip chain
-  where
-    chains = bsChains snStore
-    chain = Map.lookup header chains
+shouldCutBlockM :: (Monad m, Ord i) => Tick -> SimpleT tx i m Bool
+shouldCutBlockM at = SimpleT $ do
+    lastBlk <- gets ltLastBlk
+    self    <- asks envSelf
+    peers   <- asks envPeers
+    pure $ shouldCutBlock lastBlk self peers at
 
-shouldReconcile :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
-shouldReconcile sn@SimpleNode { snLastAsk } at =
-    time - lastTick >= stepTime
-  where
-    time     = round at
-    lastTick = round snLastAsk
-    stepTime = round (epoch sn) :: Int
-
-shouldCutBlock :: (Ord tx, Binary tx, Show tx) => SimpleNode tx -> Tick -> Bool
-shouldCutBlock sn@SimpleNode{..} at =
-    beenAWhile && ourTurn
+shouldCutBlock :: Ord i => Tick -> i -> Set i -> Tick -> Bool
+shouldCutBlock lastBlk self peers at = beenAWhile && ourTurn
   where
     time              = round at
-    lastTick          = round snLastBlk
-    stepTime          = round (epoch sn)
-    nTotalPeers       = 1 + length snPeers
+    stepTime          = round epochLength
+    nTotalPeers       = 1 + Set.size peers
     relativeBlockTime = stepTime * nTotalPeers
-    beenAWhile        = time - lastTick >= relativeBlockTime
+    beenAWhile        = time - round lastBlk >= relativeBlockTime
     stepNumber        = time `div` stepTime
-    ourOffset         = offset sn
+    ourOffset         = Set.size $ Set.filter (< self) peers
     currentOffset     = stepNumber `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset
-
-orphanParentHashes :: SimpleNode tx -> [Hashed BlockHeader]
-orphanParentHashes SimpleNode{..} =
-    orphanHashes
-  where
-    dangling        = bsDangling snStore
-    danglingHashes  = Set.map blockHash dangling
-    parentHashes    = Set.map (blockPrevHash . blockHeader) dangling
-    orphanHashes    = Set.toList $ Set.difference parentHashes danglingHashes
-
-instance (Binary tx, Ord tx, Show tx) => Protocol (SimpleNode tx) where
-    type Msg  (SimpleNode tx) = NodeMsg tx
-    type Addr (SimpleNode tx) = SockAddr
-
-    step sn@SimpleNode{..} _ (Just (_, ClientTx msg))
-        | isNovelTx msg sn =
-            (sn { snBuffer = Set.insert msg snBuffer }, [])
-        | otherwise =
-            (sn, [])
-    step sn@SimpleNode{..} _ (Just (_, SendBlock blk)) =
-        case validateBlock blk of
-            Left _ ->
-                (sn, [])
-            Right _ ->
-                (applyBlock blk sn, [])
-    step sn t (Just (from, ProposeBlock blk)) =
-        step sn t (Just (from, SendBlock blk))
-
-    step sn@SimpleNode{..} _ (Just (requestor, RequestBlock blkHash)) =
-        case lookupBlock blkHash sn of
-            Just blk -> (sn, [(requestor, SendBlock blk)])
-            Nothing  -> (sn, [])
-    step sn@SimpleNode{..} tick Nothing
-        | shouldCutBlock sn tick =
-            (applyBlock blk $ sn { snLastBlk = tick, snBuffer = mempty }, outgoingBlk)
-        | shouldReconcile sn tick =
-            (sn { snLastAsk = tick }, outgoingAsks)
-        | otherwise =
-            (sn, [])
-      where
-        chain         = bestChain snStore
-        lastBlock     = tip chain
-        lastHeader    = blockHeader lastBlock
-        parentHash    = hash lastHeader
-        timestamp     = fromIntegral (fromEnum tick)
-        blk           = block parentHash timestamp snBuffer
-        msg           = ProposeBlock blk
-        outgoingBlk   = [(p, msg) | p <- snPeers]
-        orphanParents = orphanParentHashes sn
-        outgoingAsks  = [(p, RequestBlock orphan) | p <- snPeers, orphan <- orphanParents]
-
-    epoch _ = epochLength

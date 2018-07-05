@@ -1,58 +1,109 @@
 module Oscoin.Consensus.Test.Node
-    ( TestNode(..)
-    , BufferedTestNode(..)
+    ( DummyNodeId
+    , DummyTx
+
+    , TestNodeState(..)
+    , TestNodeT
+    , emptyTestNodeState
+    , runTestNodeT
     ) where
 
-import Oscoin.Prelude
-import Oscoin.Consensus.Test.View
-import Oscoin.Consensus.Class
+import           Oscoin.Prelude hiding (runStateT)
 
-data TestNode tx = TestNode (Addr (TestNode tx)) [tx] [Addr (TestNode tx)]
-    deriving (Eq, Ord, Show)
+import qualified Oscoin.Consensus.BlockStore as BlockStore
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
+import           Oscoin.Consensus.Class (MonadQuery(..))
+import qualified Oscoin.Crypto.Blockchain.Block as Block
+import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Node.Mempool.Internal as Mempool
+import qualified Oscoin.State.Tree as STree
 
-instance (Ord tx, Eq tx) => Protocol (TestNode tx) where
-    type Msg  (TestNode tx) = tx
-    type Addr (TestNode tx) = Word8
+import           Control.Monad.State.Strict
+import           Data.Binary (Binary)
+import qualified Data.Hashable as Hashable
+import           Lens.Micro
 
-    step tn@(TestNode a state peers) _at (Just (_, msg))
-        | msg `elem` state = (tn, [])
-        | otherwise        = (TestNode a state' peers, broadcastMsgs)
-      where
-        ((), state')  = runDummyView (apply Nothing [msg]) state
-        broadcastMsgs = map (\p -> (p, msg)) peers
-    step tn _at Nothing =
-        (tn, [])
+import           Test.QuickCheck
 
-    epoch _ = 1
+newtype DummyTx = DummyTx Word8
+    deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary)
 
--------------------------------------------------------------------------------
+instance Show DummyTx where
+    show (DummyTx x) = show x
 
-data BufferedTestNode tx = BufferedTestNode
-    { btnAddr    :: Addr (BufferedTestNode tx)
-    , btnPeers   :: [Addr (BufferedTestNode tx)]
-    , btnBuffer  :: [Msg (BufferedTestNode tx)]
-    , btnTick    :: Tick
-    , btnState   :: [tx]
-    } deriving (Eq, Ord, Show)
+instance Arbitrary DummyTx where
+    arbitrary = DummyTx <$> arbitrary
 
-instance Ord tx => Protocol (BufferedTestNode tx) where
-    type Msg  (BufferedTestNode tx) = tx
-    type Addr (BufferedTestNode tx) = Word8
+newtype DummyNodeId = DummyNodeId Word8
+    deriving (Eq, Ord, Num, Hashable.Hashable, Hashable, Binary)
 
-    step btn@BufferedTestNode{..} _ (Just (_, msg))
-        | msg `elem` btnState =
-            (btn, [])
-        | otherwise =
-            (btn { btnState = state', btnBuffer = msg : btnBuffer }, [])
-      where
-        ((), state')  = runDummyView (apply Nothing [msg]) btnState
+instance Show DummyNodeId where
+    show (DummyNodeId x) = show x
 
-    step btn@BufferedTestNode{..} tick Nothing
-        | tick - btnTick > epoch btn =
-            (btn { btnTick = tick, btnBuffer = [] }, outgoing)
-        | otherwise =
-            (btn, [])
-      where
-        outgoing = [(p, msg) | msg <- btnBuffer, p <- btnPeers]
+instance Arbitrary DummyNodeId where
+    arbitrary = DummyNodeId <$> arbitrary
 
-    epoch _ = 10
+data TestNodeState = TestNodeState
+    { tnsStateTree  :: STree.Tree STree.Path STree.Val
+    , tnsMempool    :: Mempool.Mempool DummyTx
+    , tnsBlockstore :: BlockStore.BlockStore DummyTx
+    , tnsNodeId     :: DummyNodeId
+    } deriving Show
+
+tnsMempoolL :: Lens' TestNodeState (Mempool.Mempool DummyTx)
+tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })
+
+tnsBlockstoreL :: Lens' TestNodeState (BlockStore.BlockStore DummyTx)
+tnsBlockstoreL = lens tnsBlockstore (\s a -> s { tnsBlockstore = a })
+
+emptyTestNodeState :: DummyNodeId -> TestNodeState
+emptyTestNodeState nid = TestNodeState
+    { tnsStateTree  = mempty
+    , tnsMempool    = mempty
+    , tnsBlockstore = BlockStore.genesisBlockStore $ Block.genesisBlock 0 []
+    , tnsNodeId     = nid
+    }
+
+newtype TestNodeT m a = TestNodeT (StateT TestNodeState m a)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadTrans
+             , MonadState TestNodeState
+             )
+
+instance Monad m => MonadMempool DummyTx (TestNodeT m) where
+    addTxs txs = modify' (over tnsMempoolL (Mempool.insertMany txs))
+    getTxs     = Mempool.toList <$> gets tnsMempool
+    delTxs txs = modify' (over tnsMempoolL (Mempool.removeTxs txs))
+    numTxs     = Mempool.size <$> gets tnsMempool
+    lookupTx h = Mempool.lookup h <$> gets tnsMempool
+    subscribe  = error "Oscoin.Consensus.Test.Node: `subscribe` not available for pure mempool"
+
+    {-# INLINE addTxs #-}
+    {-# INLINE getTxs #-}
+    {-# INLINE delTxs #-}
+    {-# INLINE numTxs #-}
+
+instance Monad m => MonadBlockStore DummyTx (TestNodeT m) where
+    storeBlock  blk  = modify' (over tnsBlockstoreL (BlockStore.insert blk))
+    lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
+    orphans          = BlockStore.orphans <$> gets tnsBlockstore
+    maximumChainBy f = BlockStore.maximumChainBy f <$> gets tnsBlockstore
+
+    {-# INLINE storeBlock     #-}
+    {-# INLINE lookupBlock    #-}
+    {-# INLINE orphans        #-}
+    {-# INLINE maximumChainBy #-}
+
+instance Monad m => MonadQuery (TestNodeT m) where
+    type Key (TestNodeT m) = STree.Path
+    type Val (TestNodeT m) = STree.Val
+
+    queryM k = STree.get k <$> gets tnsStateTree
+
+    {-# INLINE queryM #-}
+
+runTestNodeT :: TestNodeState -> TestNodeT m a -> m (a, TestNodeState)
+runTestNodeT s (TestNodeT ma) = runStateT ma s

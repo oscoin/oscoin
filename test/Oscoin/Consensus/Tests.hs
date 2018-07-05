@@ -1,13 +1,12 @@
-module Oscoin.Consensus.Tests (tests) where
+module Oscoin.Consensus.Tests where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
-import           Oscoin.Consensus.Test.Node
-import           Oscoin.Consensus.Test.View
-import           Oscoin.Consensus.Simple
-import           Oscoin.Consensus.Nakamoto (Nakamoto)
+
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import qualified Oscoin.Consensus.Simple as Simple
 
 import           Data.List (sort)
 import qualified Data.Set as Set
@@ -19,44 +18,61 @@ import           Test.Tasty.QuickCheck
 tests :: [TestTree]
 tests =
     [ testGroup "With Partitions"
-        [ testProperty "All nodes DON'T include all txns (simple test)" $
-            expectFailure $ propNetworkNodesConverge nodesMatch anyAmp (arbitraryNetwork @(TestNode DummyTx))
-        , testProperty "All nodes DON'T include all txns (buffered test)" $
-            expectFailure $ propNetworkNodesConverge nodesMatch anyAmp (arbitraryNetwork @(BufferedTestNode DummyTx))
+        [ testProperty "All nodes DON'T include all txns (no consensus)" $
+            expectFailure $
+                propNetworkNodesConverge @NoConsensusState
+                                         nodesMatch
+                                         anyAmp
+                                         (arbitraryPartitionedNetwork 1)
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesConverge nodePrefixesMatch (<= 2) (arbitraryPartitionedNetwork @(SimpleNode DummyTx))
+            propNetworkNodesConverge @SimpleNodeState
+                                     nodePrefixesMatch
+                                     (<= 20)
+                                     (arbitraryPartitionedNetwork Simple.epochLength)
         ]
     , testGroup "Without Partitions"
-        [ testProperty "All nodes include all txns (simple test)" $
-            propNetworkNodesConverge nodesMatch anyAmp (arbitraryHealthyNetwork @(TestNode DummyTx))
-        , testProperty "All nodes include all txns (buffered test)" $
-            propNetworkNodesConverge nodesMatch anyAmp (arbitraryHealthyNetwork @(BufferedTestNode DummyTx))
+        [ testProperty "All nodes include all txns (no consensus)" $
+            propNetworkNodesConverge @NoConsensusState
+                                     nodesMatch
+                                     anyAmp
+                                     (arbitraryHealthyNetwork 1)
         , testProperty "All nodes include all txns (simple fault tolerant)" $
-            propNetworkNodesConverge nodePrefixesMatch (<= 2) (arbitraryHealthyNetwork @(SimpleNode DummyTx))
+            propNetworkNodesConverge @SimpleNodeState
+                                     nodePrefixesMatch
+                                     (<= 20)
+                                     (arbitraryHealthyNetwork Simple.epochLength)
         , testProperty "All nodes include all txns (nakamoto)" $
-            propNetworkNodesConverge nodePrefixesMatch (<= 3) (arbitraryHealthyNetwork @(Nakamoto DummyTx))
+            propNetworkNodesConverge @NakamotoNodeState
+                                     nodePrefixesMatch
+                                     (<= 20)
+                                     (arbitraryHealthyNetwork Nakamoto.epochLength)
         ]
     ]
   where
     anyAmp = const True
 
 propNetworkNodesConverge
-    :: forall a . (Show (TestNetwork a), TestableNode a)
-    => (TestNetwork a -> Bool)
-    -> (Int -> Bool)
-    -> Gen (TestNetwork a)
+    :: TestableNode a
+    => (TestNetwork a -> Bool) -- ^ Predicate to match on the final state
+    -> (Int -> Bool)           -- ^ Predicate on message amplification
+    -> Gen (TestNetwork ())    -- ^ Network generator
     -> Property
-propNetworkNodesConverge stateCmp msgAmpPred testNetworks =
-    forAllShrink testNetworks shrink $ \tn ->
+propNetworkNodesConverge stateCmp msgAmpPred genNetworks =
+    forAllShrink genNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
-            let tn'           = runNetwork tn
+            let tn'           = runNetwork (testableInit tn)
                 msgAmp        = msgAmplification tn' msgsSent
                 initialMsgs   = Set.filter isMsg (tnMsgs tn)
                 msgsSent      = tnMsgCount tn' - length initialMsgs
+                -- Nb.: All nodes have to know all txs, thus the coverage
+                -- condition only needs to check one node.
+                replicatedTxs = testableIncludedTxs . head . toList $ tnNodes tn'
+                chainGrowth   = length (commonPrefix (nodePrefixes tn')) > 1
 
-             in cover (not . null . testableIncludedTxs . head . toList $ tnNodes tn') 60 "replicated any data" $
-                 counterexample (prettyCounterexample tn' msgAmp msgsSent)
-                                (stateCmp tn' && msgAmpPred msgAmp)
+             in cover (not . null $ replicatedTxs) 60 "replicated any data" $
+                 cover chainGrowth 60 "have more than one block" $
+                     counterexample (prettyCounterexample tn' msgAmp msgsSent)
+                                    (stateCmp tn' && msgAmpPred msgAmp)
 
 msgAmplification :: TestableNode a => TestNetwork a -> Int -> Int
 msgAmplification tn@TestNetwork{..} msgsSent =

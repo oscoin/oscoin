@@ -1,156 +1,79 @@
 module Oscoin.Node.Mempool
-    ( -- * Mempool
-      Mempool(..)
-    , lookup
-    , member
-    , insert
-    , removeTxs
-
-      -- * MonadMempool
-    , MonadMempool
-    , Handle(..)
+    ( Mempool
+    , Event (..)
+    , Channel
+    , Handle
     , new
-    , read
-    , addTxs
+    , insert
+    , insertMany
+    , remove
+    , removeMany
+    , member
+    , lookup
+    , size
+    , toList
     , subscribe
-    , unsubscribe
-
-    , module Exports
+    , snapshot
     ) where
 
-import           Oscoin.Prelude hiding (read, lookup)
-import qualified Oscoin.Node.Channel as Exports (flushChannel, readChannel, Channel)
-import           Oscoin.Node.Channel
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import           Data.Foldable (toList)
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Aeson as Aeson
-import           Control.Concurrent.STM.TVar (TVar, newTVar, modifyTVar, readTVar)
+import           Oscoin.Prelude hiding (lookup, toList)
 
--- Mempool --------------------------------------------------------------------
+import           Oscoin.Crypto.Hash (Hashable, Hashed)
+import           Oscoin.Node.Mempool.Event (Channel, Event(..))
+import           Oscoin.Node.Mempool.Internal (Mempool)
+import qualified Oscoin.Node.Mempool.Internal as Internal
 
--- | A map of transaction keys to transactions.
-newtype Mempool k tx = Mempool { fromMempool :: Map k tx }
-    deriving (Show, Semigroup, Monoid, Eq, Foldable)
+import           Control.Concurrent.STM (TChan, TVar)
+import qualified Control.Concurrent.STM as STM
+import qualified Data.Foldable as Fold
 
--- | The 'Aeson.ToJSON' instance of 'Mempool' includes transaction ids as fields
--- inside the transaction object.
-instance (Aeson.ToJSON k, Aeson.ToJSON tx) => Aeson.ToJSON (Mempool k tx) where
-    toJSON (Mempool txs) =
-        Aeson.toJSON [addId (Aeson.toJSON k) (Aeson.toJSON v) | (k, v) <- Map.toList txs]
-      where
-        addId k (Aeson.Object hm) = Aeson.Object $ HashMap.insert "id" k hm
-        addId _ _                 = error "Unexpected value encountered"
-
--- | Lookup a transaction in a mempool.
-lookup :: Ord k => k -> Mempool k tx -> Maybe tx
-lookup k (Mempool txs) = Map.lookup k txs
-
--- | Check for key membership.
-member :: Ord k => k -> Mempool k tx -> Bool
-member k (Mempool txs) = Map.member k txs
-
--- | Add a transaction to a mempool.
-insert
-    :: Hashable tx
-    => tx
-    -> Mempool (Hashed tx) tx
-    -> Mempool (Hashed tx) tx
-insert tx (Mempool txs) =
-    Mempool (Map.insert (hash tx) tx txs)
-
--- TODO: We shouldn't need this function. Use foldr instead.
--- | Add multiple transactions to a mempool.
-insertMany
-    :: (Foldable t, Hashable tx)
-    => t tx
-    -> Mempool (Hashed tx) tx
-    -> Mempool (Hashed tx) tx
-insertMany txs' (Mempool txs) =
-    Mempool . Map.union txs
-            . Map.fromList
-            . map (\tx -> (hash tx, tx))
-            $ toList txs'
-
--- | Remove multiple transactions from a mempool.
-removeTxs :: (Ord k, Foldable t) => t k -> Mempool k tx -> Mempool k tx
-removeTxs ks (Mempool txs) =
-    Mempool $ Map.withoutKeys txs keys
-  where
-    keys = Set.fromList $ toList ks
-
--- MonadMempool ---------------------------------------------------------------
-
--- | Represents any monad which has a 'Handle' to a mempool in its environment.
-type MonadMempool tx r m = (Has (Handle tx) r, MonadReader r m)
-
--- | Handle to a mutable 'Evented' 'Mempool'.
-newtype Handle tx = Handle
-    { fromHandle :: TVar (Evented tx (Mempool (Id tx) tx)) }
+-- | Handle to a mutable 'Mempool'.
+data Handle tx = Handle
+    { hMempool   :: TVar (Mempool tx)
+    , hBroadcast :: Channel tx
+    }
 
 -- | Create a new 'Handle' with an underlying empty mempool.
-new
-    :: (Ord (Id tx), Monad m, MonadSTM m)
-    => m (Handle tx)
-new =
-    Handle <$> liftSTM (newTVar (evented mempty))
+new :: (Monad m, MonadSTM m) => m (Handle tx)
+new = do
+    hMempool   <- liftSTM (STM.newTVar mempty)
+    hBroadcast <- liftSTM STM.newBroadcastTChan
+    pure Handle{..}
 
--- | Add transactions to the mempool, notifying all subscribers.
-addTxs
-    :: (MonadMempool tx r m, MonadSTM m, Foldable t)
-    => (Id tx ~ Hashed tx, Hashable tx)
-    => t tx
-    -> m ()
-addTxs txs = do
-    update (insertMany txs)
-    tvar <- fromHandle <$> asks getter
-    evt  <- liftSTM (readTVar tvar)
-    for_ txs $ notifySubscribers evt
+insert :: (MonadSTM m, Hashable tx) => Handle tx -> tx -> m ()
+insert Handle{hMempool, hBroadcast} tx = liftSTM $ do
+    STM.modifyTVar' hMempool (Internal.insert tx)
+    STM.writeTChan hBroadcast (Insert [tx])
 
--- | Return a read-only version of the mempool.
-read :: (MonadMempool tx r m, MonadSTM m) => m (Mempool (Id tx) tx)
-read = do
-    Handle tvar <- asks getter
-    evProducer <$> liftSTM (readTVar tvar)
+insertMany :: (MonadSTM m, Hashable tx, Foldable t) => Handle tx -> t tx -> m ()
+insertMany Handle{hMempool, hBroadcast} txs = liftSTM $ do
+    STM.modifyTVar' hMempool (Internal.insertMany txs)
+    STM.writeTChan hBroadcast (Insert (Fold.toList txs))
 
--- | Subscribe to mempool events.
-subscribe
-    :: (MonadSTM m, MonadMempool tx r m)
-    => Id (Channel tx) -- ^ Subscription key, used with 'unsubscribe'.
-    -> m (Channel tx)
-subscribe key = do
-    chan <- liftSTM newChannel
-    addSubscriber key chan
-    pure chan
+remove :: (MonadSTM m, Hashable tx) => Handle tx -> tx -> m ()
+remove Handle{hMempool, hBroadcast} tx = liftSTM $ do
+    STM.modifyTVar' hMempool (Internal.removeTxs [tx])
+    STM.writeTChan hBroadcast (Remove [tx])
 
--- | Unsubscribe from mempool events.
-unsubscribe
-    :: (MonadSTM m, MonadMempool tx r m)
-    => Id (Channel tx) -- ^ Subscription key.
-    -> m ()
-unsubscribe key = do
-    Handle tvar <- asks getter
-    liftSTM . modifyTVar tvar . mapSubscribers $ Map.delete key
+removeMany :: (MonadSTM m, Hashable tx, Foldable t) => Handle tx -> t tx -> m ()
+removeMany Handle{hMempool, hBroadcast} txs = liftSTM $ do
+    STM.modifyTVar' hMempool (Internal.removeTxs txs)
+    STM.writeTChan hBroadcast (Remove (Fold.toList txs))
 
--- Internal functions ---------------------------------------------------------
+member :: (MonadSTM m, Functor m) => Handle tx -> Hashed tx -> m Bool
+member hdl tx = Internal.member tx <$> snapshot hdl
 
--- | Add a subscriber to the mempool.
-addSubscriber
-    :: (MonadSTM m, MonadMempool tx r m)
-    => Id (Channel tx)
-    -> Channel tx -> m ()
-addSubscriber key chan = do
-    Handle tvar <- asks getter
-    liftSTM . modifyTVar tvar . mapSubscribers $ Map.insert key chan
+lookup :: (MonadSTM m, Functor m) => Handle tx -> Hashed tx -> m (Maybe tx)
+lookup hdl tx = Internal.lookup tx <$> snapshot hdl
 
--- | Update the mempool with an update function.
-update
-    :: (MonadMempool tx r m, MonadSTM m)
-    => (Mempool (Id tx) tx -> Mempool (Id tx) tx)
-    -> m ()
-update f = do
-    Handle tvar <- asks getter
-    liftSTM $ modifyTVar tvar $ mapProducer f
+size :: (MonadSTM m, Functor m) => Handle tx -> m Int
+size hdl = Internal.size <$> snapshot hdl
+
+toList :: (MonadSTM m, Functor m) => Handle tx -> m [(Hashed tx, tx)]
+toList hdl = Internal.toList <$> snapshot hdl
+
+subscribe :: MonadSTM m => Handle tx -> m (TChan (Event tx))
+subscribe = liftSTM . STM.dupTChan . hBroadcast
+
+snapshot :: MonadSTM m => Handle tx -> m (Mempool tx)
+snapshot = liftSTM . STM.readTVar . hMempool

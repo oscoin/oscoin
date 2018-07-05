@@ -5,20 +5,25 @@ module Oscoin.P2P.Discovery.Pure
     , removePeer
     ) where
 
-import           Oscoin.P2P.Discovery.Internal (Disco(..))
 import           Oscoin.Prelude
 
-import           Control.Monad.State (MonadState, get, modify')
-import qualified Data.Set as Set
+import           Oscoin.P2P.Discovery.Internal (Disco(..))
+import           Oscoin.P2P.Types (Endpoints, NodeId)
 
-mkDisco :: MonadState (Set addr) m => Disco m addr
+import           Control.Monad.State (MonadState, gets, modify')
+import qualified Data.Map as Map
+import           Lens.Micro (over)
+
+type EndpointMap = Map NodeId Endpoints
+
+mkDisco :: (Has EndpointMap s, MonadState s m) => Disco m
 mkDisco = Disco
-    { knownPeers = get
+    { knownPeers = gets getter
     , closeDisco = pure ()
     }
 
-addPeer :: (Ord addr, MonadState (Set addr) m) => addr -> m ()
-addPeer addr = modify' (Set.insert addr)
+addPeer :: (Has EndpointMap s, MonadState s m) => NodeId -> Endpoints -> m ()
+addPeer id = modify' . over hasLens . Map.insert id
 
-removePeer :: (Ord addr, MonadState (Set addr) m) => addr -> m ()
-removePeer addr = modify' (Set.delete addr)
+removePeer :: (Has EndpointMap s, MonadState s m) => NodeId -> m ()
+removePeer = modify' . over (hasLens @EndpointMap) . Map.delete

@@ -3,3 +3,4 @@ vendor/
 *.orig
 .ghci.local
 oscoin.cabal
+tags

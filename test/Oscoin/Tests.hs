@@ -1,40 +1,51 @@
 module Oscoin.Tests where
 
 import           Oscoin.Prelude
+
 import           Oscoin.Account (Account(..))
 import qualified Oscoin.Account as Account
-import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Account.Arbitrary ()
-import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
-import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Crypto.Hash.Arbitrary ()
-import           Oscoin.Crypto.Blockchain.Block (validateBlock, blockHeader)
+import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain)
 import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
+import           Oscoin.Crypto.Blockchain.Block (blockHeader, validateBlock)
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.Hash.Arbitrary ()
+import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
+import           Oscoin.Environment (Environment(Testing))
+import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.Node.Channel (Subscription(..), fromEvent)
-import           Oscoin.State.Tree (Tree, Path)
+import qualified Oscoin.Node.Mempool.Event as Mempool
+import           Oscoin.State.Tree (Path, Tree)
 
+import qualified Oscoin.Consensus.Tests as Consensus
 import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Test.Helpers
-import qualified Oscoin.Consensus.Tests as Consensus
 
+import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
 import           Test.Tasty.QuickCheck
-import           Test.QuickCheck.Instances ()
 
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
-import qualified Data.Text as T
 import qualified Data.Binary as Binary
+import qualified Data.Text as T
 import           Lens.Micro ((^?), (^?!))
 import           Lens.Micro.Aeson (key, nth, _String)
 
 acme :: Account
 acme = Account { accName = "Acme", accId = "acme" }
+
+nodeConfig :: Node.Config
+nodeConfig = Node.Config
+    { Node.cfgServiceName = "http"
+    , Node.cfgPeers       = []
+    , Node.cfgEnv         = Testing
+    , Node.cfgAccounts    = [("acme", acme)]
+    }
 
 tests :: TestTree
 tests = testGroup "Oscoin"
@@ -50,7 +61,7 @@ tests = testGroup "Oscoin"
     ]
 
 testOscoinAPI :: Assertion
-testOscoinAPI = runSession [("acme", acme)] $ do
+testOscoinAPI = runSession nodeConfig 42 $ do
     get "/"         >>= assertOK
     get "/accounts" >>= assertBody [acme]
 
@@ -82,9 +93,8 @@ testOscoinAPI = runSession [("acme", acme)] $ do
     mp <- responseBody <$> get "/node/mempool"
     mp ^? nth 0 . key "id" . _String @?= Just txId
 
-    get ("/node/mempool/" <> txId)
-        >>= assertOK <> assertJSON
-    get "/accounts/acme/data/doz" >>= assertStatus 404
+    get ("/node/mempool/" <> txId) >>= assertOK <> assertJSON
+    get "/accounts/acme/data/doz"  >>= assertStatus 404
 
     -- TODO: Once we can wait for transactions to be committed, this test
     -- should pass.
@@ -128,35 +138,34 @@ testOscoinCrypto = do
 
 testOscoinMempool :: Assertion
 testOscoinMempool = do
-    -- Create two subscription tokens.
-    let s1 :: Subscription Account.Tx = Subscription "alice"
-        s2 :: Subscription Account.Tx = Subscription "bob"
-
     -- Create a new mempool of account transactions.
-    mp <- Mempool.new @Account.Tx
+    mp <- atomically $ Mempool.new
 
     -- Create some arbitrary transactions.
     txs <- generate arbitrary :: IO [Account.Tx]
 
-    flip runReaderT mp $ do
-        -- Subscribe to the mempool with the subscription tokens.
-        chan1 <- Mempool.subscribe s1
-        chan2 <- Mempool.subscribe s2
+    -- Subscribe to the mempool with the subscription tokens.
+    chan1 <- atomically $ Mempool.subscribe mp
+    chan2 <- atomically $ Mempool.subscribe mp
 
-        -- Add the transactions.
-        Mempool.addTxs txs
+    -- Add the transactions.
+    atomically $ Mempool.insertMany mp txs
 
-        -- Retrieve all events from the channels.
-        evs1 <- Mempool.flushChannel chan1
-        evs2 <- Mempool.flushChannel chan2
+    -- Retrieve all events from the channels.
+    evs1 <- atomically $ Mempool.drainChannel chan1
+    evs2 <- atomically $ Mempool.drainChannel chan2
 
-        -- Verify that they contain the transactions we generated.
-        map fromEvent evs1 @?= txs
-        map fromEvent evs2 @?= txs
+    -- Verify that they contain the transactions we generated.
+    assertEqual "Chan 1 has all Txs" txs $ concat . mapMaybe fromEvent $ evs1
+    assertEqual "Chan 2 has all Txs" txs $ concat . mapMaybe fromEvent $ evs2
 
-        -- If we try to read again, the channel is empty.
-        evs <- Mempool.flushChannel chan1
-        evs @?= []
+    -- If we try to read again, the channel is empty.
+    atomically (Mempool.drainChannel chan1) >>= assertEqual "Chan 1 is empty" []
+    atomically (Mempool.drainChannel chan2) >>= assertEqual "Chan 2 is empty" []
+  where
+    fromEvent :: Mempool.Event tx -> Maybe [tx]
+    fromEvent (Mempool.Insert txs) = Just txs
+    fromEvent _                    = Nothing
 
 testOscoinBlockchain :: Assertion
 testOscoinBlockchain = do

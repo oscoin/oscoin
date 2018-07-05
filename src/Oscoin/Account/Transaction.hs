@@ -15,8 +15,8 @@ import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex)
 import           Oscoin.State.Tree (Tree, Key, Path, Val)
-import qualified Oscoin.Node as Node
-import qualified Oscoin.Node.Mempool as Mempool
+import           Oscoin.Node.Mempool.Class (MonadMempool)
+import qualified Oscoin.Node.Mempool.Class as Mempool
 
 import qualified Data.ByteString.Base64.Extended as Base64
 import           Data.Binary
@@ -119,9 +119,9 @@ applyTransaction _ _ =
 
 -- | Submit a transaction to the mempool.
 submitTransaction
-    :: (Monad m, MonadSTM m, Hashable tx, Id tx ~ Hashed tx)
+    :: (Monad m, Hashable tx, Id tx ~ Hashed tx, MonadMempool tx m)
     => tx
-    -> Node.StorageT tx m (Receipt tx)
+    -> m (Receipt tx)
 submitTransaction tx = do
     Mempool.addTxs [tx]
     pure $ Receipt (hash tx)

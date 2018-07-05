@@ -26,19 +26,21 @@ runDummyView :: DummyView f tx a -> f tx -> (a, f tx)
 runDummyView (DummyView inner) xs =
     runState inner xs
 
-instance Context (DummyView f tx) where
-    type T   (DummyView f tx) = f tx
+instance MonadQuery (DummyView f tx) where
     type Key (DummyView f tx) = ()
+    type Val (DummyView f tx) = ()
 
-    get = notImplemented
-    set = notImplemented
-    del = notImplemented
+    queryM = notImplemented
 
-instance Ord tx => View (DummyView [] tx) where
-    type Transaction (DummyView [] tx) = tx
-    type TransactionContext (DummyView [] tx) = ()
+instance MonadModify (DummyView f tx) where
+    setM = notImplemented
+    delM = notImplemented
 
-    apply _ txs =
+instance Ord tx => MonadFold (DummyView [] tx) where
+    type Op        (DummyView [] tx) = tx
+    type OpContext (DummyView [] tx) = ()
+
+    foldM _ txs =
         for_ txs $ \tx ->
             State.modify (\xs -> sort $ tx : xs)
 

@@ -2,27 +2,33 @@
 module Oscoin.HTTP.Test.Helpers where
 
 import           Oscoin.Prelude
+
+import           Oscoin.Consensus.BlockStore (genesisBlockStore)
+import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
 import           Oscoin.Environment
-import           Oscoin.Account (Account, AccId)
-import           Oscoin.HTTP.Internal (mkMiddleware)
 import           Oscoin.HTTP.API (api)
+import           Oscoin.HTTP.Internal (mkMiddleware)
+import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
+import qualified Oscoin.Storage.Block as BlockStore
 
-import Test.Tasty.HUnit (Assertion, assertFailure)
+import           Oscoin.Consensus.Test.Node (DummyNodeId)
+
+import           Test.Tasty.HUnit (Assertion, assertFailure)
 import qualified Test.Tasty.HUnit as Tasty
 
 import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.Aeson as Aeson
-import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8 as L8
 
-import qualified Network.Wai.Test as Wai
-import qualified Network.Wai      as Wai
-import           Web.Spock (spockAsApp)
+import qualified Network.HTTP.Types.Header as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
 import qualified Network.HTTP.Types.Method as HTTP
-import qualified Network.HTTP.Types.Header as HTTP
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Test as Wai
+import           Web.Spock (spockAsApp)
 
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
@@ -38,18 +44,22 @@ instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: [(AccId, Account)] -> Session () -> Assertion
-runSession accs sess = do
+runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
+runSession cfg nid sess = do
     mp <- Mempool.new
     st <- STree.connect
-    spockAsApp (mkMiddleware (api Testing) accs mp st) >>= Wai.runSession sess
+    bs <- BlockStore.new $ genesisBlockStore (genesisBlock 0 [])
+    nh <- Node.open cfg nid mp st bs
+
+    app <- spockAsApp (mkMiddleware (api Testing) (Node.cfgAccounts cfg) nh)
+    Wai.runSession sess app
 
 infix 1 @?=, @=?
 
-(@?=) :: (MonadIO m, Eq a, Show a) => a -> a -> m ()
-(@?=) a b = io $ Tasty.assertEqual "" a b
+(@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
+(@?=) actual expected = io $ Tasty.assertEqual "" expected actual
 
-(@=?) :: (MonadIO m, Eq a, Show a) => a -> a -> m ()
+(@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
 
 -- TODO: Should also assert status is 2xx.

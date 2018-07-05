@@ -1,4 +1,13 @@
-module Oscoin.Node.Tree where
+module Oscoin.Node.Tree
+    ( Handle
+    , Val
+    , Path
+    , connect
+    , close
+    , get
+    , set
+    , update
+    ) where
 
 import           Oscoin.Prelude
 import qualified Oscoin.State.Tree as Tree

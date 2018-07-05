@@ -1,134 +1,249 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Oscoin.Consensus.Test.Network where
 
 import           Oscoin.Prelude hiding (log)
+
 import           Oscoin.Consensus.Test.Node
-import           Oscoin.Consensus.BlockStore (genesisBlockStore)
+
+import qualified Oscoin.Consensus.BlockStore as BlockStore
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.Simple
-import           Oscoin.Consensus.Simple.Arbitrary ()
-import           Oscoin.Consensus.Nakamoto.Arbitrary ()
-import           Oscoin.Consensus.Nakamoto (nakamoto, Nakamoto(..), NodeMsg(..), longestChain)
-import           Oscoin.Crypto.Blockchain.Block (genesisBlock, blockData, blockHeader, BlockHeader)
-import           Oscoin.Crypto.Blockchain (showChainDigest, fromBlockchain)
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
+import           Oscoin.Consensus.Nakamoto (NakamotoT, runNakamotoT)
+import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
+import qualified Oscoin.Consensus.Simple as Simple
+import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, height, showChainDigest)
+import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
+import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Node.Mempool.Internal as Mempool
+import           Oscoin.P2P (Msg(..))
 
-import           Data.Binary (Binary)
+import           Data.Bifunctor (second)
+import qualified Data.Hashable as Hashable
+import           Data.List.NonEmpty (nonEmpty)
+import qualified Data.Map.Strict as Map
+import           Data.Maybe (catMaybes, maybeToList)
 import qualified Data.Set as Set
-import qualified Data.Map as Map
-import           Network.Socket
-import           System.Random (mkStdGen, randomRs)
-
-import           Test.QuickCheck
+import           Data.Traversable (for)
+import           System.Random (StdGen, mkStdGen)
 
 -- TestableNode ---------------------------------------------------------------
 
-class ( Eq (TestableTx a)
-      , Show (TestableTx a)
-      , Arbitrary (Msg a)
-      , Arbitrary (Addr a)
-      , Eq (Msg a)
-      , Show (Scheduled a)
-      , Show (Addr a)
-      , Show (Msg a)
-      , Eq (TestableResult a)
+class ( Eq   (TestableResult a)
       , Show (TestableResult a)
-      , Protocol a ) => TestableNode a where
-    type TestableTx a :: *
+      , MonadProtocol DummyTx (TestableRun a)
+      ) => TestableNode a
+  where
     type TestableResult a :: *
+    type TestableRun    a :: * -> *
 
-    testableNode :: Addr a -> [Addr a] -> a
-    testablePostState :: a -> [TestableResult a]
-    testableIncludedTxs :: a -> [TestableTx a]
-    testablePreState :: a -> Msg a -> [TestableTx a]
-    testableNodeAddr :: a -> Addr a
-    testableShow :: a -> String
+    testableInit        :: TestNetwork b -> TestNetwork a
+    testableRun         :: a -> (TestableRun a) b -> (b, a)
 
+    testablePostState   :: a -> [TestableResult a]
 
-instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (TestNode tx) where
-    type TestableTx (TestNode tx) = tx
-    type TestableResult (TestNode tx) = tx
+    testableIncludedTxs :: a -> [DummyTx]
 
-    testableNode addr = TestNode addr []
-    testablePreState _ tx = [tx]
-    testablePostState (TestNode _ s _) = s
-    testableIncludedTxs = testablePostState
-    testableNodeAddr (TestNode a _ _) = a
-    testableShow _ = "-"
+    testableNodeAddr    :: a -> DummyNodeId
+    testableShow        :: a -> String
 
-instance (Show tx, Arbitrary tx, Ord tx) => TestableNode (BufferedTestNode tx) where
-    type TestableTx (BufferedTestNode tx) = tx
-    type TestableResult (BufferedTestNode tx) = tx
+-- No-consensus Node -----------------------------------------------------------
 
-    testableNode addr peers = BufferedTestNode
-        { btnAddr   = addr
-        , btnPeers  = peers
-        , btnBuffer = []
-        , btnTick   = 0
-        , btnState  = []
-        }
-    testablePreState _ tx = [tx]
-    testablePostState = btnState
-    testableIncludedTxs = testablePostState
-    testableNodeAddr = btnAddr
-    testableShow _ = "-"
+newtype NoConsensus a = NoConsensus (TestNodeT Identity a)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadBlockStore DummyTx
+             , MonadMempool DummyTx
+             , MonadState TestNodeState
+             )
 
-instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode (SimpleNode tx) where
-    type TestableTx (SimpleNode tx) = tx
-    type TestableResult (SimpleNode tx) = Hashed BlockHeader
-
-    testableNode addr peers = SimpleNode
-        { snAddr    = addr
-        , snPeers   = peers
-        , snBuffer  = mempty
-        , snLastBlk = 0
-        , snLastAsk = 0
-        , snStore   = genesisBlockStore (genesisBlock 0 [])
-        }
-
-    testablePreState _ (ClientTx tx) = [tx]
-    testablePreState _ _             = []
-
-    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . bestChain . snStore
-    testableIncludedTxs = concatMap (toList . blockData) . toList . fromBlockchain . bestChain . snStore
-
-    testableNodeAddr = snAddr
-    testableShow SimpleNode{..} = showChainDigest $ bestChain $ snStore
-
-instance (Binary tx, Show tx, Arbitrary tx, Ord tx, Hashable tx) => TestableNode (Nakamoto tx) where
-    type TestableTx (Nakamoto tx) = tx
-    type TestableResult (Nakamoto tx) = Hashed BlockHeader
-
-    testableNode addr peers =
-        nakamoto addr (genesisBlock 0 []) peers (randomRs (0, 1) rng)
+instance MonadProtocol DummyTx NoConsensus where
+    -- We're not mining any blocks, thus just store all incoming txs in the
+    -- mempool and broadcast those we haven't seen before.
+    stepM _ = \case
+        BlockMsg    blk -> storeTxs $ toList (blockData blk)
+        TxMsg       txs -> storeTxs txs
+        ReqBlockMsg _   -> pure mempty
       where
-        rng = mkStdGen (fromIntegral addr)
+        storeTxs txs = do
+            let outgoing = maybeToList . map (TxMsg . toList) . nonEmpty . catMaybes
+            map outgoing . for txs $ \tx' -> do
+                known <- isJust <$> lookupTx (hash tx')
+                if known then
+                    pure Nothing
+                else do
+                    addTxs [tx']
+                    pure $ Just tx'
 
-    testablePreState _ (TxMsg tx) = [tx]
-    testablePreState _ _          = []
+    tickM = const $ pure []
 
-    testablePostState = map (hash . blockHeader) . toList . fromBlockchain . longestChain
-    testableIncludedTxs = concatMap (toList . blockData) . toList . fromBlockchain . longestChain
-    testableNodeAddr = nkAddr
-    testableShow = showChainDigest . longestChain
+
+newtype NoConsensusState = NoConsensusState { noNode :: TestNodeState }
+    deriving Show
+
+instance TestableNode NoConsensusState where
+    type TestableResult NoConsensusState = DummyTx
+    type TestableRun    NoConsensusState = NoConsensus
+
+    testableInit = initNoConsensusNodes
+    testableRun  = runNoConsensusNode
+
+    testablePostState   = Mempool.elems . tnsMempool . noNode
+    testableIncludedTxs = testablePostState
+
+    testableNodeAddr = tnsNodeId . noNode
+    testableShow     = show . tnsMempool . noNode
+
+noConsensusNode :: DummyNodeId -> NoConsensusState
+noConsensusNode = NoConsensusState . emptyTestNodeState
+
+initNoConsensusNodes :: TestNetwork a -> TestNetwork NoConsensusState
+initNoConsensusNodes tn@TestNetwork{tnNodes} =
+    tn { tnNodes = Map.mapWithKey (const . noConsensusNode) tnNodes }
+
+runNoConsensusNode :: NoConsensusState -> NoConsensus a -> (a, NoConsensusState)
+runNoConsensusNode (NoConsensusState s) (NoConsensus ma) =
+    second NoConsensusState . runIdentity $ runTestNodeT s ma
+
+noConsensusLongestChain :: NoConsensusState -> Blockchain DummyTx
+noConsensusLongestChain =
+      BlockStore.maximumChainBy (comparing height) . tnsBlockstore . noNode
+
+-- Nakamoto Node ---------------------------------------------------------------
+
+type NakamotoNode = NakamotoT DummyTx (TestNodeT Identity)
+
+data NakamotoNodeState = NakamotoNodeState
+    { nakStdGen :: StdGen
+    , nakNode   :: TestNodeState
+    } deriving Show
+
+instance TestableNode NakamotoNodeState where
+    type TestableResult NakamotoNodeState = Hashed BlockHeader
+    type TestableRun    NakamotoNodeState = NakamotoNode
+
+    testableInit = initNakamotoNodes
+    testableRun  = runNakamotoNode
+
+    testablePostState =
+          map (hash . blockHeader)
+        . toList . fromBlockchain
+        . nakamotoLongestChain
+
+    testableIncludedTxs =
+          concatMap (toList . blockData)
+        . toList . fromBlockchain
+        . nakamotoLongestChain
+
+    testableNodeAddr = tnsNodeId . nakNode
+
+    testableShow = showChainDigest . nakamotoLongestChain
+
+nakamotoNode :: DummyNodeId -> NakamotoNodeState
+nakamotoNode nid = NakamotoNodeState
+    { nakStdGen = mkStdGen (Hashable.hash nid)
+    , nakNode   = emptyTestNodeState nid
+    }
+
+initNakamotoNodes :: TestNetwork a -> TestNetwork NakamotoNodeState
+initNakamotoNodes tn@TestNetwork{tnNodes} =
+    tn { tnNodes = Map.mapWithKey (const . nakamotoNode) tnNodes }
+
+runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
+runNakamotoNode s@NakamotoNodeState{..} ma =
+    (a, s { nakStdGen = g, nakNode = tns })
+  where
+    ((!a, !g), !tns) =
+        runIdentity
+            . runTestNodeT nakNode
+            $ runNakamotoT nakStdGen ma
+
+nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx
+nakamotoLongestChain =
+      BlockStore.maximumChainBy (comparing height) . tnsBlockstore . nakNode
+
+-- Simple Node -----------------------------------------------------------------
+
+type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT Identity)
+
+data SimpleNodeState = SimpleNodeState
+    { snsEnv  :: Simple.Env DummyNodeId
+    , snsNode :: TestNodeState
+    , snsLast :: Simple.LastTime
+    } deriving Show
+
+instance TestableNode SimpleNodeState where
+    type TestableResult SimpleNodeState = Hashed BlockHeader
+    type TestableRun    SimpleNodeState = SimpleNode
+
+    testableInit = initSimpleNodes
+    testableRun  = runSimpleNode
+
+    testablePostState =
+          map (hash . blockHeader)
+        . toList . fromBlockchain
+        . simpleBestChain
+
+    testableIncludedTxs =
+          concatMap (toList . blockData)
+        . toList . fromBlockchain
+        . simpleBestChain
+
+    testableNodeAddr = tnsNodeId . snsNode
+
+    testableShow = showChainDigest . simpleBestChain
+
+simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
+simpleNode nid peers = SimpleNodeState
+    { snsEnv  = Simple.mkEnv nid peers
+    , snsNode = emptyTestNodeState nid
+    , snsLast = Simple.LastTime 0 0
+    }
+
+initSimpleNodes :: TestNetwork a -> TestNetwork SimpleNodeState
+initSimpleNodes tn@TestNetwork{tnNodes} =
+    let nodes   = Map.keysSet tnNodes
+        !nodes' = Map.fromList
+                . map (\node -> (node, simpleNode node (Set.delete node nodes)))
+                $ toList nodes
+     in tn { tnNodes = nodes' }
+
+runSimpleNode :: SimpleNodeState -> SimpleNode a -> (a, SimpleNodeState)
+runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
+  where
+    ((!a, !lt), !tns) =
+        runIdentity
+            . runTestNodeT snsNode
+            $ runSimpleT snsEnv snsLast ma
+
+simpleBestChain :: SimpleNodeState -> Blockchain DummyTx
+simpleBestChain =
+      BlockStore.maximumChainBy (comparing Simple.chainScore)
+    . tnsBlockstore
+    . snsNode
 
 -- TestNetwork ----------------------------------------------------------------
 
 data TestNetwork a = TestNetwork
-    { tnNodes      :: Map (Addr a) a
-    , tnMsgs       :: Set (Scheduled a)
-    , tnPartitions :: Partitions a
-    , tnLog        :: [Scheduled a]
+    { tnNodes      :: Map DummyNodeId a
+    , tnMsgs       :: Set Scheduled
+    , tnPartitions :: Partitions
+    , tnLog        :: [Scheduled]
     , tnLatencies  :: [Tick]
     , tnMsgCount   :: Int
     , tnLastTick   :: Tick
     }
 
-type Partitions a = Map (Addr a) (Set (Addr a))
+-- | Network partitions is a map of node id to a set of node ids _not_
+-- reachable from that node id.
+type Partitions = Map DummyNodeId (Set DummyNodeId)
 
-instance (TestableNode a, Show a) => Show (TestNetwork a) where
+instance Show (TestNetwork a) where
     show TestNetwork{..} =
         unlines [ "TestNetwork"
-                , " nodes: "      ++ show (map testableNodeAddr (toList tnNodes))
+                , " nodes: "      ++ show (Map.keys tnNodes)
                 , " scheduled:\n" ++ scheduled
                 ]
       where
@@ -137,48 +252,62 @@ instance (TestableNode a, Show a) => Show (TestNetwork a) where
 
 runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
 runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
-    | Just (sm, sms) <- Set.minView tnMsgs
+    | Just (sm, sms)   <- Set.minView tnMsgs
     , scheduledTick sm <= tnLastTick
-    , tn' <- tn { tnMsgs = sms } =
+    , tn'              <- tn { tnMsgs = sms } =
         runNetwork $ case sm of
-            ScheduledTick tick to        -> deliver tick to Nothing tn'
-            ScheduledMessage tick to msg -> deliver tick to (Just msg) tn'
-            Partition _ ps               -> tn' { tnPartitions = ps }
-            Heal _                       -> tn' { tnPartitions = mempty }
+            ScheduledTick    tick to         -> deliver tick to Nothing    tn'
+            ScheduledMessage tick to (_,msg) -> deliver tick to (Just msg) tn'
+            Partition _ ps                   -> tn' { tnPartitions = ps     }
+            Heal _                           -> tn' { tnPartitions = mempty }
+
     | otherwise = tn
 
 deliver
-    :: (TestableNode a)
+    :: TestableNode a
     => Tick
-    -> Addr a
-    -> Maybe (Addr a, Msg a)
+    -> DummyNodeId
+    -> Maybe (Msg DummyTx)
     -> TestNetwork a
     -> TestNetwork a
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
-        let (node', msgs) = step node tick msg
+        let (outgoing, a) = testableRun node $ maybe (tickM tick) (stepM tick) msg
             tnMsgCount'   = if isJust msg then tnMsgCount + 1 else tnMsgCount
-            tn'           = tn { tnNodes = Map.insert to node' tnNodes, tnMsgCount = tnMsgCount' }
-         in scheduleMessages tick to msgs tn'
-    | otherwise =
-        tn
+            tn'           = tn { tnNodes    = Map.insert to a tnNodes
+                               , tnMsgCount = tnMsgCount'
+                               }
+         in scheduleMessages tick to outgoing tn'
+
+    | otherwise = tn
 
 scheduleMessages
-    :: TestableNode a
-    => Tick
-    -> Addr a
-    -> [(Addr a, Msg a)]
+    :: Tick
+    -> DummyNodeId
+    -> [Msg DummyTx]
     -> TestNetwork a
     -> TestNetwork a
-scheduleMessages t from msgs tn@TestNetwork{tnMsgs, tnPartitions, tnLog, tnLatencies} =
-    let
-        msgs'                = Set.union (Set.fromList scheduled) tnMsgs
-        (lats, tnLatencies') = splitAt (length msgs) tnLatencies
-        log                  = scheduled ++ tnLog
-        scheduled            = [ScheduledMessage (t + lat) to (from, msg) | (lat, (to, msg)) <- zip lats msgs, reachable to]
-        reachable to         = maybe True not $
-            Set.member to <$> Map.lookup from tnPartitions
-     in tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies' }
+scheduleMessages t from msgs tn@TestNetwork{tnNodes, tnMsgs, tnPartitions, tnLog, tnLatencies} =
+    tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies' }
+  where
+    (lats, tnLatencies') = splitAt (Set.size broadcast) tnLatencies
+
+    msgs' = Set.union (Set.fromList scheduled) tnMsgs
+    log   = scheduled ++ tnLog
+
+    broadcast = Set.filter reachable . Set.delete from $ Map.keysSet tnNodes
+
+    unreachables = Map.lookup from tnPartitions
+
+    reachable _    | Map.null tnPartitions = True -- no partitions, all reachable
+    reachable rcpt = case unreachables of
+        Nothing -> True                           -- no one is partitioned from 'rcpt'
+        Just ur -> Set.notMember rcpt ur          -- 'rcpt' is reachable iff not in the partition set
+
+    scheduled =
+            (\(lat, (to, msg)) -> ScheduledMessage (t + lat) to (from, msg))
+        <$> zip lats [(rcpt, msg) | rcpt <- toList broadcast, msg <- msgs]
+
 
 networkNonTrivial :: TestNetwork v -> Bool
 networkNonTrivial TestNetwork{tnNodes, tnMsgs}
@@ -190,48 +319,40 @@ networkNonTrivial TestNetwork{tnNodes, tnMsgs}
 
 -- Scheduled ------------------------------------------------------------------
 
-data Scheduled a =
-      ScheduledMessage Tick (Addr a) (Addr a, Msg a)
-    | ScheduledTick    Tick (Addr a)
-    | Partition        Tick (Partitions a)
+data Scheduled =
+      ScheduledMessage Tick DummyNodeId (DummyNodeId, Msg DummyTx)
+    | ScheduledTick    Tick DummyNodeId
+    | Partition        Tick Partitions
     | Heal             Tick
+    deriving (Eq, Show)
 
-deriving instance TestableNode a => Show (Scheduled a)
-deriving instance TestableNode a => Eq (Scheduled a)
-
-instance TestableNode a => Ord (Scheduled a) where
+instance Ord Scheduled where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-scheduledTick :: Scheduled a -> Tick
+scheduledTick :: Scheduled -> Tick
 scheduledTick (ScheduledMessage t _ _) = t
 scheduledTick (ScheduledTick t _)      = t
 scheduledTick (Partition t _)          = t
 scheduledTick (Heal t)                 = t
 
-scheduledReceivers :: Scheduled a -> [Addr a]
+scheduledReceivers :: Scheduled -> [DummyNodeId]
 scheduledReceivers (ScheduledMessage _ a _) = [a]
 scheduledReceivers (ScheduledTick _ a)      = [a]
 scheduledReceivers (Partition _ _)          = [] -- XXX
 scheduledReceivers (Heal _)                 = []
 
-scheduledSender :: Scheduled a -> Maybe (Addr a)
+scheduledSender :: Scheduled -> Maybe DummyNodeId
 scheduledSender (ScheduledMessage _ _ (a, _)) = Just a
 scheduledSender _                             = Nothing
 
-scheduledMessage :: Scheduled a -> Maybe (Msg a)
-scheduledMessage (ScheduledMessage _ _ (_, x)) = Just x
-scheduledMessage _                             = Nothing
+scheduledMessage :: Scheduled -> Maybe (DummyNodeId, Msg DummyTx)
+scheduledMessage (ScheduledMessage _ _ x) = Just x
+scheduledMessage _                        = Nothing
 
-isTick :: Scheduled a -> Bool
+isTick :: Scheduled -> Bool
 isTick (ScheduledTick _ _) = True
 isTick _                   = False
 
-isMsg :: Scheduled a -> Bool
+isMsg :: Scheduled -> Bool
 isMsg ScheduledMessage{} = True
 isMsg _                  = False
-
-instance Arbitrary SockAddr where
-    arbitrary = do
-        port <- arbitrary :: Gen Int
-        host <- arbitrary
-        pure $ SockAddrInet (fromIntegral port) host

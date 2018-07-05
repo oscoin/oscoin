@@ -8,5 +8,5 @@ import Oscoin.P2P.Discovery.Internal (Disco(closeDisco, knownPeers))
 
 import Control.Exception.Safe (bracket, MonadMask)
 
-withDisco :: MonadMask m => m (Disco m addr) -> (Disco m addr -> m a) -> m a
+withDisco :: MonadMask m => m (Disco m) -> (Disco m -> m a) -> m a
 withDisco mkDisco = bracket mkDisco closeDisco

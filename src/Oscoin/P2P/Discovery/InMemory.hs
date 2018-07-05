@@ -10,27 +10,28 @@ module Oscoin.P2P.Discovery.InMemory
     ) where
 
 import           Oscoin.P2P.Discovery.Internal (Disco(..))
+import           Oscoin.P2P.Types (Endpoints, NodeId)
 import           Oscoin.Prelude
 
 import           Control.Concurrent.STM.TVar
-import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 
-newtype Peers addr = Peers (TVar (Set addr))
+newtype Peers = Peers (TVar (Map NodeId Endpoints))
 
-mkPeers :: Set addr -> IO (Peers addr)
+mkPeers :: Map NodeId Endpoints -> IO Peers
 mkPeers = map Peers . newTVarIO
 
-mkDisco :: Peers addr -> Disco IO addr
+mkDisco :: Peers -> Disco IO
 mkDisco (Peers peers) = Disco
     { knownPeers = readTVarIO peers
     , closeDisco = pure ()
     }
 
-addPeer :: Ord addr => Peers addr -> addr -> IO ()
-addPeer (Peers peers) addr = atomically $
-    modifyTVar' peers (Set.insert addr)
+addPeer :: Peers -> NodeId -> Endpoints -> IO ()
+addPeer (Peers peers) id addr = atomically $
+    modifyTVar' peers (Map.insert id addr)
 
-removePeer :: Ord addr => Peers addr -> addr -> IO ()
-removePeer (Peers peers) addr = atomically $
-    modifyTVar' peers (Set.delete addr)
+removePeer :: Peers -> NodeId -> IO ()
+removePeer (Peers peers) id = atomically $
+    modifyTVar' peers (Map.delete id)

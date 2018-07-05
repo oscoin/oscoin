@@ -1,22 +1,23 @@
 module Oscoin.HTTP.API where
 
 import           Oscoin.Prelude
-import           Oscoin.Environment
+
 import qualified Oscoin.Account.Transaction as Account
 import           Oscoin.Crypto.PubKey (Signed)
+import           Oscoin.Environment
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
 
-import           Data.Aeson ((.=), object)
+import           Data.Aeson (object, (.=))
 import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
-import           Web.Spock (middleware, get, post, root, json, (<//>), var)
+import           Web.Spock (get, json, middleware, post, root, var, (<//>))
 
 -- | Entry point for API.
-api :: Environment -> Api (Signed Account.Tx) ()
+api :: Environment -> Api (Signed Account.Tx) i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")

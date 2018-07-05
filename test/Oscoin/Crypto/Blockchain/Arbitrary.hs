@@ -20,29 +20,18 @@ import           Control.Monad (replicateM)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
-instance (Arbitrary tx, Binary tx) => Arbitrary (Block tx) where
-    arbitrary =
-        Block <$> arbitrary <*> arbitrary
-
 arbitraryBlockchain :: forall tx. (Arbitrary tx, Binary tx) => Gen (Blockchain tx)
 arbitraryBlockchain = do
-    genesis <- arbitraryGenesis
-    rest <- arbitrary :: Gen [Block tx]
-    pure $ Blockchain $ genesis :| rest
+    genesis <- Blockchain . singleton <$> arbitraryGenesis
+    rest    <- arbitraryValidBlock genesis
+    pure $ rest |> genesis
+  where
+    singleton x = x :| []
 
 instance Arbitrary (Crypto.Digest HashAlgorithm) where
     arbitrary = do
         str <- replicateM (Crypto.hashDigestSize hashAlgorithm) (arbitrary :: Gen Word8)
         pure . fromJust $ Crypto.digestFromByteString (BS.pack str)
-
-instance Arbitrary BlockHeader where
-    arbitrary =
-        BlockHeader
-            <$> arbitrary
-            <*> arbitrary
-            <*> arbitrary
-            <*> arbitrary
-            <*> arbitrary
 
 arbitraryValidBlock :: forall tx. (Binary tx, Arbitrary tx) => Blockchain tx -> Gen (Block tx)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do

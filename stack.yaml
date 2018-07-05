@@ -14,14 +14,5 @@ extra-deps:
   subdirs:
     - wai-extra
 
-# Using the serokell/cardano fork as they have added a number of bug fixes and
-# improvements (eg. configuration, logging).
-#
-# cf. https://github.com/froozen/kademlia/compare/master...serokell:master
-#
-# Unfortunately, it does not seem like they intend to upstream their changes.
-- git: https://github.com/serokell/kademlia.git
-  commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f
-
 ghc-options:
   "$locals": -fhide-source-paths

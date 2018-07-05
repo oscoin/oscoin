@@ -5,8 +5,6 @@ import           Oscoin.Prelude
 import           Oscoin.Account (AccId, Account)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
-import qualified Oscoin.Node.Mempool as Mempool
-import qualified Oscoin.Node.Tree as STree
 
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
@@ -28,49 +26,49 @@ data State = State
 type Handle = Node.Handle
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction tx = SpockAction (Handle tx) () State
+type ApiAction tx i = SpockAction (Handle tx i) () State
 
-instance MonadFail (ApiAction tx) where
+instance MonadFail (ApiAction tx i) where
     fail = error "failing!"
 
 -- | The type of our api.
-type Api tx = SpockM (Handle tx) () State
+type Api tx i = SpockM (Handle tx i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi tx m = (HasSpock m, SpockConn m ~ Handle tx)
+type MonadApi tx i m = (HasSpock m, SpockConn m ~ Handle tx i)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State { stAccounts = [] }
 
-getBody :: Aeson.FromJSON a => ApiAction tx (Maybe a)
+getBody :: Aeson.FromJSON a => ApiAction tx i (Maybe a)
 getBody = Spock.jsonBody
 
-getRawBody :: ApiAction tx LByteString
+getRawBody :: ApiAction tx i LByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-getState :: ApiAction tx State
+getState :: ApiAction tx i State
 getState = Spock.getState
 
-param' :: (FromHttpApiData p) => Text -> ApiAction tx p
+param' :: (FromHttpApiData p) => Text -> ApiAction tx i p
 param' = Spock.param'
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction tx ()
+respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction tx i ()
 respond status (Just body) =
     respondBytes status (Aeson.encode body)
 respond status Nothing =
     respondBytes status ""
 
-respondBytes :: HTTP.Status -> LByteString -> ApiAction tx ()
+respondBytes :: HTTP.Status -> LByteString -> ApiAction tx i ()
 respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body
 
-notImplemented :: ApiAction tx ()
+notImplemented :: ApiAction tx i ()
 notImplemented =
     respond HTTP.notImplemented501 (Just body)
   where
@@ -79,28 +77,24 @@ notImplemented =
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run
-    :: Api tx ()
+run :: Api tx i ()
     -> [(AccId, Account)]
     -> Int
-    -> Mempool.Handle tx
-    -> STree.Handle
+    -> Handle tx i
     -> IO ()
-run app accs port mp st =
-    runSpock port (mkMiddleware app accs mp st)
+run app accs port hdl =
+    runSpock port (mkMiddleware app accs hdl)
 
 mkMiddleware
-    :: Api tx ()
+    :: Api tx i ()
     -> [(AccId, Account)]
-    -> Mempool.Handle tx
-    -> STree.Handle
+    -> Handle tx i
     -> IO Wai.Middleware
-mkMiddleware app accs mp st = do
+mkMiddleware app accs hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
-    conn        = Node.open mp st
-    connBuilder = ConnBuilder conn Node.close (PoolCfg 1 1 30)
+    connBuilder = ConnBuilder (pure hdl) (const pass) (PoolCfg 1 1 30)
     state       = mkState { stAccounts = accs }
 
 loggingMiddleware :: Environment -> Wai.Middleware

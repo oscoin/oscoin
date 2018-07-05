@@ -1,6 +1,7 @@
 module Oscoin.State.Tree where
 
 import           Oscoin.Prelude
+
 import qualified Data.Map as Map
 
 type Key = Text

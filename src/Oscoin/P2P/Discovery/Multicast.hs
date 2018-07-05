@@ -6,8 +6,12 @@ module Oscoin.P2P.Discovery.Multicast
     , mkDisco
     ) where
 
-import           Oscoin.P2P.Discovery.Internal (Disco(..))
 import           Oscoin.Prelude
+
+import           Oscoin.Logging (Logger)
+import qualified Oscoin.Logging as Log
+import           Oscoin.P2P.Discovery.Internal (Disco(..))
+import           Oscoin.P2P.Types (Endpoints, NodeId)
 
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async
@@ -16,9 +20,9 @@ import           Control.Monad (forever, unless)
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary (decode, encode)
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Set as Set
+import qualified Data.Map as Map
 import qualified Network.Multicast as NMC
-import           Network.Socket (HostName, PortNumber, SockAddr(..))
+import           Network.Socket (HostName, PortNumber)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 
@@ -26,25 +30,26 @@ data Config = Config
     { cfgMcastDiscoGroup    :: HostName
     , cfgMcastDiscoPort     :: PortNumber
     , cfgPacketSize         :: Int
-    , cfgAdvertiseHost      :: HostName
-    , cfgAdvertisePort      :: PortNumber
+    , cfgAdvertiseId        :: NodeId
+    , cfgAdvertiseEndpoints :: Endpoints
     , cfgAdvertiseEverySecs :: Int
     }
 
-mkConfig :: PortNumber -> Config
-mkConfig p = Config
+mkConfig :: NodeId -> Endpoints -> Config
+mkConfig id srvs = Config
     { cfgMcastDiscoGroup    = "226.111.111.104"
     , cfgMcastDiscoPort     = 8008
     , cfgPacketSize         = 65536
-    , cfgAdvertiseHost      = "127.0.0.1"
-    , cfgAdvertisePort      = p
-    , cfgAdvertiseEverySecs = 10
+    , cfgAdvertiseId        = id
+    , cfgAdvertiseEndpoints = srvs
+    , cfgAdvertiseEverySecs = 5
     }
 
-mkDisco :: Config -> IO (Disco IO SockAddr)
-mkDisco s = do
+mkDisco :: Logger -> Config -> IO (Disco IO)
+mkDisco lgr cfg = do
     kp <- newTVarIO mempty
-    th <- async $ race_ (advertise s) (discover s kp)
+    let lgr' = Log.setNamespace (Just "mcast-disco") lgr
+    th <- async $ race_ (advertise cfg lgr') (discover cfg lgr' kp)
 
     pure Disco
         { knownPeers = readTVarIO kp
@@ -59,38 +64,32 @@ mkDisco s = do
 -- This exists mainly to identify ourselves, such that 'knownPeers' does not
 -- include the local node.
 data Beacon = Beacon
-    { myHost :: HostName
-    , myPort :: Int
+    { myId        :: NodeId
+    , myEndpoints :: Endpoints
     } deriving Generic
 
 instance Binary Beacon
 
-advertise :: Config -> IO ()
-advertise Config{..} = NS.withSocketsDo $ do
+advertise :: Config -> Logger -> IO ()
+advertise Config{..} lgr = NS.withSocketsDo $ do
     (sock, addr) <- NMC.multicastSender cfgMcastDiscoGroup cfgMcastDiscoPort
     forever $ do
+        Log.debug lgr "Advertising"
         NSB.sendManyTo sock msg addr
         threadDelay (cfgAdvertiseEverySecs * 1000000)
   where
     msg = LBS.toChunks .  Binary.encode $ Beacon
-        { myHost = cfgAdvertiseHost
-        , myPort = fromIntegral cfgAdvertisePort
+        { myId        = cfgAdvertiseId
+        , myEndpoints = cfgAdvertiseEndpoints
         }
 
-discover :: Config -> TVar (Set SockAddr) -> IO ()
-discover Config{..} tvar = NS.withSocketsDo $ do
+discover :: Config -> Logger -> TVar (Map NodeId Endpoints) -> IO ()
+discover Config{..} lgr tvar = NS.withSocketsDo $ do
     sock <- NMC.multicastReceiver cfgMcastDiscoGroup cfgMcastDiscoPort
     forever $ do
-        (msg, addr) <- NSB.recvFrom sock cfgPacketSize
-        let Beacon h (fromIntegral -> p) = Binary.decode $ LBS.fromStrict msg
-        unless (h == cfgAdvertiseHost && p == cfgAdvertisePort) $
+        (msg, _) <- NSB.recvFrom sock cfgPacketSize
+        Log.debug lgr "Received beacon"
+        let Beacon id addrs = Binary.decode $ LBS.fromStrict msg
+        unless (id == cfgAdvertiseId) $
             atomically . modifyTVar' tvar $
-                Set.insert (replacePort addr p)
-  where
-    replacePort :: SockAddr -> PortNumber -> SockAddr
-    replacePort (SockAddrInet _ host) port =
-        SockAddrInet port host
-    replacePort (SockAddrInet6 _ flow host scope) port =
-        SockAddrInet6 port flow host scope
-    replacePort other _ =
-        other
+                Map.insert id addrs

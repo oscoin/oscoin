@@ -1,41 +1,44 @@
 module Oscoin.Consensus.Test.Network.Arbitrary where
 
 import           Oscoin.Prelude
+
 import           Oscoin.Consensus.Class
+import           Oscoin.P2P (Msg(..))
 
 import           Oscoin.Consensus.Test.Network
+import           Oscoin.Consensus.Test.Node (DummyNodeId)
 
-import qualified Data.Set as Set
-import qualified Data.Map as Map
-import           Data.Maybe (catMaybes)
 import           Data.List (nub)
+import qualified Data.Map.Strict as Map
+import           Data.Maybe (catMaybes)
+import qualified Data.Set as Set
+import           Data.Traversable (for)
 
-import           Test.QuickCheck
 import           System.Random
+import           Test.QuickCheck
 
 -- | Smaller tests for computationally complex generators.
 kidSize :: Int
 kidSize = 13
 
-arbitraryNetwork :: TestableNode a => Gen (TestNetwork a)
+arbitraryTxMsg :: Arbitrary tx => Gen (Msg tx)
+arbitraryTxMsg = TxMsg . (:[]) <$> arbitrary
+
+arbitraryNetwork :: Gen (TestNetwork ())
 arbitraryNetwork = arbitrary
 
-arbitraryHealthyNetwork :: forall a. TestableNode a => Gen (TestNetwork a)
-arbitraryHealthyNetwork = do
+arbitraryHealthyNetwork :: Tick -> Gen (TestNetwork ())
+arbitraryHealthyNetwork e = do
     addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
-        `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set (Addr a))
+        `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set DummyNodeId)
 
-    nodes <- forM (toList addrs) $ \a ->
-        pure (a, testableNode a [x | x <- toList addrs, x /= a])
-
-    e <- pure . epoch . snd . head $ nodes
-
+    let nodes    = zip (toList addrs) (repeat ())
     let lastTick = (length addrs * 3) * toSeconds e :: Int
 
     smsgs <- listOf1 $ do
-        msg <- arbitrary  :: Gen (Addr a, Msg a)
-        dests <- sublistOf (toList addrs) :: Gen [Addr a]
-        forM dests $ \d -> do
+        msg   <- liftA2 (,) arbitrary arbitraryTxMsg
+        dests <- sublistOf (toList addrs) :: Gen [DummyNodeId]
+        for dests $ \d -> do
             at <- choose (0, lastTick `div` 2) :: Gen Int
             pure $ ScheduledMessage (fromIntegral at) d msg
 
@@ -54,15 +57,17 @@ arbitraryHealthyNetwork = do
         , tnLastTick   = fromIntegral lastTick
         }
 
-arbitraryPartitionedNetwork :: TestableNode a => Gen (TestNetwork a)
-arbitraryPartitionedNetwork = do
-    net@TestNetwork{..} <- arbitraryHealthyNetwork
+arbitraryPartitionedNetwork :: Tick -> Gen (TestNetwork ())
+arbitraryPartitionedNetwork e = do
+    net@TestNetwork{..} <- arbitraryHealthyNetwork e
     partition           <- arbitraryPartition (Map.keys tnNodes)
     partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
                                              , fromEnum $ scheduledTick (maximum tnMsgs) / 4) :: Gen Tick
     healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
                                              , fromEnum $ scheduledTick (maximum tnMsgs) / 3) :: Gen Tick
-    pure $ net { tnMsgs = tnMsgs ++ Set.fromList [Partition partitionAt partition, Heal healAt] }
+
+    let partheal = Set.fromList [Partition partitionAt partition, Heal healAt]
+    pure net { tnMsgs = tnMsgs <> partheal }
 
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPartition addrs =
@@ -102,8 +107,8 @@ arbitraryBridgePartition addrs = do
         [] ->
             mempty
 
-instance TestableNode a => Arbitrary (TestNetwork a) where
-    arbitrary = arbitraryPartitionedNetwork
+instance Arbitrary (TestNetwork ()) where
+    arbitrary = arbitraryPartitionedNetwork 1 -- TODO: use size for epochLength?
 
     shrink tn@TestNetwork{..} =
         lessMsgs
@@ -115,7 +120,7 @@ instance TestableNode a => Arbitrary (TestNetwork a) where
         -- NB. Not in use currently.
         _lessNodes = map filterNetwork [tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
-shrinkScheduledMsgs :: Ord (Scheduled a) => Set (Scheduled a) -> [Set (Scheduled a)]
+shrinkScheduledMsgs :: Set Scheduled -> [Set Scheduled]
 shrinkScheduledMsgs msgs =
     mempty : [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
   where
@@ -128,7 +133,7 @@ shrinkScheduledMsgs msgs =
 
 -- TODO: Nodes will still contain previously present nodes in their address
 -- books.
-filterNetwork :: Ord (Addr a) => TestNetwork a -> TestNetwork a
+filterNetwork :: TestNetwork a -> TestNetwork a
 filterNetwork (TestNetwork nodes msgs partitions _ rng count lt) =
     TestNetwork nodes (Set.filter f msgs) partitions [] rng count lt
   where

@@ -23,9 +23,10 @@ dependencies:
   - dlist
   - fast-logger
   - formatting
+  - hashable
   - http-api-data
   - http-types
-  - kademlia
+  - iproute
   - memory
   - merkle-tree
   - microlens
@@ -33,6 +34,7 @@ dependencies:
   - mtl
   - network
   - network-multicast
+  - random
   - safe-exceptions
   - semigroups
   - Spock
@@ -70,13 +72,14 @@ tests:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
+      - -fno-warn-orphans
+      - -O2
     dependencies:
       - microlens
       - microlens-aeson
       - oscoin
       - QuickCheck
       - quickcheck-instances
-      - random
       - tasty >=1.0.0.1
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
@@ -119,7 +122,6 @@ ghc-options:
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
   - -Wredundant-constraints
-  - -fno-warn-orphans
   - -fno-warn-unused-do-bind
   - -fno-print-expanded-synonyms
   - -funbox-small-strict-fields

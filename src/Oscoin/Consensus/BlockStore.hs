@@ -1,13 +1,19 @@
 module Oscoin.Consensus.BlockStore
-    ( BlockStore(..)
-    , emptyBlockStore
+    ( BlockStore
+    , bsChains
+    , bsDangling
+
     , genesisBlockStore
-    , storeBlock
+
+    , maximumChainBy
+    , insert
+    , lookupBlock
+    , orphans
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, (|>))
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>))
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 
@@ -19,9 +25,6 @@ data BlockStore tx = BlockStore
     , bsDangling :: Set (Block tx)
     } deriving (Eq, Show)
 
-emptyBlockStore :: BlockStore tx
-emptyBlockStore = BlockStore mempty Set.empty
-
 genesisBlockStore :: Ord tx => Block tx -> BlockStore tx
 genesisBlockStore gen =
     BlockStore
@@ -29,9 +32,26 @@ genesisBlockStore gen =
         , bsDangling = mempty
         }
 
-storeBlock :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
-storeBlock blk bs@BlockStore{..} =
+maximumChainBy
+    :: (Blockchain tx -> Blockchain tx -> Ordering)
+    -> BlockStore tx
+    -> Blockchain tx
+maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
+-- Nb. we guarantee that there is at least one chain in the store by exposing
+-- only the 'genesisBlockStore' smart constructor.
+
+insert :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
+insert blk bs@BlockStore{..} =
     constructChains $ bs { bsDangling = Set.insert blk bsDangling }
+
+lookupBlock :: Hashed BlockHeader -> BlockStore tx -> Maybe (Block tx)
+lookupBlock hdr = map tip . Map.lookup hdr . bsChains
+
+orphans :: BlockStore tx -> Set (Hashed BlockHeader)
+orphans BlockStore{bsDangling} =
+    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsDangling
+        danglingHashes = Set.map blockHash bsDangling
+     in Set.difference parentHashes danglingHashes
 
 constructChains :: Ord tx => BlockStore tx -> BlockStore tx
 constructChains n =
