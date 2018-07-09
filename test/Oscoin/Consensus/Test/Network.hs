@@ -203,7 +203,8 @@ deliver
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
         let (outgoing, a) = testableRun node $ maybe (tickM tick) (stepM tick) msg
-            tnMsgCount'   = if isJust msg then tnMsgCount + 1 else tnMsgCount
+            tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
+                                                        _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
                                , tnMsgCount = tnMsgCount'
                                }
