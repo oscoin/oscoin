@@ -65,7 +65,7 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
                 -- Predicates.
                 chainGrowthP    = chainLength > 1
                 msgComplexityP  = msgsSent >= minMsgs && msgsSent <= maxMsgs
-                commonPrefixP   = if nodeCount > 1 then nodePrefixesMatch tn' else True
+                commonPrefixP   = nodeCount == 1 || nodePrefixesMatch tn'
                 replicationP    = not . null $ replicatedTxs
                 majorityPrefixP = majorityNodePrefixesMatch tn'
 

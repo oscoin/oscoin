@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Oscoin.Consensus.Test.Network where
 
 import           Oscoin.Prelude hiding (log)
