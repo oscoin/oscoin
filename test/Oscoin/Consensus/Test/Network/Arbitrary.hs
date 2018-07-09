@@ -29,11 +29,19 @@ arbitraryNetwork = arbitrary
 
 arbitraryHealthyNetwork :: Tick -> Gen (TestNetwork ())
 arbitraryHealthyNetwork e = do
+    net  <- arbitrarySynchronousNetwork e
+    gen  <- mkStdGen <$> arbitrary :: Gen StdGen
+
+    pure net
+        { tnLatencies  = map fromIntegral (randomRs (1 :: Int, 1 + 2 * toSeconds e) gen) }
+
+arbitrarySynchronousNetwork :: Tick -> Gen (TestNetwork ())
+arbitrarySynchronousNetwork e = do
     addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
         `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set DummyNodeId)
 
     let nodes    = zip (toList addrs) (repeat ())
-    let lastTick = (length addrs * 3) * toSeconds e :: Int
+    let lastTick = max ((length addrs * 3) * toSeconds e) (toSeconds 30) :: Int
 
     smsgs <- listOf1 $ do
         msg   <- liftA2 (,) arbitrary arbitraryTxMsg
@@ -45,14 +53,12 @@ arbitraryHealthyNetwork e = do
     let ticks = foreach nodes $ \(addr, _) ->
          [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
 
-    seed <- arbitrary :: Gen Int
-
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
         , tnLog        = []
-        , tnLatencies  = map fromIntegral (randomRs (1 :: Int, 1 + 2 * toSeconds e) (mkStdGen seed))
+        , tnLatencies  = repeat 0
         , tnMsgCount   = 0
         , tnLastTick   = fromIntegral lastTick
         }
