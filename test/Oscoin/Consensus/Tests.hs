@@ -8,7 +8,7 @@ import           Oscoin.Consensus.Test.Network.Arbitrary
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 
-import           Data.List (sort)
+import           Data.List (sort, isPrefixOf)
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -65,17 +65,23 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
                 -- Predicates.
                 chainGrowthP    = chainLength > 1
                 msgComplexityP  = msgsSent >= minMsgs && msgsSent <= maxMsgs
-                commonPrefixP   = nodePrefixesMatch tn'
+                commonPrefixP   = if nodeCount > 1 then nodePrefixesMatch tn' else True
                 replicationP    = not . null $ replicatedTxs
+                majorityPrefixP = majorityNodePrefixesMatch tn'
 
+                -- TODO(cloudhead): Document.
              in cover replicationP   70 "replicated any data"
+                -- TODO(cloudhead): Document.
               . cover chainGrowthP   75 "have more than one block"
                 -- The expected minimum amount of messages sent is the length of the shared
                 -- prefix times the number of nodes. Anything above that is considered
                 -- 'amplification'.
-              . cover msgComplexityP 90 "are within the communication complexity bounds"
+              . cover msgComplexityP 75 "are within the communication complexity bounds"
+                -- TODO(cloudhead): Document.
+              . cover commonPrefixP  95 "have a common prefix"
               . counterexample (prettyCounterexample tn' msgsSent (length replicatedTxs))
-              $ commonPrefixP
+                -- TODO(cloudhead): Document.
+              $ majorityPrefixP
 
 prettyCounterexample :: TestableNode a => TestNetwork a -> Int -> Int -> String
 prettyCounterexample tn@TestNetwork{..} msgsSent txsReplicated =
@@ -88,12 +94,23 @@ prettyCounterexample tn@TestNetwork{..} msgsSent txsReplicated =
                               " txs replicated: " ++ show txsReplicated,
                               " common prefix: "  ++ show (length $ commonPrefix $ nodePrefixes tn) ]
 
-nodesMatch :: TestableNode a => TestNetwork a -> Bool
-nodesMatch TestNetwork{..} = equal $ map testablePostState (toList tnNodes)
-
+-- TODO(cloudhead): Document.
 nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
 nodePrefixesMatch =
-    not . null . commonPrefix . nodePrefixes
+    (> 1) . length . commonPrefix . nodePrefixes
+
+-- TODO(cloudhead): Document.
+majorityNodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
+majorityNodePrefixesMatch tn@TestNetwork{..} =
+    length ns > length tnNodes - length ns
+  where
+    pre = commonPrefix $ nodePrefixes tn
+    ns  = filter (nodeHasPrefix pre) (toList tnNodes)
+
+-- TODO(cloudhead): Document.
+nodeHasPrefix :: TestableNode a => [TestableResult a] -> a -> Bool
+nodeHasPrefix p node =
+    p `isPrefixOf` reverse (testablePostState node)
 
 nodePrefixes :: TestableNode a => TestNetwork a -> [[TestableResult a]]
 nodePrefixes TestNetwork{..} =
