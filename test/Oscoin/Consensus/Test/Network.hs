@@ -7,7 +7,6 @@ import           Oscoin.Prelude hiding (log)
 import           Oscoin.Consensus.Test.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Nakamoto (NakamotoT, runNakamotoT)
 import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
@@ -15,17 +14,11 @@ import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, height, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
-import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import qualified Oscoin.Node.Mempool.Internal as Mempool
 import           Oscoin.P2P (Msg(..))
 
-import           Data.Bifunctor (second)
 import qualified Data.Hashable as Hashable
-import           Data.List.NonEmpty (nonEmpty)
 import qualified Data.Map.Strict as Map
-import           Data.Maybe (catMaybes, maybeToList)
 import qualified Data.Set as Set
-import           Data.Traversable (for)
 import           System.Random (StdGen, mkStdGen)
 
 -- TestableNode ---------------------------------------------------------------
@@ -47,69 +40,6 @@ class ( Eq   (TestableResult a)
 
     testableNodeAddr    :: a -> DummyNodeId
     testableShow        :: a -> String
-
--- No-consensus Node -----------------------------------------------------------
-
-newtype NoConsensus a = NoConsensus (TestNodeT Identity a)
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadBlockStore DummyTx
-             , MonadMempool DummyTx
-             , MonadState TestNodeState
-             )
-
-instance MonadProtocol DummyTx NoConsensus where
-    -- We're not mining any blocks, thus just store all incoming txs in the
-    -- mempool and broadcast those we haven't seen before.
-    stepM _ = \case
-        BlockMsg    blk -> storeTxs $ toList (blockData blk)
-        TxMsg       txs -> storeTxs txs
-        ReqBlockMsg _   -> pure mempty
-      where
-        storeTxs txs = do
-            let outgoing = maybeToList . map (TxMsg . toList) . nonEmpty . catMaybes
-            map outgoing . for txs $ \tx' -> do
-                known <- isJust <$> lookupTx (hash tx')
-                if known then
-                    pure Nothing
-                else do
-                    addTxs [tx']
-                    pure $ Just tx'
-
-    tickM = const $ pure []
-
-
-newtype NoConsensusState = NoConsensusState { noNode :: TestNodeState }
-    deriving Show
-
-instance TestableNode NoConsensusState where
-    type TestableResult NoConsensusState = DummyTx
-    type TestableRun    NoConsensusState = NoConsensus
-
-    testableInit = initNoConsensusNodes
-    testableRun  = runNoConsensusNode
-
-    testablePostState   = Mempool.elems . tnsMempool . noNode
-    testableIncludedTxs = testablePostState
-
-    testableNodeAddr = tnsNodeId . noNode
-    testableShow     = show . tnsMempool . noNode
-
-noConsensusNode :: DummyNodeId -> NoConsensusState
-noConsensusNode = NoConsensusState . emptyTestNodeState
-
-initNoConsensusNodes :: TestNetwork a -> TestNetwork NoConsensusState
-initNoConsensusNodes tn@TestNetwork{tnNodes} =
-    tn { tnNodes = Map.mapWithKey (const . noConsensusNode) tnNodes }
-
-runNoConsensusNode :: NoConsensusState -> NoConsensus a -> (a, NoConsensusState)
-runNoConsensusNode (NoConsensusState s) (NoConsensus ma) =
-    second NoConsensusState . runIdentity $ runTestNodeT s ma
-
-noConsensusLongestChain :: NoConsensusState -> Blockchain DummyTx
-noConsensusLongestChain =
-      BlockStore.maximumChainBy (comparing height) . tnsBlockstore . noNode
 
 -- Nakamoto Node ---------------------------------------------------------------
 
