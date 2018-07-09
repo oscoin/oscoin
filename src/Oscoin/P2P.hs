@@ -27,6 +27,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHeader)
+import           Oscoin.Crypto.Blockchain (showBlockDigest)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Environment
 import           Oscoin.Logging (Logger, shown, withExceptionLogged, (%))
@@ -59,7 +60,12 @@ data Msg tx =
       BlockMsg    (Block tx)
     | TxMsg       [tx]
     | ReqBlockMsg (Hashed BlockHeader)
-    deriving (Eq, Show, Generic)
+    deriving (Eq, Generic)
+
+instance Show tx => Show (Msg tx) where
+    show (BlockMsg  blk) = "BlockMsg " ++ showBlockDigest blk
+    show (TxMsg     txs) = "TxMsg " ++ show txs
+    show (ReqBlockMsg h) = "ReqBlockMsg " ++ show h
 
 instance Binary tx => Binary (Msg tx)
 
