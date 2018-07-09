@@ -115,7 +115,7 @@ instance Arbitrary (TestNetwork ()) where
       where
         msgs'     = shrinkScheduledMsgs tnMsgs
         nodes'    = shrinkList shrinkNothing (Map.toList tnNodes)
-        lessMsgs  = [tn { tnMsgs = ms, tnLatencies = [] } | ms <- msgs']
+        lessMsgs  = [tn { tnMsgs = ms } | ms <- msgs']
 
         -- NB. Not in use currently.
         _lessNodes = map filterNetwork [tn { tnNodes = Map.fromList ns } | ns <- nodes']
