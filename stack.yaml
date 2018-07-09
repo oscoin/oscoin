@@ -1,4 +1,4 @@
-resolver: lts-11.5
+resolver: lts-12.0
 
 packages:
 - .
@@ -8,6 +8,9 @@ extra-deps:
 - merkle-tree-0.1.0
 - base58-bytestring-0.1.0
 - monad-stm-0.1.0.2
+- Spock-0.13.0.0
+- Spock-core-0.13.0.0
+- reroute-0.5.0.0
 
 - git: git@github.com:cloudhead/wai
   commit: a3464cc76198d51ae7cf838690eadeeefd627f9c

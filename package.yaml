@@ -8,7 +8,7 @@ license: BSD3
 github: oscoin/oscoin
 
 dependencies:
-  - base >=4.10 && <4.11
+  - base >=4.11.1.0 && <4.12
   - aeson
   - async
   - base16-bytestring
