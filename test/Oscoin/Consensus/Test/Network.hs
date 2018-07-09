@@ -173,8 +173,10 @@ type Partitions = Map DummyNodeId (Set DummyNodeId)
 instance Show (TestNetwork a) where
     show TestNetwork{..} =
         unlines [ "TestNetwork"
-                , " nodes: "      ++ show (Map.keys tnNodes)
-                , " scheduled:\n" ++ scheduled
+                , " nodes: "       ++ show (Map.keys tnNodes)
+                , " last-tick: "   ++ show tnLastTick
+                , " partitioned: " ++ show (not $ Map.null tnPartitions)
+                , " scheduled:\n"  ++ scheduled
                 ]
       where
         scheduled = unlines
