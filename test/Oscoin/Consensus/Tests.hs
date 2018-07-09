@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 
 import           Data.List (sort)
-import qualified Data.Set as Set
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -18,80 +17,76 @@ import           Test.Tasty.QuickCheck
 tests :: [TestTree]
 tests =
     [ testGroup "With Partitions"
-        [ testProperty "All nodes DON'T include all txns (no consensus)" $
-            expectFailure $
-                propNetworkNodesConverge @NoConsensusState
-                                         nodesMatch
-                                         anyAmp
-                                         (arbitraryPartitionedNetwork 1)
-        , testProperty "All nodes include all txns (simple fault tolerant)" $
+        [ testProperty "All nodes include all txns (simple fault tolerant)" $
             propNetworkNodesConverge @SimpleNodeState
-                                     nodePrefixesMatch
-                                     (<= 20)
+                                     testableInit
+                                     constant
                                      (arbitraryPartitionedNetwork Simple.epochLength)
         ]
     , testGroup "Without Partitions"
-        [ testProperty "All nodes include all txns (no consensus)" $
-            propNetworkNodesConverge @NoConsensusState
-                                     nodesMatch
-                                     anyAmp
-                                     (arbitraryHealthyNetwork 1)
-        , testProperty "All nodes include all txns (simple fault tolerant)" $
+        [ testProperty "All nodes include all txns (simple fault tolerant)" $
             propNetworkNodesConverge @SimpleNodeState
-                                     nodePrefixesMatch
-                                     (<= 20)
+                                     testableInit
+                                     constant
                                      (arbitraryHealthyNetwork Simple.epochLength)
         , testProperty "All nodes include all txns (nakamoto)" $
             propNetworkNodesConverge @NakamotoNodeState
-                                     nodePrefixesMatch
-                                     (<= 20)
+                                     testableInit
+                                     constant
                                      (arbitraryHealthyNetwork Nakamoto.epochLength)
         ]
     ]
   where
-    anyAmp = const True
+    constant = identity
 
+-- 1. Message amplification: we would like to measure the communication complexity
+-- of the consensus protocol. For this, we count the number of blocks agreed on
+-- (shared prefix) and the number of blocks sent between nodes.
 propNetworkNodesConverge
     :: TestableNode a
-    => (TestNetwork a -> Bool) -- ^ Predicate to match on the final state
-    -> (Int -> Bool)           -- ^ Predicate on message amplification
+    => (TestNetwork () -> TestNetwork a)
+    -> (Int -> Int)            -- ^ Predicate on message amplification
     -> Gen (TestNetwork ())    -- ^ Network generator
     -> Property
-propNetworkNodesConverge stateCmp msgAmpPred genNetworks =
+propNetworkNodesConverge tnInit msgComplexity genNetworks =
     forAllShrink genNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
-            let tn'           = runNetwork (testableInit tn)
-                msgAmp        = msgAmplification tn' msgsSent
-                initialMsgs   = Set.filter isMsg (tnMsgs tn)
-                msgsSent      = tnMsgCount tn' - length initialMsgs
+            let tn'             = runNetwork (tnInit tn)
+                msgsSent        = tnMsgCount tn'
+
                 -- Nb.: All nodes have to know all txs, thus the coverage
                 -- condition only needs to check one node.
-                replicatedTxs = testableIncludedTxs . head . toList $ tnNodes tn'
-                chainGrowth   = length (commonPrefix (nodePrefixes tn')) > 1
+                replicatedTxs   = testableIncludedTxs . head . toList $ tnNodes tn'
+                nodeCount       = length $ tnNodes tn
+                chainLength     = length (commonPrefix (nodePrefixes tn'))
+                minMsgs         = (chainLength - 1) * msgComplexity nodeCount             - (chainLength - 1)
+                maxMsgs         = (chainLength - 1) * msgComplexity nodeCount * nodeCount - (chainLength - 1)
 
-             in cover (not . null $ replicatedTxs) 60 "replicated any data" $
-                 cover chainGrowth 60 "have more than one block" $
-                     counterexample (prettyCounterexample tn' msgAmp msgsSent)
-                                    (stateCmp tn' && msgAmpPred msgAmp)
+                -- Predicates.
+                chainGrowthP    = chainLength > 1
+                msgComplexityP  = msgsSent >= minMsgs && msgsSent <= maxMsgs
+                commonPrefixP   = nodePrefixesMatch tn'
+                replicationP    = not . null $ replicatedTxs
 
-msgAmplification :: TestableNode a => TestNetwork a -> Int -> Int
-msgAmplification tn@TestNetwork{..} msgsSent =
-    if expectedMsgs == 0 then 0 else msgsSent `div` expectedMsgs
-  where
-    expectedMsgs = nodes * prefix
-    nodes        = length tnNodes
-    prefix       = length $ commonPrefix $ nodePrefixes tn
+             in cover replicationP   70 "replicated any data"
+              . cover chainGrowthP   75 "have more than one block"
+                -- The expected minimum amount of messages sent is the length of the shared
+                -- prefix times the number of nodes. Anything above that is considered
+                -- 'amplification'.
+              . cover msgComplexityP 90 "are within the communication complexity bounds"
+              . counterexample (prettyCounterexample tn' msgsSent (length replicatedTxs))
+              $ commonPrefixP
 
 prettyCounterexample :: TestableNode a => TestNetwork a -> Int -> Int -> String
-prettyCounterexample tn@TestNetwork{..} msgAmp msgsSent =
-    prettyLog ++ prettyNodes ++ prettyInfo ++ prettyMsgAmp
+prettyCounterexample tn@TestNetwork{..} msgsSent txsReplicated =
+    prettyLog ++ prettyInfo ++ prettyNodes ++ prettyStats
   where
     prettyLog    = unlines $  " log:" : reverse ["  " ++ show l | l <- reverse $ sort tnLog]
     prettyNodes  = unlines $ [" nodes:", "  " ++ show (length tnNodes)]
     prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList tnNodes]]
-    prettyMsgAmp = unlines $ [" msgs sent: "     ++ show msgsSent,
-                              " common prefix: " ++ show (length $ commonPrefix $ nodePrefixes tn),
-                              " amplification: " ++ show msgAmp ++ "x" ]
+    prettyStats  = unlines $ [" msgs sent: "      ++ show msgsSent,
+                              " txs replicated: " ++ show txsReplicated,
+                              " common prefix: "  ++ show (length $ commonPrefix $ nodePrefixes tn) ]
 
 nodesMatch :: TestableNode a => TestNetwork a -> Bool
 nodesMatch TestNetwork{..} = equal $ map testablePostState (toList tnNodes)
