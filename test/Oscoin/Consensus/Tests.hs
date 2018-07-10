@@ -40,13 +40,13 @@ tests =
         ]
     ]
   where
-    constant = identity
+    constant = identity -- O(1)
 
 propNetworkNodesConverge
     :: TestableNode a
-    => (TestNetwork () -> TestNetwork a)
-    -> (Int -> Int)            -- ^ Predicate on message amplification
-    -> Gen (TestNetwork ())    -- ^ Network generator
+    => (TestNetwork () -> TestNetwork a) -- ^ Network initialization function
+    -> (Int -> Int)                      -- ^ Expected messaging complexity
+    -> Gen (TestNetwork ())              -- ^ TestNetwork generator
     -> Property
 propNetworkNodesConverge tnInit msgComplexity genNetworks =
     forAllShrink genNetworks shrink $ \tn ->
