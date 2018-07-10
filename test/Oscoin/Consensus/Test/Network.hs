@@ -19,25 +19,20 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           System.Random (StdGen, mkStdGen)
 
--- TestableNode ---------------------------------------------------------------
+-- TestableNode ----------------------------------------------------------------
 
-class ( Eq   (TestableResult a)
-      , Show (TestableResult a)
-      , MonadProtocol DummyTx (TestableRun a)
-      ) => TestableNode a
-  where
-    type TestableResult a :: *
+class MonadProtocol DummyTx (TestableRun a) => TestableNode a where
     type TestableRun    a :: * -> *
 
-    testableInit        :: TestNetwork b -> TestNetwork a
-    testableRun         :: a -> (TestableRun a) b -> (b, a)
+    testableInit         :: TestNetwork b -> TestNetwork a
+    testableRun          :: a -> (TestableRun a) b -> (b, a)
 
-    testablePostState   :: a -> [TestableResult a]
+    testableLongestChain :: a -> [Hashed BlockHeader]
 
-    testableIncludedTxs :: a -> [DummyTx]
+    testableIncludedTxs  :: a -> [DummyTx]
 
-    testableNodeAddr    :: a -> DummyNodeId
-    testableShow        :: a -> String
+    testableNodeAddr     :: a -> DummyNodeId
+    testableShow         :: a -> String
 
 -- Nakamoto Node ---------------------------------------------------------------
 
@@ -49,13 +44,12 @@ data NakamotoNodeState = NakamotoNodeState
     } deriving Show
 
 instance TestableNode NakamotoNodeState where
-    type TestableResult NakamotoNodeState = Hashed BlockHeader
     type TestableRun    NakamotoNodeState = NakamotoNode
 
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
 
-    testablePostState =
+    testableLongestChain =
           map (hash . blockHeader)
         . toList . fromBlockchain
         . nakamotoLongestChain
@@ -103,13 +97,12 @@ data SimpleNodeState = SimpleNodeState
     } deriving Show
 
 instance TestableNode SimpleNodeState where
-    type TestableResult SimpleNodeState = Hashed BlockHeader
     type TestableRun    SimpleNodeState = SimpleNode
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
 
-    testablePostState =
+    testableLongestChain =
           map (hash . blockHeader)
         . toList . fromBlockchain
         . simpleBestChain
@@ -152,7 +145,7 @@ simpleBestChain =
     . tnsBlockstore
     . snsNode
 
--- TestNetwork ----------------------------------------------------------------
+-- TestNetwork -----------------------------------------------------------------
 
 data TestNetwork a = TestNetwork
     { tnNodes      :: Map DummyNodeId a
@@ -248,7 +241,7 @@ networkNonTrivial TestNetwork{tnNodes, tnMsgs}
   where
     msgs = Set.filter isMsg tnMsgs
 
--- Scheduled ------------------------------------------------------------------
+-- Scheduled -------------------------------------------------------------------
 
 data Scheduled =
       ScheduledMessage Tick DummyNodeId (DummyNodeId, Msg DummyTx)

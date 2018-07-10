@@ -7,6 +7,8 @@ import           Oscoin.Consensus.Test.Network.Arbitrary
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
+import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Crypto.Blockchain.Block (BlockHeader)
 
 import           Data.List (sort, isPrefixOf)
 
@@ -17,19 +19,19 @@ import           Test.Tasty.QuickCheck
 tests :: [TestTree]
 tests =
     [ testGroup "With Partitions"
-        [ testProperty "All nodes include all txns (simple fault tolerant)" $
+        [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
                                      constant
                                      (arbitraryPartitionedNetwork Simple.epochLength)
         ]
     , testGroup "Without Partitions"
-        [ testProperty "All nodes include all txns (simple fault tolerant)" $
+        [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
                                      constant
                                      (arbitraryHealthyNetwork Simple.epochLength)
-        , testProperty "All nodes include all txns (nakamoto)" $
+        , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @NakamotoNodeState
                                      testableInit
                                      constant
@@ -108,13 +110,13 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- TODO(cloudhead): Document.
-nodeHasPrefix :: TestableNode a => [TestableResult a] -> a -> Bool
+nodeHasPrefix :: TestableNode a => [Hashed BlockHeader] -> a -> Bool
 nodeHasPrefix p node =
-    p `isPrefixOf` reverse (testablePostState node)
+    p `isPrefixOf` reverse (testableLongestChain node)
 
-nodePrefixes :: TestableNode a => TestNetwork a -> [[TestableResult a]]
+nodePrefixes :: TestableNode a => TestNetwork a -> [[Hashed BlockHeader]]
 nodePrefixes TestNetwork{..} =
-    map (reverse . testablePostState) (toList tnNodes)
+    map (reverse . testableLongestChain) (toList tnNodes)
 
 commonPrefix :: Eq a => [[a]] -> [a]
 commonPrefix [] = []
