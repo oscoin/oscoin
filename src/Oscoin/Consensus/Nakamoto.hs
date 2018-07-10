@@ -7,6 +7,7 @@ module Oscoin.Consensus.Nakamoto
     , evalNakamotoT
 
     , epochLength
+    , score
 
     , difficulty
     , defaultGenesisDifficulty
@@ -15,7 +16,8 @@ module Oscoin.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
+import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
@@ -35,6 +37,9 @@ import           System.Random (StdGen, randomR)
 
 epochLength :: Tick
 epochLength = 1
+
+score :: Blockchain tx -> Blockchain tx -> Ordering
+score = comparing height
 
 newtype NakamotoT tx m a = NakamotoT (StateT StdGen m a)
     deriving ( Functor
@@ -60,7 +65,7 @@ instance ( MonadMempool    tx m
     stepM _ = \case
         P2P.BlockMsg blk -> do
             for_ (validateBlock blk) $ \blk' -> do
-                storeBlock blk'
+                BlockStore.storeBlock blk'
                 delTxs (toList blk')
             pure mempty
 
@@ -69,7 +74,7 @@ instance ( MonadMempool    tx m
             addTxs txs $> mempty
 
         P2P.ReqBlockMsg blk ->
-            map P2P.BlockMsg . maybeToList <$> lookupBlock blk
+            map P2P.BlockMsg . maybeToList <$> BlockStore.lookupBlock blk
 
     tickM t = do
         blk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t)
@@ -100,11 +105,11 @@ mineBlock
     -> NakamotoT tx m (Maybe (Block tx))
 mineBlock tick = do
     txs   <- map snd <$> getTxs
-    chain <- maximumChainBy (comparing height)
+    chain <- BlockStore.maximumChainBy score
     let prevHash = hash . blockHeader $ tip chain
     for (findBlock tick prevHash minDifficulty txs) $ \blk -> do
         delTxs (toList blk)
-        storeBlock blk
+        BlockStore.storeBlock blk
         pure blk
 
 -- | Calculate block difficulty.
