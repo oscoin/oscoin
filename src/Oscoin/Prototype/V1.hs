@@ -52,17 +52,17 @@ class MonadFork m => HasFold c tx m | c -> tx where
 
 instance (Binary (Tx AccountTx), MonadFork m) => HasFold GenesisChain (Tx GenesisTx) m where
     fold = genesisFold
-    fromTx _ (tx@Tx{txPayload}) =
+    fromTx _ tx@Tx{txPayload} =
         pure $ tx {txPayload = Binary.decode txPayload}
 
 instance MonadFork m => HasFold AccountChain (Tx AccountTx) m where
     fold = accountFold
-    fromTx _ (tx@Tx{txPayload}) =
+    fromTx _ tx@Tx{txPayload} =
         pure $ tx {txPayload = Binary.decode txPayload}
 
 instance MonadFork m => HasFold RepoChain (Tx RepoTx) m where
     fold = repoFold
-    fromTx _ (tx@Tx{txPayload}) =
+    fromTx _ tx@Tx{txPayload} =
         pure $ tx {txPayload = Binary.decode txPayload}
 
 newtype ForkT m a = ForkT (StateT (BlockTree m) m a)
