@@ -167,7 +167,6 @@ instance Show (TestNetwork a) where
         unlines [ "TestNetwork"
                 , " nodes: "       ++ show (Map.keys tnNodes)
                 , " last-tick: "   ++ show tnLastTick
-                , " partitioned: " ++ show (not $ Map.null tnPartitions)
                 , " scheduled:\n"  ++ scheduled
                 ]
       where
