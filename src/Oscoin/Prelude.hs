@@ -61,6 +61,7 @@ module Oscoin.Prelude
     , identity
     , equal
     , toSeconds
+    , chunksOf
     ) where
 
 import           Prelude hiding ( fail, read, readIO, readFile
@@ -206,3 +207,11 @@ equal xs = and $ map (== head xs) (tail xs)
 -- | Converts a NominalDiffTime to seconds.
 toSeconds :: NominalDiffTime -> Int
 toSeconds t = fromEnum t `div` 1000000000000
+
+-- | Splits a list into length-@n@ pieces. If @n@ is @<= 0@, returns an infinite
+-- list of empty lists.
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n l
+  | n > 0     = take n l : chunksOf n (drop n l)
+  | otherwise = repeat []

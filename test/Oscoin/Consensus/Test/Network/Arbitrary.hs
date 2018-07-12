@@ -8,7 +8,7 @@ import           Oscoin.P2P (Msg(..))
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Node (DummyNodeId)
 
-import           Data.List (nub)
+import           Data.List (nub, permutations)
 import qualified Data.Map.Strict as Map
 import           Data.Maybe (catMaybes)
 import qualified Data.Set as Set
@@ -81,6 +81,26 @@ arbitraryPartition addrs =
           , arbitraryLonerPartition   addrs
           , arbitraryBridgePartition  addrs
           ]
+
+arbitraryDoublePartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryDoublePartition addrs
+    | length addrs < 3 =
+        pure mempty
+    | otherwise =
+        subnetsToPartitions . chunksOf subnetSize <$> shuffle addrs
+      where
+        netSize = length addrs
+        subnetSize | odd netSize = netSize `div` 2
+                   | otherwise   = netSize `div` 2 - 1
+
+-- | Convert a list of subnets into a list partition map.
+subnetsToPartitions :: Ord addr => [[addr]] -> Map addr (Set addr)
+subnetsToPartitions nets =
+    Map.fromList $
+        concatMap f [(p, concat ps) | p:ps <- perms]
+  where
+    f (xs, ys) = [(x, Set.fromList ys) | x <- xs]
+    perms      = take (length nets) (permutations nets)
 
 arbitraryPerfectPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPerfectPartition [] =
