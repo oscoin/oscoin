@@ -10,7 +10,6 @@ import           Oscoin.Consensus.Test.Node (DummyNodeId)
 
 import           Data.List (nub, permutations)
 import qualified Data.Map.Strict as Map
-import           Data.Maybe (catMaybes)
 import qualified Data.Set as Set
 import           Data.Traversable (for)
 
