@@ -80,6 +80,7 @@ arbitraryPartition addrs =
     oneof [ arbitraryPerfectPartition addrs
           , arbitraryLonerPartition   addrs
           , arbitraryBridgePartition  addrs
+          , arbitraryDoublePartition  addrs
           ]
 
 arbitraryDoublePartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
