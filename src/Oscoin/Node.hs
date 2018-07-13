@@ -125,7 +125,7 @@ instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) wh
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadSTM m, Ord tx) => MonadBlockStore tx (NodeT tx i m) where
+instance (Monad m, MonadSTM m, Ord tx, Hashable tx) => MonadBlockStore tx (NodeT tx i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         BlockStore.put bs blk
@@ -134,6 +134,11 @@ instance (Monad m, MonadSTM m, Ord tx) => MonadBlockStore tx (NodeT tx i m) wher
         bs <- asks hBlockStore
         BlockStore.for bs $
             BlockStore.lookupBlock hdr
+
+    lookupTx tx = do
+        bs <- asks hBlockStore
+        BlockStore.for bs $
+            BlockStore.lookupTx tx
 
     orphans = do
         bs <- asks hBlockStore

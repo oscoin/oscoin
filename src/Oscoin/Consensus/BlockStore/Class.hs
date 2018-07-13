@@ -12,10 +12,13 @@ class Monad m => MonadBlockStore tx m | m -> tx where
     -- | Store a block in the block-store.
     storeBlock :: Block tx -> m ()
 
-    -- | Lookup a 'Block' by it's header
+    -- | Lookup a 'Block' by its header.
     lookupBlock :: Hashed BlockHeader -> m (Maybe (Block tx))
 
-    -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent
+    -- | Lookup a transaction by its hash.
+    lookupTx :: Hashed tx -> m (Maybe tx)
+
+    -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
     orphans :: m (Set (Hashed BlockHeader))
 
     -- | Returns the maximum chain, according to the ordering function provided.
@@ -31,6 +34,7 @@ instance {-# OVERLAPPABLE #-}
   where
     storeBlock     = lift . storeBlock
     lookupBlock    = lift . lookupBlock
+    lookupTx       = lift . lookupTx
     orphans        = lift orphans
     maximumChainBy = lift . maximumChainBy
     {-# INLINE storeBlock     #-}

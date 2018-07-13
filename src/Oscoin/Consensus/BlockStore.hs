@@ -8,6 +8,7 @@ module Oscoin.Consensus.BlockStore
     , maximumChainBy
     , insert
     , lookupBlock
+    , lookupTx
     , orphans
     ) where
 
@@ -52,6 +53,12 @@ orphans BlockStore{bsDangling} =
     let parentHashes   = Set.map (blockPrevHash . blockHeader) bsDangling
         danglingHashes = Set.map blockHash bsDangling
      in Set.difference parentHashes danglingHashes
+
+lookupTx :: forall tx. Hashable tx => Hashed tx -> BlockStore tx -> Maybe tx
+lookupTx h BlockStore{..} =
+    let txs :: [(Hashed tx, tx)]
+        txs = [(hash tx, tx) | tx <- concatMap toList (Map.elems bsChains)]
+     in lookup h txs
 
 constructChains :: Ord tx => BlockStore tx -> BlockStore tx
 constructChains n =
