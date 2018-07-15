@@ -18,7 +18,8 @@ import           Oscoin.P2P (Msg(..))
 import qualified Data.Hashable as Hashable
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           System.Random (StdGen, mkStdGen)
+import           System.Random (StdGen, mkStdGen, split)
+import           System.Random.Shuffle (shuffle')
 
 -- TestableNode ----------------------------------------------------------------
 
@@ -154,6 +155,7 @@ data TestNetwork a = TestNetwork
     , tnPartitions :: Partitions
     , tnLog        :: [Scheduled]
     , tnLatencies  :: [Tick]
+    , tnRng        :: StdGen
     , tnMsgCount   :: Int
     , tnLastTick   :: Tick
     }
@@ -211,15 +213,31 @@ scheduleMessages
     -> [Msg DummyTx]
     -> TestNetwork a
     -> TestNetwork a
-scheduleMessages t from msgs tn@TestNetwork{tnNodes, tnMsgs, tnPartitions, tnLog, tnLatencies} =
-    tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies' }
+scheduleMessages t from msgs tn@TestNetwork{tnNodes, tnMsgs, tnPartitions, tnLog, tnLatencies, tnRng} =
+    tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies', tnRng = tnRng' }
   where
-    (lats, tnLatencies') = splitAt (Set.size broadcast) tnLatencies
+    (lats, tnLatencies') = splitAt (length recipients) tnLatencies
+    (rng, tnRng')        = split tnRng
 
     msgs' = Set.union (Set.fromList scheduled) tnMsgs
     log   = scheduled ++ tnLog
 
-    broadcast = Set.filter reachable . Set.delete from $ Map.keysSet tnNodes
+    peers      = Set.filter reachable . Set.delete from $ Map.keysSet tnNodes
+    recipients = sample (toList peers)
+
+    -- Instead of sending the message to all peers, send it to at most 3 random peers.
+    -- This ensures we're testing gossip functionality on larger networks.
+    --
+    -- Nb. Since currently this is very naive, we have pretty bad message amplification,
+    -- because a node which receives a block might send that block back to the sender,
+    -- since peer selection for gossip is completely random.
+    --
+    -- Ideally the P2P layer would keep track of who has what, so that we don't
+    -- flood the network with redundant messages. Another way to solve this would be
+    -- for the consensus protocol to be able to respond with a 'Gossip a' message which
+    -- indicates that 'a' should not be sent to the sender, but only to other nodes.
+    sample []  = []
+    sample xs  = take 3 $ shuffle' xs (length xs) rng
 
     unreachables = Map.lookup from tnPartitions
 
@@ -230,7 +248,7 @@ scheduleMessages t from msgs tn@TestNetwork{tnNodes, tnMsgs, tnPartitions, tnLog
 
     scheduled =
             (\(lat, (to, msg)) -> ScheduledMessage (t + lat) to (from, msg))
-        <$> zip lats [(rcpt, msg) | rcpt <- toList broadcast, msg <- msgs]
+        <$> zip lats [(rcpt, msg) | rcpt <- recipients, msg <- msgs]
 
 
 networkNonTrivial :: TestNetwork v -> Bool

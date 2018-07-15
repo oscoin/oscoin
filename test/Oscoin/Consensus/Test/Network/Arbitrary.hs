@@ -52,12 +52,15 @@ arbitrarySynchronousNetwork e = do
     let ticks = foreach nodes $ \(addr, _) ->
          [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
 
+    rng <- mkStdGen <$> arbitrary
+
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
         , tnLog        = []
         , tnLatencies  = repeat 0
+        , tnRng        = rng
         , tnMsgCount   = 0
         , tnLastTick   = fromIntegral lastTick
         }

@@ -35,6 +35,7 @@ dependencies:
   - network
   - network-multicast
   - random
+  - random-shuffle
   - safe-exceptions
   - semigroups
   - Spock
