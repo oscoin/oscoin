@@ -3,7 +3,6 @@ module Oscoin.Crypto.Blockchain.Arbitrary where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Arbitrary ()
 

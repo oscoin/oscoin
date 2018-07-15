@@ -1,4 +1,19 @@
-module Oscoin.Crypto.Blockchain.Block where
+module Oscoin.Crypto.Blockchain.Block
+    ( Block(..)
+    , BlockHeader(..)
+    , Difficulty
+    , Height
+    , block
+    , mkBlock
+    , genesisBlock
+    , isGenesisBlock
+    , validateBlock
+    , headerHash
+    , blockHash
+    , emptyHeader
+    , hashTx
+    , hashTxs
+    ) where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash
@@ -83,6 +98,13 @@ genesisBlock t xs =
 isGenesisBlock :: Block a -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == toHashed zeroHash
+
+headerHash :: BlockHeader -> Hashed BlockHeader
+headerHash header =
+    hash header
+
+blockHash :: Block tx -> Hashed BlockHeader
+blockHash blk = headerHash (blockHeader blk)
 
 hashTxs :: (Foldable t, Binary tx) => t tx -> ByteString
 hashTxs txs

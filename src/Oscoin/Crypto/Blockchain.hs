@@ -1,4 +1,14 @@
-module Oscoin.Crypto.Blockchain where
+module Oscoin.Crypto.Blockchain
+    ( Blockchain(..)
+    , (|>)
+    , tip
+    , height
+    , validateBlockchain
+    , showBlockDigest
+    , showChainDigest
+
+    , module Oscoin.Crypto.Blockchain.Block
+    ) where
 
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
@@ -54,13 +64,6 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     t  = blockTimestamp (blockHeader blk)
     t' = blockTimestamp (blockHeader blk')
     hours = 3600
-
-blockHash :: Block tx -> Hashed BlockHeader
-blockHash blk = headerHash (blockHeader blk)
-
-headerHash :: BlockHeader -> Hashed BlockHeader
-headerHash header =
-    hash header
 
 showChainDigest :: Blockchain tx -> String
 showChainDigest =

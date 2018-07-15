@@ -20,7 +20,6 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Class
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
