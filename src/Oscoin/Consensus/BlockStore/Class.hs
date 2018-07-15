@@ -39,5 +39,6 @@ instance {-# OVERLAPPABLE #-}
     maximumChainBy = lift . maximumChainBy
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
+    {-# INLINE lookupTx       #-}
     {-# INLINE orphans        #-}
     {-# INLINE maximumChainBy #-}
