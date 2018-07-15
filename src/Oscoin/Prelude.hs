@@ -95,7 +95,7 @@ import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
 import           Data.String (IsString)
 import           Data.Time.Clock (NominalDiffTime)
 import           Data.Word
-import           Control.Applicative (liftA2)
+import           Control.Applicative (liftA2, (<|>))
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Class (MonadTrans, lift)
 import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)

@@ -31,7 +31,7 @@ import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.Maybe (maybeToList)
+import           Data.Maybe (maybeToList, catMaybes)
 import           Data.Traversable (for)
 import           System.Random (StdGen, randomR)
 
@@ -63,15 +63,21 @@ instance ( MonadMempool    tx m
          ) => MonadProtocol tx (NakamotoT tx m)
   where
     stepM _ = \case
-        P2P.BlockMsg blk -> do
-            for_ (validateBlock blk) $ \blk' -> do
-                BlockStore.storeBlock blk'
-                delTxs (toList blk')
-            pure mempty
+        P2P.BlockMsg blk ->
+            isNovelBlock (blockHash blk) >>= \case
+                True | Right blk' <- validateBlock blk -> do
+                    BlockStore.storeBlock blk'
+                    delTxs (toList blk')
+                    pure [P2P.BlockMsg blk']
+                _ ->
+                    pure mempty
 
         -- TODO: Validate tx.
         P2P.TxMsg txs ->
-            addTxs txs $> mempty
+            map catMaybes $ for txs $ \tx -> do
+                n <- isNovelTx (hash tx)
+                if n then addTxs [tx] $> Just (P2P.TxMsg [tx])
+                     else pure Nothing
 
         P2P.ReqBlockMsg blk ->
             map P2P.BlockMsg . maybeToList <$> BlockStore.lookupBlock blk
@@ -82,6 +88,16 @@ instance ( MonadMempool    tx m
 
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
+
+isNovelBlock :: (MonadBlockStore tx m) => Hashed BlockHeader -> m Bool
+isNovelBlock h =
+    isNothing <$> BlockStore.lookupBlock h
+
+isNovelTx :: (MonadBlockStore tx m, MonadMempool tx m) => Hashed tx -> m Bool
+isNovelTx h = do
+    inBlockStore <- BlockStore.lookupTx h
+    inMempool    <- lookupTx h
+    pure . isNothing $ inBlockStore <|> inMempool
 
 runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
 runNakamotoT rng (NakamotoT ma) = runStateT ma rng
