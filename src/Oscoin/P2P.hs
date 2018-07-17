@@ -57,9 +57,9 @@ data Handle = Handle
     }
 
 data Msg tx =
-      BlockMsg    (Block tx)
+      BlockMsg    (Block tx ())
     | TxMsg       [tx]
-    | ReqBlockMsg (Hashed BlockHeader)
+    | ReqBlockMsg (Hashed (BlockHeader ()))
     deriving (Eq, Generic)
 
 instance Show tx => Show (Msg tx) where

@@ -9,7 +9,6 @@ import           Oscoin.Consensus.Class
 
 import           Control.Monad.State (State)
 import qualified Control.Monad.State as State
-import           Data.List (sort)
 
 -- DummyView ------------------------------------------------------------------
 
@@ -35,14 +34,6 @@ instance MonadQuery (DummyView f tx) where
 instance MonadModify (DummyView f tx) where
     setM = notImplemented
     delM = notImplemented
-
-instance Ord tx => MonadFold (DummyView [] tx) where
-    type Op        (DummyView [] tx) = tx
-    type OpContext (DummyView [] tx) = ()
-
-    foldM _ txs =
-        for_ txs $ \tx ->
-            State.modify (\xs -> sort $ tx : xs)
 
 -------------------------------------------------------------------------------
 

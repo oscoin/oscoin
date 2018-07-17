@@ -2,6 +2,7 @@ module Oscoin.Node
     ( Config (..)
     , Handle
     , NodeT
+    , Root
 
     , withNode
     , open
@@ -23,6 +24,7 @@ import           Oscoin.Account (AccId, Account, pattern AccountsPrefix)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
+import           Oscoin.Crypto.Blockchain.Block (Root)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Environment
 import           Oscoin.Node.Mempool (Mempool)
@@ -45,11 +47,11 @@ data Config = Config
     }
 
 -- | Node handle.
-data Handle tx i = Handle
+data Handle tx s i = Handle
     { hConfig     :: Config
     , hNodeId     :: i
     , hStateTree  :: STree.Handle
-    , hBlockStore :: BlockStore.Handle tx
+    , hBlockStore :: BlockStore.Handle tx s
     , hMempool    :: Mempool.Handle tx
     }
 
@@ -58,8 +60,8 @@ withNode
     -> i
     -> Mempool.Handle tx
     -> STree.Handle
-    -> BlockStore.Handle tx
-    -> (Handle tx i -> IO c)
+    -> BlockStore.Handle tx s
+    -> (Handle tx s i -> IO c)
     -> IO c
 withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
@@ -68,13 +70,13 @@ open :: Config
      -> i
      -> Mempool.Handle tx
      -> STree.Handle
-     -> BlockStore.Handle tx
-     -> IO (Handle tx i)
+     -> BlockStore.Handle tx s
+     -> IO (Handle tx s i)
 open hConfig hNodeId hMempool hStateTree hBlockStore =
     pure Handle{..}
 
 -- | Close the connection to state storage.
-close :: Handle tx i -> IO ()
+close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
 run :: ( MonadNetwork  tx m
@@ -100,15 +102,15 @@ step _ = do
 
 -------------------------------------------------------------------------------
 
-newtype NodeT tx i m a = NodeT (ReaderT (Handle tx i) m a)
+newtype NodeT tx i m a = NodeT (ReaderT (Handle tx Root i) m a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadReader (Handle tx i)
+             , MonadReader (Handle tx Root i)
              , MonadTrans
              )
 
-runNodeT :: Handle tx i -> NodeT tx i m a -> m a
+runNodeT :: Handle tx Root i -> NodeT tx i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
 
 instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) where
@@ -125,7 +127,7 @@ instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) wh
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadSTM m, Ord tx) => MonadBlockStore tx (NodeT tx i m) where
+instance (Monad m, MonadSTM m, Ord tx) => MonadBlockStore tx Root (NodeT tx i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         BlockStore.put bs blk

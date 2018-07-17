@@ -2,7 +2,6 @@
 
 module Oscoin.Consensus.Class
     ( Score
-    , MonadFold (..)
     , MonadQuery (..)
     , MonadModify (..)
     , MonadProtocol (..)
@@ -17,15 +16,6 @@ import           Oscoin.Clock
 import qualified Oscoin.P2P as P2P
 
 type Score = ByteString
-
-class Monad m => MonadFold m where
-    type Op        m :: *
-    type OpContext m :: *
-
-    -- | State transition function.
-    --
-    -- Apply a sequence of operations to the \"world state\"
-    foldM :: Foldable t => Maybe (OpContext m) -> t (Op m) -> m ()
 
 class Monad m => MonadQuery m where
     type Key m

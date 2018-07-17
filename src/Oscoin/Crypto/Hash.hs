@@ -4,6 +4,8 @@ module Oscoin.Crypto.Hash
     , Hashable(..)
     , toHashed
     , fromHashed
+    , digestFromByteString
+    , hashBinary
     , HashAlgorithm
     , hashAlgorithm
     , maxHash
@@ -67,6 +69,13 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
 toHashed :: Crypto.Digest HashAlgorithm -> Hashed a
 toHashed = Hashed
 
+-- | Convery a 'ByteString' to a 'Digest'. Throws an error if the input is
+-- not a valid digest.
+digestFromByteString :: HasCallStack => ByteString -> Crypto.Digest HashAlgorithm
+digestFromByteString bs =
+    fromMaybe (error "Oscoin.Crypto.Hash: Invalid input")
+              (Crypto.digestFromByteString bs)
+
 -- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
 
@@ -117,9 +126,11 @@ shortHash =
 
 -------------------------------------------------------------------------------
 
-class Binary a => Hashable a where
+class Hashable a where
     hash :: a -> Hashed a
-    hash = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
+
+hashBinary :: Binary a => a -> Hashed a
+hashBinary = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
 
 instance Hashable () where
     hash () = Hashed zeroHash
@@ -133,8 +144,9 @@ instance Hashable ByteString where
 instance Hashable Word8 where
     hash = Hashed . Crypto.hash . BS.singleton
 
-instance (Binary a, ByteArrayAccess a) => Hashable (Maybe a) where
+instance (ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)
     hash Nothing  = Hashed zeroHash
 
-instance Hashable ECDSA.PublicKey
+instance Hashable ECDSA.PublicKey where
+    hash = hashBinary
