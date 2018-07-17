@@ -78,5 +78,5 @@ constructChains n =
             Nothing ->
                 go blks bs
 
-linkBlock :: Monad m => Block tx s -> Block tx (s -> m s) -> m (Block tx s)
-linkBlock (blockState . blockHeader -> s) = mapM ($ s)
+linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
+linkBlock (blockState . blockHeader -> s) = traverse ($ s)
