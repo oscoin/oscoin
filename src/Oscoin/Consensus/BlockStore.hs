@@ -79,4 +79,4 @@ constructChains n =
                 go blks bs
 
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m s) -> m (Block tx s)
-linkBlock (blockState . blockHeader -> s) = sequence . map ($ s)
+linkBlock (blockState . blockHeader -> s) = mapM ($ s)
