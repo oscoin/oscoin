@@ -14,7 +14,7 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
 import qualified Oscoin.Crypto.Blockchain.Block as Block
-import           Oscoin.Crypto.Hash (toHashed, Hashable(..))
+import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
@@ -23,16 +23,11 @@ import           Control.Monad.State.Strict
 import           Data.Binary (Binary)
 import qualified Data.Hashable as Hashable
 import           Lens.Micro
-import qualified Crypto.Hash as C
-import qualified Data.ByteString as BS
 
 import           Test.QuickCheck
 
 newtype DummyTx = DummyTx Word8
-    deriving (Eq, Ord, Hashable.Hashable, Binary)
-
-instance Hashable DummyTx where
-    hash (DummyTx w8) = toHashed $ C.hash $ BS.singleton w8
+    deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary)
 
 instance Show DummyTx where
     show (DummyTx x) = show x
