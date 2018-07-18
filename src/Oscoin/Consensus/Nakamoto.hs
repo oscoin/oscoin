@@ -41,7 +41,7 @@ import           System.Random (StdGen, randomR)
 epochLength :: Tick
 epochLength = 1
 
-type NakamotoEval s tx = Evaluator s tx (Maybe EvalError)
+type NakamotoEval s tx = Evaluator s tx ()
 
 newtype NakamotoT tx m a = NakamotoT (RWST (NakamotoEval () tx) () StdGen m a)
     deriving ( Functor

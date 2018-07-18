@@ -13,15 +13,15 @@ newtype LanguageM s a = LanguageM
     { fromLanguageM :: ExceptT EvalError (State s) a }
     deriving (Functor, Applicative, Monad, MonadState s, MonadError EvalError)
 
-type Evaluator s a b = a -> s -> (b, Maybe s)
+type Evaluator s a b = a -> s -> Maybe (b, s)
 
 -- | An evaluator that accepts any expression and has no state.
-acceptAnythingEval :: Evaluator () a (Maybe EvalError)
-acceptAnythingEval _ = const (Nothing, Just ())
+acceptAnythingEval :: Evaluator s a ()
+acceptAnythingEval _ s = Just ((), s)
 
 -- | An evaluator that rejects any expression and has no state.
-rejectEverythingEval :: Evaluator () a (Maybe EvalError)
-rejectEverythingEval _ = const (Just $ EvalError "I reject it all", Nothing)
+rejectEverythingEval :: Evaluator s a b
+rejectEverythingEval _ = const Nothing
 
 -- TODO(alexis): Reimplement in terms of applyValidExprs.
 evals :: Foldable t => t a -> s -> Evaluator s a b -> Maybe s
@@ -31,8 +31,8 @@ evals exprs st eval =
     go [] s = Just s
     go (expr:es) s =
         case eval expr s of
-            (_, Just s') -> go es s'
-            (_, Nothing) -> Nothing
+            Just (_, s') -> go es s'
+            Nothing      -> Nothing
 
 -- | Given a bunch of expressions, runs those that don't result in an error in
 -- order.
@@ -40,7 +40,7 @@ applyValidExprs
     :: Foldable t
     => t a                             -- ^ The expressions to evaluate.
     -> s                               -- ^ The initial state.
-    -> Evaluator s a (Maybe EvalError) -- ^ The evaluation funcion.
+    -> Evaluator s a b                 -- ^ The evaluation funcion.
     -> ([Either EvalError a], s)       -- ^ A list of results and maybe a new state @s@.
 applyValidExprs exprs st eval =
     -- TODO: Do we want to return the 'b's?
@@ -48,10 +48,8 @@ applyValidExprs exprs st eval =
   where
     go acc (expr:es) s =
         case eval expr s of
-            (_, Just s')        -> -- Successful evaluation.
+            Just (_, s') -> -- Successful evaluation.
                 go (Right expr : acc) es s'
-            (Just err, Nothing) -> -- Failed evaluation.
-                go (Left err : acc) es s
-            (Nothing, Nothing)  ->
+            Nothing      -> -- Failed evaluation.
                 go (Left (EvalError "Evaluation failed") : acc) es s
     go acc [] s = (reverse acc, s)
