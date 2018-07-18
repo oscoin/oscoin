@@ -24,7 +24,6 @@ import           Oscoin.Account (AccId, Account, pattern AccountsPrefix)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
-import           Oscoin.Crypto.Blockchain.Block (Root)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Environment
 import           Oscoin.Node.Mempool (Mempool)
@@ -54,6 +53,9 @@ data Handle tx s i = Handle
     , hBlockStore :: BlockStore.Handle tx s
     , hMempool    :: Mempool.Handle tx
     }
+
+-- TODO(alexis): Document.
+type Root = ()
 
 withNode
     :: Config

@@ -59,9 +59,6 @@ headerHash =
 -- TODO(alexis): Document.
 type Orphan s = s -> Maybe s
 
--- TODO(alexis): Move this somewhere.
-type Root = ()
-
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx s = Block
     { blockHeader :: BlockHeader s
@@ -101,11 +98,11 @@ validateBlock :: Block tx s -> Either Error (Block tx s)
 validateBlock = Right
 
 block
-    :: (Foldable t, Binary tx)
+    :: (Foldable t, Binary tx, Default s)
     => Hashed (BlockHeader ())
     -> Timestamp
     -> t tx
-    -> Block tx Root
+    -> Block tx s
 block prev t txs =
     Block
         emptyHeader
@@ -113,7 +110,7 @@ block prev t txs =
             , blockTimestamp  = t
             , blockDataHash   = hashTxs txs
             , blockStateHash  = zeroHash
-            , blockState      = ()
+            , blockState      = def
             , blockDifficulty = 0
             }
         (Seq.fromList (toList txs))
@@ -126,7 +123,7 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisBlock :: (Foldable t, Binary tx) => Timestamp -> t tx -> Block tx Root
+genesisBlock :: (Foldable t, Binary tx, Default s) => Timestamp -> t tx -> Block tx s
 genesisBlock t xs =
     block (toHashed zeroHash) t xs
 

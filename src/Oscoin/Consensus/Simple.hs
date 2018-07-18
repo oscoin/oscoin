@@ -24,7 +24,7 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (block, blockData, blockHeader, blockTimestamp, validateBlock)
+import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
@@ -90,7 +90,7 @@ instance ( MonadMempool    tx    m
                 chain <- maximumChainBy (comparing chainScore)
                 let prevHash  = hash . blockHeader $ tip chain
                 let timestamp = fromIntegral (fromEnum tick)
-                let blk       = block prevHash timestamp txs
+                let blk       = block prevHash timestamp txs :: Block tx ()
 
                 storeBlock (second (const (\s -> evals (blockData blk) s acceptAnythingEval)) blk)
                 delTxs (blockData blk)

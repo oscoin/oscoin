@@ -56,9 +56,9 @@ arbitraryGenesis = do
     txs <- resize 20 arbitrary :: Gen [tx]
     arbitraryGenesisWith txs
 
-arbitraryGenesisWith :: (Binary tx, Default s) => [tx] -> Gen (Block tx s)
+arbitraryGenesisWith :: forall tx s. (Binary tx, Default s) => [tx] -> Gen (Block tx s)
 arbitraryGenesisWith txs =
-    map (const def) <$> (genesisBlock <$> arbitrary <*> pure txs)
+    map (const def) <$> (genesisBlock @[] @tx @s <$> arbitrary <*> pure txs)
 
 arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Default s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
