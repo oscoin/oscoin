@@ -1,5 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.Consensus.Simple
     ( Env
@@ -25,7 +24,7 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock)
+import           Oscoin.Crypto.Blockchain.Block (block, blockData, blockHeader, blockTimestamp, validateBlock)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
@@ -119,12 +118,12 @@ runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
 evalSimpleT :: Monad m => Env i -> LastTime -> SimpleT tx i m a -> m a
 evalSimpleT env lt (SimpleT ma) = evalStateT (runReaderT ma env) lt
 
-chainScore :: forall s tx . Blockchain tx s -> Int
+chainScore :: Blockchain tx s -> Int
 chainScore bc =
     (bigMagicNumber * h) - steps
   where
     h              = height bc
-    lastBlock      = tip bc :: Block tx s
+    lastBlock      = tip bc
     timestampNs    = blockTimestamp $ blockHeader lastBlock
     timestamp      = timestampNs `div` 1000000000000
     e              = round epochLength

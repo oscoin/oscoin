@@ -69,7 +69,7 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
 toHashed :: Crypto.Digest HashAlgorithm -> Hashed a
 toHashed = Hashed
 
--- | Convery a 'ByteString' to a 'Digest'. Throws an error if the input is
+-- | Convert a 'ByteString' to a 'Digest'. Throws an error if the input is
 -- not a valid digest.
 digestFromByteString :: HasCallStack => ByteString -> Crypto.Digest HashAlgorithm
 digestFromByteString bs =
