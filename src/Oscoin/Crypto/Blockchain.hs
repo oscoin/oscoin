@@ -2,7 +2,7 @@ module Oscoin.Crypto.Blockchain where
 
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (toList)
 
 import qualified Prelude
 
@@ -14,6 +14,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import           Data.Time.Clock (NominalDiffTime)
 import           Text.Printf
+import           GHC.Exts (IsList(toList))
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
     deriving (Functor, Traversable, Foldable)
@@ -28,8 +29,11 @@ instance Bifunctor Blockchain where
     first f = Blockchain . fmap (first f) . fromBlockchain
     second f = Blockchain . fmap (second f) . fromBlockchain
 
-fromList :: [Block tx s] -> Blockchain tx s
-fromList = Blockchain . NonEmpty.fromList
+instance IsList (Blockchain tx s) where
+    type Item (Blockchain tx s) = Block tx s
+
+    fromList = Blockchain . NonEmpty.fromList
+    toList   = NonEmpty.toList . fromBlockchain
 
 infixr 5 |>
 
@@ -78,9 +82,9 @@ showBlockDigest b@Block{blockHeader} =
     time :: NominalDiffTime = toEnum (fromIntegral $ blockTimestamp blockHeader)
 
 showBlockchain :: Binary tx => Blockchain tx s -> String
-showBlockchain (Blockchain blks) = execWriter $ do
+showBlockchain chain = execWriter $ do
     tell "\n"
-    for_ (zip heights (toList blks)) $ \(h, Block bh@BlockHeader{..} txs) -> do
+    for_ (zip heights (toList chain)) $ \(h, Block bh@BlockHeader{..} txs) -> do
         tell $ printf "┍━━━ %d ━━━ %s ━━━┑\n" (h :: Int) (C8.unpack $ toHex $ headerHash bh)
         tell $ printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
         tell $ printf "│ timestamp:  %-64d │\n" blockTimestamp
@@ -92,4 +96,4 @@ showBlockchain (Blockchain blks) = execWriter $ do
 
         tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
   where
-    heights = reverse [0..length blks - 1]
+    heights = reverse [0..height chain - 1]

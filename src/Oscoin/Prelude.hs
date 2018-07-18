@@ -35,6 +35,7 @@ module Oscoin.Prelude
     , module Data.Set
     , module GHC.Stack
     , module GHC.Generics
+    , module GHC.Exts
     , module Debug.Trace
     , MonadIO
     , LByteString
@@ -110,6 +111,7 @@ import           Control.Concurrent.STM (STM, atomically)
 import           Control.Monad.Fail (MonadFail, fail)
 import           GHC.Stack (HasCallStack)
 import           GHC.Generics (Generic)
+import           GHC.Exts (IsList(fromList, Item))
 import           Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
 
 type LByteString = LBS.ByteString
