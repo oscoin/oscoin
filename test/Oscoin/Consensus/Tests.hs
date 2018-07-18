@@ -41,19 +41,19 @@ tests =
         ]
     , testGroup "Evaluator"
         [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
-            let res = fst $ applyValidExprs xs () acceptAnythingEval
+            let (res, _) = applyValidExprs xs () acceptAnythingEval
              in if | any isLeft res ->
                        counterexample ("Expected no Lefts, got: " ++ show res) False
                    | length (rights res) /= length xs ->
                        counterexample ("Expected " ++ show (length xs) ++ " Rights, got: " ++ show res) False
                    | otherwise ->
-                       let expected = Right <$> xs
+                       let expected = [Right (x, ()) | x <- xs]
                            info = "Expected: " <> show expected <> "\nGot: " <> show res
                         in counterexample info $ res == expected
 
         , testProperty "applyValidExprs does not accept invalid expressions" $ \(xs :: [Int]) ->
-            let res = fst $ applyValidExprs xs () rejectEverythingEval
-             in if | any isRight res -> counterexample ("Expected only Lefts, got: " ++ show res) False
+            let (res, _) = applyValidExprs xs () rejectEverythingEval
+             in if | any isRight res -> counterexample ("Expected only Lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
         ]
     ]

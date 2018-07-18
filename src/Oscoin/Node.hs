@@ -54,7 +54,8 @@ data Handle tx s i = Handle
     , hMempool    :: Mempool.Handle tx
     }
 
--- TODO(alexis): Document.
+-- | The type of the state root. This should eventually unify with what is
+-- in 'hStateTree'.
 type Root = ()
 
 withNode

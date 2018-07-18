@@ -121,7 +121,7 @@ mineBlock
 mineBlock tick s evalFn = do
     txs <- map snd <$> getTxs
     let (results, s') = applyValidExprs txs s evalFn
-    case rights results of
+    case map fst (rights results) of
         [] ->
             pure Nothing
         validTxs -> do
