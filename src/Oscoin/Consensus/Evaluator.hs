@@ -23,6 +23,10 @@ acceptAnythingEval _ s = Just ((), s)
 rejectEverythingEval :: Evaluator s a b
 rejectEverythingEval _ = const Nothing
 
+-- | An evaluator that just returns a constant state.
+constEval :: s -> Evaluator s a ()
+constEval s = \_ _ -> Just ((), s)
+
 -- | Evaluates a list of expressions with the given starting state and evaluator.
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
 -- is returned. Otherwise, the final state is returned.

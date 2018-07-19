@@ -125,7 +125,7 @@ mineBlock tick s evalFn = do
             parent <- tip <$> BlockStore.maximumChainBy (comparing height)
             for (findBlock tick parent minDifficulty evalFn validTxs) $ \blk -> do
                 delTxs (blockData blk)
-                BlockStore.storeBlock $ toOrphan (\_ _ -> Just ((), s')) blk
+                BlockStore.storeBlock $ toOrphan (constEval s') blk
                 pure blk
 
 -- | Calculate block difficulty.
