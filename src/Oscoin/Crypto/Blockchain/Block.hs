@@ -2,6 +2,7 @@ module Oscoin.Crypto.Blockchain.Block where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash
+import           Oscoin.Consensus.Evaluator (Evaluator, evals)
 
 import           Data.Bifunctor (Bifunctor(..))
 import           Data.Binary (Binary(..), encode)
@@ -127,9 +128,16 @@ genesisBlock :: (Foldable t, Binary tx, Default s) => Timestamp -> t tx -> Block
 genesisBlock t xs =
     block (toHashed zeroHash) t xs
 
-isGenesisBlock :: Block s a -> Bool
+isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == toHashed zeroHash
+
+toOrphan :: Evaluator s tx b -> Block tx s' -> Block tx (Orphan s)
+toOrphan eval blk =
+    second (const (\s -> evals (blockData blk) s eval)) blk
+
+linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
+linkBlock (blockState . blockHeader -> s) = traverse ($ s)
 
 hashTxs :: (Foldable t, Binary tx) => t tx -> Digest HashAlgorithm
 hashTxs txs

@@ -24,13 +24,12 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock)
+import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock, toOrphan)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.State
-import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
@@ -71,8 +70,7 @@ instance ( MonadMempool    tx    m
     stepM _ = \case
         P2P.BlockMsg blk -> do
             for_ (validateBlock blk) $ \blk' -> do
-                let txs = blockData blk'
-                storeBlock (second (const (\s -> evals txs s acceptAnythingEval)) blk')
+                storeBlock $ toOrphan acceptAnythingEval blk
                 delTxs (blockData blk')
             pure mempty
 
@@ -92,12 +90,11 @@ instance ( MonadMempool    tx    m
                 let timestamp = fromIntegral (fromEnum tick)
                 let blk       = block prevHash timestamp txs :: Block tx ()
 
-                storeBlock (second (const (\s -> evals (blockData blk) s acceptAnythingEval)) blk)
+                storeBlock $ toOrphan acceptAnythingEval blk
                 delTxs (blockData blk)
                 modify' (\s -> s { ltLastBlk = tick })
 
-                -- TODO(alexis): Move this block function somewhere.
-                pure [P2P.BlockMsg (second (const ()) blk)])
+                pure [P2P.BlockMsg blk])
 
         reqs <-
             shouldReconcileM tick >>= bool (pure mempty) (do

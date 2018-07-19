@@ -23,13 +23,12 @@ import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed, zeroHash)
+import           Oscoin.Crypto.Hash (zeroHash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
-import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
@@ -75,9 +74,7 @@ instance ( MonadMempool    tx    m
         P2P.BlockMsg blk -> do
             for_ (validateBlock blk) $ \blk' -> do
                 evalFn <- ask
-                -- TODO(alexis): Tidy up and share accross protocols.
-                let txs = blockData blk'
-                BlockStore.storeBlock (second (const (\s -> evals txs s evalFn)) blk')
+                BlockStore.storeBlock $ toOrphan evalFn blk'
                 delTxs (blockData blk')
             pure mempty
 
@@ -117,7 +114,7 @@ mineBlock
     => Tick
     -> s
     -> NakamotoEval s tx
-    -> NakamotoT      tx m (Maybe (Block tx ()))
+    -> NakamotoT      tx m (Maybe (Block tx s))
 mineBlock tick s evalFn = do
     txs <- map snd <$> getTxs
     let (results, s') = applyValidExprs txs s evalFn
@@ -125,10 +122,10 @@ mineBlock tick s evalFn = do
         [] ->
             pure Nothing
         validTxs -> do
-            prevHash <- blockHash . tip <$> BlockStore.maximumChainBy (comparing height)
-            for (findBlock tick prevHash minDifficulty validTxs) $ \blk -> do
+            parent <- tip <$> BlockStore.maximumChainBy (comparing height)
+            for (findBlock tick parent minDifficulty evalFn validTxs) $ \blk -> do
                 delTxs (blockData blk)
-                BlockStore.storeBlock (second (const . const $ Just s') blk)
+                BlockStore.storeBlock $ toOrphan (\_ _ -> Just ((), s')) blk
                 pure blk
 
 -- | Calculate block difficulty.
@@ -183,17 +180,18 @@ findPoW bh@BlockHeader { blockNonce }
 findBlock
     :: (Foldable t, Binary tx)
     => Tick
-    -> Hashed (BlockHeader ())
+    -> Block tx s
     -> Difficulty
+    -> Evaluator s tx b
     -> t tx
-    -> Maybe (Block tx ())
-findBlock t prevHash target txs = do
+    -> Maybe (Block tx s)
+findBlock t parent target eval txs = do
     header <- headerWithPoW
-    pure $ mkBlock header txs
+    linkBlock parent . toOrphan eval $ mkBlock header txs
   where
     headerWithPoW    = findPoW headerWithoutPoW
     headerWithoutPoW = BlockHeader
-        { blockPrevHash     = prevHash
+        { blockPrevHash     = blockHash parent
         , blockDataHash     = hashTxs txs
         , blockState        = ()
         , blockStateHash    = zeroHash
