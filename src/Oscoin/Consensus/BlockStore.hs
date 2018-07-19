@@ -1,8 +1,5 @@
 module Oscoin.Consensus.BlockStore
     ( BlockStore
-    , bsChains
-    , bsDangling
-
     , genesisBlockStore
 
     , maximumChainBy
@@ -22,8 +19,8 @@ import qualified Data.Set as Set
 
 -- TODO(alexis): Document fields and 'Orphan'.
 data BlockStore tx s = BlockStore
-    { bsChains   :: Map (Hashed (BlockHeader ())) (Blockchain tx s)
-    , bsDangling :: Set (Block tx (Orphan s))
+    { bsChains  :: Map (Hashed (BlockHeader ())) (Blockchain tx s)
+    , bsOrphans :: Set (Block tx (Orphan s))
     }
 
 instance Show tx => Show (BlockStore tx s) where
@@ -34,7 +31,7 @@ genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen =
     BlockStore
         { bsChains   = Map.singleton (blockHash gen) (Blockchain (gen :| []))
-        , bsDangling = Set.empty
+        , bsOrphans = Set.empty
         }
 
 maximumChainBy
@@ -47,31 +44,31 @@ maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
 
 insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
-    constructChains $ bs { bsDangling = Set.insert blk bsDangling }
+    constructChains $ bs { bsOrphans = Set.insert blk bsOrphans }
 
 lookupBlock :: Hashed (BlockHeader ()) -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock hdr = map tip . Map.lookup hdr . bsChains
 
 orphans :: BlockStore tx s -> Set (Hashed (BlockHeader ()))
-orphans BlockStore{bsDangling} =
-    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsDangling
-        danglingHashes = Set.map blockHash bsDangling
+orphans BlockStore{bsOrphans} =
+    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
+        danglingHashes = Set.map blockHash bsOrphans
      in Set.difference parentHashes danglingHashes
 
 constructChains :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
 constructChains n =
-    go (Set.elems (bsDangling n)) n
+    go (Set.elems (bsOrphans n)) n
   where
     go [] node =
         node
-    go (blk:blks) bs@BlockStore{bsChains, bsDangling} =
+    go (blk:blks) bs@BlockStore{bsChains, bsOrphans} =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
-                let store = Set.delete blk bsDangling
+                let store = Set.delete blk bsOrphans
                     -- TODO(alexis): Handle 'Nothing' here.
                     blk'  = fromJust $ linkBlock (tip chain) blk
                  in go (Set.elems store) bs
-                     { bsDangling  = store
+                     { bsOrphans  = store
                      , bsChains    = Map.insert (blockHash blk')
                                                 (blk' |> chain)
                                                 bsChains }
