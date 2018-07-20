@@ -62,7 +62,7 @@ arbitraryGenesisWith txs =
 
 arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Default s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
-    gen <- arbitraryGenesis
+    gen <- arbitraryGenesisWith []
     h   <- choose (8, 9) :: Gen Int
     go (gen :| []) h
   where

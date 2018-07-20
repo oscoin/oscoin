@@ -194,12 +194,15 @@ propOscoinBlockStore
     -> Property
 propOscoinBlockStore chainGen =
     forAll chainGen $ \chain -> do
-        let blks = map (toOrphan foldEval) $ NonEmpty.toList $ fromBlockchain chain
-        let bs   = BlockStore.fromOrphans blks (genesis chain)
+        let blks = NonEmpty.toList $ fromBlockchain chain
+        let os   = map (toOrphan foldEval) blks
+        let bs   = BlockStore.fromOrphans os (genesis chain)
         let best = BlockStore.maximumChainBy (comparing height) bs
         let z    = blockState $ blockHeader $ tip best
         let txs  = concatMap (toList . blockData) blks
-        counterexample ("Expected: " ++ show txs ++ " but got " ++ show z) (concat txs == z)
+        counterexample ("From input: " ++ show txs ++ ", Expected: "
+                                       ++ show (concat txs) ++ " but got "
+                                       ++ show z) (concat txs == z)
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x
