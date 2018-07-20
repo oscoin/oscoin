@@ -24,7 +24,7 @@ rejectEverythingEval :: Evaluator s a b
 rejectEverythingEval _ = const Nothing
 
 foldEval :: Monoid w => Evaluator w w ()
-foldEval x xs = Just ((), x <> xs)
+foldEval x xs = Just ((), xs <> x)
 
 constEval :: s -> Evaluator s a ()
 constEval s = \_ _ -> Just ((), s)
@@ -33,14 +33,9 @@ constEval s = \_ _ -> Just ((), s)
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
 -- is returned. Otherwise, the final state is returned.
 evals :: Foldable t => t a -> s -> Evaluator s a b -> Maybe s
-evals exprs st eval =
-    go (toList exprs) st
+evals exprs st eval = if any isLeft results then Nothing else Just st'
   where
-    go [] s = Just s
-    go (expr:es) s =
-        case eval expr s of
-            Just (_, s') -> go es s'
-            Nothing      -> Nothing
+    (results, st') = applyValidExprs exprs st eval
 
 -- | Evaluate a list of expressions with the given starting state and evaluator.
 -- Returns a list of evaluation results, where 'Left' means the expression

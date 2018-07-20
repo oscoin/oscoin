@@ -199,10 +199,10 @@ propOscoinBlockStore chainGen =
         let bs   = BlockStore.fromOrphans os (genesis chain)
         let best = BlockStore.maximumChainBy (comparing height) bs
         let z    = blockState $ blockHeader $ tip best
-        let txs  = concatMap (toList . blockData) blks
+        let txs  = concatMap (toList . blockData) $ reverse blks
         counterexample ("From input: " ++ show txs ++ ", Expected: "
                                        ++ show (concat txs) ++ " but got "
-                                       ++ show z) (concat txs == z)
+                                       ++ show z ++ show best) (concat txs == z)
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

@@ -6,15 +6,20 @@ import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node (DummyTx)
 
+import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
 import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain (blockHash, tip)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, BlockHash, blockPrevHash, blockTimestamp, emptyHeader, genesisBlock, mkBlock)
 
-import           Data.List (sort, isPrefixOf)
+import           Data.Function (on)
+import           Data.List (isPrefixOf, sort)
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
+import           Test.Tasty.HUnit (testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -54,6 +59,20 @@ tests =
             let (res, _) = applyValidExprs xs () rejectEverythingEval
              in if | any isRight res -> counterexample ("Expected only Lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
+        ]
+
+    , testGroup "BlockStore"
+        [ testCase "'insert' puts blocks with parents on a chain" $ do
+            let genBlk = genesisBlock 0 [] :: Block () ()
+                nextBlk = mkBlock emptyHeader
+                    { blockTimestamp = 1
+                    , blockPrevHash = blockHash genBlk
+                    } []
+                blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk
+                chain = maximumChainBy (compare `on` length) blkStore
+            tip chain @?= nextBlk
+            orphans blkStore @?= mempty
+
         ]
     ]
   where
