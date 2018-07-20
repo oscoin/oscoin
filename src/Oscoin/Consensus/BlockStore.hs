@@ -21,12 +21,24 @@ import qualified Data.Set as Set
 data BlockStore tx s = BlockStore
     { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
     , bsOrphans :: Set (Block tx (Orphan s))       -- ^ Orphan blocks.
-    } deriving (Show)
+    }
+
+instance Show (BlockStore tx s) where
+    -- We can't derive Show because 'Orphan' is a function.
+    show = const "BlockStore{}"
+
+instance Ord tx => Semigroup (BlockStore tx s) where
+    (<>) a b = BlockStore
+        { bsOrphans = bsOrphans a <> bsOrphans b
+        , bsChains  = bsChains  a <> bsChains  b }
+
+instance Ord tx => Monoid (BlockStore tx s) where
+    mempty = BlockStore mempty mempty
 
 genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen =
     BlockStore
-        { bsChains   = Map.singleton (blockHash gen) (Blockchain (gen :| []))
+        { bsChains  = Map.singleton (blockHash gen) (Blockchain (gen :| []))
         , bsOrphans = Set.empty
         }
 
