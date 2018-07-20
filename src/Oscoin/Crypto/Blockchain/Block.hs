@@ -57,7 +57,11 @@ headerHash :: BlockHeader s -> Hashed (BlockHeader ())
 headerHash =
     hash . map (const ())
 
--- TODO(alexis): Document.
+-- | Represents an orphan state @s@. Blocks of type @Block tx (Orphan s)@ are
+-- considered orphan blocks. The type @s -> Maybe s@ represents a function from
+-- a parent state @s@ to a new state @s@ after a block is evaluated. Thus, we
+-- can say that orphan blocks have an unapplied state function which produces
+-- a state when they are linked to a parent.
 type Orphan s = s -> Maybe s
 
 -- | The hash of a block.
