@@ -49,7 +49,7 @@ data TestNodeState = TestNodeState
     , tnsMempool    :: Mempool.Mempool DummyTx
     , tnsBlockstore :: BlockStore.BlockStore DummyTx ()
     , tnsNodeId     :: DummyNodeId
-    } deriving Show
+    } deriving (Show)
 
 tnsMempoolL :: Lens' TestNodeState (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })

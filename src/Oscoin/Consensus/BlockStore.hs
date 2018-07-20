@@ -16,15 +16,15 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
--- TODO(alexis): Document fields and 'Orphan'.
+-- | Store of 'Block's and 'Blockchain's.
 data BlockStore tx s = BlockStore
-    { bsChains  :: Map BlockHash (Blockchain tx s)
-    , bsOrphans :: Set (Block tx (Orphan s))
-    }
+    { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
+    , bsOrphans :: Set (Block tx (Orphan s))       -- ^ Orphan blocks.
+    } deriving (Show)
 
-instance Show tx => Show (BlockStore tx s) where
-    -- TODO(alexis): Fix this.
-    show BlockStore{..} = "BlockStore{..}"
+instance Show (Orphan s) where
+    -- We can't show this, since it's of type @(->)@.
+    show _ = "()"
 
 genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen =
