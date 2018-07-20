@@ -1,6 +1,7 @@
 module Oscoin.Consensus.BlockStore
     ( BlockStore
     , genesisBlockStore
+    , fromOrphans
 
     , maximumChainBy
     , insert
@@ -40,6 +41,10 @@ maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
 insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
     linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
+
+fromOrphans :: (Ord tx, Foldable t) => t (Block tx (Orphan s)) -> Block tx s -> BlockStore tx s
+fromOrphans (toList -> blks) gen =
+    linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
 
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock hdr = map tip . Map.lookup hdr . bsChains
