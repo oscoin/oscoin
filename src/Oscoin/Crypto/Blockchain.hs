@@ -64,7 +64,7 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     t' = blockTimestamp (blockHeader blk')
     hours = 3600
 
-blockHash :: Block tx s -> Hashed (BlockHeader ())
+blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
 
 showChainDigest :: Blockchain tx s -> String

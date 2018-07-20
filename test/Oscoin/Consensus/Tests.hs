@@ -9,8 +9,7 @@ import           Oscoin.Consensus.Test.Node (DummyTx)
 import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Hash (Hashed)
-import           Oscoin.Crypto.Blockchain.Block (BlockHeader)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 
 import           Data.List (sort, isPrefixOf)
 
@@ -148,12 +147,12 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: TestableNode a => [Hashed (BlockHeader ())] -> a -> Bool
+nodeHasPrefix :: TestableNode a => [BlockHash] -> a -> Bool
 nodeHasPrefix p node =
     p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: TestableNode a => TestNetwork a -> [[Hashed (BlockHeader ())]]
+nodePrefixes :: TestableNode a => TestNetwork a -> [[BlockHash]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

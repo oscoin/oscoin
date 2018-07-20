@@ -12,14 +12,13 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>))
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 -- TODO(alexis): Document fields and 'Orphan'.
 data BlockStore tx s = BlockStore
-    { bsChains  :: Map (Hashed (BlockHeader ())) (Blockchain tx s)
+    { bsChains  :: Map BlockHash (Blockchain tx s)
     , bsOrphans :: Set (Block tx (Orphan s))
     }
 
@@ -46,10 +45,10 @@ insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
     constructChains $ bs { bsOrphans = Set.insert blk bsOrphans }
 
-lookupBlock :: Hashed (BlockHeader ()) -> BlockStore tx s -> Maybe (Block tx s)
+lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock hdr = map tip . Map.lookup hdr . bsChains
 
-orphans :: BlockStore tx s -> Set (Hashed (BlockHeader ()))
+orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
     let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
         danglingHashes = Set.map blockHash bsOrphans

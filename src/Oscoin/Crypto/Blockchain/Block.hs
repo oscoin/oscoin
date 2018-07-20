@@ -60,6 +60,9 @@ headerHash =
 -- TODO(alexis): Document.
 type Orphan s = s -> Maybe s
 
+-- | The hash of a block.
+type BlockHash = Hashed (BlockHeader ())
+
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx s = Block
     { blockHeader :: BlockHeader s
@@ -70,10 +73,10 @@ deriving instance {-# OVERLAPPING #-} Eq tx => Eq (Block tx ())
 deriving instance {-# OVERLAPPING #-} Ord tx => Ord (Block tx ())
 
 instance {-# OVERLAPPABLE #-} (Eq tx)  => Eq (Block tx s) where
-    (==) a b = second (const ()) a == second (const ()) b
+    (==) a b = map (const ()) a == map (const ()) b
 
 instance {-# OVERLAPPABLE #-} (Ord tx)  => Ord (Block tx s) where
-    (<=) a b = second (const ()) a <= second (const ()) b
+    (<=) a b = map (const ()) a <= map (const ()) b
 
 instance (Binary tx) => Binary (Block tx ())
 
@@ -100,7 +103,7 @@ validateBlock = Right
 
 block
     :: (Foldable t, Binary tx, Default s)
-    => Hashed (BlockHeader ())
+    => BlockHash
     -> Timestamp
     -> t tx
     -> Block tx s

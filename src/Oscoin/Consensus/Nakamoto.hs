@@ -23,7 +23,7 @@ import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed, zeroHash)
+import           Oscoin.Crypto.Hash (zeroHash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
@@ -181,7 +181,7 @@ findPoW bh@BlockHeader { blockNonce }
 findBlock
     :: (Foldable t, Binary tx)
     => Tick
-    -> Hashed (BlockHeader ())
+    -> BlockHash
     -> s
     -> Difficulty
     -> t tx
