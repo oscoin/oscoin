@@ -64,10 +64,6 @@ headerHash =
 -- a state when they are linked to a parent.
 type Orphan s = s -> Maybe s
 
-instance Show (Orphan s) where
-    -- We can't show this, since it's of type @(->)@.
-    show _ = "()"
-
 -- | The hash of a block.
 type BlockHash = Hashed (BlockHeader ())
 
