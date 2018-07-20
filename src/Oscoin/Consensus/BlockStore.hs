@@ -51,21 +51,23 @@ orphans BlockStore{bsOrphans} =
      in Set.difference parentHashes danglingHashes
 
 constructChains :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
-constructChains n =
-    go (Set.elems (bsOrphans n)) n
+constructChains bs' =
+    go (Set.elems (bsOrphans bs')) bs'
   where
-    go [] node =
-        node
+    go [] bs =
+        bs
     go (blk:blks) bs@BlockStore{bsChains, bsOrphans} =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
                 let store = Set.delete blk bsOrphans
-                    -- TODO(alexis): Handle 'Nothing' here.
-                    blk'  = fromJust $ linkBlock (tip chain) blk
-                 in go (Set.elems store) bs
-                     { bsOrphans  = store
-                     , bsChains    = Map.insert (blockHash blk')
-                                                (blk' |> chain)
-                                                bsChains }
+                    mblk' = linkBlock (tip chain) blk
+                 in go (Set.elems store) $ case mblk' of
+                     Just blk' -> bs
+                         { bsOrphans  = store
+                         , bsChains    = Map.insert (blockHash blk')
+                                                    (blk' |> chain)
+                                                    bsChains }
+                     Nothing -> bs
+                         { bsOrphans = store }
             Nothing ->
                 go blks bs
