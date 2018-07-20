@@ -39,7 +39,7 @@ maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
 
 insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
-    constructChains $ bs { bsOrphans = Set.insert blk bsOrphans }
+    linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
 
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock hdr = map tip . Map.lookup hdr . bsChains
@@ -50,8 +50,10 @@ orphans BlockStore{bsOrphans} =
         danglingHashes = Set.map blockHash bsOrphans
      in Set.difference parentHashes danglingHashes
 
-constructChains :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
-constructChains bs' =
+-- | Link as many orphans as possible to one of the existing chains. If the
+-- linking of an orphan to its parent fails, the block is discarded.
+linkBlocks :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
+linkBlocks bs' =
     go (Set.elems (bsOrphans bs')) bs'
   where
     go [] bs =
@@ -60,8 +62,7 @@ constructChains bs' =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
                 let store = Set.delete blk bsOrphans
-                    mblk' = linkBlock (tip chain) blk
-                 in go (Set.elems store) $ case mblk' of
+                 in go (Set.elems store) $ case linkBlock (tip chain) blk of
                      Just blk' -> bs
                          { bsOrphans  = store
                          , bsChains    = Map.insert (blockHash blk')
