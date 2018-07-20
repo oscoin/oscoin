@@ -22,10 +22,6 @@ data BlockStore tx s = BlockStore
     , bsOrphans :: Set (Block tx (Orphan s))       -- ^ Orphan blocks.
     } deriving (Show)
 
-instance Show (Orphan s) where
-    -- We can't show this, since it's of type @(->)@.
-    show _ = "()"
-
 genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen =
     BlockStore
