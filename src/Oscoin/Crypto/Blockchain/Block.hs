@@ -139,7 +139,7 @@ isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == toHashed zeroHash
 
-toOrphan :: Evaluator s tx b -> Block tx s' -> Block tx (Orphan s)
+toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
     second (const (\s -> evals (blockData blk) s eval)) blk
 
