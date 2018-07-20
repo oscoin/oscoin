@@ -22,9 +22,9 @@ import           Test.QuickCheck.Instances ()
 
 arbitraryBlockchain :: forall tx. (Arbitrary tx, Binary tx) => Gen (Blockchain tx ())
 arbitraryBlockchain = do
-    genesis <- Blockchain . singleton <$> arbitraryGenesis
-    rest    <- arbitraryValidBlock genesis
-    pure $ rest |> genesis
+    gen  <- Blockchain . singleton <$> arbitraryGenesis
+    rest <- arbitraryValidBlock gen
+    pure $ rest |> gen
   where
     singleton x = x :| []
 
