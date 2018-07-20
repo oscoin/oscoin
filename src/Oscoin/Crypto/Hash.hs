@@ -48,6 +48,13 @@ type Hash = Digest HashAlgorithm
 newtype Hashed' algo a = Hashed { fromHashed :: Digest algo }
     deriving (Eq, Ord, Functor, ByteArrayAccess)
 
+instance Hashable a => Semigroup (Hashed' HashAlgorithm a) where
+    (<>) (Hashed a) (Hashed b) =
+        Hashed $ Crypto.hash ((convert a :: ByteString) <> (convert b :: ByteString))
+
+instance Hashable a => Monoid (Hashed' HashAlgorithm a) where
+    mempty = Hashed zeroHash
+
 instance Show (Hashed' algo a) where
     show = show . fromHashed
 
@@ -148,6 +155,9 @@ instance Hashable ByteString where
 
 instance Hashable Word8 where
     hash = Hashed . Crypto.hash . BS.singleton
+
+instance Hashable a => Hashable [a] where
+    hash xs = toHashed . fromHashed . mconcat $ map hash xs
 
 instance (ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)
