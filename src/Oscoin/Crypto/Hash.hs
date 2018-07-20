@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Crypto.Hash
     ( Hashed
+    , Hash
     , Hashable(..)
     , toHashed
     , fromHashed
@@ -37,6 +38,10 @@ import           Web.HttpApiData (FromHttpApiData(..))
 
 -- | Represents data that has been hashed with 'HashAlgorithm'.
 type Hashed a = Hashed' HashAlgorithm a
+
+-- | A hash using the default hash algorithm. Used instead of 'Hashed' when
+-- the hash pre-image is not known or cannot be typed.
+type Hash = Digest HashAlgorithm
 
 -- | Represents data that has been hashed with @algo@. In general, it's
 -- recommended to use 'Hashed' instead.

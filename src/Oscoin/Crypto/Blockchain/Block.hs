@@ -6,7 +6,7 @@ import           Oscoin.Consensus.Evaluator (Evaluator, evals)
 
 import           Data.Bifunctor (Bifunctor(..))
 import           Data.Binary (Binary(..), encode)
-import           Crypto.Hash (hashlazy, Digest)
+import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
 import           Data.ByteString.Lazy (toStrict)
@@ -22,8 +22,8 @@ type Height = Integer
 -- | Block header.
 data BlockHeader s = BlockHeader
     { blockPrevHash   :: Hashed (BlockHeader ())
-    , blockDataHash   :: Digest HashAlgorithm
-    , blockStateHash  :: Digest HashAlgorithm
+    , blockDataHash   :: Hash
+    , blockStateHash  :: Hash
     , blockState      :: s
     , blockTimestamp  :: Timestamp
     , blockDifficulty :: Difficulty
@@ -142,7 +142,7 @@ toOrphan eval blk =
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
 linkBlock (blockState . blockHeader -> s) = traverse ($ s)
 
-hashTxs :: (Foldable t, Binary tx) => t tx -> Digest HashAlgorithm
+hashTxs :: (Foldable t, Binary tx) => t tx -> Hash
 hashTxs txs
     -- TODO: Get rid of merkle-tree dependency, or create our own that doesn't
     -- depend on protolude.
