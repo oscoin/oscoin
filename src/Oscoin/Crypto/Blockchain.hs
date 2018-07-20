@@ -43,6 +43,9 @@ infixr 5 |>
 tip :: Blockchain tx s -> Block tx s
 tip (Blockchain blks) = NonEmpty.head blks
 
+genesis :: Blockchain tx s -> Block tx s
+genesis = NonEmpty.last . fromBlockchain
+
 height :: Blockchain tx s -> Int
 height = length . fromBlockchain
 
