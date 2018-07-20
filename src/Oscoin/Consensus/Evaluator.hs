@@ -27,7 +27,7 @@ foldEval :: Monoid w => Evaluator w w ()
 foldEval x xs = Just ((), xs <> x)
 
 constEval :: s -> Evaluator s a ()
-constEval s = \_ _ -> Just ((), s)
+constEval s _ _ = Just ((), s)
 
 -- | Evaluates a list of expressions with the given starting state and evaluator.
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
