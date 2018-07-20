@@ -23,12 +23,13 @@ import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (zeroHash)
+import           Oscoin.Crypto.Hash (Hashed, zeroHash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
+import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
@@ -123,9 +124,9 @@ mineBlock tick s evalFn = do
             pure Nothing
         validTxs -> do
             parent <- tip <$> BlockStore.maximumChainBy (comparing height)
-            for (findBlock tick parent minDifficulty evalFn validTxs) $ \blk -> do
+            for (findBlock tick (blockHash parent) s' minDifficulty validTxs) $ \blk -> do
                 delTxs (blockData blk)
-                BlockStore.storeBlock $ toOrphan (constEval s') blk
+                BlockStore.storeBlock $ map (const . Just) blk
                 pure blk
 
 -- | Calculate block difficulty.
@@ -180,18 +181,18 @@ findPoW bh@BlockHeader { blockNonce }
 findBlock
     :: (Foldable t, Binary tx)
     => Tick
-    -> Block tx s
+    -> Hashed (BlockHeader ())
+    -> s
     -> Difficulty
-    -> Evaluator s tx b
     -> t tx
     -> Maybe (Block tx s)
-findBlock t parent target eval txs = do
+findBlock t parent st target txs = do
     header <- headerWithPoW
-    linkBlock parent . toOrphan eval $ mkBlock header txs
+    pure $ second (const st) $ mkBlock header txs
   where
     headerWithPoW    = findPoW headerWithoutPoW
     headerWithoutPoW = BlockHeader
-        { blockPrevHash     = blockHash parent
+        { blockPrevHash     = parent
         , blockDataHash     = hashTxs txs
         , blockState        = ()
         , blockStateHash    = zeroHash
