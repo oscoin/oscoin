@@ -157,7 +157,10 @@ instance Hashable Word8 where
     hash = Hashed . Crypto.hash . BS.singleton
 
 instance Hashable a => Hashable [a] where
-    hash xs = toHashed . fromHashed . concat $ map hash xs
+    hash = toHashed . fromHashed . concat . map hash
+
+instance Hashable a => Hashable (Seq a) where
+    hash = toHashed . fromHashed . hash . toList
 
 instance (ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)
