@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.Consensus.Nakamoto
     ( NakamotoT
@@ -19,13 +20,15 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Class
+import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash, zeroHash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
-import           Control.Monad.State (StateT, evalStateT, state)
+import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
+import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
@@ -37,16 +40,22 @@ import           System.Random (StdGen, randomR)
 epochLength :: Tick
 epochLength = 1
 
-score :: Blockchain tx -> Blockchain tx -> Ordering
-score = comparing height
+type NakamotoEval s tx = Evaluator s tx ()
 
-newtype NakamotoT tx m a = NakamotoT (StateT StdGen m a)
+newtype NakamotoT tx m a = NakamotoT (RWST (NakamotoEval () tx) () StdGen m a)
     deriving ( Functor
              , Applicative
              , Monad
              , MonadIO
+             , MonadEval () tx
+             , MonadWriter ()
              , MonadState StdGen
              )
+
+score :: Blockchain tx s -> Blockchain tx s -> Ordering
+score = comparing height
+
+type MonadEval s tx = MonadReader (NakamotoEval s tx)
 
 instance MonadTrans (NakamotoT tx) where
     lift = NakamotoT . lift
@@ -56,17 +65,19 @@ instance MonadClock m => MonadClock (NakamotoT tx m) where
     currentTick = lift currentTick
     {-# INLINE currentTick #-}
 
-instance ( MonadMempool    tx m
-         , MonadBlockStore tx m
+instance ( MonadMempool    tx    m
+         , MonadBlockStore tx () m
          , Hashable        tx
+         , Binary          tx
          ) => MonadProtocol tx (NakamotoT tx m)
   where
     stepM _ = \case
         P2P.BlockMsg blk ->
             isNovelBlock (blockHash blk) >>= \case
                 True | Right blk' <- validateBlock blk -> do
-                    BlockStore.storeBlock blk'
-                    delTxs (toList blk')
+                    evalFn <- ask
+                    BlockStore.storeBlock $ toOrphan evalFn blk'
+                    delTxs (blockData blk')
                     pure [P2P.BlockMsg blk']
                 _ ->
                     pure mempty
@@ -82,27 +93,28 @@ instance ( MonadMempool    tx m
             map P2P.BlockMsg . maybeToList <$> BlockStore.lookupBlock blk
 
     tickM t = do
-        blk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t)
+        e   <- ask
+        blk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t () e)
         pure . maybeToList . map P2P.BlockMsg $ blk
 
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
 
-isNovelBlock :: (MonadBlockStore tx m) => Hashed BlockHeader -> m Bool
+isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
 isNovelBlock h =
     isNothing <$> BlockStore.lookupBlock h
 
-isNovelTx :: (MonadBlockStore tx m, MonadMempool tx m) => Hashed tx -> m Bool
+isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
 isNovelTx h = do
     inBlockStore <- BlockStore.lookupTx h
     inMempool    <- lookupTx h
     pure . isNothing $ inBlockStore <|> inMempool
 
-runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
-runNakamotoT rng (NakamotoT ma) = runStateT ma rng
+runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen, ())
+runNakamotoT rng (NakamotoT ma) = runRWST ma acceptAnythingEval rng
 
-evalNakamotoT :: Monad m => StdGen -> NakamotoT tx m a -> m a
-evalNakamotoT rng (NakamotoT ma) = evalStateT ma rng
+evalNakamotoT :: Monad m => StdGen -> NakamotoT tx m a -> m (a, ())
+evalNakamotoT rng (NakamotoT ma) = evalRWST ma acceptAnythingEval rng
 
 shouldCutBlock :: Monad m => NakamotoT tx m Bool
 shouldCutBlock = do
@@ -112,24 +124,30 @@ shouldCutBlock = do
     p = 0.1 :: Float
 
 mineBlock
-    :: ( MonadMempool    tx m
-       , MonadBlockStore tx m
+    :: ( MonadMempool    tx   m
+       , MonadBlockStore tx s m
        , Binary          tx
        )
     => Tick
-    -> NakamotoT tx m (Maybe (Block tx))
-mineBlock tick = do
-    txs   <- map snd <$> getTxs
-    chain <- BlockStore.maximumChainBy score
-    let prevHash = hash . blockHeader $ tip chain
-    for (findBlock tick prevHash minDifficulty txs) $ \blk -> do
-        delTxs (toList blk)
-        BlockStore.storeBlock blk
-        pure blk
+    -> s
+    -> NakamotoEval s tx
+    -> NakamotoT      tx m (Maybe (Block tx s))
+mineBlock tick s evalFn = do
+    txs <- map snd <$> getTxs
+    let (results, s') = applyValidExprs txs s evalFn
+    case map fst (rights results) of
+        [] ->
+            pure Nothing
+        validTxs -> do
+            parent <- tip <$> BlockStore.maximumChainBy (comparing height)
+            for (findBlock tick (blockHash parent) s' minDifficulty validTxs) $ \blk -> do
+                delTxs (blockData blk)
+                BlockStore.storeBlock $ map (const . Just) blk
+                pure blk
 
 -- | Calculate block difficulty.
-difficulty :: BlockHeader -> Difficulty
-difficulty = os2ip . hash
+difficulty :: BlockHeader s -> Difficulty
+difficulty = os2ip . headerHash
 
 -- | The minimum difficulty.
 minDifficulty :: Difficulty
@@ -143,12 +161,12 @@ defaultGenesisDifficulty =
     -- This is the original difficulty of Bitcoin at genesis.
 
 -- | Return whether or not a block has a valid difficulty.
-hasPoW :: BlockHeader -> Bool
+hasPoW :: BlockHeader s -> Bool
 hasPoW header =
     difficulty header < blockDifficulty header
 
 -- | Calculate the difficulty of a blockchain.
-chainDifficulty :: Blockchain tx -> Difficulty
+chainDifficulty :: Blockchain tx s -> Difficulty
 chainDifficulty (Blockchain blks) =
     if   length range < blocksConsidered
     then genesisDifficulty
@@ -167,7 +185,7 @@ chainDifficulty (Blockchain blks) =
     currentDifficulty = blockDifficulty rangeEnd
     genesisDifficulty = blockDifficulty . blockHeader $ NonEmpty.last blks
 
-findPoW :: BlockHeader -> Maybe BlockHeader
+findPoW :: BlockHeader () -> Maybe (BlockHeader ())
 findPoW bh@BlockHeader { blockNonce }
     | hasPoW bh =
         Just bh
@@ -177,20 +195,23 @@ findPoW bh@BlockHeader { blockNonce }
         Nothing
 
 findBlock
-    :: (Binary tx, Foldable t)
+    :: (Foldable t, Binary tx)
     => Tick
-    -> Hashed BlockHeader
+    -> BlockHash
+    -> s
     -> Difficulty
     -> t tx
-    -> Maybe (Block tx)
-findBlock t prevHash target txs = do
+    -> Maybe (Block tx s)
+findBlock t parent st target txs = do
     header <- headerWithPoW
-    pure $ mkBlock header txs
+    pure $ second (const st) $ mkBlock header txs
   where
     headerWithPoW    = findPoW headerWithoutPoW
     headerWithoutPoW = BlockHeader
-        { blockPrevHash     = prevHash
-        , blockRootHash     = hashTxs txs
+        { blockPrevHash     = parent
+        , blockDataHash     = hashTxs txs
+        , blockState        = ()
+        , blockStateHash    = zeroHash
         , blockDifficulty   = target
         , blockTimestamp    = toSecs t
         , blockNonce        = 0

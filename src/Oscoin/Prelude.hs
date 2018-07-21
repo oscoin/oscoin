@@ -12,6 +12,8 @@ module Oscoin.Prelude
     , module Control.Monad
     , module Data.Semigroup
     , module Data.Traversable
+    , module Data.Bitraversable
+    , module Data.Bifoldable
     , module Data.Foldable
     , module Data.Functor.Identity
     , module Data.Ord
@@ -33,6 +35,7 @@ module Oscoin.Prelude
     , module Data.Set
     , module GHC.Stack
     , module GHC.Generics
+    , module GHC.Exts
     , module Debug.Trace
     , MonadIO
     , LByteString
@@ -80,25 +83,27 @@ import           Data.Semigroup (Semigroup, (<>))
 import           Data.IORef (IORef)
 import           Data.Traversable (Traversable(..), sequence, traverse)
 import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl', maximumBy, minimumBy)
+import           Data.Bitraversable (Bitraversable, bitraverse)
+import           Data.Bifoldable (Bifoldable, bifold, bifoldMap)
 import           Data.Ord (comparing)
 import           Data.Sequence (Seq)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.List (intersperse)
 import           Data.Has
-import           Data.Either (isRight, isLeft)
+import           Data.Either (isRight, isLeft, rights, lefts)
 import           Data.Default (def, Default)
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.Function ((&))
 import           Data.Functor (void)
-import           Data.Functor.Identity (Identity, runIdentity)
-import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe)
+import           Data.Functor.Identity (Identity(..), runIdentity)
+import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe, fromMaybe)
 import           Data.String (IsString)
 import           Data.Time.Clock (NominalDiffTime)
 import           Data.Word
 import           Control.Applicative (liftA2, (<|>))
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Class (MonadTrans, lift)
-import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local)
+import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local, reader, join)
 import           Control.Monad.State (MonadState, runState, runStateT, execStateT, evalStateT)
 import           Control.Monad.Writer.CPS (MonadWriter, runWriter, runWriterT, execWriter, tell)
 import           Control.Monad.STM.Class (MonadSTM, liftSTM)
@@ -107,6 +112,7 @@ import           Control.Concurrent.STM (STM, atomically)
 import           Control.Monad.Fail (MonadFail, fail)
 import           GHC.Stack (HasCallStack)
 import           GHC.Generics (Generic)
+import           GHC.Exts (IsList(fromList, Item))
 import           Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
 
 type LByteString = LBS.ByteString

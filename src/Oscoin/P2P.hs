@@ -26,9 +26,8 @@ module Oscoin.P2P
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHeader)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
-import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Environment
 import           Oscoin.Logging (Logger, shown, withExceptionLogged, (%))
 import qualified Oscoin.Logging as Log
@@ -57,9 +56,9 @@ data Handle = Handle
     }
 
 data Msg tx =
-      BlockMsg    (Block tx)
+      BlockMsg    (Block tx ())
     | TxMsg       [tx]
-    | ReqBlockMsg (Hashed BlockHeader)
+    | ReqBlockMsg BlockHash
     deriving (Eq, Generic)
 
 instance Show tx => Show (Msg tx) where

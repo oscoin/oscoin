@@ -6,15 +6,20 @@ import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node (DummyTx)
 
+import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
+import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Hash (Hashed)
-import           Oscoin.Crypto.Blockchain.Block (BlockHeader)
+import           Oscoin.Crypto.Blockchain (blockHash, tip)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, BlockHash, blockPrevHash, blockTimestamp, emptyHeader, genesisBlock, mkBlock)
 
-import           Data.List (sort, isPrefixOf)
+import           Data.Function (on)
+import           Data.List (isPrefixOf, sort)
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
+import           Test.Tasty.HUnit (testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -37,6 +42,37 @@ tests =
                                      testableInit
                                      constant
                                      (arbitraryHealthyNetwork Nakamoto.epochLength)
+        ]
+    , testGroup "Evaluator"
+        [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
+            let (res, _) = applyValidExprs xs () acceptAnythingEval
+             in if | any isLeft res ->
+                       counterexample ("Expected no Lefts, got: " ++ show res) False
+                   | length (rights res) /= length xs ->
+                       counterexample ("Expected " ++ show (length xs) ++ " Rights, got: " ++ show res) False
+                   | otherwise ->
+                       let expected = [Right (x, ()) | x <- xs]
+                           info = "Expected: " <> show expected <> "\nGot: " <> show res
+                        in counterexample info $ res == expected
+
+        , testProperty "applyValidExprs does not accept invalid expressions" $ \(xs :: [Int]) ->
+            let (res, _) = applyValidExprs xs () rejectEverythingEval
+             in if | any isRight res -> counterexample ("Expected only Lefts, got: " ++ show (map (map fst) res)) False
+                   | otherwise -> property $ length res == length xs
+        ]
+
+    , testGroup "BlockStore"
+        [ testCase "'insert' puts blocks with parents on a chain" $ do
+            let genBlk = genesisBlock 0 [] :: Block () ()
+                nextBlk = mkBlock emptyHeader
+                    { blockTimestamp = 1
+                    , blockPrevHash = blockHash genBlk
+                    } []
+                blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk
+                chain = maximumChainBy (compare `on` length) blkStore
+            tip chain @?= nextBlk
+            orphans blkStore @?= mempty
+
         ]
     ]
   where
@@ -124,10 +160,10 @@ nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
 nodePrefixesMatch tn =
     (>= length (shortestChain tn) - 3) . length . commonPrefix $ nodePrefixes tn
 
-shortestChain :: TestableNode a => TestNetwork a -> [Hashed BlockHeader]
+shortestChain :: TestableNode a => TestNetwork a -> [BlockHash]
 shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
 
-longestChain :: TestableNode a => TestNetwork a -> [Hashed BlockHeader]
+longestChain :: TestableNode a => TestNetwork a -> [BlockHash]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | A 50%+ majority of nodes in the network have a common prefix.
@@ -139,12 +175,12 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: TestableNode a => [Hashed BlockHeader] -> a -> Bool
+nodeHasPrefix :: TestableNode a => [BlockHash] -> a -> Bool
 nodeHasPrefix p node =
     p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: TestableNode a => TestNetwork a -> [[Hashed BlockHeader]]
+nodePrefixes :: TestableNode a => TestNetwork a -> [[BlockHash]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

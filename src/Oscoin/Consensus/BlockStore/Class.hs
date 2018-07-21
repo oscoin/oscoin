@@ -5,32 +5,32 @@ module Oscoin.Consensus.BlockStore.Class where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHeader)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan)
 import           Oscoin.Crypto.Hash (Hashed)
 
-class Monad m => MonadBlockStore tx m | m -> tx where
+class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     -- | Store a block in the block-store.
-    storeBlock :: Block tx -> m ()
+    storeBlock :: Block tx (Orphan s) -> m ()
 
     -- | Lookup a 'Block' by its header.
-    lookupBlock :: Hashed BlockHeader -> m (Maybe (Block tx))
+    lookupBlock :: BlockHash -> m (Maybe (Block tx s))
 
     -- | Lookup a transaction by its hash.
     lookupTx :: Hashed tx -> m (Maybe tx)
 
     -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
-    orphans :: m (Set (Hashed BlockHeader))
+    orphans :: m (Set BlockHash)
 
     -- | Returns the maximum chain, according to the ordering function provided.
     maximumChainBy
-        :: (Blockchain tx -> Blockchain tx -> Ordering)
-        -> m (Blockchain tx)
+        :: (Blockchain tx s -> Blockchain tx s -> Ordering)
+        -> m (Blockchain tx s)
 
 instance {-# OVERLAPPABLE #-}
     ( MonadTrans t
     , Monad (t m)
-    , MonadBlockStore tx m
-    ) => MonadBlockStore tx (t m)
+    , MonadBlockStore s tx m
+    ) => MonadBlockStore s tx (t m)
   where
     storeBlock     = lift . storeBlock
     lookupBlock    = lift . lookupBlock

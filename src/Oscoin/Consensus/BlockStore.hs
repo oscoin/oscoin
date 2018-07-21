@@ -1,9 +1,7 @@
 module Oscoin.Consensus.BlockStore
     ( BlockStore
-    , bsChains
-    , bsDangling
-
     , genesisBlockStore
+    , fromOrphans
 
     , maximumChainBy
     , insert
@@ -14,66 +12,93 @@ module Oscoin.Consensus.BlockStore
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>))
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), blocks)
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-data BlockStore tx = BlockStore
-    { bsChains   :: Map (Hashed BlockHeader) (Blockchain tx)
-    , bsDangling :: Set (Block tx)
-    } deriving (Eq, Show)
+-- | Store of 'Block's and 'Blockchain's.
+data BlockStore tx s = BlockStore
+    { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
+    , bsOrphans :: Set (Block tx (Orphan s))       -- ^ Orphan blocks.
+    }
 
-genesisBlockStore :: Ord tx => Block tx -> BlockStore tx
+instance Show (BlockStore tx s) where
+    -- We can't derive Show because 'Orphan' is a function.
+    show = const "BlockStore{}"
+
+instance Ord tx => Semigroup (BlockStore tx s) where
+    (<>) a b = BlockStore
+        { bsOrphans = bsOrphans a <> bsOrphans b
+        , bsChains  = bsChains  a <> bsChains  b }
+
+instance Ord tx => Monoid (BlockStore tx s) where
+    mempty = BlockStore mempty mempty
+
+genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen =
     BlockStore
-        { bsChains   = Map.singleton (blockHash gen) (Blockchain (gen :| []))
-        , bsDangling = mempty
+        { bsChains  = Map.singleton (blockHash gen) (Blockchain (gen :| []))
+        , bsOrphans = Set.empty
         }
 
 maximumChainBy
-    :: (Blockchain tx -> Blockchain tx -> Ordering)
-    -> BlockStore tx
-    -> Blockchain tx
+    :: (Blockchain tx s -> Blockchain tx s -> Ordering)
+    -> BlockStore tx s
+    -> Blockchain tx s
 maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
 -- Nb. we guarantee that there is at least one chain in the store by exposing
 -- only the 'genesisBlockStore' smart constructor.
 
-insert :: Ord tx => Block tx -> BlockStore tx -> BlockStore tx
+insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
-    constructChains $ bs { bsDangling = Set.insert blk bsDangling }
+    linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
 
-lookupBlock :: Hashed BlockHeader -> BlockStore tx -> Maybe (Block tx)
+fromOrphans :: (Ord tx, Foldable t) => t (Block tx (Orphan s)) -> Block tx s -> BlockStore tx s
+fromOrphans (toList -> blks) gen =
+    linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
+
+lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock hdr = map tip . Map.lookup hdr . bsChains
 
-orphans :: BlockStore tx -> Set (Hashed BlockHeader)
-orphans BlockStore{bsDangling} =
-    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsDangling
-        danglingHashes = Set.map blockHash bsDangling
+orphans :: BlockStore tx s -> Set BlockHash
+orphans BlockStore{bsOrphans} =
+    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
+        danglingHashes = Set.map blockHash bsOrphans
      in Set.difference parentHashes danglingHashes
 
-lookupTx :: forall tx. Hashable tx => Hashed tx -> BlockStore tx -> Maybe tx
-lookupTx h BlockStore{..} =
-    let txs :: [(Hashed tx, tx)]
-        txs = [(hash tx, tx) | tx <- concatMap toList (Map.elems bsChains)]
+-- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
+-- blocks which lead back to genesis.
+lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe tx
+lookupTx h BlockStore{bsChains} =
+    -- Nb. This is very slow. One way to make it faster would be to traverse
+    -- all chains starting from the tip, in lock step, because it's likely
+    -- that the transaction we're looking for is near the tip.
+    let txs  = [(hash tx, tx) | tx <- concatMap (toList . blockData) blks]
+        blks = concatMap blocks (Map.elems bsChains)
      in lookup h txs
 
-constructChains :: Ord tx => BlockStore tx -> BlockStore tx
-constructChains n =
-    go (Set.elems (bsDangling n)) n
+-- | Link as many orphans as possible to one of the existing chains. If the
+-- linking of an orphan to its parent fails, the block is discarded.
+linkBlocks :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
+linkBlocks bs' =
+    go (Set.elems (bsOrphans bs')) bs'
   where
-    go [] node =
-        node
-    go (blk:blks) bs@BlockStore{bsChains, bsDangling} =
+    go [] bs =
+        bs
+    go (blk:blks) bs@BlockStore{bsChains, bsOrphans} =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
-                let store = Set.delete blk bsDangling
-                 in go (Set.elems store) bs
-                     { bsDangling  = store
-                     , bsChains    = Map.insert (blockHash blk)
-                                                (blk |> chain)
-                                                bsChains }
+                let store = Set.delete blk bsOrphans
+                 in go (Set.elems store) $ case linkBlock (tip chain) blk of
+                     Just blk' -> bs
+                         { bsOrphans  = store
+                         , bsChains    = Map.insert (blockHash blk')
+                                                    (blk' |> chain)
+                                                    bsChains }
+                     Nothing -> bs
+                         { bsOrphans = store }
             Nothing ->
                 go blks bs

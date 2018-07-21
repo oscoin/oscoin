@@ -6,13 +6,16 @@ import           Oscoin.Account (Account(..))
 import qualified Oscoin.Account as Account
 import           Oscoin.Account.Arbitrary ()
 import qualified Oscoin.Account.Transaction as Account
-import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain)
-import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith)
-import           Oscoin.Crypto.Blockchain.Block (blockHeader, validateBlock)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain, genesis, height, tip)
+import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, validateBlock, toOrphan)
+import           Oscoin.Crypto.BlockStore.Arbitrary ()
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Arbitrary ()
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
+import qualified Oscoin.Consensus.BlockStore as BlockStore
+import           Oscoin.Consensus.Evaluator (foldEval)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -33,6 +36,7 @@ import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Binary as Binary
 import qualified Data.Text as T
+import qualified Data.List.NonEmpty as NonEmpty
 import           Lens.Micro ((^?), (^?!))
 import           Lens.Micro.Aeson (key, nth, _String)
 
@@ -54,6 +58,7 @@ tests = testGroup "Oscoin"
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
+    , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
@@ -183,6 +188,21 @@ testOscoinBlockchain = do
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
     assertNoError $ validateBlockchain $ Blockchain (block :| [gblock])
+
+propOscoinBlockStore
+    :: Gen (Blockchain [Word8] [Word8])
+    -> Property
+propOscoinBlockStore chainGen =
+    forAll chainGen $ \chain -> do
+        let blks = NonEmpty.toList $ fromBlockchain chain
+        let os   = map (toOrphan foldEval) blks
+        let bs   = BlockStore.fromOrphans os (genesis chain)
+        let best = BlockStore.maximumChainBy (comparing height) bs
+        let z    = blockState $ blockHeader $ tip best
+        let txs  = concatMap (toList . blockData) $ reverse blks
+        counterexample ("From input: " ++ show txs ++ ", Expected: "
+                                       ++ show (concat txs) ++ " but got "
+                                       ++ show z ++ show best) (concat txs == z)
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

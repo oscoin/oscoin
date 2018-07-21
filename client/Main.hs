@@ -47,7 +47,7 @@ main = do
     withStdLogger Log.defaultConfig                   $ \lgr ->
         withDisco (mkDisco lgr nid ip listenPort)     $ \dis ->
         withP2P   (mkP2PConfig ip listenPort) lgr dis $ \p2p ->
-            runNetworkT p2p . runNodeT nod . evalNakamotoT rng $
+            void . runNetworkT p2p . runNodeT nod . evalNakamotoT rng $
                 Node.run (Proxy @Text)
   where
     mkP2PConfig ip port = P2P.defaultConfig

@@ -18,16 +18,19 @@ module Oscoin.Consensus.Simple
     , shouldReconcile
     ) where
 
+import           Oscoin.Prelude
+
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
+import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block, block, blockHeader, blockTimestamp, validateBlock)
+import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock, toOrphan)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
-import           Oscoin.Prelude
 
 import           Control.Monad.State
+import           Data.Binary (Binary)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
 import           Data.Maybe (maybeToList)
@@ -58,17 +61,17 @@ instance MonadTrans (SimpleT tx i) where
     lift = SimpleT . lift . lift
     {-# INLINE lift #-}
 
-instance ( MonadMempool    tx m
-         , MonadBlockStore tx m
-         , Hashable        tx
+instance ( MonadMempool    tx    m
+         , MonadBlockStore tx () m
+         , Binary          tx
          , Ord i
          ) => MonadProtocol tx (SimpleT tx i m)
   where
     stepM _ = \case
         P2P.BlockMsg blk -> do
             for_ (validateBlock blk) $ \blk' -> do
-                storeBlock blk'
-                delTxs (toList blk')
+                storeBlock $ toOrphan acceptAnythingEval blk
+                delTxs (blockData blk')
             pure mempty
 
         -- TODO: Validate tx.
@@ -85,10 +88,10 @@ instance ( MonadMempool    tx m
                 chain <- maximumChainBy (comparing chainScore)
                 let prevHash  = hash . blockHeader $ tip chain
                 let timestamp = fromIntegral (fromEnum tick)
-                let blk       = block prevHash timestamp txs
+                let blk       = block prevHash timestamp txs :: Block tx ()
 
-                storeBlock blk
-                delTxs (toList blk)
+                storeBlock $ toOrphan acceptAnythingEval blk
+                delTxs (blockData blk)
                 modify' (\s -> s { ltLastBlk = tick })
 
                 pure [P2P.BlockMsg blk])
@@ -112,12 +115,12 @@ runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
 evalSimpleT :: Monad m => Env i -> LastTime -> SimpleT tx i m a -> m a
 evalSimpleT env lt (SimpleT ma) = evalStateT (runReaderT ma env) lt
 
-chainScore :: forall tx . Blockchain tx -> Int
+chainScore :: Blockchain tx s -> Int
 chainScore bc =
     (bigMagicNumber * h) - steps
   where
     h              = height bc
-    lastBlock      = tip bc :: Block tx
+    lastBlock      = tip bc
     timestampNs    = blockTimestamp $ blockHeader lastBlock
     timestamp      = timestampNs `div` 1000000000000
     e              = round epochLength

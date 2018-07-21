@@ -19,11 +19,11 @@ import           Control.Monad (replicateM)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
-arbitraryBlockchain :: forall tx. (Arbitrary tx, Binary tx) => Gen (Blockchain tx)
+arbitraryBlockchain :: forall tx. (Arbitrary tx, Binary tx) => Gen (Blockchain tx ())
 arbitraryBlockchain = do
-    genesis <- Blockchain . singleton <$> arbitraryGenesis
-    rest    <- arbitraryValidBlock genesis
-    pure $ rest |> genesis
+    gen  <- Blockchain . singleton <$> arbitraryGenesis
+    rest <- arbitraryValidBlock gen
+    pure $ rest |> gen
   where
     singleton x = x :| []
 
@@ -32,35 +32,36 @@ instance Arbitrary (Crypto.Digest HashAlgorithm) where
         str <- replicateM (Crypto.hashDigestSize hashAlgorithm) (arbitrary :: Gen Word8)
         pure . fromJust $ Crypto.digestFromByteString (BS.pack str)
 
-arbitraryValidBlock :: forall tx. (Binary tx, Arbitrary tx) => Blockchain tx -> Gen (Block tx)
+arbitraryValidBlock :: forall tx s. (Binary tx, Arbitrary tx, Default s) => Blockchain tx s -> Gen (Block tx s)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
-    arbitraryValidBlockWith prevHeader txs
+    arbitraryValidBlockWith (map (const ()) prevHeader) txs
 
-arbitraryValidBlockWith :: forall tx. Binary tx => BlockHeader -> [tx] -> Gen (Block tx)
+arbitraryValidBlockWith :: (Binary tx, Default s) => BlockHeader () -> [tx] -> Gen (Block tx s)
 arbitraryValidBlockWith prevHeader txs = do
     elapsed <- choose (2750, 3250)
     let header = emptyHeader
                { blockPrevHash   = hash prevHeader
-               , blockRootHash   = hashTxs txs
+               , blockDataHash   = hashTxs txs
+               , blockState      = def
+               , blockStateHash  = zeroHash
                , blockTimestamp  = blockTimestamp prevHeader + elapsed
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)
 
-arbitraryGenesis :: forall tx. (Binary tx, Arbitrary tx) => Gen (Block tx)
+arbitraryGenesis :: forall tx s. (Binary tx, Arbitrary tx, Default s) => Gen (Block tx s)
 arbitraryGenesis = do
     txs <- resize 20 arbitrary :: Gen [tx]
     arbitraryGenesisWith txs
 
-arbitraryGenesisWith :: Binary tx => [tx] -> Gen (Block tx)
-arbitraryGenesisWith txs = do
-    g <- genesisBlock <$> arbitrary <*> pure txs
-    pure $ g { blockHeader = blockHeader g }
+arbitraryGenesisWith :: forall tx s. (Binary tx, Default s) => [tx] -> Gen (Block tx s)
+arbitraryGenesisWith txs =
+    map (const def) <$> (genesisBlock @[] @tx @s <$> arbitrary <*> pure txs)
 
-arbitraryValidBlockchain :: forall tx. (Binary tx, Arbitrary tx) => Gen (Blockchain tx)
+arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Default s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
-    gen <- arbitraryGenesis :: (Gen (Block tx))
+    gen <- arbitraryGenesisWith []
     h   <- choose (8, 9) :: Gen Int
     go (gen :| []) h
   where

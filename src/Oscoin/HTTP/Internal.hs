@@ -23,7 +23,7 @@ data State = State
     deriving (Show)
 
 -- | Storage connection handle.
-type Handle = Node.Handle
+type Handle tx = Node.Handle tx Node.Root
 
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction tx i = SpockAction (Handle tx i) () State

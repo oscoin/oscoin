@@ -1,9 +1,12 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Crypto.Hash
     ( Hashed
+    , Hash
     , Hashable(..)
     , toHashed
     , fromHashed
+    , digestFromByteString
+    , hashBinary
     , HashAlgorithm
     , hashAlgorithm
     , maxHash
@@ -36,10 +39,21 @@ import           Web.HttpApiData (FromHttpApiData(..))
 -- | Represents data that has been hashed with 'HashAlgorithm'.
 type Hashed a = Hashed' HashAlgorithm a
 
+-- | A hash using the default hash algorithm. Used instead of 'Hashed' when
+-- the hash pre-image is not known or cannot be typed.
+type Hash = Digest HashAlgorithm
+
 -- | Represents data that has been hashed with @algo@. In general, it's
 -- recommended to use 'Hashed' instead.
 newtype Hashed' algo a = Hashed { fromHashed :: Digest algo }
     deriving (Eq, Ord, Functor, ByteArrayAccess)
+
+instance Hashable a => Semigroup (Hashed' HashAlgorithm a) where
+    (<>) (Hashed a) (Hashed b) =
+        Hashed $ Crypto.hash ((convert a :: ByteString) <> (convert b :: ByteString))
+
+instance Hashable a => Monoid (Hashed' HashAlgorithm a) where
+    mempty = Hashed zeroHash
 
 instance Show (Hashed' algo a) where
     show = show . fromHashed
@@ -66,6 +80,13 @@ instance FromHttpApiData (Hashed' Blake2b_256 a) where
 -- | Wrap a 'Crypto.Digest' 'HashAlgorithm' into a 'Hashed'.
 toHashed :: Crypto.Digest HashAlgorithm -> Hashed a
 toHashed = Hashed
+
+-- | Convert a 'ByteString' to a 'Digest'. Throws an error if the input is
+-- not a valid digest.
+digestFromByteString :: HasCallStack => ByteString -> Crypto.Digest HashAlgorithm
+digestFromByteString bs =
+    fromMaybe (error "Oscoin.Crypto.Hash: Invalid input")
+              (Crypto.digestFromByteString bs)
 
 -- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
@@ -117,9 +138,11 @@ shortHash =
 
 -------------------------------------------------------------------------------
 
-class Binary a => Hashable a where
+class Hashable a where
     hash :: a -> Hashed a
-    hash = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
+
+hashBinary :: Binary a => a -> Hashed a
+hashBinary = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
 
 instance Hashable () where
     hash () = Hashed zeroHash
@@ -133,8 +156,12 @@ instance Hashable ByteString where
 instance Hashable Word8 where
     hash = Hashed . Crypto.hash . BS.singleton
 
-instance (Binary a, ByteArrayAccess a) => Hashable (Maybe a) where
+instance Hashable a => Hashable [a] where
+    hash xs = toHashed . fromHashed . concat $ map hash xs
+
+instance (ByteArrayAccess a) => Hashable (Maybe a) where
     hash (Just x) = Hashed (Crypto.hash x)
     hash Nothing  = Hashed zeroHash
 
-instance Hashable ECDSA.PublicKey
+instance Hashable ECDSA.PublicKey where
+    hash = hashBinary

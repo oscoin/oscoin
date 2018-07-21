@@ -13,7 +13,7 @@ import           Oscoin.Account
 import           Oscoin.Address
 import           Oscoin.Crypto.PubKey (PublicKey, Signed(..))
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex)
+import           Oscoin.Crypto.Hash (Hashed, Hashable, hash, toHex, hashBinary)
 import           Oscoin.State.Tree (Tree, Key, Path, Val)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -52,7 +52,9 @@ data Tx =
     deriving (Show, Eq, Ord, Generic)
 
 instance Binary Tx
-instance Hashable Tx
+
+instance Hashable Tx where
+    hash = hashBinary
 
 instance ToJSON Tx where
     toJSON (SetTx acc key val) =

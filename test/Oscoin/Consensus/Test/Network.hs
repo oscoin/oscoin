@@ -24,15 +24,13 @@ import           System.Random.Shuffle (shuffle')
 -- TestableNode ----------------------------------------------------------------
 
 class MonadProtocol DummyTx (TestableRun a) => TestableNode a where
-    type TestableRun    a :: * -> *
+    type TestableRun a   :: * -> *
 
     testableInit         :: TestNetwork b -> TestNetwork a
+
     testableRun          :: a -> (TestableRun a) b -> (b, a)
-
-    testableLongestChain :: a -> [Hashed BlockHeader]
-
+    testableLongestChain :: a -> [Hashed (BlockHeader ())]
     testableIncludedTxs  :: a -> [DummyTx]
-
     testableNodeAddr     :: a -> DummyNodeId
     testableShow         :: a -> String
 
@@ -46,7 +44,7 @@ data NakamotoNodeState = NakamotoNodeState
     } deriving Show
 
 instance TestableNode NakamotoNodeState where
-    type TestableRun    NakamotoNodeState = NakamotoNode
+    type TestableRun NakamotoNodeState = NakamotoNode
 
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
@@ -79,12 +77,12 @@ runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
 runNakamotoNode s@NakamotoNodeState{..} ma =
     (a, s { nakStdGen = g, nakNode = tns })
   where
-    ((!a, !g), !tns) =
+    ((!a, !g, ()), !tns) =
         runIdentity
             . runTestNodeT nakNode
             $ runNakamotoT nakStdGen ma
 
-nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx
+nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =
       BlockStore.maximumChainBy Nakamoto.score . tnsBlockstore . nakNode
 
@@ -99,7 +97,7 @@ data SimpleNodeState = SimpleNodeState
     } deriving Show
 
 instance TestableNode SimpleNodeState where
-    type TestableRun    SimpleNodeState = SimpleNode
+    type TestableRun SimpleNodeState = SimpleNode
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
@@ -141,7 +139,7 @@ runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
             . runTestNodeT snsNode
             $ runSimpleT snsEnv snsLast ma
 
-simpleBestChain :: SimpleNodeState -> Blockchain DummyTx
+simpleBestChain :: SimpleNodeState -> Blockchain DummyTx ()
 simpleBestChain =
       BlockStore.maximumChainBy (comparing Simple.chainScore)
     . tnsBlockstore

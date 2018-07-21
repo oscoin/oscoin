@@ -1,6 +1,6 @@
 module Oscoin.Consensus.Test.Node
     ( DummyNodeId
-    , DummyTx
+    , DummyTx(..)
 
     , TestNodeState(..)
     , TestNodeT
@@ -14,7 +14,7 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
 import qualified Oscoin.Crypto.Blockchain.Block as Block
-import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
@@ -47,14 +47,14 @@ instance Arbitrary DummyNodeId where
 data TestNodeState = TestNodeState
     { tnsStateTree  :: STree.Tree STree.Path STree.Val
     , tnsMempool    :: Mempool.Mempool DummyTx
-    , tnsBlockstore :: BlockStore.BlockStore DummyTx
+    , tnsBlockstore :: BlockStore.BlockStore DummyTx ()
     , tnsNodeId     :: DummyNodeId
-    } deriving Show
+    } deriving (Show)
 
 tnsMempoolL :: Lens' TestNodeState (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })
 
-tnsBlockstoreL :: Lens' TestNodeState (BlockStore.BlockStore DummyTx)
+tnsBlockstoreL :: Lens' TestNodeState (BlockStore.BlockStore DummyTx ())
 tnsBlockstoreL = lens tnsBlockstore (\s a -> s { tnsBlockstore = a })
 
 emptyTestNodeState :: DummyNodeId -> TestNodeState
@@ -86,7 +86,7 @@ instance Monad m => MonadMempool DummyTx (TestNodeT m) where
     {-# INLINE delTxs #-}
     {-# INLINE numTxs #-}
 
-instance Monad m => MonadBlockStore DummyTx (TestNodeT m) where
+instance Monad m => MonadBlockStore DummyTx () (TestNodeT m) where
     storeBlock  blk  = modify' (over tnsBlockstoreL (BlockStore.insert blk))
     lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
     lookupTx    txh  = BlockStore.lookupTx txh <$> gets tnsBlockstore
