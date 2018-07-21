@@ -25,9 +25,11 @@
 - warn: {lhs: liftM, rhs: map}
 - warn: {lhs: ap, rhs: (<*>)}
 - warn: {lhs: mapM, rhs: traverse}
+- warn: {lhs: concat (map f x), rhs: foldMap f x}
 
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 
+- ignore: {name: Use concatMap}
 - ignore: {name: Use ++}
 - ignore: {name: Use &&}
 - ignore: {name: Eta reduce}

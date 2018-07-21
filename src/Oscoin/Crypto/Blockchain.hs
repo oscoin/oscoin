@@ -1,4 +1,16 @@
-module Oscoin.Crypto.Blockchain where
+module Oscoin.Crypto.Blockchain
+    ( Blockchain(..)
+    , (|>)
+    , tip
+    , genesis
+    , blocks
+    , height
+    , validateBlockchain
+    , showBlockDigest
+    , showChainDigest
+
+    , module Oscoin.Crypto.Blockchain.Block
+    ) where
 
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
@@ -40,6 +52,9 @@ infixr 5 |>
 (|>) :: Block tx s -> Blockchain tx s -> Blockchain tx s
 (|>) blk (Blockchain blks) = Blockchain (blk <| blks)
 
+blocks :: Blockchain tx s -> [Block tx s]
+blocks = NonEmpty.toList . fromBlockchain
+
 tip :: Blockchain tx s -> Block tx s
 tip (Blockchain blks) = NonEmpty.head blks
 
@@ -66,9 +81,6 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     t  = blockTimestamp (blockHeader blk)
     t' = blockTimestamp (blockHeader blk')
     hours = 3600
-
-blockHash :: Block tx s -> BlockHash
-blockHash blk = headerHash (blockHeader blk)
 
 showChainDigest :: Blockchain tx s -> String
 showChainDigest =

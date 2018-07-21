@@ -76,13 +76,13 @@ tests =
         ]
     ]
   where
-    constant = identity
+    constant = identity -- O(1)
 
 propNetworkNodesConverge
     :: TestableNode a
-    => (TestNetwork () -> TestNetwork a)
-    -> (Int -> Int)            -- ^ Predicate on message amplification
-    -> Gen (TestNetwork ())    -- ^ Network generator
+    => (TestNetwork () -> TestNetwork a) -- ^ Network initialization function
+    -> (Int -> Int)                      -- ^ Expected messaging complexity
+    -> Gen (TestNetwork ())              -- ^ TestNetwork generator
     -> Property
 propNetworkNodesConverge tnInit msgComplexity genNetworks =
     forAllShrink genNetworks shrink $ \tn ->
@@ -94,7 +94,12 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
                 -- condition only needs to check one node.
                 replicatedTxs   = testableIncludedTxs . head . toList $ tnNodes tn'
                 nodeCount       = length (tnNodes tn')
-                chainLength     = length (commonPrefix (nodePrefixes tn'))
+                -- Nb.: The right metric for chain length here is not obvious, but
+                -- it's unlikely that longest/shortest chain works, and also unlikely
+                -- that commonPrefix works. Perhaps this is a case for using majority prefix,
+                -- although this can also be solved properly by waiting for networks to
+                -- converge.
+                chainLength     = length (longestChain tn')
                 -- The expected minimum amount of messages sent is the length of the shared
                 -- prefix times the number of nodes. Anything above that is considered
                 -- 'amplification'. The `- 1` is to not consider the genesis block as part
@@ -134,8 +139,8 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
 
              in cover propReplication     70 "replicated any data"
               . cover propChainGrowth     75 "have more than one block"
-              . cover propMsgComplexity   75 "are within the communication complexity bounds"
-              . cover propUnanimtyPrefix  95 "have a common prefix"
+              . cover propMsgComplexity   70 "are within the communication complexity bounds"
+              . cover propUnanimtyPrefix  75 "have a common prefix"
               . counterexample (prettyCounterexample tn' replicatedTxs)
               $ propMajorityPrefix
 
@@ -151,11 +156,15 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated =
                               " txs replicated: " ++ show (length txsReplicated),
                               " common prefix: "  ++ show (length $ commonPrefix $ nodePrefixes tn) ]
 
--- | All nodes in the network have more than one block in common on their
--- longest chain.
 nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
-nodePrefixesMatch =
-    (> 1) . length . commonPrefix . nodePrefixes
+nodePrefixesMatch tn =
+    (>= length (shortestChain tn) - 3) . length . commonPrefix $ nodePrefixes tn
+
+shortestChain :: TestableNode a => TestNetwork a -> [BlockHash]
+shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
+
+longestChain :: TestableNode a => TestNetwork a -> [BlockHash]
+longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | A 50%+ majority of nodes in the network have a common prefix.
 majorityNodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool

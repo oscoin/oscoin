@@ -8,9 +8,8 @@ import           Oscoin.P2P (Msg(..))
 import           Oscoin.Consensus.Test.Network
 import           Oscoin.Consensus.Test.Node (DummyNodeId)
 
-import           Data.List (nub)
+import           Data.List (nub, permutations)
 import qualified Data.Map.Strict as Map
-import           Data.Maybe (catMaybes)
 import qualified Data.Set as Set
 import           Data.Traversable (for)
 
@@ -53,12 +52,15 @@ arbitrarySynchronousNetwork e = do
     let ticks = foreach nodes $ \(addr, _) ->
          [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
 
+    rng <- mkStdGen <$> arbitrary
+
     pure TestNetwork
         { tnNodes      = Map.fromList nodes
         , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
         , tnPartitions = Map.empty
         , tnLog        = []
         , tnLatencies  = repeat 0
+        , tnRng        = rng
         , tnMsgCount   = 0
         , tnLastTick   = fromIntegral lastTick
         }
@@ -80,7 +82,28 @@ arbitraryPartition addrs =
     oneof [ arbitraryPerfectPartition addrs
           , arbitraryLonerPartition   addrs
           , arbitraryBridgePartition  addrs
+          , arbitraryDoublePartition  addrs
           ]
+
+arbitraryDoublePartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
+arbitraryDoublePartition addrs
+    | length addrs < 3 =
+        pure mempty
+    | otherwise =
+        subnetsToPartitions . chunksOf subnetSize <$> shuffle addrs
+      where
+        netSize = length addrs
+        subnetSize | odd netSize = netSize `div` 2
+                   | otherwise   = netSize `div` 2 - 1
+
+-- | Convert a list of subnets into a list partition map.
+subnetsToPartitions :: Ord addr => [[addr]] -> Map addr (Set addr)
+subnetsToPartitions nets =
+    Map.fromList $
+        concatMap f [(p, concat ps) | p:ps <- perms]
+  where
+    f (xs, ys) = [(x, Set.fromList ys) | x <- xs]
+    perms      = take (length nets) (permutations nets)
 
 arbitraryPerfectPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPerfectPartition [] =
@@ -116,15 +139,15 @@ arbitraryBridgePartition addrs = do
 instance Arbitrary (TestNetwork ()) where
     arbitrary = arbitraryPartitionedNetwork 1 -- TODO: use size for epochLength?
 
-    shrink tn@TestNetwork{..} =
-        lessMsgs
+    shrink tn =
+        lessMsgs ++ lessNodes
       where
-        msgs'     = shrinkScheduledMsgs tnMsgs
-        nodes'    = shrinkList shrinkNothing (Map.toList tnNodes)
+        msgs'     = shrinkScheduledMsgs (tnMsgs tn)
+        nodes'    = shrinkList shrinkNothing (Map.toList $ tnNodes tn)
         lessMsgs  = [tn { tnMsgs = ms } | ms <- msgs']
-
-        -- NB. Not in use currently.
-        _lessNodes = map filterNetwork [tn { tnNodes = Map.fromList ns } | ns <- nodes']
+        lessNodes = filter (odd . length . tnNodes)
+                  $ filter (not . null . tnNodes)
+                  $ [filterNetwork tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
 shrinkScheduledMsgs :: Set Scheduled -> [Set Scheduled]
 shrinkScheduledMsgs msgs =
@@ -137,11 +160,8 @@ shrinkScheduledMsgs msgs =
             (shrinkList shrinkNothing)
             (Set.filter isMsg msgs)
 
--- TODO: Nodes will still contain previously present nodes in their address
--- books.
 filterNetwork :: TestNetwork a -> TestNetwork a
-filterNetwork (TestNetwork nodes msgs partitions _ rng count lt) =
-    TestNetwork nodes (Set.filter f msgs) partitions [] rng count lt
+filterNetwork tn@TestNetwork{..} =
+    tn { tnMsgs = Set.filter f tnMsgs }
   where
-    f msg = all (`Map.member` nodes) $
-        scheduledReceivers msg ++ catMaybes [scheduledSender msg]
+    f msg = all (`Map.member` tnNodes) (scheduledReceivers msg)

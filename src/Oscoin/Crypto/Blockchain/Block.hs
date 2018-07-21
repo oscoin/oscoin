@@ -1,4 +1,23 @@
-module Oscoin.Crypto.Blockchain.Block where
+module Oscoin.Crypto.Blockchain.Block
+    ( Block(..)
+    , BlockHash
+    , BlockHeader(..)
+    , Difficulty
+    , Height
+    , Orphan
+    , toOrphan
+    , block
+    , mkBlock
+    , linkBlock
+    , genesisBlock
+    , isGenesisBlock
+    , validateBlock
+    , headerHash
+    , blockHash
+    , emptyHeader
+    , hashTx
+    , hashTxs
+    ) where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash
@@ -142,6 +161,9 @@ isGenesisBlock blk =
 toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
     second (const (\s -> evals (blockData blk) s eval)) blk
+
+blockHash :: Block tx s -> BlockHash
+blockHash blk = headerHash (blockHeader blk)
 
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
 linkBlock (blockState . blockHeader -> s) = traverse ($ s)

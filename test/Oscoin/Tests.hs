@@ -190,7 +190,7 @@ testOscoinBlockchain = do
     assertNoError $ validateBlockchain $ Blockchain (block :| [gblock])
 
 propOscoinBlockStore
-    :: Gen (Blockchain [Word8] [Word8])
+    :: Gen (Blockchain (Seq Word8) (Seq Word8))
     -> Property
 propOscoinBlockStore chainGen =
     forAll chainGen $ \chain -> do

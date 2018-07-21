@@ -89,6 +89,7 @@ instance Monad m => MonadMempool DummyTx (TestNodeT m) where
 instance Monad m => MonadBlockStore DummyTx () (TestNodeT m) where
     storeBlock  blk  = modify' (over tnsBlockstoreL (BlockStore.insert blk))
     lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
+    lookupTx    txh  = BlockStore.lookupTx txh <$> gets tnsBlockstore
     orphans          = BlockStore.orphans <$> gets tnsBlockstore
     maximumChainBy f = BlockStore.maximumChainBy f <$> gets tnsBlockstore
 
