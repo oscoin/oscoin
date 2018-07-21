@@ -40,14 +40,14 @@ import           System.Random (StdGen, randomR)
 epochLength :: Tick
 epochLength = 1
 
-type NakamotoEval s tx = Evaluator s tx ()
+type NakamotoEval tx s = Evaluator s tx ()
 
-newtype NakamotoT tx m a = NakamotoT (RWST (NakamotoEval () tx) () StdGen m a)
+newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEval tx s) () StdGen m a)
     deriving ( Functor
              , Applicative
              , Monad
              , MonadIO
-             , MonadEval () tx
+             , MonadEval tx s
              , MonadWriter ()
              , MonadState StdGen
              )
@@ -55,21 +55,21 @@ newtype NakamotoT tx m a = NakamotoT (RWST (NakamotoEval () tx) () StdGen m a)
 score :: Blockchain tx s -> Blockchain tx s -> Ordering
 score = comparing height
 
-type MonadEval s tx = MonadReader (NakamotoEval s tx)
+type MonadEval tx s = MonadReader (NakamotoEval tx s)
 
-instance MonadTrans (NakamotoT tx) where
+instance MonadTrans (NakamotoT tx s) where
     lift = NakamotoT . lift
     {-# INLINE lift #-}
 
-instance MonadClock m => MonadClock (NakamotoT tx m) where
+instance MonadClock m => MonadClock (NakamotoT tx s m) where
     currentTick = lift currentTick
     {-# INLINE currentTick #-}
 
-instance ( MonadMempool    tx    m
-         , MonadBlockStore tx () m
+instance ( MonadMempool    tx   m
+         , MonadBlockStore tx s m
          , Hashable        tx
          , Binary          tx
-         ) => MonadProtocol tx (NakamotoT tx m)
+         ) => MonadProtocol tx (NakamotoT tx s m)
   where
     stepM _ = \case
         P2P.BlockMsg blk ->
@@ -89,13 +89,14 @@ instance ( MonadMempool    tx    m
                 if n then addTxs [tx] $> Just (P2P.TxMsg [tx])
                      else pure Nothing
 
-        P2P.ReqBlockMsg blk ->
-            map P2P.BlockMsg . maybeToList <$> BlockStore.lookupBlock blk
+        P2P.ReqBlockMsg blk -> do
+            mblk <- BlockStore.lookupBlock blk
+            pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
 
     tickM t = do
-        e   <- ask
-        blk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t () e)
-        pure . maybeToList . map P2P.BlockMsg $ blk
+        e    <- ask
+        mblk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t e)
+        pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
 
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
@@ -110,13 +111,13 @@ isNovelTx h = do
     inMempool    <- lookupTx h
     pure . isNothing $ inBlockStore <|> inMempool
 
-runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen, ())
+runNakamotoT :: StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())
 runNakamotoT rng (NakamotoT ma) = runRWST ma acceptAnythingEval rng
 
-evalNakamotoT :: Monad m => StdGen -> NakamotoT tx m a -> m (a, ())
+evalNakamotoT :: Monad m => StdGen -> NakamotoT tx s m a -> m (a, ())
 evalNakamotoT rng (NakamotoT ma) = evalRWST ma acceptAnythingEval rng
 
-shouldCutBlock :: Monad m => NakamotoT tx m Bool
+shouldCutBlock :: Monad m => NakamotoT s tx m Bool
 shouldCutBlock = do
     v <- state $ randomR (0, 1)
     pure $ v < p
@@ -129,17 +130,17 @@ mineBlock
        , Binary          tx
        )
     => Tick
-    -> s
-    -> NakamotoEval s tx
-    -> NakamotoT      tx m (Maybe (Block tx s))
-mineBlock tick s evalFn = do
-    txs <- map snd <$> getTxs
-    let (results, s') = applyValidExprs txs s evalFn
+    -> NakamotoEval tx s
+    -> NakamotoT    tx s m (Maybe (Block tx s))
+mineBlock tick evalFn = do
+    txs    <- map snd <$> getTxs
+    parent <- tip <$> BlockStore.maximumChainBy (comparing height)
+
+    let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
     case map fst (rights results) of
         [] ->
             pure Nothing
-        validTxs -> do
-            parent <- tip <$> BlockStore.maximumChainBy (comparing height)
+        validTxs ->
             for (findBlock tick (blockHash parent) s' minDifficulty validTxs) $ \blk -> do
                 delTxs (blockData blk)
                 BlockStore.storeBlock $ map (const . Just) blk

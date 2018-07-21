@@ -36,7 +36,7 @@ class MonadProtocol DummyTx (TestableRun a) => TestableNode a where
 
 -- Nakamoto Node ---------------------------------------------------------------
 
-type NakamotoNode = NakamotoT DummyTx (TestNodeT Identity)
+type NakamotoNode = NakamotoT DummyTx () (TestNodeT Identity)
 
 data NakamotoNodeState = NakamotoNodeState
     { nakStdGen :: StdGen
