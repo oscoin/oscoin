@@ -1,10 +1,14 @@
 README
 ======
 
-This is the oscoin light node.
+This is the oscoin client.
 
 TESTING
 -------
+
+Run the tests with file-watching with::
+
+  stack test --file-watch --fast
 
 To load the tests in the repl, run::
 
@@ -12,6 +16,21 @@ To load the tests in the repl, run::
 
 Then call the ``main`` function to run them, and reload with ``:r`` as
 necessary.
+
+PROFILING
+---------
+
+To profile the test-suite, run::
+
+  stack test --profile -j4 --work-dir .stack-work-prof
+
+This will output a file, ``test.prof`` which you can convert to an interactive
+``svg`` with::
+
+  ghc-prof-flamegraph test.prof
+
+This will require installation of ``ghc-prof-flamegraph``. Then open the ``.svg``
+with any browser.
 
 DOCS
 ----
