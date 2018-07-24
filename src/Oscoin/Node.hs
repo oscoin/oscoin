@@ -9,9 +9,10 @@ module Oscoin.Node
     , close
 
     , runNodeT
+    , runEffects
 
-    , run
     , step
+    , tick
 
     , getMempool
     , getAccountPath
@@ -30,7 +31,8 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (MonadNetwork(..), Msg)
+import           Oscoin.P2P (MonadNetwork(..), Msg, runNetworkT)
+import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Storage.Block as BlockStore
 
 import           Control.Exception.Safe (bracket)
@@ -82,13 +84,15 @@ open hConfig hNodeId hMempool hStateTree hBlockStore =
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-run :: ( MonadNetwork  tx m
-       , MonadProtocol tx m
-       , MonadClock       m
-       )
-    => proxy tx
-    -> m ()
-run = forever . step
+tick :: forall proxy tx m.
+        ( MonadNetwork  tx m
+        , MonadProtocol tx m
+        , MonadClock       m
+        )
+     => proxy tx
+     -> m ()
+tick _ =
+    currentTick >>= tickM >>= sendM
 
 step :: forall proxy tx m.
         ( MonadNetwork  tx m
@@ -115,6 +119,15 @@ newtype NodeT tx i m a = NodeT (ReaderT (Handle tx Root i) m a)
 
 runNodeT :: Handle tx Root i -> NodeT tx i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
+
+runEffects
+    :: P2P.Handle
+    -> Handle tx Root i
+    -> (c -> NodeT tx i (P2P.NetworkT tx m) a)
+    -> c
+    -> m a
+runEffects p2p node evalConsensusT =
+    runNetworkT p2p . runNodeT node . evalConsensusT
 
 instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) where
     addTxs txs = asks hMempool >>= (`Mempool.insertMany` txs)

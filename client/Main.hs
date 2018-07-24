@@ -9,16 +9,16 @@ import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
-import           Oscoin.Node (runNodeT)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (Endpoints(..), NodeAddr(..), NodeId(..), runNetworkT, withP2P)
+import           Oscoin.P2P (Endpoints(..), NodeAddr(..), NodeId(..), withP2P)
 import qualified Oscoin.P2P as P2P
 import           Oscoin.P2P.Discovery (withDisco)
 import qualified Oscoin.P2P.Discovery.Multicast as MCast
 import qualified Oscoin.Storage.Block as BlockStore
 
+import qualified Control.Concurrent.Async as Async
 import           Data.Proxy (Proxy(..))
 import           GHC.Generics (Generic)
 import           System.Random (newStdGen)
@@ -47,8 +47,9 @@ main = do
     withStdLogger Log.defaultConfig                   $ \lgr ->
         withDisco (mkDisco lgr nid ip listenPort)     $ \dis ->
         withP2P   (mkP2PConfig ip listenPort) lgr dis $ \p2p ->
-            void . runNetworkT p2p . runNodeT nod . evalNakamotoT rng $
-                Node.run (Proxy @Text)
+            let run = Node.runEffects p2p nod (evalNakamotoT rng)
+             in Async.race_ (run . forever $ Node.step (Proxy @Text))
+                            (run . forever $ Node.tick (Proxy @Text))
   where
     mkP2PConfig ip port = P2P.defaultConfig
         { P2P.cfgBindIP   = ip

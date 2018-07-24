@@ -11,6 +11,8 @@ module Oscoin.Consensus.Nakamoto
     , score
 
     , difficulty
+    , minDifficulty
+    , easyDifficulty
     , defaultGenesisDifficulty
     , chainDifficulty
     ) where
@@ -137,14 +139,12 @@ mineBlock tick evalFn = do
     parent <- tip <$> BlockStore.maximumChainBy (comparing height)
 
     let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
-    case map fst (rights results) of
-        [] ->
-            pure Nothing
-        validTxs ->
-            for (findBlock tick (blockHash parent) s' minDifficulty validTxs) $ \blk -> do
-                delTxs (blockData blk)
-                BlockStore.storeBlock $ map (const . Just) blk
-                pure blk
+        validTxs      = map fst (rights results)
+
+    for (findBlock tick (blockHash parent) s' easyDifficulty validTxs) $ \blk -> do
+        delTxs (blockData blk)
+        BlockStore.storeBlock $ map (const . Just) blk
+        pure blk
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader s -> Difficulty
@@ -154,6 +154,11 @@ difficulty = os2ip . headerHash
 minDifficulty :: Difficulty
 minDifficulty =
     0xEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+-- | An easy difficulty. About 24s per block on a single core.
+easyDifficulty :: Difficulty
+easyDifficulty =
+    0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | The default difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty
