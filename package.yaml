@@ -32,8 +32,10 @@ dependencies:
   - microlens
   - monad-stm
   - mtl
+  - mwc-random
   - network
   - network-multicast
+  - primitive
   - radicle
   - random
   - random-shuffle
