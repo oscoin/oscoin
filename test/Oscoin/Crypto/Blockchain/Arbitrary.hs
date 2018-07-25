@@ -35,7 +35,7 @@ instance Arbitrary (Crypto.Digest HashAlgorithm) where
 arbitraryValidBlock :: forall tx s. (Binary tx, Arbitrary tx, Default s) => Blockchain tx s -> Gen (Block tx s)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
-    arbitraryValidBlockWith (map (const ()) prevHeader) txs
+    arbitraryValidBlockWith (void prevHeader) txs
 
 arbitraryValidBlockWith :: (Binary tx, Default s) => BlockHeader () -> [tx] -> Gen (Block tx s)
 arbitraryValidBlockWith prevHeader txs = do

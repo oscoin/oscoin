@@ -26,6 +26,8 @@
 - warn: {lhs: ap, rhs: (<*>)}
 - warn: {lhs: mapM, rhs: traverse}
 - warn: {lhs: concat (map f x), rhs: foldMap f x}
+- warn: {lhs: second (const ()), rhs: void}
+- warn: {lhs: map (const ()), rhs: void}
 
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 

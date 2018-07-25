@@ -34,7 +34,6 @@ import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
-import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
 import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -121,7 +120,7 @@ instance ( MonadMempool    tx   m
 
         P2P.ReqBlockMsg blk -> do
             mblk <- BlockStore.lookupBlock blk
-            pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
+            pure . maybeToList . map (P2P.BlockMsg . void) $ mblk
 
     tickM t = do
         NakamotoEnv{..} <- ask
@@ -133,7 +132,7 @@ instance ( MonadMempool    tx   m
             Just blk -> do
                 delTxs (blockData blk)
                 BlockStore.storeBlock $ map (const . Just) blk
-                pure [P2P.BlockMsg (second (const ()) blk)]
+                pure [P2P.BlockMsg (void blk)]
             Nothing ->
                 pure mempty
 
@@ -239,7 +238,7 @@ findBlock
     -> Maybe (Block tx s)
 findBlock t parent st target txs = do
     header <- headerWithPoW
-    pure $ second (const st) $ mkBlock header txs
+    pure (st <$ mkBlock header txs)
   where
     headerWithPoW    = findPoW headerWithoutPoW
     headerWithoutPoW = BlockHeader

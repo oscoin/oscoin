@@ -53,7 +53,7 @@ deriving instance {-# OVERLAPPING #-} Eq (BlockHeader ())
 deriving instance {-# OVERLAPPING #-} Ord (BlockHeader ())
 
 instance {-# OVERLAPPABLE #-} Eq (BlockHeader s) where
-    (==) a b = map (const ()) a == map (const ()) b
+    (==) a b = void a == void b
 
 instance Binary (BlockHeader ())
 
@@ -74,7 +74,7 @@ emptyHeader = BlockHeader
 
 headerHash :: BlockHeader s -> Hashed (BlockHeader ())
 headerHash =
-    hash . map (const ())
+    hash . void
 
 -- | Represents an orphan state @s@. Blocks of type @Block tx (Orphan s)@ are
 -- considered orphan blocks. The type @s -> Maybe s@ represents a function from
@@ -96,10 +96,10 @@ deriving instance {-# OVERLAPPING #-} Eq tx => Eq (Block tx ())
 deriving instance {-# OVERLAPPING #-} Ord tx => Ord (Block tx ())
 
 instance {-# OVERLAPPABLE #-} (Eq tx)  => Eq (Block tx s) where
-    (==) a b = map (const ()) a == map (const ()) b
+    (==) a b = void a == void b
 
 instance {-# OVERLAPPABLE #-} (Ord tx)  => Ord (Block tx s) where
-    (<=) a b = map (const ()) a <= map (const ()) b
+    (<=) a b = void a <= void b
 
 instance (Binary tx) => Binary (Block tx ())
 
@@ -160,7 +160,7 @@ isGenesisBlock blk =
 
 toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
-    second (const (\s -> evals (blockData blk) s eval)) blk
+    blk $> \s -> evals (blockData blk) s eval
 
 blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
