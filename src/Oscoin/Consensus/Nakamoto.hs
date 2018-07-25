@@ -164,7 +164,7 @@ mineBlock tick _ evalFn d txs parent = do
 
     findBlock tick (blockHash parent) s' d validTxs
 
--- | Like 'mineBlock', buy attempts to mine a block only 10% of the time it
+-- | Like 'mineBlock', but attempts to mine a block only 10% of the time it
 -- is called. Useful for test environments with very low difficulty.
 mineBlockRandom :: Binary tx => NakamotoMiner tx s
 mineBlockRandom t rng evalFn d txs parent =
