@@ -47,19 +47,25 @@ epochLength = 1
 
 type NakamotoEval tx s = Evaluator s tx ()
 
+-- | A Nakamoto mining function. Tries all nonces and returns 'Nothing' if
+-- no block satisfying the difficulty was found.
 type NakamotoMiner tx s =
-       Tick
-    -> StdGen
-    -> NakamotoEval tx s
-    -> Difficulty
-    -> [tx]
-    -> Block tx s
+       Tick              -- ^ Current time
+    -> StdGen            -- ^ A random number generator
+    -> NakamotoEval tx s -- ^ An evaluation function for extrinsics
+    -> Difficulty        -- ^ Target difficulty
+    -> [tx]              -- ^ Transactions to include in the block
+    -> Block tx s        -- ^ Parent block to build upon
     -> Maybe (Block tx s)
 
+-- | Read-only environment for the Nakamoto consensus protocol.
 data NakamotoEnv tx s = NakamotoEnv
     { nakEval       :: NakamotoEval tx s
+    -- ^ Evaluation function to use for extrinsics
     , nakDifficulty :: Difficulty
+    -- ^ Target difficulty (Nb. this is fixed for now and does not adjust)
     , nakMiner      :: NakamotoMiner tx s
+    -- ^ Mining function to use
     }
 
 instance Binary tx => Default (NakamotoEnv tx s) where
