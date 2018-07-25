@@ -6,10 +6,11 @@ import           Oscoin.Consensus.Test.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.Nakamoto (NakamotoT, runNakamotoT)
+import           Oscoin.Consensus.Nakamoto (NakamotoT, NakamotoEnv(..), runNakamotoT, minDifficulty)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
+import           Oscoin.Consensus.Evaluator (acceptAnythingEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
@@ -80,7 +81,9 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
     ((!a, !g, ()), !tns) =
         runIdentity
             . runTestNodeT nakNode
-            $ runNakamotoT nakStdGen ma
+            $ runNakamotoT env nakStdGen ma
+    env = NakamotoEnv { nakEval = acceptAnythingEval
+                      , nakDifficulty = minDifficulty }
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =

@@ -3,6 +3,7 @@
 
 module Oscoin.Consensus.Nakamoto
     ( NakamotoT
+    , NakamotoEnv(..)
 
     , runNakamotoT
     , evalNakamotoT
@@ -44,20 +45,29 @@ epochLength = 1
 
 type NakamotoEval tx s = Evaluator s tx ()
 
-newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEval tx s) () StdGen m a)
+data NakamotoEnv tx s = NakamotoEnv
+    { nakEval       :: NakamotoEval tx s
+    , nakDifficulty :: Difficulty
+    }
+
+instance Default (NakamotoEnv tx s) where
+    def = NakamotoEnv
+        { nakEval = acceptAnythingEval
+        , nakDifficulty = easyDifficulty
+        }
+
+newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEnv tx s) () StdGen m a)
     deriving ( Functor
              , Applicative
              , Monad
              , MonadIO
-             , MonadEval tx s
+             , MonadReader (NakamotoEnv tx s)
              , MonadWriter ()
              , MonadState StdGen
              )
 
 score :: Blockchain tx s -> Blockchain tx s -> Ordering
 score = comparing height
-
-type MonadEval tx s = MonadReader (NakamotoEval tx s)
 
 instance MonadTrans (NakamotoT tx s) where
     lift = NakamotoT . lift
@@ -77,8 +87,8 @@ instance ( MonadMempool    tx   m
         P2P.BlockMsg blk ->
             isNovelBlock (blockHash blk) >>= \case
                 True | Right blk' <- validateBlock blk -> do
-                    evalFn <- ask
-                    BlockStore.storeBlock $ toOrphan evalFn blk'
+                    NakamotoEnv{nakEval} <- ask
+                    BlockStore.storeBlock $ toOrphan nakEval blk'
                     delTxs (blockData blk')
                     pure [P2P.BlockMsg blk']
                 _ ->
@@ -96,8 +106,8 @@ instance ( MonadMempool    tx   m
             pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
 
     tickM t = do
-        e    <- ask
-        mblk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t e)
+        NakamotoEnv{nakEval, nakDifficulty} <- ask
+        mblk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t nakEval nakDifficulty)
         pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
 
     {-# INLINE stepM #-}
@@ -113,11 +123,11 @@ isNovelTx h = do
     inMempool    <- lookupTx h
     pure . isNothing $ inBlockStore <|> inMempool
 
-runNakamotoT :: StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())
-runNakamotoT rng (NakamotoT ma) = runRWST ma acceptAnythingEval rng
+runNakamotoT :: NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())
+runNakamotoT env rng (NakamotoT ma) = runRWST ma env rng
 
-evalNakamotoT :: Monad m => StdGen -> NakamotoT tx s m a -> m (a, ())
-evalNakamotoT rng (NakamotoT ma) = evalRWST ma acceptAnythingEval rng
+evalNakamotoT :: Monad m => NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, ())
+evalNakamotoT env rng (NakamotoT ma) = evalRWST ma env rng
 
 shouldCutBlock :: Monad m => NakamotoT s tx m Bool
 shouldCutBlock = do
@@ -133,15 +143,16 @@ mineBlock
        )
     => Tick
     -> NakamotoEval tx s
+    -> Difficulty
     -> NakamotoT    tx s m (Maybe (Block tx s))
-mineBlock tick evalFn = do
+mineBlock tick evalFn d = do
     txs    <- map snd <$> getTxs
     parent <- tip <$> BlockStore.maximumChainBy (comparing height)
 
     let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
         validTxs      = map fst (rights results)
 
-    for (findBlock tick (blockHash parent) s' easyDifficulty validTxs) $ \blk -> do
+    for (findBlock tick (blockHash parent) s' d validTxs) $ \blk -> do
         delTxs (blockData blk)
         BlockStore.storeBlock $ map (const . Just) blk
         pure blk
