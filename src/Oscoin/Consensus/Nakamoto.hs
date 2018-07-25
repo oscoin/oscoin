@@ -5,6 +5,8 @@ module Oscoin.Consensus.Nakamoto
     ( NakamotoT
     , NakamotoEnv(..)
 
+    , defaultNakamotoEnv
+
     , runNakamotoT
     , evalNakamotoT
 
@@ -67,12 +69,12 @@ data NakamotoEnv tx s = NakamotoEnv
     -- ^ Mining function to use
     }
 
-instance Binary tx => Default (NakamotoEnv tx s) where
-    def = NakamotoEnv
-        { nakEval = acceptAnythingEval
-        , nakDifficulty = easyDifficulty
-        , nakMiner = mineBlock
-        }
+defaultNakamotoEnv :: Binary tx => NakamotoEnv tx s
+defaultNakamotoEnv = NakamotoEnv
+    { nakEval = acceptAnythingEval
+    , nakDifficulty = easyDifficulty
+    , nakMiner = mineBlock
+    }
 
 newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEnv tx s) () StdGen m a)
     deriving ( Functor
