@@ -54,7 +54,7 @@ type NakamotoMiner tx s =
     -> StdGen            -- ^ A random number generator
     -> NakamotoEval tx s -- ^ An evaluation function for extrinsics
     -> Difficulty        -- ^ Target difficulty
-    -> [tx]              -- ^ Transactions to include in the block
+    -> [tx]              -- ^ Extrinsics to include in the block
     -> Block tx s        -- ^ Parent block to build upon
     -> Maybe (Block tx s)
 
