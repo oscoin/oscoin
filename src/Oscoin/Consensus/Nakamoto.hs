@@ -131,7 +131,18 @@ instance ( MonadMempool    tx   m
         case nakMiner t r nakEval nakDifficulty txs parent of
             Just blk -> do
                 delTxs (blockData blk)
-                BlockStore.storeBlock $ map (const . Just) blk
+                -- When mining a block, we've already computed the final state
+                -- of that block, but when storing a block received from the
+                -- network, we havent't, we just have `s -> Maybe s`.
+                --
+                -- It's nice to think of mined and network blocks uniformly,
+                -- so we have the same interface for both with 'BlockStore.storeBlock',
+                -- but as an optimization, with mined blocks we just have a
+                -- `(const . Just)` with the `s` we have already computed.
+                -- This way, the state is only computed once, even when the
+                -- BlockStore attempts to recompute it when linking the block
+                -- to its parent.
+                BlockStore.storeBlock $ map (\s -> \_ -> Just s) blk
                 pure [P2P.BlockMsg (void blk)]
             Nothing ->
                 pure mempty
