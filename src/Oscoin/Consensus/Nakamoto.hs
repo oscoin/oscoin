@@ -51,16 +51,16 @@ type NakamotoEval tx s = Evaluator s tx ()
 type NakamotoMiner tx s =
        Tick              -- ^ Current time
     -> StdGen            -- ^ A random number generator
-    -> NakamotoEval tx s -- ^ An evaluation function for extrinsics
+    -> NakamotoEval tx s -- ^ An evaluation function for expressions
     -> Difficulty        -- ^ Target difficulty
-    -> [tx]              -- ^ Extrinsics to include in the block
+    -> [tx]              -- ^ Expressions to include in the block
     -> Block tx s        -- ^ Parent block to build upon
     -> Maybe (Block tx s)
 
 -- | Read-only environment for the Nakamoto consensus protocol.
 data NakamotoEnv tx s = NakamotoEnv
     { nakEval       :: NakamotoEval tx s
-    -- ^ Evaluation function to use for extrinsics
+    -- ^ Evaluation function to use for expressions
     , nakDifficulty :: Difficulty
     -- ^ Target difficulty (Nb. this is fixed for now and does not adjust)
     , nakMiner      :: NakamotoMiner tx s
