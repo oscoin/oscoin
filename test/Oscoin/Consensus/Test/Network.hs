@@ -6,7 +6,7 @@ import           Oscoin.Consensus.Test.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.Nakamoto (NakamotoT, NakamotoEnv(..), runNakamotoT, minDifficulty)
+import           Oscoin.Consensus.Nakamoto (NakamotoT, NakamotoEnv(..), runNakamotoT)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
@@ -83,7 +83,8 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
             . runTestNodeT nakNode
             $ runNakamotoT env nakStdGen ma
     env = NakamotoEnv { nakEval = acceptAnythingEval
-                      , nakDifficulty = minDifficulty }
+                      , nakDifficulty = Nakamoto.minDifficulty
+                      , nakMiner = Nakamoto.mineBlockRandom }
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =

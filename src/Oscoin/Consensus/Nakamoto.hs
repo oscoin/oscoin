@@ -16,6 +16,9 @@ module Oscoin.Consensus.Nakamoto
     , easyDifficulty
     , defaultGenesisDifficulty
     , chainDifficulty
+
+    , mineBlock
+    , mineBlockRandom
     ) where
 
 import           Oscoin.Prelude
@@ -33,27 +36,37 @@ import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Bifunctor (second)
 import           Data.Binary (Binary)
-import           Data.Bool (bool)
 import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Maybe (maybeToList, catMaybes)
 import           Data.Traversable (for)
-import           System.Random (StdGen, randomR)
+import           System.Random (StdGen, randomR, split)
 
 epochLength :: Tick
 epochLength = 1
 
 type NakamotoEval tx s = Evaluator s tx ()
 
+type NakamotoMiner tx s =
+       Tick
+    -> StdGen
+    -> NakamotoEval tx s
+    -> Difficulty
+    -> [tx]
+    -> Block tx s
+    -> Maybe (Block tx s)
+
 data NakamotoEnv tx s = NakamotoEnv
     { nakEval       :: NakamotoEval tx s
     , nakDifficulty :: Difficulty
+    , nakMiner      :: NakamotoMiner tx s
     }
 
-instance Default (NakamotoEnv tx s) where
+instance Binary tx => Default (NakamotoEnv tx s) where
     def = NakamotoEnv
         { nakEval = acceptAnythingEval
         , nakDifficulty = easyDifficulty
+        , nakMiner = mineBlock
         }
 
 newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEnv tx s) () StdGen m a)
@@ -80,7 +93,6 @@ instance MonadClock m => MonadClock (NakamotoT tx s m) where
 instance ( MonadMempool    tx   m
          , MonadBlockStore tx s m
          , Hashable        tx
-         , Binary          tx
          ) => MonadProtocol tx (NakamotoT tx s m)
   where
     stepM _ = \case
@@ -106,9 +118,18 @@ instance ( MonadMempool    tx   m
             pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
 
     tickM t = do
-        NakamotoEnv{nakEval, nakDifficulty} <- ask
-        mblk <- shouldCutBlock >>= bool (pure Nothing) (mineBlock t nakEval nakDifficulty)
-        pure . maybeToList . map (P2P.BlockMsg . second (const ())) $ mblk
+        NakamotoEnv{..} <- ask
+        r :: StdGen     <- state split
+        txs             <- map snd <$> getTxs
+        parent          <- tip <$> BlockStore.maximumChainBy (comparing height)
+
+        case nakMiner t r nakEval nakDifficulty txs parent of
+            Just blk -> do
+                delTxs (blockData blk)
+                BlockStore.storeBlock $ map (const . Just) blk
+                pure [P2P.BlockMsg (second (const ()) blk)]
+            Nothing ->
+                pure mempty
 
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
@@ -129,33 +150,24 @@ runNakamotoT env rng (NakamotoT ma) = runRWST ma env rng
 evalNakamotoT :: Monad m => NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, ())
 evalNakamotoT env rng (NakamotoT ma) = evalRWST ma env rng
 
-shouldCutBlock :: Monad m => NakamotoT s tx m Bool
-shouldCutBlock = do
-    v <- state $ randomR (0, 1)
-    pure $ v < p
-  where
-    p = 0.1 :: Float
-
-mineBlock
-    :: ( MonadMempool    tx   m
-       , MonadBlockStore tx s m
-       , Binary          tx
-       )
-    => Tick
-    -> NakamotoEval tx s
-    -> Difficulty
-    -> NakamotoT    tx s m (Maybe (Block tx s))
-mineBlock tick evalFn d = do
-    txs    <- map snd <$> getTxs
-    parent <- tip <$> BlockStore.maximumChainBy (comparing height)
-
+-- | Attempt to mine a 'Block'. Returns 'Nothing' if all nonces were tried
+-- unsuccessfully.
+mineBlock :: Binary tx => NakamotoMiner tx s
+mineBlock tick _ evalFn d txs parent = do
     let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
         validTxs      = map fst (rights results)
 
-    for (findBlock tick (blockHash parent) s' d validTxs) $ \blk -> do
-        delTxs (blockData blk)
-        BlockStore.storeBlock $ map (const . Just) blk
-        pure blk
+    findBlock tick (blockHash parent) s' d validTxs
+
+-- | Like 'mineBlock', buy attempts to mine a block only 10% of the time it
+-- is called. Useful for test environments with very low difficulty.
+mineBlockRandom :: Binary tx => NakamotoMiner tx s
+mineBlockRandom t rng evalFn d txs parent =
+    let (r, rng') = randomR (0, 1) rng
+        p = 0.1 :: Float
+     in if r < p
+           then mineBlock t rng' evalFn d txs parent
+           else Nothing
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader s -> Difficulty
