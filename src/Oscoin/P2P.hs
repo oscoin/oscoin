@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Oscoin.P2P
     ( Config (..)
@@ -26,8 +26,8 @@ module Oscoin.P2P
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Environment
 import           Oscoin.Logging (Logger, shown, withExceptionLogged, (%))
 import qualified Oscoin.Logging as Log
@@ -72,16 +72,15 @@ class Monad m => MonadNetwork tx m | m -> tx where
     sendM :: Foldable t => t (Msg tx) -> m ()
     recvM :: m (Msg tx)
 
-instance {-# OVERLAPPABLE #-}
-    ( MonadTrans   t
-    , Monad        (t m)
-    , MonadNetwork tx m
-    ) => MonadNetwork tx (t m)
-  where
+    default sendM
+        :: (MonadNetwork tx m', MonadTrans t, m ~ t m', Foldable f)
+        => f (Msg tx) -> m ()
     sendM = lift . sendM
+
+    default recvM
+        :: (MonadNetwork tx m', MonadTrans t, m ~ t m')
+        => m (Msg tx)
     recvM = lift recvM
-    {-# INLINE sendM #-}
-    {-# INLINE recvM #-}
 
 newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
     deriving ( Functor

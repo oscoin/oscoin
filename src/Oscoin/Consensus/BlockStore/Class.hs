@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Oscoin.Consensus.BlockStore.Class where
 
@@ -26,19 +26,34 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
         :: (Blockchain tx s -> Blockchain tx s -> Ordering)
         -> m (Blockchain tx s)
 
-instance {-# OVERLAPPABLE #-}
-    ( MonadTrans t
-    , Monad (t m)
-    , MonadBlockStore s tx m
-    ) => MonadBlockStore s tx (t m)
-  where
-    storeBlock     = lift . storeBlock
-    lookupBlock    = lift . lookupBlock
-    lookupTx       = lift . lookupTx
-    orphans        = lift orphans
+
+    default storeBlock
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => Block tx (Orphan s) -> m ()
+    storeBlock = lift . storeBlock
+    {-# INLINE storeBlock #-}
+
+    default lookupBlock
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => BlockHash -> m (Maybe (Block tx s))
+    lookupBlock = lift . lookupBlock
+    {-# INLINE lookupBlock #-}
+
+    default lookupTx
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => Hashed tx -> m (Maybe tx)
+    lookupTx = lift . lookupTx
+    {-# INLINE lookupTx #-}
+
+    default orphans
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => m (Set BlockHash)
+    orphans = lift orphans
+    {-# INLINE orphans #-}
+
+    default maximumChainBy
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => (Blockchain tx s -> Blockchain tx s -> Ordering)
+        -> m (Blockchain tx s)
     maximumChainBy = lift . maximumChainBy
-    {-# INLINE storeBlock     #-}
-    {-# INLINE lookupBlock    #-}
-    {-# INLINE lookupTx       #-}
-    {-# INLINE orphans        #-}
     {-# INLINE maximumChainBy #-}

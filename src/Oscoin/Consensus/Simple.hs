@@ -106,6 +106,10 @@ instance ( MonadMempool    tx    m
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
 
+instance P2P.MonadNetwork tx    m => P2P.MonadNetwork tx    (SimpleT tx i m)
+instance MonadMempool     tx    m => MonadMempool     tx    (SimpleT tx i m)
+instance MonadBlockStore  tx () m => MonadBlockStore  tx () (SimpleT tx i m)
+
 mkEnv :: i -> Set i -> Env i
 mkEnv = Env
 

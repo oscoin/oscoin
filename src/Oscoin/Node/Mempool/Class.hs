@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Oscoin.Node.Mempool.Class
     ( MonadMempool (..)
@@ -33,21 +33,38 @@ class Monad m => MonadMempool tx m | m -> tx where
     -- | Subscribe to mempool events.
     subscribe :: m (Channel tx)
 
-instance {-# OVERLAPPABLE #-}
-    ( MonadTrans   t
-    , Monad        (t m)
-    , MonadMempool tx m
-    ) => MonadMempool tx (t m)
-  where
-    addTxs    = lift . addTxs
-    getTxs    = lift getTxs
-    delTxs    = lift . delTxs
-    numTxs    = lift numTxs
-    lookupTx  = lift . lookupTx
+    default addTxs
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m', Foldable f)
+        => f tx -> m ()
+    addTxs = lift . addTxs
+    {-# INLINE addTxs #-}
+
+    default getTxs
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        => m [(Hashed tx, tx)]
+    getTxs = lift getTxs
+    {-# INLINE getTxs #-}
+
+    default delTxs
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m', Foldable f)
+        => f tx -> m ()
+    delTxs = lift . delTxs
+    {-# INLINE delTxs #-}
+
+    default numTxs
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        => m Int
+    numTxs = lift numTxs
+    {-# INLINE numTxs #-}
+
+    default lookupTx
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        => Hashed tx -> m (Maybe tx)
+    lookupTx = lift . lookupTx
+    {-# INLINE lookupTx #-}
+
+    default subscribe
+        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        => m (Channel tx)
     subscribe = lift subscribe
-    {-# INLINE addTxs    #-}
-    {-# INLINE getTxs    #-}
-    {-# INLINE delTxs    #-}
-    {-# INLINE numTxs    #-}
-    {-# INLINE lookupTx  #-}
     {-# INLINE subscribe #-}

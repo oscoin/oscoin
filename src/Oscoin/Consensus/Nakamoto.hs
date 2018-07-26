@@ -152,6 +152,10 @@ instance ( MonadMempool    tx   m
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
 
+instance P2P.MonadNetwork tx   m => P2P.MonadNetwork tx   (NakamotoT tx s m)
+instance MonadMempool     tx   m => MonadMempool     tx   (NakamotoT tx s m)
+instance MonadBlockStore  tx s m => MonadBlockStore  tx s (NakamotoT tx s m)
+
 isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
 isNovelBlock h =
     isNothing <$> BlockStore.lookupBlock h

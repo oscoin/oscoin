@@ -185,6 +185,8 @@ instance MonadIO m => MonadIO (NodeT tx s i m) where
     liftIO = lift . liftIO
     {-# INLINE liftIO #-}
 
+instance MonadNetwork tx m => MonadNetwork tx (NodeT tx i m)
+
 -------------------------------------------------------------------------------
 
 getMempool :: (Monad m, MonadSTM m) => NodeT tx s i m (Mempool tx)
