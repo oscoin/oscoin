@@ -2,6 +2,7 @@
 module Oscoin.Crypto.PubKey
     ( Signed(..)
     , PublicKey
+    , publicKeyHash
     , PrivateKey
     , generateKeyPair
     , sign
@@ -35,6 +36,9 @@ instance Eq PublicKey where
 
 instance Ord PublicKey where
     (<=) (PublicKey _ h) (PublicKey _ h') = h <= h'
+
+publicKeyHash :: PublicKey -> Hashed ECDSA.PublicKey
+publicKeyHash (PublicKey _ h) = h
 
 newtype PrivateKey = PrivateKey ECDSA.PrivateKey
     deriving (Show, Eq)

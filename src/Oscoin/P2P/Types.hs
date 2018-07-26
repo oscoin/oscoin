@@ -2,27 +2,36 @@ module Oscoin.P2P.Types
     ( NodeId (..)
     , Endpoints (..)
     , NodeAddr (..)
+    , Seed (..)
     , toSockAddr
     , fromSockAddr
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.PubKey (PublicKey)
+import           Oscoin.Crypto.Hash (Hashed)
 
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Binary (Binary(..))
 import           Data.IP (IP(..))
 import qualified Data.IP as IP
+import           Data.Yaml (FromJSON, ToJSON, parseJSON, withObject, (.:))
 import           Network.Socket (SockAddr(..))
 import           Text.Read (readMaybe)
 
-newtype NodeId = NodeId { fromNodeId :: PublicKey }
-    deriving (Eq, Ord, Show, Binary)
+newtype NodeId = NodeId { fromNodeId :: Hashed ECDSA.PublicKey }
+    deriving (Eq, Ord, Show, Binary, FromJSON, ToJSON)
 
 data NodeAddr = NodeAddr
     { addrIP   :: IP
     , addrPort :: Word16
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
+
+instance FromJSON NodeAddr where
+    parseJSON = withObject "NodeAddr" $ \o -> do
+        addrIP   <- read <$> o .: "ip"
+        addrPort <-          o .: "port"
+        pure NodeAddr{..}
 
 instance Binary NodeAddr where
     put NodeAddr{addrIP, addrPort} = do
@@ -53,3 +62,12 @@ data Endpoints = Endpoints
     } deriving (Show, Generic)
 
 instance Binary Endpoints
+instance FromJSON Endpoints
+
+data Seed = Seed
+    { seedId        :: NodeId
+    , seedEndpoints :: Endpoints
+    } deriving (Show, Generic)
+
+instance FromJSON Seed
+

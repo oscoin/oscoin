@@ -96,7 +96,7 @@ import           Data.ByteArray (ByteArrayAccess)
 import           Data.Function ((&))
 import           Data.Functor (void, ($>))
 import           Data.Functor.Identity (Identity(..), runIdentity)
-import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe, fromMaybe)
+import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe, fromMaybe, catMaybes)
 import           Data.String (IsString)
 import           Data.Time.Clock (NominalDiffTime)
 import           Data.Word

@@ -39,7 +39,6 @@ instance ToJSON Account where
 
 pattern AccountsPrefix :: (IsString a, Eq a) => a
 pattern AccountsPrefix = "accounts"
--- pattern DataPrefix     = "data" :: Text
 
 -- TODO: Rewrite with `Id Account`.
 getPath :: AccId -> Path -> Tree Path v -> Maybe v

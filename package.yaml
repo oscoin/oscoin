@@ -50,6 +50,7 @@ dependencies:
   - wai-extra
   - wai-middleware-static
   - writer-cps-mtl
+  - yaml
 
 library:
   source-dirs: src
