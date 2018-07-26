@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 
 import           Control.Monad.Except
 import           Control.Monad.State
+import qualified Radicle as Rad
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
@@ -22,6 +23,13 @@ acceptAnythingEval _ s = Just ((), s)
 -- | An evaluator that rejects any expression and has no state.
 rejectEverythingEval :: Evaluator s a b
 rejectEverythingEval _ = const Nothing
+
+-- | A radicle evaluator.
+radicleEval :: Evaluator (Rad.Bindings Identity) Text ()
+radicleEval expr st =
+    case runIdentity . Rad.runLang st $ Rad.interpretMany "chain" expr of
+        (Left _, _)  -> Nothing
+        (Right _, s) -> Just ((), s)
 
 foldEval :: Monoid w => Evaluator w w ()
 foldEval x xs = Just ((), xs <> x)

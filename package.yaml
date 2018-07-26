@@ -34,8 +34,10 @@ dependencies:
   - mtl
   - network
   - network-multicast
+  - radicle
   - random
   - random-shuffle
+  - recursion-schemes
   - safe-exceptions
   - semigroups
   - Spock

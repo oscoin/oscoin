@@ -17,7 +17,7 @@ import qualified Network.Wai.Middleware.Static as Wai
 import           Web.Spock (get, json, middleware, post, root, var, (<//>))
 
 -- | Entry point for API.
-api :: Environment -> Api (Signed Account.Tx) i ()
+api :: Environment -> Api (Signed Account.Tx) s i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")

@@ -2,7 +2,6 @@ module Oscoin.Node
     ( Config (..)
     , Handle
     , NodeT
-    , Root
 
     , withNode
     , open
@@ -56,10 +55,6 @@ data Handle tx s i = Handle
     , hMempool    :: Mempool.Handle tx
     }
 
--- | The type of the state root. This should eventually unify with what is
--- in 'hStateTree'.
-type Root = ()
-
 withNode
     :: Config
     -> i
@@ -109,27 +104,27 @@ step _ = do
 
 -------------------------------------------------------------------------------
 
-newtype NodeT tx i m a = NodeT (ReaderT (Handle tx Root i) m a)
+newtype NodeT tx s i m a = NodeT (ReaderT (Handle tx s i) m a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadReader (Handle tx Root i)
+             , MonadReader (Handle tx s i)
              , MonadTrans
              )
 
-runNodeT :: Handle tx Root i -> NodeT tx i m a -> m a
+runNodeT :: Handle tx s i -> NodeT tx s i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
 
 runEffects
     :: P2P.Handle
-    -> Handle tx Root i
-    -> (c -> NodeT tx i (P2P.NetworkT tx m) a)
+    -> Handle tx s i
+    -> (c -> NodeT tx s i (P2P.NetworkT tx m) a)
     -> c
     -> m a
 runEffects p2p node evalConsensusT =
     runNetworkT p2p . runNodeT node . evalConsensusT
 
-instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) where
+instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx s i m) where
     addTxs txs = asks hMempool >>= (`Mempool.insertMany` txs)
     getTxs     = asks hMempool >>= Mempool.toList
     delTxs txs = asks hMempool >>= (`Mempool.removeMany` txs)
@@ -143,7 +138,7 @@ instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx i m) wh
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadSTM m, Ord tx, Hashable tx) => MonadBlockStore tx Root (NodeT tx i m) where
+instance (Monad m, MonadSTM m, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         BlockStore.put bs blk
@@ -173,34 +168,34 @@ instance (Monad m, MonadSTM m, Ord tx, Hashable tx) => MonadBlockStore tx Root (
     {-# INLINE orphans        #-}
     {-# INLINE maximumChainBy #-}
 
-instance (Monad m, MonadIO m) => MonadQuery (NodeT tx i m) where
-    type Key (NodeT tx i m) = STree.Path
-    type Val (NodeT tx i m) = STree.Val
+instance (Monad m, MonadIO m) => MonadQuery (NodeT tx s i m) where
+    type Key (NodeT tx s i m) = STree.Path
+    type Val (NodeT tx s i m) = STree.Val
 
     queryM k = do
         st <- asks hStateTree
         lift $ STree.get st k
     {-# INLINE queryM #-}
 
-instance MonadClock m => MonadClock (NodeT tx i m) where
+instance MonadClock m => MonadClock (NodeT tx s i m) where
     currentTick = lift currentTick
     {-# INLINE currentTick #-}
 
-instance MonadIO m => MonadIO (NodeT tx i m) where
+instance MonadIO m => MonadIO (NodeT tx s i m) where
     liftIO = lift . liftIO
     {-# INLINE liftIO #-}
 
 -------------------------------------------------------------------------------
 
-getMempool :: (Monad m, MonadSTM m) => NodeT tx i m (Mempool tx)
+getMempool :: (Monad m, MonadSTM m) => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= Mempool.snapshot
 
-getAccountPath :: MonadIO m => AccId -> STree.Path -> NodeT tx i m (Maybe STree.Val)
+getAccountPath :: MonadIO m => AccId -> STree.Path -> NodeT tx s i m (Maybe STree.Val)
 getAccountPath acc path =
     getPath (AccountsPrefix : acc : path)
 
 -- | Get a state value at the given path.
-getPath :: MonadIO m => STree.Path -> NodeT tx i m (Maybe STree.Val)
+getPath :: MonadIO m => STree.Path -> NodeT tx s i m (Maybe STree.Val)
 getPath k = do
     Handle{hStateTree} <- ask
     lift $ STree.get hStateTree k

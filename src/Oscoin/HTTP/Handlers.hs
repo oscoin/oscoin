@@ -13,19 +13,19 @@ import           Oscoin.State.Tree (Key)
 import           Data.Aeson (FromJSON, ToJSON, toJSON)
 import           Network.HTTP.Types.Status
 
-getAllTransactions :: ToJSON tx => ApiAction tx i ()
+getAllTransactions :: ToJSON tx => ApiAction tx s i ()
 getAllTransactions = do
     mp <- storage Node.getMempool
     respond ok200 (Just (toJSON mp))
 
-getTransaction :: (Hashable tx, ToJSON tx) => Hashed tx -> ApiAction tx i ()
+getTransaction :: (Hashable tx, ToJSON tx) => Hashed tx -> ApiAction tx s i ()
 getTransaction txId = do
     mtx <- storage (lookupTx txId)
     case mtx of
         Just tx -> respond ok200 (Just (toJSON tx))
         Nothing -> respond notFound404 Nothing
 
-submitTransaction :: (Hashable tx, FromJSON tx, Id tx ~ Hashed tx) => ApiAction tx i ()
+submitTransaction :: (Hashable tx, FromJSON tx, Id tx ~ Hashed tx) => ApiAction tx s i ()
 submitTransaction = do
     -- TODO: Create a pattern for this.
     result :: Maybe tx <- getBody
@@ -38,7 +38,7 @@ submitTransaction = do
             respond badRequest400 Nothing
 
 -- | Get a data key under an account.
-getAccountDataKey :: AccId -> Key -> ApiAction tx i ()
+getAccountDataKey :: AccId -> Key -> ApiAction tx s i ()
 getAccountDataKey acc key = do
     result <- storage $ Node.getPath (acc : "data" : [key])
     case result of
@@ -48,16 +48,16 @@ getAccountDataKey acc key = do
             respond notFound404 (Just $ errorBody "Not found")
 
 -- | Runs a StorageT action in a MonadApi monad.
-storage :: MonadApi tx i m => Node.NodeT tx i IO a -> m a
+storage :: MonadApi tx s i m => Node.NodeT tx s i IO a -> m a
 storage s = withHandle $ \h ->
     Node.runNodeT h s
 
-getAccounts :: ApiAction tx i ()
+getAccounts :: ApiAction tx s i ()
 getAccounts = do
     State{stAccounts} <- getState
     respond ok200 $ Just $ toJSON $ map snd stAccounts
 
-getAccount :: AccId -> ApiAction tx i ()
+getAccount :: AccId -> ApiAction tx s i ()
 getAccount accId = do
     State{stAccounts} <- getState
     case lookup accId stAccounts of
@@ -66,11 +66,11 @@ getAccount accId = do
         Nothing ->
             respond notFound404 Nothing
 
-getRepos :: AccId -> ApiAction tx i ()
+getRepos :: AccId -> ApiAction tx s i ()
 getRepos _ = notImplemented
 
-getRepo :: AccId -> RepoId -> ApiAction tx i ()
+getRepo :: AccId -> RepoId -> ApiAction tx s i ()
 getRepo _ _ = notImplemented
 
-getMember :: AccId -> MemberId -> ApiAction tx i ()
+getMember :: AccId -> MemberId -> ApiAction tx s i ()
 getMember _ _ = notImplemented

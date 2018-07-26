@@ -3,7 +3,8 @@ module Main (main) where
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv)
+import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, nakEval)
+import           Oscoin.Consensus.Evaluator (radicleEval)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Environment (Environment(Testing))
@@ -47,7 +48,8 @@ main = do
     withStdLogger Log.defaultConfig                   $ \lgr ->
         withDisco (mkDisco lgr nid ip listenPort)     $ \dis ->
         withP2P   (mkP2PConfig ip listenPort) lgr dis $ \p2p ->
-            let run = Node.runEffects p2p nod (evalNakamotoT defaultNakamotoEnv rng)
+            let run = Node.runEffects p2p nod (evalNakamotoT env rng)
+                env = defaultNakamotoEnv { nakEval = radicleEval }
              in Async.race_ (run . forever $ Node.step (Proxy @Text))
                             (run . forever $ Node.tick (Proxy @Text))
   where
