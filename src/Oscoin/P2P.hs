@@ -82,7 +82,7 @@ class Monad m => MonadNetwork tx m | m -> tx where
         :: (MonadNetwork tx m', MonadTrans t, m ~ t m')
         => m (Msg tx)
     recvM = lift recvM
-    {-# ININE recvM #-}
+    {-# INLINE recvM #-}
 
 newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
     deriving ( Functor
