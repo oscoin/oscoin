@@ -39,7 +39,7 @@ main = do
     rng <- newStdGen
     mem <- Mempool.new
     str <- STree.connect
-    blk <- BlockStore.new $ genesisBlockStore (genesisBlock 0 [])
+    blk <- BlockStore.new $ genesisBlockStore $ genesisBlock 0 []
     nod <- Node.open (Node.Config "xyz" [] Testing []) nid mem str blk
 
     let !ip = read listenIp

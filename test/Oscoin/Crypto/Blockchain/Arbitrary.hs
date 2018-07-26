@@ -32,34 +32,34 @@ instance Arbitrary (Crypto.Digest HashAlgorithm) where
         str <- replicateM (Crypto.hashDigestSize hashAlgorithm) (arbitrary :: Gen Word8)
         pure . fromJust $ Crypto.digestFromByteString (BS.pack str)
 
-arbitraryValidBlock :: forall tx s. (Binary tx, Arbitrary tx, Default s) => Blockchain tx s -> Gen (Block tx s)
+arbitraryValidBlock :: forall tx s. (Binary tx, Arbitrary tx, Monoid s) => Blockchain tx s -> Gen (Block tx s)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
     arbitraryValidBlockWith (void prevHeader) txs
 
-arbitraryValidBlockWith :: (Binary tx, Default s) => BlockHeader () -> [tx] -> Gen (Block tx s)
+arbitraryValidBlockWith :: (Binary tx, Monoid s) => BlockHeader () -> [tx] -> Gen (Block tx s)
 arbitraryValidBlockWith prevHeader txs = do
     elapsed <- choose (2750, 3250)
     let header = emptyHeader
                { blockPrevHash   = hash prevHeader
                , blockDataHash   = hashTxs txs
-               , blockState      = def
+               , blockState      = mempty
                , blockStateHash  = zeroHash
                , blockTimestamp  = blockTimestamp prevHeader + elapsed
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)
 
-arbitraryGenesis :: forall tx s. (Binary tx, Arbitrary tx, Default s) => Gen (Block tx s)
+arbitraryGenesis :: forall tx s. (Binary tx, Arbitrary tx, Monoid s) => Gen (Block tx s)
 arbitraryGenesis = do
     txs <- resize 20 arbitrary :: Gen [tx]
     arbitraryGenesisWith txs
 
-arbitraryGenesisWith :: forall tx s. (Binary tx, Default s) => [tx] -> Gen (Block tx s)
+arbitraryGenesisWith :: forall tx s. (Binary tx, Monoid s) => [tx] -> Gen (Block tx s)
 arbitraryGenesisWith txs =
-    map (const def) <$> (genesisBlock @[] @tx @s <$> arbitrary <*> pure txs)
+    map (const mempty) <$> (genesisBlock @[] @tx @s <$> arbitrary <*> pure txs)
 
-arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Default s) => Gen (Blockchain tx s)
+arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Monoid s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
     gen <- arbitraryGenesisWith []
     h   <- choose (8, 9) :: Gen Int

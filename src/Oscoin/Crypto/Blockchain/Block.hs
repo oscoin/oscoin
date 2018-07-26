@@ -125,7 +125,7 @@ validateBlock :: Block tx s -> Either Error (Block tx s)
 validateBlock = Right
 
 block
-    :: (Foldable t, Binary tx, Default s)
+    :: (Foldable t, Binary tx, Monoid s)
     => BlockHash
     -> Timestamp
     -> t tx
@@ -137,7 +137,7 @@ block prev t txs =
             , blockTimestamp  = t
             , blockDataHash   = hashTxs txs
             , blockStateHash  = zeroHash
-            , blockState      = def
+            , blockState      = mempty
             , blockDifficulty = 0
             }
         (Seq.fromList (toList txs))
@@ -150,7 +150,7 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisBlock :: (Foldable t, Binary tx, Default s) => Timestamp -> t tx -> Block tx s
+genesisBlock :: (Foldable t, Binary tx, Monoid s) => Timestamp -> t tx -> Block tx s
 genesisBlock t xs =
     block (toHashed zeroHash) t xs
 
