@@ -17,6 +17,7 @@ import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval)
 import           Oscoin.Environment (Environment(Testing))
+import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
@@ -49,6 +50,7 @@ nodeConfig = Node.Config
     , Node.cfgPeers       = []
     , Node.cfgEnv         = Testing
     , Node.cfgAccounts    = [("acme", acme)]
+    , Node.cfgLogger      = Log.noLogger
     }
 
 tests :: TestTree

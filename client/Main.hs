@@ -44,14 +44,14 @@ main = do
     mem <- Mempool.new
     str <- STree.connect
     blk <- BlockStore.new $ genesisBlockStore $ genesisBlock 0 []
-    nod <- Node.open (Node.Config "xyz" [] Testing []) nid mem str blk
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
 
     let !ip = read listenIp
 
-    withStdLogger Log.defaultConfig                       $ \lgr ->
-        withDisco (mkDisco lgr sds nid ip listenPort)     $ \dis ->
-            withP2P (mkP2PConfig ip listenPort) lgr dis   $ \p2p ->
+    withStdLogger Log.defaultConfig $ \lgr -> do
+        nod <- Node.open (Node.Config "xyz" [] Testing [] lgr) nid mem str blk
+        withDisco (mkDisco lgr sds nid ip listenPort) $ \dis ->
+            withP2P (mkP2PConfig ip listenPort) lgr dis $ \p2p ->
                 let run = Node.runEffects p2p nod (evalNakamotoT env rng)
                     env = defaultNakamotoEnv { nakEval = radicleEval }
                  in Async.race_ (run . forever $ Node.step (Proxy @Text))

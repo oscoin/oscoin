@@ -26,6 +26,7 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Environment
+import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -44,6 +45,7 @@ data Config = Config
     , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
     , cfgEnv         :: Environment
     , cfgAccounts    :: [(AccId, Account)]
+    , cfgLogger      :: Log.Logger
     }
 
 -- | Node handle.
