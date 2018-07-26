@@ -2,17 +2,10 @@ module Oscoin.Consensus.Evaluator where
 
 import           Oscoin.Prelude
 
-import           Control.Monad.Except
-import           Control.Monad.State
 import qualified Radicle as Rad
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
-
--- | The monad in which transaction languages run.
-newtype LanguageM s a = LanguageM
-    { fromLanguageM :: ExceptT EvalError (State s) a }
-    deriving (Functor, Applicative, Monad, MonadState s, MonadError EvalError)
 
 type Evaluator s a b = a -> s -> Maybe (b, s)
 
@@ -41,7 +34,8 @@ constEval s _ _ = Just ((), s)
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
 -- is returned. Otherwise, the final state is returned.
 evals :: Foldable t => t a -> s -> Evaluator s a b -> Maybe s
-evals exprs st eval = if any isLeft results then Nothing else Just st'
+evals exprs st eval =
+    if any isLeft results then Nothing else Just st'
   where
     (results, st') = applyValidExprs exprs st eval
 
