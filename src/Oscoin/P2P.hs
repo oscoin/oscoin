@@ -76,11 +76,13 @@ class Monad m => MonadNetwork tx m | m -> tx where
         :: (MonadNetwork tx m', MonadTrans t, m ~ t m', Foldable f)
         => f (Msg tx) -> m ()
     sendM = lift . sendM
+    {-# INLINE sendM #-}
 
     default recvM
         :: (MonadNetwork tx m', MonadTrans t, m ~ t m')
         => m (Msg tx)
     recvM = lift recvM
+    {-# ININE recvM #-}
 
 newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
     deriving ( Functor
