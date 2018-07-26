@@ -22,11 +22,13 @@ import           Oscoin.Prelude
 
 import           Oscoin.Account (AccId, Account, pattern AccountsPrefix)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
 import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
+import           Oscoin.Logging ((%))
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -34,6 +36,8 @@ import qualified Oscoin.Node.Tree as STree
 import           Oscoin.P2P (MonadNetwork(..), Msg, runNetworkT)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Storage.Block as BlockStore
+
+import qualified Radicle as Rad
 
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -91,18 +95,29 @@ tick :: forall proxy tx m.
 tick _ =
     currentTick >>= tickM >>= sendM
 
-step :: forall proxy tx m.
-        ( MonadNetwork  tx m
-        , MonadProtocol tx m
-        , MonadClock       m
+step :: forall proxy    w tx s m r.
+        ( MonadNetwork    tx   m
+        , MonadProtocol   tx   m
+        , MonadBlockStore tx s m
+        , MonadClock           m
+        , MonadReader     r    m
+        , Has Log.Logger  r
+        , Rad.Bindings   w ~ s
+        , MonadIO              m
         )
      => proxy tx
      -> m ()
 step _ = do
+    l :: Log.Logger <- asks getter
+
     r <- recvM :: m (Msg tx)
     t <- currentTick
     o <- stepM t r
     sendM o
+
+    st <- Rad.bindingsEnv . blockState . blockHeader . tip
+      <$> maximumChainBy (comparing height)
+    liftIO $ Log.info l ("State: " % Log.string) (show st)
 
 -------------------------------------------------------------------------------
 

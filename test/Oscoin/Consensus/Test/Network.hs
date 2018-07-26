@@ -14,6 +14,7 @@ import           Oscoin.Consensus.Evaluator (acceptAnythingEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import qualified Oscoin.Logging as Log
 import           Oscoin.P2P (Msg(..))
 
 import qualified Data.Hashable as Hashable
@@ -84,7 +85,8 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
             $ runNakamotoT env nakStdGen ma
     env = NakamotoEnv { nakEval = acceptAnythingEval
                       , nakDifficulty = Nakamoto.minDifficulty
-                      , nakMiner = Nakamoto.mineBlockRandom }
+                      , nakMiner = Nakamoto.mineBlockRandom
+                      , nakLogger = Log.noLogger }
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =

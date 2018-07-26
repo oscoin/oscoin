@@ -31,6 +31,7 @@ import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash, zeroHash)
+import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
@@ -67,13 +68,19 @@ data NakamotoEnv tx s = NakamotoEnv
     -- ^ Target difficulty (Nb. this is fixed for now and does not adjust)
     , nakMiner      :: NakamotoMiner tx s
     -- ^ Mining function to use
+    , nakLogger     :: Log.Logger
     }
+
+instance Has Log.Logger (NakamotoEnv tx s) where
+    getter = nakLogger
+    modifier = notImplemented
 
 defaultNakamotoEnv :: Binary tx => NakamotoEnv tx s
 defaultNakamotoEnv = NakamotoEnv
     { nakEval = acceptAnythingEval
     , nakDifficulty = easyDifficulty
     , nakMiner = mineBlock
+    , nakLogger = Log.noLogger
     }
 
 newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEnv tx s) () StdGen m a)
