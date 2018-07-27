@@ -48,7 +48,7 @@ main = do
 
     let !ip = read listenIp
 
-    withStdLogger Log.defaultConfig $ \lgr -> do
+    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr -> do
         nod <- Node.open (Node.Config "xyz" [] Testing [] lgr) nid mem str blk
         withDisco (mkDisco lgr sds nid ip listenPort) $ \dis ->
             withP2P (mkP2PConfig ip listenPort) lgr dis $ \p2p ->

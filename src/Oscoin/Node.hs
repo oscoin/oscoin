@@ -117,7 +117,7 @@ step _ = do
 
     st <- Rad.bindingsEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
-    liftIO $ Log.info l ("State: " % Log.string) (show st)
+    liftIO $ Log.debug l ("State: " % Log.shown) st
 
 -------------------------------------------------------------------------------
 
