@@ -72,8 +72,8 @@ data NakamotoEnv tx s = NakamotoEnv
     }
 
 instance Has Log.Logger (NakamotoEnv tx s) where
-    getter = nakLogger
-    modifier = notImplemented
+    getter         = nakLogger
+    modifier f env = env { nakLogger = f (nakLogger env) }
 
 defaultNakamotoEnv :: Binary tx => NakamotoEnv tx s
 defaultNakamotoEnv = NakamotoEnv
