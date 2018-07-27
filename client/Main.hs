@@ -11,12 +11,12 @@ import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
+import           Oscoin.Node (withNode)
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import           Oscoin.P2P (Endpoints(..), NodeAddr(..), NodeId(..), withP2P)
 import qualified Oscoin.P2P as P2P
-import           Oscoin.P2P.Discovery (withDisco)
-import           Oscoin.P2P.Discovery.Pure (toKnownPeers)
+import           Oscoin.P2P.Discovery (withDisco, toKnownPeers)
 import qualified Oscoin.P2P.Discovery.Multicast as MCast
 import qualified Oscoin.P2P.Discovery.Static as Static
 import qualified Oscoin.Storage.Block as BlockStore
@@ -48,14 +48,14 @@ main = do
 
     let !ip = read listenIp
 
-    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr -> do
-        nod <- Node.open (Node.Config "xyz" [] Testing [] lgr) nid mem str blk
-        withDisco (mkDisco lgr sds nid ip listenPort) $ \dis ->
-            withP2P (mkP2PConfig ip listenPort) lgr dis $ \p2p ->
-                let run = Node.runEffects p2p nod (evalNakamotoT env rng)
-                    env = defaultNakamotoEnv { nakEval = radicleEval, nakLogger = lgr }
-                 in Async.race_ (run . forever $ Node.step (Proxy @Text))
-                                (run . forever $ Node.tick (Proxy @Text))
+    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }        $ \lgr ->
+        withNode  (Node.Config "xyz" [] Testing [] lgr) nid mem str blk $ \nod ->
+        withDisco (mkDisco lgr sds nid ip listenPort)                   $ \dis ->
+        withP2P   (mkP2PConfig ip listenPort) lgr dis                   $ \p2p ->
+            let run = Node.runEffects p2p nod (evalNakamotoT env rng)
+                env = defaultNakamotoEnv { nakEval = radicleEval, nakLogger = lgr }
+             in Async.race_ (run . forever $ Node.step (Proxy @Text))
+                            (run . forever $ Node.tick (Proxy @Text))
   where
     mkP2PConfig ip port = P2P.defaultConfig
         { P2P.cfgBindIP   = ip
