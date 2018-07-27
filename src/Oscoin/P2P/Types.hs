@@ -1,6 +1,7 @@
 module Oscoin.P2P.Types
     ( NodeId (..)
     , Endpoints (..)
+    , EndpointMap
     , NodeAddr (..)
     , Seed (..)
     , toSockAddr
@@ -63,6 +64,8 @@ data Endpoints = Endpoints
 
 instance Binary Endpoints
 instance FromJSON Endpoints
+
+type EndpointMap = Map NodeId Endpoints
 
 data Seed = Seed
     { seedId        :: NodeId
