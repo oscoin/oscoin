@@ -10,6 +10,7 @@ module Oscoin.Crypto.Blockchain.Block
     , mkBlock
     , linkBlock
     , genesisBlock
+    , emptyGenesisBlock
     , isGenesisBlock
     , validateBlock
     , headerHash
@@ -150,9 +151,23 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisBlock :: (Foldable t, Binary tx, Monoid s) => Timestamp -> t tx -> Block tx s
-genesisBlock t xs =
-    block (toHashed zeroHash) t xs
+genesisBlock
+    :: forall t tx s. (Foldable t, Binary tx)
+    => s
+    -> Evaluator s tx ()
+    -> Timestamp
+    -> t tx
+    -> Maybe (Block tx s)
+genesisBlock s eval t xs =
+    -- TODO(alexis): Refactor.
+    evalBlock s $ toOrphan eval $ (block (toHashed zeroHash) t xs :: Block tx ())
+
+emptyGenesisBlock
+    :: forall tx s. (Binary tx, Monoid s)
+    => Timestamp
+    -> Block tx s
+emptyGenesisBlock t =
+    block (toHashed zeroHash) t []
 
 isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
@@ -166,7 +181,10 @@ blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
 
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
-linkBlock (blockState . blockHeader -> s) = traverse ($ s)
+linkBlock (blockState . blockHeader -> s) = evalBlock s
+
+evalBlock :: Monad m => s -> Block tx (s -> m t) -> m (Block tx t)
+evalBlock s = traverse ($ s)
 
 hashTxs :: (Foldable t, Binary tx) => t tx -> Hash
 hashTxs txs

@@ -5,7 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, nakEval, nakLogger)
 import           Oscoin.Consensus.Evaluator (radicleEval)
-import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Logging (withStdLogger)
@@ -43,7 +43,7 @@ main = do
     rng <- newStdGen
     mem <- Mempool.new
     str <- STree.connect
-    blk <- BlockStore.new $ genesisBlockStore $ genesisBlock 0 []
+    blk <- BlockStore.new $ genesisBlockStore $ emptyGenesisBlock 0
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
 
     let !ip = read listenIp

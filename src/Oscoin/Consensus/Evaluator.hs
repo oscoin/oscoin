@@ -13,6 +13,10 @@ type Evaluator s a b = a -> s -> Maybe (b, s)
 acceptAnythingEval :: Evaluator s a ()
 acceptAnythingEval _ s = Just ((), s)
 
+-- | Alias for 'acceptAnythingEval'.
+identityEval :: Evaluator s a ()
+identityEval = acceptAnythingEval
+
 -- | An evaluator that rejects any expression and has no state.
 rejectEverythingEval :: Evaluator s a b
 rejectEverythingEval _ = const Nothing

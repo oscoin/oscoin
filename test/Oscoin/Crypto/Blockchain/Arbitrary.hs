@@ -5,6 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Arbitrary ()
+import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 
 import qualified Crypto.Hash as Crypto
 
@@ -53,15 +54,25 @@ arbitraryValidBlockWith prevHeader txs = do
 arbitraryGenesis :: forall tx s. (Binary tx, Arbitrary tx, Monoid s) => Gen (Block tx s)
 arbitraryGenesis = do
     txs <- resize 20 arbitrary :: Gen [tx]
-    arbitraryGenesisWith txs
+    arbitraryGenesisWith identityEval txs
 
-arbitraryGenesisWith :: forall tx s. (Binary tx, Monoid s) => [tx] -> Gen (Block tx s)
-arbitraryGenesisWith txs =
-    map (const mempty) <$> (genesisBlock @[] @tx @s <$> arbitrary <*> pure txs)
+arbitraryGenesisWith
+    :: forall tx s
+     . (Binary tx, Monoid s)
+     => Evaluator s tx ()
+     -> [tx]
+     -> Gen (Block tx s)
+arbitraryGenesisWith eval txs =
+    map fromJust $ genesisBlock @[] @tx @s mempty eval <$> arbitrary <*> pure txs
+
+arbitraryEmptyGenesis
+    :: forall tx s. (Binary tx, Monoid s) => Gen (Block tx s)
+arbitraryEmptyGenesis =
+    emptyGenesisBlock <$> arbitrary
 
 arbitraryValidBlockchain :: (Binary tx, Arbitrary tx, Monoid s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
-    gen <- arbitraryGenesisWith []
+    gen <- arbitraryEmptyGenesis
     h   <- choose (8, 9) :: Gen Int
     go (gen :| []) h
   where

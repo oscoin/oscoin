@@ -7,19 +7,22 @@ import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node (DummyTx)
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
-import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval)
+import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval, radicleEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, blockPrevHash, blockTimestamp, emptyHeader, genesisBlock, mkBlock)
+                 (Block, BlockHash, blockPrevHash, blockState, blockHeader, blockTimestamp, emptyHeader, genesisBlock, emptyGenesisBlock, mkBlock)
+
+import qualified Radicle as Rad
 
 import           Data.Function (on)
 import           Data.List (isPrefixOf, sort)
+import qualified Data.Map as Map
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit (testCase, (@?=))
+import           Test.Tasty.HUnit (testCase, (@?=), assertFailure)
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -55,15 +58,30 @@ tests =
                            info = "Expected: " <> show expected <> "\nGot: " <> show res
                         in counterexample info $ res == expected
 
-        , testProperty "applyValidExprs does not accept invalid expressions" $ \(xs :: [Int]) ->
+        , testProperty "applyvalidexprs does not accept invalid expressions" $ \(xs :: [Int]) ->
             let (res, _) = applyValidExprs xs () rejectEverythingEval
-             in if | any isRight res -> counterexample ("Expected only Lefts, got: " ++ show (map (map fst) res)) False
+             in if | any isRight res -> counterexample ("expected only lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
+        , testCase "block data evaluates to block state" $ do
+            let mgen  = genesisBlock Rad.pureEnv radicleEval 0 txs
+                txs   = ["(define x 42)", "(define answer (+ x x))"]
+
+            case mgen of
+                Just gen ->
+                    let i = fromJust $ Rad.mkIdent "answer"
+                        v = Map.lookup i
+                          . Rad.fromEnv . Rad.bindingsEnv
+                          . blockState . blockHeader
+                          $ gen
+                     in
+                        v @?= Just (Rad.Number (42 + 42))
+                Nothing ->
+                    assertFailure "Genesis block failed to evaluate"
         ]
 
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = genesisBlock 0 [] :: Block () ()
+            let genBlk = emptyGenesisBlock 0 :: Block () ()
                 nextBlk = mkBlock emptyHeader
                     { blockTimestamp = 1
                     , blockPrevHash = blockHash genBlk

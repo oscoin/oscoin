@@ -61,7 +61,7 @@ emptyTestNodeState :: DummyNodeId -> TestNodeState
 emptyTestNodeState nid = TestNodeState
     { tnsStateTree  = mempty
     , tnsMempool    = mempty
-    , tnsBlockstore = BlockStore.genesisBlockStore $ Block.genesisBlock 0 []
+    , tnsBlockstore = BlockStore.genesisBlockStore $ Block.emptyGenesisBlock 0
     , tnsNodeId     = nid
     }
 

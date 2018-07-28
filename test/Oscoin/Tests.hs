@@ -15,7 +15,7 @@ import           Oscoin.Crypto.Hash.Arbitrary ()
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.Evaluator (foldEval)
+import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
@@ -181,7 +181,7 @@ testOscoinBlockchain = do
     txs <- generate . listOf $
         arbitrarySignedWith key' :: IO [Crypto.Signed Account.Tx]
 
-    gblock <- generate $ arbitraryGenesisWith txs
+    gblock <- generate $ arbitraryGenesisWith identityEval txs
     assertNoError $ validateBlock gblock
 
     txs' <- generate . listOf $
