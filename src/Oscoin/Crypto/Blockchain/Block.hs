@@ -159,8 +159,9 @@ genesisBlock
     -> t tx
     -> Maybe (Block tx s)
 genesisBlock s eval t xs =
-    -- TODO(alexis): Refactor.
-    evalBlock s $ toOrphan eval $ (block (toHashed zeroHash) t xs :: Block tx ())
+    evalBlock s eval blk
+  where
+    blk = block (toHashed zeroHash) t xs :: Block tx ()
 
 emptyGenesisBlock
     :: forall tx s. (Binary tx, Monoid s)
@@ -173,6 +174,10 @@ isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == toHashed zeroHash
 
+evalBlock :: s -> Evaluator s tx () -> Block tx s' -> Maybe (Block tx s)
+evalBlock s eval blk =
+    sequence $ blk $> evals (blockData blk) s eval
+
 toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
     blk $> \s -> evals (blockData blk) s eval
@@ -181,10 +186,7 @@ blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
 
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
-linkBlock (blockState . blockHeader -> s) = evalBlock s
-
-evalBlock :: Monad m => s -> Block tx (s -> m t) -> m (Block tx t)
-evalBlock s = traverse ($ s)
+linkBlock (blockState . blockHeader -> s) = traverse ($ s)
 
 hashTxs :: (Foldable t, Binary tx) => t tx -> Hash
 hashTxs txs
