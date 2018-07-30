@@ -70,7 +70,7 @@ instance ( MonadMempool    tx    m
     stepM _ = \case
         P2P.BlockMsg blk -> do
             for_ (validateBlock blk) $ \blk' -> do
-                storeBlock $ toOrphan acceptAnythingEval blk
+                storeBlock $ toOrphan identityEval blk
                 delTxs (blockData blk')
             pure mempty
 
@@ -94,7 +94,7 @@ instance ( MonadMempool    tx    m
                                             , blockPrevHash  = prevHash
                                             , blockDataHash  = hashTxs txs }
 
-                storeBlock $ toOrphan acceptAnythingEval blk
+                storeBlock $ toOrphan identityEval blk
                 delTxs (blockData blk)
                 modify' (\s -> s { ltLastBlk = tick })
 

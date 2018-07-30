@@ -1,4 +1,14 @@
-module Oscoin.Consensus.Evaluator where
+module Oscoin.Consensus.Evaluator
+    ( Evaluator
+    , EvalError
+    , identityEval
+    , radicleEval
+    , foldEval
+    , constEval
+    , evals
+    , applyValidExprs
+    , rejectEverythingEval
+    ) where
 
 import           Oscoin.Prelude
 
@@ -9,13 +19,10 @@ newtype EvalError = EvalError { fromEvalError :: Text }
 
 type Evaluator s a b = a -> s -> Maybe (b, s)
 
--- | An evaluator that accepts any expression and has no state.
-acceptAnythingEval :: Evaluator s a ()
-acceptAnythingEval _ s = Just ((), s)
-
--- | Alias for 'acceptAnythingEval'.
+-- | The identity evaluator. An evaluator that accepts any expression and has
+-- no state.
 identityEval :: Evaluator s a ()
-identityEval = acceptAnythingEval
+identityEval _ s = Just ((), s)
 
 -- | An evaluator that rejects any expression and has no state.
 rejectEverythingEval :: Evaluator s a b

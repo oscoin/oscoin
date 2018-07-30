@@ -10,7 +10,7 @@ import           Oscoin.Consensus.Nakamoto (NakamotoT, NakamotoEnv(..), runNakam
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Consensus.Evaluator (acceptAnythingEval)
+import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
@@ -83,7 +83,7 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
         runIdentity
             . runTestNodeT nakNode
             $ runNakamotoT env nakStdGen ma
-    env = NakamotoEnv { nakEval = acceptAnythingEval
+    env = NakamotoEnv { nakEval = identityEval
                       , nakDifficulty = Nakamoto.minDifficulty
                       , nakMiner = Nakamoto.mineBlockRandom
                       , nakLogger = Log.noLogger }

@@ -7,7 +7,7 @@ import           Oscoin.Consensus.Test.Network.Arbitrary
 import           Oscoin.Consensus.Test.Node (DummyTx)
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
-import           Oscoin.Consensus.Evaluator (acceptAnythingEval, applyValidExprs, rejectEverythingEval, radicleEval)
+import           Oscoin.Consensus.Evaluator (identityEval, applyValidExprs, rejectEverythingEval, radicleEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
@@ -48,7 +48,7 @@ tests =
         ]
     , testGroup "Evaluator"
         [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
-            let (res, _) = applyValidExprs xs () acceptAnythingEval
+            let (res, _) = applyValidExprs xs () identityEval
              in if | any isLeft res ->
                        counterexample ("Expected no Lefts, got: " ++ show res) False
                    | length (rights res) /= length xs ->

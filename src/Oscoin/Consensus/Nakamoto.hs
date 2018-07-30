@@ -77,7 +77,7 @@ instance Has Log.Logger (NakamotoEnv tx s) where
 
 defaultNakamotoEnv :: Binary tx => NakamotoEnv tx s
 defaultNakamotoEnv = NakamotoEnv
-    { nakEval = acceptAnythingEval
+    { nakEval = identityEval
     , nakDifficulty = easyDifficulty
     , nakMiner = mineBlock
     , nakLogger = Log.noLogger
