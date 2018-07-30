@@ -163,7 +163,13 @@ isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == toHashed zeroHash
 
-evalBlock :: s -> Evaluator s tx () -> Block tx s' -> Maybe (Block tx s)
+-- | Evaluate a block, setting its state @s@. Returns 'Nothing' if evaluation
+-- failed.
+evalBlock
+    :: s                 -- ^ Input state
+    -> Evaluator s tx () -- ^ Evaluator
+    -> Block tx ()       -- ^ Block to evaluate
+    -> Maybe (Block tx s)
 evalBlock s eval blk =
     sequence $ blk $> evals (blockData blk) s eval
 
