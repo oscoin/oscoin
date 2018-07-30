@@ -24,7 +24,7 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block, block, blockData, blockHeader, blockTimestamp, validateBlock, toOrphan)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), mkBlock, emptyHeader, validateBlock, toOrphan, hashTxs)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
@@ -86,9 +86,13 @@ instance ( MonadMempool    tx    m
             shouldCutBlockM tick >>= bool (pure mempty) (do
                 txs   <- map snd <$> getTxs
                 chain <- maximumChainBy (comparing chainScore)
+
                 let prevHash  = hash . blockHeader $ tip chain
-                let timestamp = fromIntegral (fromEnum tick)
-                let blk       = block prevHash timestamp txs :: Block tx ()
+                    timestamp = fromIntegral (fromEnum tick)
+                    blk       = mkBlock header txs
+                    header    = emptyHeader { blockTimestamp = timestamp
+                                            , blockPrevHash  = prevHash
+                                            , blockDataHash  = hashTxs txs }
 
                 storeBlock $ toOrphan acceptAnythingEval blk
                 delTxs (blockData blk)

@@ -6,7 +6,6 @@ module Oscoin.Crypto.Blockchain.Block
     , Height
     , Orphan
     , toOrphan
-    , block
     , mkBlock
     , linkBlock
     , genesisBlock
@@ -125,24 +124,6 @@ instance Bifoldable Block where
 validateBlock :: Block tx s -> Either Error (Block tx s)
 validateBlock = Right
 
-block
-    :: (Foldable t, Binary tx, Monoid s)
-    => BlockHash
-    -> Timestamp
-    -> t tx
-    -> Block tx s
-block prev t txs =
-    Block
-        emptyHeader
-            { blockPrevHash   = prev
-            , blockTimestamp  = t
-            , blockDataHash   = hashTxs txs
-            , blockStateHash  = zeroHash
-            , blockState      = mempty
-            , blockDifficulty = 0
-            }
-        (Seq.fromList (toList txs))
-
 mkBlock
     :: Foldable t
     => BlockHeader s
@@ -150,6 +131,14 @@ mkBlock
     -> Block tx s
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
+
+genesisHeader :: (Foldable t, Binary tx, Monoid s) => Timestamp -> t tx -> BlockHeader s
+genesisHeader t txs = emptyHeader
+    { blockDataHash  = hashTxs txs
+    , blockTimestamp = t
+    , blockStateHash = zeroHash
+    , blockState     = mempty
+    }
 
 genesisBlock
     :: forall t tx s. (Foldable t, Binary tx)
@@ -161,14 +150,14 @@ genesisBlock
 genesisBlock s eval t xs =
     evalBlock s eval blk
   where
-    blk = block (toHashed zeroHash) t xs :: Block tx ()
+    blk = mkBlock (genesisHeader t xs) xs :: Block tx ()
 
 emptyGenesisBlock
     :: forall tx s. (Binary tx, Monoid s)
     => Timestamp
     -> Block tx s
 emptyGenesisBlock t =
-    block (toHashed zeroHash) t []
+    mkBlock (genesisHeader t ([] :: [tx])) []
 
 isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
