@@ -24,6 +24,7 @@ import qualified Oscoin.Node.Mempool.Event as Mempool
 import           Oscoin.State.Tree (Path, Tree)
 
 import qualified Oscoin.Consensus.Tests as Consensus
+import qualified Oscoin.Test.P2P as P2P
 import           Oscoin.HTTP.Test.Helpers
 import           Oscoin.Test.Helpers
 
@@ -65,6 +66,7 @@ tests = testGroup "Oscoin"
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
     , testGroup      "Consensus"                      Consensus.tests
+    , testGroup      "P2P"                            P2P.tests
     ]
 
 testOscoinAPI :: Assertion

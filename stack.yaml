@@ -5,6 +5,7 @@ packages:
 
 extra-deps:
 - acid-state-0.14.3
+- algebraic-graphs-0.1.1.1
 - merkle-tree-0.1.0
 - base58-bytestring-0.1.0
 - monad-stm-0.1.0.2

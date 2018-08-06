@@ -81,6 +81,7 @@ tests:
       - -fno-warn-orphans
       - -O2
     dependencies:
+      - algebraic-graphs
       - microlens
       - microlens-aeson
       - oscoin
@@ -89,6 +90,7 @@ tests:
       - tasty >=1.0.0.1
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
+      - vector
 
 default-extensions:
   - BangPatterns
