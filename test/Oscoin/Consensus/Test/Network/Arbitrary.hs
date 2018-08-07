@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Consensus.Test.Network.Arbitrary where
 
 import           Oscoin.Prelude

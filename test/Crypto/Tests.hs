@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Crypto.Tests where
 
 import           Prelude hiding (length)

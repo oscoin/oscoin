@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- TODO: Move this module to Network.Wai.Test.Extended
 module Oscoin.HTTP.Test.Helpers where
 

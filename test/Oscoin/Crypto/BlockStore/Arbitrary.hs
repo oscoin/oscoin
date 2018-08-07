@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Crypto.BlockStore.Arbitrary where
 
 import Oscoin.Prelude

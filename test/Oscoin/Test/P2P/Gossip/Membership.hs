@@ -38,8 +38,8 @@ tests = testGroup "Membership"
 
 -- | Bootstrap the protocol with the respective contacts given by 'Network', and
 -- assert the network of active views converged to a connected state.
-propActiveConnected :: MWC.Seed -> Network -> Property
-propActiveConnected seed net = monadicIO $ do
+propActiveConnected :: Seed -> Network -> Property
+propActiveConnected (Seed seed) net = monadicIO $ do
     nodes <- run $ runNetwork seed noopCallbacks net
     let peers = map (first hSelf) nodes
         actv  = activeNetwork peers

@@ -22,8 +22,11 @@ import qualified System.Random.MWC as MWC
 
 import           Test.QuickCheck
 
-instance Arbitrary MWC.Seed where
-    arbitrary = MWC.toSeed . Vector.fromList <$> vectorOf 258 arbitrary
+newtype Seed = Seed { fromSeed :: MWC.Seed }
+    deriving Show
+
+instance Arbitrary Seed where
+    arbitrary = Seed . MWC.toSeed . Vector.fromList <$> vectorOf 258 arbitrary
     shrink    = shrinkNothing
 
 newtype NonEmptySet a = NonEmptySet { getNonEmptySet :: Set a }

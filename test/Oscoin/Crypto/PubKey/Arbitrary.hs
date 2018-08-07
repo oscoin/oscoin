@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Crypto.PubKey.Arbitrary where
 
 import Oscoin.Prelude
