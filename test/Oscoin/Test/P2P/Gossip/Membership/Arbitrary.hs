@@ -10,7 +10,7 @@ import           Oscoin.P2P.Gossip.Membership
 import qualified Algebra.Graph.AdjacencyMap as Alga
 import qualified Algebra.Graph.Class as Alga (toGraph)
 import qualified Algebra.Graph.Export.Dot as Alga (exportViaShow)
-import qualified Algebra.Graph.Relation.Symmetric as Alga (toRelation)
+import qualified Algebra.Graph.Relation.Symmetric as Sym (toRelation)
 import           Data.Bifunctor (second)
 import           Data.Graph (Forest, graphFromEdges')
 import qualified Data.Graph as Graph
@@ -124,14 +124,15 @@ arbitraryConnectedNetwork = do
 
     -- Ensure the graph is connected: if it has only one component, it is
     -- already connected, otherwise, connect the roots of the forest as a
-    -- circuit and overlay the result onto the graph.
+    -- (undirected) circuit and overlay the result onto the graph.
     ensureConnected g =
         let gu = undirected g
          in case Alga.dfsForest gu of
-                cs@(_:_:_) -> Alga.overlay gu . Alga.circuit $ map tip cs
+                cs@(_:_:_) -> Alga.overlay gu . undirected . Alga.circuit
+                            $ map tip cs
                 _          -> gu
 
-    undirected = Alga.toGraph . Alga.toRelation . Alga.toGraph
+    undirected = Alga.toGraph . Sym.toRelation . Alga.toGraph
 
     tip :: Graph.Tree a -> a
     tip (Graph.Node a _) = a
