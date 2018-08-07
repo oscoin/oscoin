@@ -504,7 +504,7 @@ addToPassive n = do
     self <- asks hSelf
     actv <- gets active
     when (n /= self && Map.notMember n actv) $ do
-        removeFromPassiveIfFull
+        void $ removeFromPassiveIfFull
         modify' $ over passiveL (Set.insert n)
 
 purgePassive :: Ord n => Set n -> HyParView n c ()

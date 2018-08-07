@@ -130,6 +130,5 @@ ghc-options:
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
   - -Wredundant-constraints
-  - -fno-warn-unused-do-bind
   - -fno-print-expanded-synonyms
   - -funbox-small-strict-fields
