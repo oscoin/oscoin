@@ -80,9 +80,8 @@ instance FromJSON Tx where
                 notImplemented
 
 validateTransaction :: Signed Tx -> Either Error (Signed Tx)
-validateTransaction stx@(Signed tx _) = do
-    validateTransaction' tx
-    pure stx
+validateTransaction stx@(Signed tx _) =
+    const stx <$> validateTransaction' tx
 
 validateTransaction' :: Tx -> Either Error Tx
 validateTransaction' tx@(SetTx accId accKey _)
