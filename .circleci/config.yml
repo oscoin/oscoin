@@ -18,10 +18,10 @@ jobs:
                 command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint "$@"
             - run:
                 name: Build
-                command: stack build --no-terminal --fast --ghc-options "-Werror"
+                command: stack build --no-terminal --pedantic --test --no-run-tests
             - run:
                 name: Test
-                command: stack test --no-terminal --fast --ghc-options "-Werror"
+                command: stack test --no-terminal --pedantic
             - save_cache:
                 key: stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                 paths:
