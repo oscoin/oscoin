@@ -21,7 +21,7 @@ jobs:
                 command: stack build --no-terminal --pedantic --test --no-run-tests
             - run:
                 name: Test
-                command: stack test --no-terminal --pedantic
+                command: stack test --no-terminal
             - save_cache:
                 key: stack-work-v1-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                 paths:
