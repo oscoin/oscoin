@@ -81,7 +81,7 @@ instance FromJSON Tx where
 
 validateTransaction :: Signed Tx -> Either Error (Signed Tx)
 validateTransaction stx@(Signed tx _) =
-    const stx <$> validateTransaction' tx
+    validateTransaction' tx $> stx
 
 validateTransaction' :: Tx -> Either Error Tx
 validateTransaction' tx@(SetTx accId accKey _)
