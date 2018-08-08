@@ -1,12 +1,13 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Crypto.Blockchain.Arbitrary where
+module Oscoin.Test.Crypto.Blockchain.Arbitrary where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Test.Crypto.Hash.Arbitrary ()
+
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash
-import           Oscoin.Crypto.Hash.Arbitrary ()
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 
 import qualified Crypto.Hash as Crypto

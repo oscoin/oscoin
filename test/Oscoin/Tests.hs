@@ -4,18 +4,13 @@ import           Oscoin.Prelude
 
 import           Oscoin.Account (Account(..))
 import qualified Oscoin.Account as Account
-import           Oscoin.Account.Arbitrary ()
 import qualified Oscoin.Account.Transaction as Account
-import           Oscoin.Crypto.Blockchain (Blockchain(..), validateBlockchain, genesis, height, tip)
-import           Oscoin.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, validateBlock, toOrphan)
-import           Oscoin.Crypto.BlockStore.Arbitrary ()
-import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Crypto.Hash.Arbitrary ()
-import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip, validateBlockchain)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, toOrphan, validateBlock)
+import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
@@ -23,10 +18,15 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 import           Oscoin.State.Tree (Path, Tree)
 
-import qualified Oscoin.Consensus.Tests as Consensus
-import qualified Oscoin.Test.P2P as P2P
-import           Oscoin.HTTP.Test.Helpers
+import           Oscoin.Test.Account.Arbitrary ()
+import qualified Oscoin.Test.Consensus as Consensus
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
+import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
+import           Oscoin.Test.Crypto.Hash.Arbitrary ()
+import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
 import           Oscoin.Test.Helpers
+import           Oscoin.Test.HTTP.Helpers
+import qualified Oscoin.Test.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -37,8 +37,8 @@ import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Binary as Binary
-import qualified Data.Text as T
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text as T
 import           Lens.Micro ((^?), (^?!))
 import           Lens.Micro.Aeson (key, nth, _String)
 

@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Crypto.Hash.Arbitrary where
+module Oscoin.Test.Crypto.Hash.Arbitrary where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash

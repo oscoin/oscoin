@@ -1,8 +1,8 @@
-module Oscoin.Consensus.Test.Network where
+module Oscoin.Test.Consensus.Network where
 
 import           Oscoin.Prelude hiding (log)
 
-import           Oscoin.Consensus.Test.Node
+import           Oscoin.Test.Consensus.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Class

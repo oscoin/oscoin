@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Crypto.BlockStore.Arbitrary where
+module Oscoin.Test.Crypto.BlockStore.Arbitrary where
 
 import Oscoin.Prelude
 
-import Oscoin.Crypto.Blockchain.Arbitrary
+import Oscoin.Test.Crypto.Blockchain.Arbitrary
 import Oscoin.Consensus.BlockStore
 
 import Data.Binary (Binary)

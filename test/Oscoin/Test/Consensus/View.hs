@@ -1,4 +1,4 @@
-module Oscoin.Consensus.Test.View
+module Oscoin.Test.Consensus.View
     ( DummyView(..)
     , DummyTx
     , runDummyView

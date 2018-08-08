@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Account.Arbitrary where
+module Oscoin.Test.Account.Arbitrary where
 
 import Oscoin.Prelude
 import Oscoin.Account

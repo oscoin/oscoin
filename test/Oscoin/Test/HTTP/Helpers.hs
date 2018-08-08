@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- TODO: Move this module to Network.Wai.Test.Extended
-module Oscoin.HTTP.Test.Helpers where
+module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude
 
@@ -17,7 +17,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
 
-import           Oscoin.Consensus.Test.Node (DummyNodeId)
+import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
 import           Test.Tasty.HUnit (Assertion, assertFailure)
 import qualified Test.Tasty.HUnit as Tasty

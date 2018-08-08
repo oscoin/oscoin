@@ -1,4 +1,4 @@
-module Oscoin.Consensus.Test.Node
+module Oscoin.Test.Consensus.Node
     ( DummyNodeId
     , DummyTx(..)
 

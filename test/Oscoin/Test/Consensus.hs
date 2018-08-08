@@ -1,10 +1,10 @@
-module Oscoin.Consensus.Tests where
+module Oscoin.Test.Consensus where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Test.Network
-import           Oscoin.Consensus.Test.Network.Arbitrary
-import           Oscoin.Consensus.Test.Node (DummyTx)
+import           Oscoin.Test.Consensus.Network
+import           Oscoin.Test.Consensus.Network.Arbitrary
+import           Oscoin.Test.Consensus.Node (DummyTx)
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
 import           Oscoin.Consensus.Evaluator (identityEval, applyValidExprs, rejectEverythingEval, radicleEval)

@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Crypto.PubKey.Arbitrary where
+module Oscoin.Test.Crypto.PubKey.Arbitrary where
 
 import Oscoin.Prelude
 import Oscoin.Crypto.PubKey (PrivateKey, Signed, sign)

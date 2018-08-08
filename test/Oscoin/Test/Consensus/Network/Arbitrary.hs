@@ -1,14 +1,14 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Consensus.Test.Network.Arbitrary where
+module Oscoin.Test.Consensus.Network.Arbitrary where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Class
 import           Oscoin.P2P (Msg(..))
 
-import           Oscoin.Consensus.Test.Network
-import           Oscoin.Consensus.Test.Node (DummyNodeId)
+import           Oscoin.Test.Consensus.Network
+import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
 import           Data.List (nub, permutations)
 import qualified Data.Map.Strict as Map
