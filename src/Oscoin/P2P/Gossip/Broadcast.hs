@@ -15,6 +15,8 @@ module Oscoin.P2P.Gossip.Broadcast
     , Callbacks (..)
 
     , Handle
+    , new
+
     , Plumtree
     , runPlumtree
 
@@ -92,6 +94,13 @@ data Handle n = Handle
     , hCallbacks      :: Callbacks n
     -- ^ 'Callbacks' interface.
     }
+
+new :: Ord n => n -> Set n -> Callbacks n -> IO (Handle n)
+new self peers callbacks =
+    Handle self <$> newTVarIO peers
+                <*> newTVarIO mempty
+                <*> newTVarIO mempty
+                <*> pure callbacks
 
 type Plumtree n = ReaderT (Handle n) IO
 
