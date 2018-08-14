@@ -15,10 +15,14 @@ module Oscoin.P2P.Gossip.Broadcast
     , Callbacks (..)
 
     , Handle
+    , hSelf
     , new
 
     , Plumtree
     , runPlumtree
+
+    , eagerPushPeers
+    , lazyPushPeers
 
     , broadcast
     , receive
@@ -26,7 +30,7 @@ module Oscoin.P2P.Gossip.Broadcast
     , neighborDown
     ) where
 
-import           Oscoin.Prelude hiding (Error)
+import           Oscoin.Prelude
 
 import           Control.Concurrent.STM
 import qualified Data.Map.Strict as Map
@@ -62,18 +66,26 @@ data Outgoing n =
     -- ^ Send 'Message n' to recipient 'n' immediately.
     | Lazy   n   (IHave n)
     -- ^ Send 'IHave n' to recipient 'n' according to some lazy queueing policy.
-    | After  Int MessageId (Plumtree n [Outgoing n])
+    | After  Int MessageId (IO [Outgoing n])
     -- ^ Run the action keyed by 'MessageId' after a timeout.
     | Cancel     MessageId
     -- ^ Cancel the 'After' action identified by 'MessageId'.
+    --
+    -- This is an optimisation allowing to cancel and GC any threads. When this
+    -- is emitted, the internal state the corresponding 'After' action operates
+    -- on will have been reset such that the action is a no-op.
 
 -- | Result of 'applyMessage'.
 data ApplyResult =
-      Applied -- ^ The message was applied successfully, and was not known before.
-    | Stale   -- ^ The message was either applied before, or a later message rendered it obsolete.
-    | Error   -- ^ An error occurred. Perhaps the message was invalid.
+      Applied
+    -- ^ The message was applied successfully, and was not known before.
+    | Stale
+    -- ^ The message was either applied before, or a later message rendered it
+    -- obsolete.
+    | ApplyError
+    -- ^ An error occurred. Perhaps the message was invalid.
 
-data Callbacks n = Callbacks
+data Callbacks = Callbacks
     { applyMessage  :: MessageId -> ByteString -> IO ApplyResult
     -- ^ Apply the payload associated with the given 'MessageId' to the local
     -- state.
@@ -91,11 +103,11 @@ data Handle n = Handle
     -- ^ The peers to lazy push to.
     , hMissing        :: TVar (Map MessageId (IHave n))
     -- ^ Received 'IHave's for which we haven't requested the value yet.
-    , hCallbacks      :: Callbacks n
+    , hCallbacks      :: Callbacks
     -- ^ 'Callbacks' interface.
     }
 
-new :: Ord n => n -> Set n -> Callbacks n -> IO (Handle n)
+new :: Ord n => n -> Set n -> Callbacks -> IO (Handle n)
 new self peers callbacks =
     Handle self <$> newTVarIO peers
                 <*> newTVarIO mempty
@@ -107,12 +119,18 @@ type Plumtree n = ReaderT (Handle n) IO
 runPlumtree :: Handle n -> Plumtree n a -> IO a
 runPlumtree r s = runReaderT s r
 
+eagerPushPeers :: Plumtree n (Set n)
+eagerPushPeers = asks hEagerPushPeers >>= io . readTVarIO
+
+lazyPushPeers :: Plumtree n (Set n)
+lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
+
 -- | Broadcast some arbitrary data to the network.
 --
 -- The caller is responsible for applying the message to the local state, such
 -- that subsequent 'lookupMessage' calls would return 'Just' the 'ByteString'
 -- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
--- 'Stale' (or 'Error').
+-- 'Stale' (or 'ApplyError').
 broadcast :: Ord n => MessageId -> ByteString -> Plumtree n [Outgoing n]
 broadcast mid msg = do
     self <- asks hSelf
@@ -143,6 +161,7 @@ receive (GossipM g) = do
             -- Cancel any timers for this message.
             io . atomically . modifyTVar' missing $ Map.delete mid
             map (Cancel mid:) $
+                -- Disseminate gossip.
                 push . set  (gMetaL . metaSenderL) self
                      . over (gMetaL . metaRoundL)  (+1)
                      $ g
@@ -172,7 +191,7 @@ receive (GossipM g) = do
             io . atomically . modifyTVar' missing $ Map.delete mid
             pure $ [Eager sender $ Prune self]
 
-        Error ->
+        ApplyError ->
             -- TODO(kim): log this
             pure mempty
 
@@ -242,28 +261,32 @@ neighborDown n = do
 -- Internal --------------------------------------------------------------------
 
 scheduleGraft :: Ord n => MessageId -> Plumtree n [Outgoing n]
-scheduleGraft mid = pure [timer timeout1 $ Just (timer timeout2 Nothing)]
+scheduleGraft mid = do
+    hdl <- ask
+    pure [timer hdl timeout1 $ Just (timer hdl timeout2 Nothing)]
   where
     timeout1 = 5 * 1000000
     timeout2 = 1 * 1000000
 
-    timer timeout k = After timeout mid $ do
-        Handle{hSelf = self, hMissing = missing} <- ask
-        ann <-
-            io . atomically $ do
-                (ann, missing') <-
-                        Map.updateLookupWithKey (\_ _ -> Nothing) mid
-                    <$> readTVar missing
-                writeTVar missing missing'
-                pure ann
+    timer :: Ord n => Handle n -> Int -> Maybe (Outgoing n) -> Outgoing n
+    timer hdl@Handle{hSelf = self, hMissing = missing} timeout k =
+        After timeout mid $ do
+            ann <-
+                atomically $ do
+                    (ann, missing') <-
+                            Map.updateLookupWithKey (\_ _ -> Nothing) mid
+                        <$> readTVar missing
+                    writeTVar missing missing'
+                    pure ann
 
-        grf <-
-            for ann $ \(IHave meta) ->
-                let sender = metaSender meta
-                    graft  = Graft meta { metaSender = self }
-                  in moveToEager sender $> Eager sender graft
+            grf <-
+                for ann $ \(IHave meta) ->
+                    let sender = metaSender meta
+                        graft  = Graft meta { metaSender = self }
+                     in runPlumtree hdl (moveToEager sender)
+                     $> Eager sender graft
 
-        pure $ catMaybes [grf, k]
+            pure $ catMaybes [grf, k]
 
 push :: Ord n => Gossip n -> Plumtree n [Outgoing n]
 push g = do
