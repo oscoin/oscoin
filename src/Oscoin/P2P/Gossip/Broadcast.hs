@@ -126,14 +126,14 @@ lazyPushPeers :: Plumtree n (Set n)
 lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
 
 -- | Broadcast some arbitrary data to the network.
---
--- The caller is responsible for applying the message to the local state, such
--- that subsequent 'lookupMessage' calls would return 'Just' the 'ByteString'
--- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
--- 'Stale' (or 'ApplyError').
 broadcast :: Ord n => MessageId -> ByteString -> Plumtree n [Outgoing n]
 broadcast mid msg = do
-    self <- asks hSelf
+    Handle { hSelf      = self
+           , hCallbacks = Callbacks{applyMessage}
+           } <- ask
+
+    void . io $ applyMessage mid msg
+
     push Gossip
         { gPayload = msg
         , gMeta    = Meta
@@ -157,14 +157,16 @@ receive (GossipM g) = do
     r <- io $ applyMessage mid (gPayload g)
     case r of
         Applied -> do
-            moveToEager sender
             -- Cancel any timers for this message.
             io . atomically . modifyTVar' missing $ Map.delete mid
-            map (Cancel mid:) $
-                -- Disseminate gossip.
-                push . set  (gMetaL . metaSenderL) self
-                     . over (gMetaL . metaRoundL)  (+1)
-                     $ g
+            out <-
+                map (Cancel mid:) $
+                    -- Disseminate gossip.
+                    push . set  (gMetaL . metaSenderL) self
+                         . over (gMetaL . metaRoundL)  (+1)
+                         $ g
+            moveToEager sender
+            pure out
             -- Optimization (Section 3.8)
             -- Left out for now, as it's unclear what the value of 'threshold'
             -- should be. Riak also doesn't use this.
@@ -180,7 +182,7 @@ receive (GossipM g) = do
                                 { metaSender = self
                                 , metaMessageId = ??
                                 ]
-                            , Not sender $ Prune self
+                            , Eager sender $ Prune self
                             ]
                         else
                             []
@@ -202,8 +204,8 @@ receive (IHaveM ihave@(IHave Meta{metaMessageId = mid})) = do
 
     msg <- io $ lookupMessage mid
     case msg of
-        Nothing -> pure mempty
-        Just _  -> do
+        Just _  -> pure mempty
+        Nothing -> do
             io . atomically . modifyTVar' missing $ Map.insert mid ihave
             scheduleGraft mid
 
@@ -219,7 +221,7 @@ receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
 
     payload <- io $ lookupMessage mid
     pure $ case payload of
-        Nothing -> []
+        Nothing -> mempty
         Just  p ->
             [ Eager sender $ GossipM Gossip
                 { gPayload = p

@@ -81,12 +81,14 @@ tests:
       - -O
     dependencies:
       - algebraic-graphs
+      - hedgehog
       - microlens
       - microlens-aeson
       - oscoin
       - QuickCheck
       - quickcheck-instances
       - tasty >=1.0.0.1
+      - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
       - vector
