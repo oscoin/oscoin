@@ -1,6 +1,22 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Oscoin.Test.P2P.Gossip.Broadcast where
+module Oscoin.Test.P2P.Gossip.Broadcast
+    ( tests
+
+    , propAtomicBroadcast
+
+    , genBroadcasts
+    , genConnected
+
+    , initNodes
+    , cast
+    , settle
+
+    , bootTopo
+    , eagerTopo
+    , lazyTopo
+    , renderTopo
+    ) where
 
 import           Oscoin.Prelude
 
@@ -34,33 +50,33 @@ tests :: TestTree
 tests = testGroup "Broadcast"
     [ testGroup "Static Network"
         [ testProperty "Atomic Broadcast" . property $ do
-            graph  <- forAll genConnected
-            bcasts <- forAll $ genBroadcasts graph
-            propAtomicBroadcast graph bcasts
+            boot   <- forAll genConnected
+            bcasts <- forAll $ genBroadcasts boot
+            nodes  <- lift $ initNodes boot
+            propAtomicBroadcast nodes bcasts
         ]
     ]
 
-propAtomicBroadcast :: Graph -> [(Int, (MessageId, ByteString))] -> PropertyT IO ()
-propAtomicBroadcast boot bcasts = do
+propAtomicBroadcast
+    :: Nodes
+    -> [(Int, (MessageId, ByteString))]
+    -> PropertyT IO ()
+propAtomicBroadcast nodes bcasts = do
     stores <- lift $ do
-        net <- initNodes boot
-        traverse_ (run net) bcasts
-        Map.toList <$> traverse (readIORef . snd) net
+        traverse_ (cast nodes) bcasts
+        Map.toList <$> traverse (readIORef . snd) nodes
     annotateShow stores
     assert $
         let stores' = map snd stores
             bcasts' = map snd bcasts
          in allEqual stores' && head stores' == Map.fromList bcasts'
-  where
-    allEqual []     = error $ "allEqual: vacuously true (empty list)"
-    allEqual (x:xs) = all (== x) xs
 
-    run :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
-    run nodes (root, bcast) = do
-        let (hdl, store) = snd $ Map.elemAt root nodes
-        void $ uncurry (storeInsert store) bcast
-        out <- runPlumtree hdl $ uncurry broadcast bcast
-        settle nodes out
+cast :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
+cast nodes (root, bcast) = do
+    let (hdl, store) = snd $ Map.elemAt root nodes
+    void $ uncurry (storeInsert store) bcast
+    out <- runPlumtree hdl $ uncurry broadcast bcast
+    settle nodes out
 
 genBroadcasts :: MonadGen m => Graph -> m [(Int, (MessageId, ByteString))]
 genBroadcasts (length -> glen) = do
@@ -74,7 +90,7 @@ genBroadcasts (length -> glen) = do
 
 genConnected :: MonadGen m => m Graph
 genConnected = do
-    nodes  <- Gen.set (Range.constantFrom 5 5 100) nodeId
+    nodes  <- Gen.set (Range.constantFrom minNodes minNodes maxNodes) nodeId
     splits <- Gen.list (Range.singleton (Set.size nodes))
                        (Gen.int (Range.constant 1 maxContacts))
     graph  <-
@@ -82,10 +98,12 @@ genConnected = do
             clusters (Set.toList nodes, splits)
     pure $ Alga.adjacencyList (ensureConnected graph)
   where
+    minNodes    = 5
+    maxNodes    = 100
     maxContacts = 5
 
     nodeId :: MonadGen m => m NodeId
-    nodeId = Gen.word16 (Range.constant 0 95)
+    nodeId = Gen.word16 (Range.constant 0 (fromIntegral $ maxNodes - 1))
 
     -- Split network into randomly-sized chunks.
     clusters :: ([NodeId], [Int]) -> [[NodeId]]
@@ -129,7 +147,8 @@ settle nodes outs = loop $ pure outs
 
     dispatch (Eager to msg)   = onNode to $ receive msg
     dispatch (Lazy  to ihave) = onNode to $ receive (IHaveM ihave)
-    dispatch (After _ _ ma)   = Just <$> io ma
+    dispatch (After 0 _ ma)   = Just <$> io ma
+    dispatch (After t k ma)   = pure $ Just [After (t - 1000000) k ma]
     dispatch _                = pure mempty
 
     onNode n ma = for (Map.lookup n nodes) $ \(hdl,_) -> runPlumtree hdl ma
@@ -158,6 +177,9 @@ storeInsert ref mid payload = atomicModifyIORef' ref $ \m ->
 storeLookup :: Store -> MessageId -> IO (Maybe ByteString)
 storeLookup ref mid = Map.lookup mid <$> readIORef ref
 
+bootTopo :: Graph -> AdjacencyMap NodeId
+bootTopo = Alga.fromAdjacencyList
+
 eagerTopo :: Nodes -> IO (AdjacencyMap NodeId)
 eagerTopo nodes = do
     adj <-
@@ -174,3 +196,7 @@ lazyTopo nodes = do
 
 renderTopo :: (IsString s, Monoid s, Eq s) => AdjacencyMap NodeId -> s
 renderTopo = Alga.exportViaShow
+
+allEqual :: Eq a => [a] -> Bool
+allEqual []     = error $ "allEqual: vacuously true (empty list)"
+allEqual (x:xs) = all (== x) xs
