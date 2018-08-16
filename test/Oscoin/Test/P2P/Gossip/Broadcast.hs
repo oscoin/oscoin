@@ -55,12 +55,11 @@ propAtomicBroadcast boot bcasts = do
     allEqual []     = error $ "allEqual: vacuously true (empty list)"
     allEqual (x:xs) = all (== x) xs
 
-    rootHdl :: Int -> Map NodeId (Handle NodeId, Store) -> Handle NodeId
-    rootHdl root = fst . snd . Map.elemAt root
-
     run :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
     run nodes (root, bcast) = do
-        out <- runPlumtree (rootHdl root nodes) $ uncurry broadcast bcast
+        let (hdl, store) = snd $ Map.elemAt root nodes
+        void $ uncurry (storeInsert store) bcast
+        out <- runPlumtree hdl $ uncurry broadcast bcast
         settle nodes out
 
 genBroadcasts :: MonadGen m => Graph -> m [(Int, (MessageId, ByteString))]
@@ -147,12 +146,17 @@ initNodes net = do
 simpleCallbacks :: Store -> Callbacks
 simpleCallbacks ref = Callbacks {..}
   where
-    applyMessage mid pl = atomicModifyIORef' ref $ \m ->
-        case Map.insertLookupWithKey (\_ v _ -> v) mid pl m of
-            (Nothing, m') -> (m', Applied)
-            (Just  _, _ ) -> (m , Stale)
+    applyMessage  = storeInsert ref
+    lookupMessage = storeLookup ref
 
-    lookupMessage mid = Map.lookup mid <$> readIORef ref
+storeInsert :: Store -> MessageId -> ByteString -> IO ApplyResult
+storeInsert ref mid payload = atomicModifyIORef' ref $ \m ->
+    case Map.insertLookupWithKey (\_ v _ -> v) mid payload m of
+        (Nothing, m') -> (m', Applied)
+        (Just  _, _ ) -> (m , Stale)
+
+storeLookup :: Store -> MessageId -> IO (Maybe ByteString)
+storeLookup ref mid = Map.lookup mid <$> readIORef ref
 
 eagerTopo :: Nodes -> IO (AdjacencyMap NodeId)
 eagerTopo nodes = do

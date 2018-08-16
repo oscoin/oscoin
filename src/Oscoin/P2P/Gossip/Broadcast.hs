@@ -126,14 +126,14 @@ lazyPushPeers :: Plumtree n (Set n)
 lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
 
 -- | Broadcast some arbitrary data to the network.
+--
+-- The caller is responsible for applying the message to the local state, such
+-- that subsequent 'lookupMessage' calls would return 'Just' the 'ByteString'
+-- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
+-- 'Stale' (or 'ApplyError').
 broadcast :: Ord n => MessageId -> ByteString -> Plumtree n [Outgoing n]
 broadcast mid msg = do
-    Handle { hSelf      = self
-           , hCallbacks = Callbacks{applyMessage}
-           } <- ask
-
-    void . io $ applyMessage mid msg
-
+    self <- asks hSelf
     push Gossip
         { gPayload = msg
         , gMeta    = Meta
