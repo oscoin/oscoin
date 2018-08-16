@@ -109,7 +109,7 @@ data Handle n = Handle
 
 new :: Ord n => n -> Set n -> Callbacks -> IO (Handle n)
 new self peers callbacks =
-    Handle self <$> newTVarIO peers
+    Handle self <$> newTVarIO (Set.delete self peers)
                 <*> newTVarIO mempty
                 <*> newTVarIO mempty
                 <*> pure callbacks
@@ -317,10 +317,22 @@ moveToEager peer = do
     hdl <- ask
     io $ updatePeers hdl Set.insert Set.delete peer
 
-updatePeers :: Handle n -> (n -> Set n -> Set n) -> (n -> Set n -> Set n) -> n -> IO ()
-updatePeers Handle{hEagerPushPeers = eagers, hLazyPushPeers = lazies}
-            updateEager updateLazy peer =
-    atomically $ do
+updatePeers
+    :: Eq n
+    => Handle n
+    -> (n -> Set n -> Set n)
+    -> (n -> Set n -> Set n)
+    -> n
+    -> IO ()
+updatePeers Handle { hSelf           = self
+                   , hEagerPushPeers = eagers
+                   , hLazyPushPeers  = lazies
+                   }
+            updateEager
+            updateLazy
+            peer
+    | self == peer = pure ()
+    | otherwise    = atomically $ do
         modifyTVar' eagers $ updateEager peer
         modifyTVar' lazies $ updateLazy  peer
 
