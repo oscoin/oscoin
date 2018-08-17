@@ -108,8 +108,6 @@ step :: forall proxy    w tx s m r.
      => proxy tx
      -> m ()
 step _ = do
-    l :: Log.Logger <- asks getter
-
     r <- recvM :: m (Msg tx)
     t <- currentTick
     o <- stepM t r
@@ -117,7 +115,7 @@ step _ = do
 
     st <- Rad.bindingsEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
-    liftIO $ Log.debug l ("State: " % Log.shown) st
+    Log.debugM ("State: " % Log.shown) st
 
 -------------------------------------------------------------------------------
 
