@@ -6,7 +6,6 @@ module Oscoin.Prelude
     , module Control.Monad.State
     , module Control.Monad.Writer.CPS
     , module Control.Monad.Trans.Class
-    , module Control.Monad.STM.Class
     , module Control.Concurrent.STM
     , module Control.Monad.Fail
     , module Control.Monad
@@ -106,7 +105,6 @@ import           Control.Monad.Trans.Class (MonadTrans, lift)
 import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local, reader, join)
 import           Control.Monad.State (MonadState, runState, runStateT, execStateT, evalStateT)
 import           Control.Monad.Writer.CPS (MonadWriter, runWriter, runWriterT, execWriter, tell)
-import           Control.Monad.STM.Class (MonadSTM, liftSTM)
 import           Control.Monad (forM, mapM, forever)
 import           Control.Concurrent.STM (STM, atomically)
 import           Control.Monad.Fail (MonadFail, fail)

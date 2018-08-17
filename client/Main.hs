@@ -41,9 +41,9 @@ main = do
 
     nid <- NodeId . publicKeyHash . fst <$> generateKeyPair -- TODO: read from disk
     rng <- newStdGen
-    mem <- Mempool.new
+    mem <- Mempool.newIO
     str <- STree.connect
-    blk <- BlockStore.new $ genesisBlockStore $ emptyGenesisBlock 0
+    blk <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock 0
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
 
     let !ip = read listenIp

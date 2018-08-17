@@ -50,9 +50,9 @@ instance MonadRandom Session where
 -- | Turn a "Session" into an "Assertion".
 runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
-    mp <- Mempool.new
+    mp <- Mempool.newIO
     st <- STree.connect
-    bs <- BlockStore.new $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed Tx) ())
+    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed Tx) ())
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) (Node.cfgAccounts cfg) nh)
