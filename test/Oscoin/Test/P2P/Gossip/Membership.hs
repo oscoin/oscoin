@@ -6,53 +6,77 @@ import           Oscoin.Prelude
 
 import           Oscoin.P2P.Gossip.Membership
 
-import           Oscoin.Test.P2P.Gossip.Membership.Arbitrary
+import           Oscoin.Test.P2P.Gossip.Gen (Contacts, NodeId)
+import qualified Oscoin.Test.P2P.Gossip.Gen as Gen
 
-import           Control.Monad (unless)
+import qualified Algebra.Graph.AdjacencyMap as Alga
 import           Data.Bifunctor
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified System.Random.MWC as MWC
 
-import           Test.QuickCheck.Monadic
-import           Test.Tasty
-import           Test.Tasty.QuickCheck
+import           Hedgehog
+import           Test.Tasty (TestTree, testGroup)
+import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
 tests = testGroup "Membership"
     [ testGroup "Overlay convergence with healthy underlay"
-        [ testProperty "Disconnected network"
-            . forAll (seedAnd arbitraryDisconnectedNetwork) $ \(s,n) ->
-                length (fromNetwork n) > 1 ==>
-                    expectFailure $ propActiveConnected s n
+        [ testProperty "Disconnected network" . property $ do
+            seed <- forAll Gen.mwcSeed
+            boot <- forAll $ Gen.disconnectedContacts Gen.defaultNetworkBounds
+            propActiveDisconnected seed boot
 
-        , testProperty "Circular network"
-            . forAll (seedAnd arbitraryCircularNetwork)
-            $ uncurry propActiveConnected
+        , testProperty "Circular network" . property $ do
+            seed <- forAll Gen.mwcSeed
+            boot <- forAll $ Gen.circularContacts Gen.defaultNetworkBounds
+            propActiveConnected seed boot
 
-        , testProperty "Connected network"
-            . forAll (seedAnd arbitraryConnectedNetwork)
-            $ uncurry propActiveConnected
+        , testProperty "Connected network" . property $ do
+            seed <- forAll Gen.mwcSeed
+            boot <- forAll $ Gen.connectedContacts Gen.defaultNetworkBounds
+            propActiveConnected seed boot
         ]
     ]
-  where
-    seedAnd = liftA2 (,) arbitrary
 
--- | Bootstrap the protocol with the respective contacts given by 'Network', and
--- assert the network of active views converged to a connected state.
-propActiveConnected :: Seed -> Network -> Property
-propActiveConnected (Seed seed) net = monadicIO $ do
-    nodes <- run $ runNetwork seed noopCallbacks net
-    let peers = map (first hSelf) nodes
-        actv  = activeNetwork peers
-        pasv  = passiveNetwork peers
-     in unless (isConnected actv) . fail . unlines $
-            [ "Active:",  show actv, ""
-            , "Passive:", show pasv, ""
-            ]
+-- | Bootstrap the protocol with the respective contacts given by 'Contacts',
+-- and assert the network of active views converged to a connected state.
+propActiveConnected :: MWC.Seed -> Contacts -> PropertyT IO ()
+propActiveConnected seed boot = do
+    peers <- lift $ runNetwork' seed noopCallbacks boot
+    annotateShow $ passiveNetwork peers
+    assert $ isConnected (activeNetwork peers)
+
+-- | Like 'propActiveConnected', but assert that the network converges to a
+-- disconnected state.
+--
+-- This exists to suppress output which 'Test.Tasty.ExpectedFailure.expectFail'
+-- would produce, and also because there's no point in letting hedgehog shrink
+-- on failure.
+propActiveDisconnected :: MWC.Seed -> Contacts -> PropertyT IO ()
+propActiveDisconnected seed boot = do
+    peers <- lift $ runNetwork' seed noopCallbacks boot
+    annotateShow $ passiveNetwork peers
+    assert $ not $ isConnected (activeNetwork peers)
 
 --------------------------------------------------------------------------------
 
-runNetwork :: MWC.Seed -> Callbacks NodeId c -> Network -> IO [Node NodeId c]
-runNetwork seed cbs (Network net) = do
+activeNetwork :: [(NodeId, Peers NodeId a)] -> [(NodeId, [NodeId])]
+activeNetwork = map (second (Map.keys . active))
+
+passiveNetwork :: [(NodeId, Peers NodeId a)] -> [(NodeId, [NodeId])]
+passiveNetwork = map (second (Set.toList . passive))
+
+isConnected :: [(NodeId, [NodeId])] -> Bool
+isConnected adj =
+    case Alga.dfsForest (Alga.fromAdjacencyList adj) of
+        [_] -> True
+        _   -> False
+
+--------------------------------------------------------------------------------
+
+runNetwork :: MWC.Seed -> Callbacks NodeId c -> Contacts -> IO [Node NodeId c]
+runNetwork seed cbs net = do
     nodes <- flip zip contacts <$> initNodes seed cbs boot
     (rpcs, nodes') <- sequenceA <$> traverse (uncurry joinNetwork) nodes
     settle nodes' rpcs
@@ -60,6 +84,9 @@ runNetwork seed cbs (Network net) = do
     (boot, contacts) = unzip net
 
     joinNetwork n = runNode n . joinAny
+
+runNetwork' :: MWC.Seed -> Callbacks NodeId c -> Contacts -> IO [(NodeId, Peers NodeId c)]
+runNetwork' seed cbs net = map (first hSelf) <$> runNetwork seed cbs net
 
 settle :: (Ord n, Show n) => [Node n c] -> [RPC n] -> IO [Node n c]
 settle []    _    = pure []
