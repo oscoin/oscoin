@@ -1,1 +1,0 @@
-module Oscoin.User where

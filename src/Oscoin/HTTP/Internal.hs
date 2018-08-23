@@ -2,7 +2,6 @@ module Oscoin.HTTP.Internal where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Account (AccId, Account)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 
@@ -18,8 +17,7 @@ import qualified Web.Spock as Spock
 import           Web.Spock.Config (ConnBuilder(..), PoolCfg(..), PoolOrConn(..), defaultSpockCfg)
 
 -- | The global server state.
-data State = State
-    { stAccounts :: [(AccId, Account)] }
+data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
@@ -36,7 +34,7 @@ type MonadApi tx s i m = (HasSpock m, SpockConn m ~ Node.Handle tx s i)
 
 -- | Create an empty state.
 mkState :: State
-mkState = State { stAccounts = [] }
+mkState = State ()
 
 getBody :: Aeson.FromJSON a => ApiAction tx s i (Maybe a)
 getBody = Spock.jsonBody
@@ -75,24 +73,22 @@ errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
 run :: Api tx s i ()
-    -> [(AccId, Account)]
     -> Int
     -> Node.Handle tx s i
     -> IO ()
-run app accs port hdl =
-    runSpock port (mkMiddleware app accs hdl)
+run app port hdl =
+    runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
     :: Api tx s i ()
-    -> [(AccId, Account)]
     -> Node.Handle tx s i
     -> IO Wai.Middleware
-mkMiddleware app accs hdl = do
+mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
     spock spockCfg app
   where
     connBuilder = ConnBuilder (pure hdl) (const pass) (PoolCfg 1 1 30)
-    state       = mkState { stAccounts = accs }
+    state       = mkState
 
 loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production = Wai.logStdout

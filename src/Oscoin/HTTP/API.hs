@@ -2,22 +2,29 @@ module Oscoin.HTTP.API where
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Account.Transaction as Account
-import           Oscoin.Crypto.PubKey (Signed)
+import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Environment
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
 
-import           Data.Aeson (object, (.=))
+import           Data.Aeson (object, (.=), FromJSON, ToJSON)
 import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
+import           Data.Typeable (Typeable)
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
 import           Web.Spock (get, json, middleware, post, root, var, (<//>))
 
+withAPI
+    :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx)
+    => Environment -> (Api tx s i () -> m a) -> m a
+withAPI env f = f (api env)
+
 -- | Entry point for API.
-api :: Environment -> Api (Signed Account.Tx) s i ()
+api :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx)
+    => Environment
+    -> Api tx s i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")
@@ -35,31 +42,3 @@ api env = do
     -- /node/mempool/:id ------------------------------------------------------
 
     get ("node" <//> "mempool" <//> var) Handlers.getTransaction
-
-    -- /blocks/:id ------------------------------------------------------------
-
-    -- /accounts --------------------------------------------------------------
-
-    get  "accounts" Handlers.getAccounts
-
-    -- /accounts/:account -----------------------------------------------------
-
-    get ("accounts" <//> var) Handlers.getAccount
-
-    -- /accounts/:account/repos -----------------------------------------------
-
-    get ("accounts" <//> var <//> "repos") Handlers.getRepos
-
-    -- /accounts/:account/repos/:repo -----------------------------------------
-
-    get ("accounts" <//> var <//> "repos" <//> var) Handlers.getRepo
-
-    -- /accounts/:account/repos/:repo/patches ---------------------------------
-
-    -- /accounts/:account/data/:key -------------------------------------------
-
-    get ("accounts" <//> var <//> "data" <//> var) Handlers.getAccountDataKey
-
-    -- /accounts/:account/members/:member -------------------------------------
-
-    get ("accounts" <//> var <//> "members" <//> var) Handlers.getMember

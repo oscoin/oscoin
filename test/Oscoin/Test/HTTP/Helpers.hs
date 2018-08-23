@@ -8,7 +8,6 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, Block)
 import           Oscoin.Crypto.PubKey (Signed)
-import           Oscoin.Account.Transaction (Tx)
 import           Oscoin.Environment
 import           Oscoin.HTTP.API (api)
 import           Oscoin.HTTP.Internal (mkMiddleware)
@@ -37,6 +36,9 @@ import           Web.Spock (spockAsApp)
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
 
+-- | Dummy transaction type used for testing.
+type DummyTx = ()
+
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
 
@@ -52,10 +54,10 @@ runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.connect
-    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed Tx) ())
+    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed DummyTx) ())
     nh <- Node.open cfg nid mp st bs
 
-    app <- spockAsApp (mkMiddleware (api Testing) (Node.cfgAccounts cfg) nh)
+    app <- spockAsApp (mkMiddleware (api Testing) nh)
     Wai.runSession sess app
 
 infix 1 @?=, @=?

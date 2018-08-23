@@ -40,7 +40,6 @@ module Oscoin.Prelude
     , LByteString
     , Error(..)
     , Timestamp
-    , Id
     , notImplemented
     , io
     , pass
@@ -120,9 +119,6 @@ newtype Error = Error { fromError :: Text }
 
 -- | Unix timestamp.
 type Timestamp = Word64
-
--- | 'Id' maps a type to its identifier type. Example: 'Hashed' @tx@ for @tx@.
-type family Id a :: *
 
 notImplemented :: HasCallStack => a
 notImplemented = error "Not implemented"

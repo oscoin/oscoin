@@ -14,17 +14,17 @@ module Oscoin.Node
     , tick
 
     , getMempool
-    , getAccountPath
     , getPath
+
+    , Receipt(..)
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Account (AccId, Account, pattern AccountsPrefix)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
-import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
@@ -41,6 +41,7 @@ import qualified Radicle as Rad
 
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Data.Aeson (ToJSON, toJSON, object, (.=))
 import qualified Network.Socket as NS
 
 -- | Node static config.
@@ -48,7 +49,6 @@ data Config = Config
     { cfgServiceName :: NS.ServiceName
     , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
     , cfgEnv         :: Environment
-    , cfgAccounts    :: [(AccId, Account)]
     , cfgLogger      :: Log.Logger
     }
 
@@ -211,12 +211,15 @@ instance MonadNetwork tx m => MonadNetwork tx (NodeT tx s i m)
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 
-getAccountPath :: MonadIO m => AccId -> STree.Path -> NodeT tx s i m (Maybe STree.Val)
-getAccountPath acc path =
-    getPath (AccountsPrefix : acc : path)
-
 -- | Get a state value at the given path.
 getPath :: MonadIO m => STree.Path -> NodeT tx s i m (Maybe STree.Val)
 getPath k = do
     Handle{hStateTree} <- ask
     lift $ STree.get hStateTree k
+
+-- | A transaction receipt. Contains the hashed transaction.
+newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
+
+instance Hashable tx => ToJSON (Receipt tx) where
+    toJSON (Receipt tx) =
+        object [ "tx" .= decodeUtf8 (toHex tx) ]

@@ -8,6 +8,8 @@ import           Oscoin.Consensus.Evaluator (radicleEval)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
 import           Oscoin.Environment (Environment(Testing))
+import qualified Oscoin.HTTP as HTTP
+import           Oscoin.HTTP.API (withAPI)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
@@ -49,13 +51,16 @@ main = do
     let !ip = read listenIp
 
     withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }        $ \lgr ->
-        withNode  (Node.Config "xyz" [] Testing [] lgr) nid mem str blk $ \nod ->
+        withNode  (Node.Config "xyz" [] Testing lgr) nid mem str blk    $ \nod ->
+        withAPI   Testing                                               $ \api ->
         withDisco (mkDisco lgr sds nid ip listenPort)                   $ \dis ->
         withP2P   (mkP2PConfig ip listenPort) lgr dis                   $ \p2p ->
             let run = Node.runEffects p2p nod (evalNakamotoT env rng)
                 env = defaultNakamotoEnv { nakEval = radicleEval, nakLogger = lgr }
-             in Async.race_ (run . forever $ Node.step (Proxy @Text))
-                            (run . forever $ Node.tick (Proxy @Text))
+             in do
+                 void $ Async.async $ HTTP.run api 8080 nod -- TODO(cloudhead): Eventually we should terminate gracefully.
+                 Async.race_ (run . forever $ Node.step (Proxy @Text))
+                             (run . forever $ Node.tick (Proxy @Text))
   where
     mkP2PConfig ip port = P2P.defaultConfig
         { P2P.cfgBindIP   = ip

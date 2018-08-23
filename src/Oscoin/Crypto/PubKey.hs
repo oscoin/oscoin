@@ -69,8 +69,6 @@ instance FromHttpApiData Signature where
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
 
-type instance Id (Signed msg) = Hashed (Signed msg)
-
 instance Binary msg => Binary (Signed msg)
 
 instance Hashable msg => Hashable (Signed msg) where

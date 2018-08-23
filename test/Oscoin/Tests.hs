@@ -2,9 +2,6 @@ module Oscoin.Tests where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Account (Account(..))
-import qualified Oscoin.Account as Account
-import qualified Oscoin.Account.Transaction as Account
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip, validateBlockchain)
@@ -16,9 +13,7 @@ import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
-import           Oscoin.State.Tree (Path, Tree)
 
-import           Oscoin.Test.Account.Arbitrary ()
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
@@ -33,31 +28,24 @@ import           Test.Tasty
 import           Test.Tasty.HUnit hiding ((@?=))
 import           Test.Tasty.QuickCheck
 
-import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.Types (emptyArray)
 import qualified Data.Binary as Binary
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Text as T
 import           Lens.Micro ((^?), (^?!))
 import           Lens.Micro.Aeson (key, nth, _String)
-
-acme :: Account
-acme = Account { accName = "Acme", accId = "acme" }
 
 nodeConfig :: Node.Config
 nodeConfig = Node.Config
     { Node.cfgServiceName = "http"
     , Node.cfgPeers       = []
     , Node.cfgEnv         = Testing
-    , Node.cfgAccounts    = [("acme", acme)]
     , Node.cfgLogger      = Log.noLogger
     }
 
 tests :: TestTree
 tests = testGroup "Oscoin"
     [ testCase       "API"                            testOscoinAPI
-    , testCase       "Tx"                             testOscoinTxs
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
@@ -71,21 +59,13 @@ tests = testGroup "Oscoin"
 
 testOscoinAPI :: Assertion
 testOscoinAPI = runSession nodeConfig 42 $ do
-    get "/"         >>= assertOK
-    get "/accounts" >>= assertBody [acme]
-
-    -- The "acme" account exists.
-    get  "/accounts/acme" >>= assertBody acme
+    get "/" >>= assertOK
 
     -- The mempool is empty.
     get "/node/mempool" >>= assertBody emptyArray
 
-    -- Now let's create a value we want to store in the account.
-    let value = Aeson.object ["name" .= t "zod"]
-
-    -- Let's create a transaction to store that value under the key
-    -- "zod".
-    let tx = Account.setTx "acme" "zod" (Aeson.encode value)
+    -- Now let's create a transaction.
+    let tx :: DummyTx = ()
 
     -- Now generate a key pair and sign the transaction.
     (_, priKey) <- Crypto.generateKeyPair
@@ -103,36 +83,6 @@ testOscoinAPI = runSession nodeConfig 42 $ do
     mp ^? nth 0 . key "id" . _String @?= Just txId
 
     get ("/node/mempool/" <> txId) >>= assertOK <> assertJSON
-    get "/accounts/acme/data/doz"  >>= assertStatus 404
-
-    -- TODO: Once we can wait for transactions to be committed, this test
-    -- should pass.
-    -- ...
-    -- Wait for transaction to be committed.
-    -- ...
-    -- get "/accounts/acme/data/zod" >>= assertBody value
-
-testOscoinTxs :: Assertion
-testOscoinTxs = do
-    (pubKey, priKey) <- Crypto.generateKeyPair
-
-    -- Create a new, valid `setTx` transaction.
-    let tx = Account.setTx "acme" "home" "~"
-
-    -- Sign it and verify it.
-    tx' <- Crypto.sign priKey tx
-    assertValidTx tx'
-    Account.verifySignature pubKey tx' @?= Right tx
-
-    -- Now let's create an empty state tree.
-    let tree  = mempty :: Tree Path v
-
-    -- And apply this transaction to it. This should create a key
-    -- under `/accounts/acme/data`.
-    let tree' = Account.applyTransaction tx tree
-
-    -- The updated state should include the newly set key.
-    Account.getPath "acme" ["data", "home"] tree' @?= Just "~"
 
 testOscoinCrypto :: Assertion
 testOscoinCrypto = do
@@ -151,7 +101,7 @@ testOscoinMempool = do
     mp <- Mempool.newIO
 
     -- Create some arbitrary transactions.
-    txs <- generate arbitrary :: IO [Account.Tx]
+    txs <- generate arbitrary :: IO [DummyTx]
 
     -- Subscribe to the mempool with the subscription tokens.
     chan1 <- atomically $ Mempool.subscribe mp
@@ -181,13 +131,13 @@ testOscoinBlockchain = do
     (_, key') <- Crypto.generateKeyPair
 
     txs <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed Account.Tx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed DummyTx]
 
     gblock <- generate $ arbitraryGenesisWith identityEval txs
     assertNoError $ validateBlock gblock
 
     txs' <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed Account.Tx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed DummyTx]
 
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
@@ -216,11 +166,3 @@ propHashedJSON x = (Aeson.decode . Aeson.encode) x == Just x
 
 propHexEncoding :: ByteString -> Bool
 propHexEncoding x = (Crypto.fromHex . Crypto.toHex) x == Right x
-
-assertValidTx :: HasCallStack => Crypto.Signed Account.Tx -> Assertion
-assertValidTx tx =
-    case Account.validateTransaction tx of
-        Left err ->
-            assertFailure (T.unpack $ fromError err)
-        _ ->
-            pure ()
