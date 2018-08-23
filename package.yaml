@@ -30,7 +30,6 @@ dependencies:
   - memory
   - merkle-tree
   - microlens
-  - monad-stm
   - mtl
   - mwc-random
   - network

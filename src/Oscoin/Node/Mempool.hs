@@ -4,6 +4,7 @@ module Oscoin.Node.Mempool
     , Channel
     , Handle
     , new
+    , newIO
     , insert
     , insertMany
     , remove
@@ -34,46 +35,53 @@ data Handle tx = Handle
     }
 
 -- | Create a new 'Handle' with an underlying empty mempool.
-new :: (Monad m, MonadSTM m) => m (Handle tx)
+new :: STM (Handle tx)
 new = do
-    hMempool   <- liftSTM (STM.newTVar mempty)
-    hBroadcast <- liftSTM STM.newBroadcastTChan
+    hMempool   <- STM.newTVar mempty
+    hBroadcast <- STM.newBroadcastTChan
     pure Handle{..}
 
-insert :: (MonadSTM m, Hashable tx) => Handle tx -> tx -> m ()
-insert Handle{hMempool, hBroadcast} tx = liftSTM $ do
+-- | Like 'new', but without running a transaction.
+newIO :: IO (Handle tx)
+newIO = do
+    hMempool   <- STM.newTVarIO mempty
+    hBroadcast <- STM.newBroadcastTChanIO
+    pure Handle{..}
+
+insert :: Hashable tx => Handle tx -> tx -> STM ()
+insert Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.insert tx)
     STM.writeTChan hBroadcast (Insert [tx])
 
-insertMany :: (MonadSTM m, Hashable tx, Foldable t) => Handle tx -> t tx -> m ()
-insertMany Handle{hMempool, hBroadcast} txs = liftSTM $ do
+insertMany :: (Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+insertMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.insertMany txs)
     STM.writeTChan hBroadcast (Insert (Fold.toList txs))
 
-remove :: (MonadSTM m, Hashable tx) => Handle tx -> tx -> m ()
-remove Handle{hMempool, hBroadcast} tx = liftSTM $ do
+remove :: Hashable tx => Handle tx -> tx -> STM ()
+remove Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.removeTxs [tx])
     STM.writeTChan hBroadcast (Remove [tx])
 
-removeMany :: (MonadSTM m, Hashable tx, Foldable t) => Handle tx -> t tx -> m ()
-removeMany Handle{hMempool, hBroadcast} txs = liftSTM $ do
+removeMany :: (Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+removeMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.removeTxs txs)
     STM.writeTChan hBroadcast (Remove (Fold.toList txs))
 
-member :: (MonadSTM m, Functor m) => Handle tx -> Hashed tx -> m Bool
+member :: Handle tx -> Hashed tx -> STM Bool
 member hdl tx = Internal.member tx <$> snapshot hdl
 
-lookup :: (MonadSTM m, Functor m) => Handle tx -> Hashed tx -> m (Maybe tx)
+lookup :: Handle tx -> Hashed tx -> STM (Maybe tx)
 lookup hdl tx = Internal.lookup tx <$> snapshot hdl
 
-size :: (MonadSTM m, Functor m) => Handle tx -> m Int
+size :: Handle tx -> STM Int
 size hdl = Internal.size <$> snapshot hdl
 
-toList :: (MonadSTM m, Functor m) => Handle tx -> m [(Hashed tx, tx)]
+toList :: Handle tx -> STM [(Hashed tx, tx)]
 toList hdl = Internal.toList <$> snapshot hdl
 
-subscribe :: MonadSTM m => Handle tx -> m (TChan (Event tx))
-subscribe = liftSTM . STM.dupTChan . hBroadcast
+subscribe :: Handle tx -> STM (TChan (Event tx))
+subscribe = STM.dupTChan . hBroadcast
 
-snapshot :: MonadSTM m => Handle tx -> m (Mempool tx)
-snapshot = liftSTM . STM.readTVar . hMempool
+snapshot :: Handle tx -> STM (Mempool tx)
+snapshot = STM.readTVar . hMempool

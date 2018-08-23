@@ -108,8 +108,6 @@ step :: forall proxy    w tx s m r.
      => proxy tx
      -> m ()
 step _ = do
-    l :: Log.Logger <- asks getter
-
     r <- recvM :: m (Msg tx)
     t <- currentTick
     o <- stepM t r
@@ -117,7 +115,7 @@ step _ = do
 
     st <- Rad.bindingsEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
-    liftIO $ Log.debug l ("State: " % Log.shown) st
+    Log.debugM ("State: " % Log.shown) st
 
 -------------------------------------------------------------------------------
 
@@ -141,13 +139,13 @@ runEffects
 runEffects p2p node evalConsensusT =
     runNetworkT p2p . runNodeT node . evalConsensusT
 
-instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx s i m) where
-    addTxs txs = asks hMempool >>= (`Mempool.insertMany` txs)
-    getTxs     = asks hMempool >>= Mempool.toList
-    delTxs txs = asks hMempool >>= (`Mempool.removeMany` txs)
-    numTxs     = asks hMempool >>= Mempool.size
-    lookupTx h = asks hMempool >>= (`Mempool.lookup` h)
-    subscribe  = asks hMempool >>= Mempool.subscribe
+instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) where
+    addTxs txs = asks hMempool >>= io . atomically . (`Mempool.insertMany` txs)
+    getTxs     = asks hMempool >>= io . atomically . Mempool.toList
+    delTxs txs = asks hMempool >>= io . atomically . (`Mempool.removeMany` txs)
+    numTxs     = asks hMempool >>= io . atomically . Mempool.size
+    lookupTx h = asks hMempool >>= io . atomically . (`Mempool.lookup` h)
+    subscribe  = asks hMempool >>= io . atomically . Mempool.subscribe
 
     {-# INLINE addTxs    #-}
     {-# INLINE getTxs    #-}
@@ -155,30 +153,34 @@ instance (Hashable tx, Monad m, MonadSTM m) => MonadMempool tx (NodeT tx s i m) 
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadSTM m, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx s i m) where
+instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
-        BlockStore.put bs blk
+        io . atomically $ BlockStore.put bs blk
 
     lookupBlock hdr = do
         bs <- asks hBlockStore
-        BlockStore.for bs $
-            BlockStore.lookupBlock hdr
+        io . atomically $
+            BlockStore.for bs $
+                BlockStore.lookupBlock hdr
 
     lookupTx tx = do
         bs <- asks hBlockStore
-        BlockStore.for bs $
-            BlockStore.lookupTx tx
+        io . atomically $
+            BlockStore.for bs $
+                BlockStore.lookupTx tx
 
     orphans = do
         bs <- asks hBlockStore
-        BlockStore.for bs $
-            BlockStore.orphans
+        io . atomically $
+            BlockStore.for bs $
+                BlockStore.orphans
 
     maximumChainBy cmp = do
         bs <- asks hBlockStore
-        BlockStore.for bs $
-            BlockStore.maximumChainBy cmp
+        io . atomically $
+            BlockStore.for bs $
+                BlockStore.maximumChainBy cmp
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
@@ -206,8 +208,8 @@ instance MonadNetwork tx m => MonadNetwork tx (NodeT tx s i m)
 
 -------------------------------------------------------------------------------
 
-getMempool :: (Monad m, MonadSTM m) => NodeT tx s i m (Mempool tx)
-getMempool = asks hMempool >>= Mempool.snapshot
+getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
+getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 
 getAccountPath :: MonadIO m => AccId -> STree.Path -> NodeT tx s i m (Maybe STree.Val)
 getAccountPath acc path =

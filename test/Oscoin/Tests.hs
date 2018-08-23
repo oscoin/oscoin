@@ -148,7 +148,7 @@ testOscoinCrypto = do
 testOscoinMempool :: Assertion
 testOscoinMempool = do
     -- Create a new mempool of account transactions.
-    mp <- atomically $ Mempool.new
+    mp <- Mempool.newIO
 
     -- Create some arbitrary transactions.
     txs <- generate arbitrary :: IO [Account.Tx]
