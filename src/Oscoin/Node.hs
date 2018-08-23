@@ -24,6 +24,7 @@ import           Oscoin.Prelude
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
+import qualified Oscoin.Consensus.Evaluator as Eval
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
 import           Oscoin.Environment
@@ -95,15 +96,14 @@ tick :: forall proxy tx m.
 tick _ =
     currentTick >>= tickM >>= sendM
 
-step :: forall proxy    w tx s m r.
-        ( MonadNetwork    tx   m
-        , MonadProtocol   tx   m
-        , MonadBlockStore tx s m
-        , MonadClock           m
-        , MonadReader     r    m
+step :: forall proxy      r tx          m.
+        ( MonadNetwork      tx          m
+        , MonadProtocol     tx          m
+        , MonadBlockStore   tx Eval.Env m
+        , MonadClock                    m
+        , MonadReader     r             m
         , Has Log.Logger  r
-        , Rad.Bindings   w ~ s
-        , MonadIO              m
+        , MonadIO                       m
         )
      => proxy tx
      -> m ()
@@ -113,7 +113,7 @@ step _ = do
     o <- stepM t r
     sendM o
 
-    st <- Rad.bindingsEnv . blockState . blockHeader . tip
+    st <- Rad.bindingsEnv . Eval.fromEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
     Log.debugM ("State: " % Log.shown) st
 

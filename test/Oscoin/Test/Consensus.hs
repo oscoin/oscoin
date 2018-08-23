@@ -7,7 +7,7 @@ import           Oscoin.Test.Consensus.Network.Arbitrary
 import           Oscoin.Test.Consensus.Node (DummyTx)
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
-import           Oscoin.Consensus.Evaluator (identityEval, applyValidExprs, rejectEverythingEval, radicleEval)
+import           Oscoin.Consensus.Evaluator (Env(..), identityEval, applyValidExprs, rejectEverythingEval, radicleEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
@@ -63,7 +63,7 @@ tests =
              in if | any isRight res -> counterexample ("expected only lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
         , testCase "block data evaluates to block state" $ do
-            let mgen  = genesisBlock Rad.pureEnv radicleEval 0 txs
+            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval 0 txs
                 txs   = ["(define x 42)", "(define answer (+ x x))"]
 
             case mgen of
@@ -71,7 +71,7 @@ tests =
                     let i = fromJust $ Rad.mkIdent "answer"
                         v = Map.lookup i
                           . Rad.fromEnv . Rad.bindingsEnv
-                          . blockState . blockHeader
+                          . fromEnv . blockState . blockHeader
                           $ gen
                      in
                         v @?= Just (Rad.Number (42 + 42))

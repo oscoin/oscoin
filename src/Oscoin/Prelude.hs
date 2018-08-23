@@ -13,6 +13,7 @@ module Oscoin.Prelude
     , module Data.Traversable
     , module Data.Bitraversable
     , module Data.Bifoldable
+    , module Data.Bifunctor
     , module Data.Foldable
     , module Data.Functor.Identity
     , module Data.Ord
@@ -37,7 +38,6 @@ module Oscoin.Prelude
     , module GHC.Exts
     , module Debug.Trace
     , MonadIO
-    , LByteString
     , Error(..)
     , Timestamp
     , notImplemented
@@ -74,7 +74,6 @@ import qualified Data.Text.IO as T
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 import           Data.Text.Encoding.Error (lenientDecode)
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
 import           Data.Map (Map)
 import           Data.Set (Set)
 import           Data.Semigroup (Semigroup, (<>))
@@ -83,6 +82,7 @@ import           Data.Traversable (Traversable(..), sequence, traverse, for)
 import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl', maximumBy, minimumBy)
 import           Data.Bitraversable (Bitraversable, bitraverse)
 import           Data.Bifoldable (Bifoldable, bifold, bifoldMap)
+import           Data.Bifunctor (first, second)
 import           Data.Ord (comparing)
 import           Data.Sequence (Seq)
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -95,7 +95,7 @@ import           Data.Function ((&))
 import           Data.Functor (void, ($>))
 import           Data.Functor.Identity (Identity(..), runIdentity)
 import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe, fromMaybe, catMaybes)
-import           Data.String (IsString)
+import           Data.String (IsString, fromString)
 import           Data.Time.Clock (NominalDiffTime)
 import           Data.Word
 import           Control.Applicative (liftA2, (<|>))
@@ -111,8 +111,6 @@ import           GHC.Stack (HasCallStack)
 import           GHC.Generics (Generic)
 import           GHC.Exts (IsList(fromList, Item))
 import           Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
-
-type LByteString = LBS.ByteString
 
 newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)

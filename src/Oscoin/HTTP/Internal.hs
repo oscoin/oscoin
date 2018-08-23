@@ -39,7 +39,7 @@ mkState = State ()
 getBody :: Aeson.FromJSON a => ApiAction tx s i (Maybe a)
 getBody = Spock.jsonBody
 
-getRawBody :: ApiAction tx s i LByteString
+getRawBody :: ApiAction tx s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
 getState :: ApiAction tx s i State
@@ -58,7 +58,7 @@ respond status (Just body) =
 respond status Nothing =
     respondBytes status ""
 
-respondBytes :: HTTP.Status -> LByteString -> ApiAction tx s i ()
+respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction tx s i ()
 respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body

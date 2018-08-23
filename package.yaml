@@ -1,8 +1,8 @@
 name: oscoin
 version: '0.1.0.0'
 synopsis: open-source collaboration network
-author: Alexis Sellier
-maintainer: alexis@monadic.xyz
+author: Monadic
+maintainer: team@monadic.xyz
 copyright: 2018 Monadic
 license: BSD3
 github: oscoin/oscoin
@@ -25,6 +25,7 @@ dependencies:
   - formatting
   - hashable
   - http-api-data
+  - http-client
   - http-types
   - iproute
   - memory
@@ -40,6 +41,8 @@ dependencies:
   - random-shuffle
   - recursion-schemes
   - safe-exceptions
+  - scientific
+  - serialise
   - semigroups
   - Spock
   - stm >=2.4.5.0
@@ -58,10 +61,14 @@ library:
 
 executables:
   oscoin:
-    main: client/Main.hs
+    main: node/Main.hs
     dependencies:
       - iproute
       - optparse-generic >= 1.3.0
+      - oscoin
+  oscoin-cli:
+    main: cli/Main.hs
+    dependencies:
       - oscoin
   txgen:
     main: txgen/Main.hs

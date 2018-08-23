@@ -10,7 +10,6 @@ import           Oscoin.Test.P2P.Gossip.Gen (Contacts, NodeId)
 import qualified Oscoin.Test.P2P.Gossip.Gen as Gen
 
 import qualified Algebra.Graph.AdjacencyMap as Alga
-import           Data.Bifunctor
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified System.Random.MWC as MWC

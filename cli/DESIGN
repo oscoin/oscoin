@@ -1,0 +1,253 @@
+CLI
+===
+
+You're on ``master``, you want to make a small change. You open your editor and
+make some changes::
+
+  $ vi main.c
+
+Running ``git status`` you see changes::
+
+  $ git status --short
+  M main.c
+
+You want to suggest these changes as a new revision::
+
+  $ git revision create -m "Fixed typo"
+  # => Commiting f18ae9d "Fixed typo"
+  # => Updating HEAD master..f18ae9d
+  # => Creating origin/revision/41...
+  # => Your revision can be found at http://oscoin.local/revisions/41
+
+A new commit is created, as well as a new revision which includes the diff
+between origin/master, and your new commit.
+
+It's also okay to commit your changes and then invoke ``git revision create``,
+in which case all unpushed commits will be included in the revision.
+
+You can list revisions and see the recently created one::
+
+  $ git revision list
+  * [Fixed typo] revision/41 (open)
+    [Fixed bug]  revision/29 (closed)
+
+The current revision is marked with a ``*``. The CLI is able to determine which
+revision the current working copy corresponts to. You can get information on
+the current revision by running::
+
+  $ git revision status
+  On branch master of repository xyz
+
+  Current revisions:
+    (use "git revision close" to close the revision(s))
+
+        * [Fixed typo] revision/41 (open)
+
+  These commits are pending:
+    (use "git revision update" to add them to revision/41)
+    (use "git revision reset" to reset your changes to revision/41)
+
+        a8e9dfa Fix nasty bug
+        918e8ea Add documentation
+
+You can make more changes and push them::
+
+  $ vim main.c
+  $ git revision update -m "Fixed more typos"
+  # => Updated revision/41 to 49aefa1
+
+Or if you prefer using standard git, you can do it this way too::
+
+  $ vim main.c
+  $ git commit -a -m "Fixed more typos"
+  $ git push origin revision/41
+  # => Updated revision/41 to 49aefa1
+
+Now let's take Alice's perspective, who is tasked to review your revision.
+First, she wants to see what you've done::
+
+  $ git revision show 41
+  ...
+
+This shows her the changes you've made.
+
+She wants to make a suggestion because she found another typo, so she
+pulls your revision to her computer::
+
+  $ git revision pull 41
+
+This throws her into a *worktree* with your revision checked out::
+
+  $ pwd
+  ~/.worktrees/revisions/41
+
+She fixes the typo and suggests the additional change::
+
+  $ vim main.c
+  $ git suggest -m "Found another typo!"
+  # => Uploading suggestion...
+  $ cd -
+
+Now back to you. You list your revisions and see that ``41`` has a suggestion::
+
+  $ git revision list
+  * [Fixed typo] revision/41 (open) (1 suggestion)
+    ...
+
+You want to review her suggestion::
+
+  $ git revision review 41
+
+  Suggestion #1 by Alice:
+  ...
+  - // Nothing like a boollean
+  + // Nothing like a boolean
+  ...
+  => Accept? [y/n]
+
+You accept her suggestion by typing ``y``. The suggestion is added to staging::
+
+  $ git --diff --cached
+
+  --- main.c
+  +++ main.c
+  ...
+  - // Nothing like a boollean
+  + // Nothing like a boolean
+  ...
+
+You commit it::
+
+  $ git commit
+
+The commit message is prefilled with Alice's note, which you can edit. When
+showing it, you see that you are the committer, but she is the author::
+
+  $ git show
+  commit 87da13ee7a9e861faed8e8f76187263
+  Author: Alice <alice@random.xyz>
+  Committer: You <you@random.xyz>
+
+    Found another typo!
+
+  diff
+  --- main.c
+  +++ main.c
+  ...
+  - // Nothing like a boollean
+  + // Nothing like a boolean
+  ...
+
+When done, you update the revision::
+
+  $ git revision update
+  ...
+
+Now Alice is happy, and on her machine, she decides to approve your revision::
+
+  $ git revision approve 41
+  # => Revision 41 approved and ready to merge!
+
+And you are able to merge it into master::
+
+  $ git revision merge 41
+  # => Merging revision/41 into master...
+  # => Done!
+  # => Resetting your HEAD
+
+Your master gets reset to the origin with all changes included::
+
+  $ git revision list
+  * [Fixed typo] revision/41 (merged)
+
+Interactive reviewing
+^^^^^^^^^^^^^^^^^^^^^
+
+By using the ``-i`` flag, we are thrown in interactive review mode::
+
+  $ git revision review -i 41
+  commit 87da13ee7a9e861faed8e8f76187263
+  Author: Alice <alice@random.xyz>
+  Committer: You <you@random.xyz>
+
+    Found another typo!
+
+  diff
+  --- main.c
+  +++ main.c
+  ...
+  - // Nothing like a boollean
+  + // Nothing like a boolean
+  ...
+
+  Review this hunk [a,r,s,j,k,q]?
+
+The options are::
+
+  a: Approve this hunk
+  r: Reject this hunk
+  j: Decide later, go to next hunk
+  k: Decide later, go to previous hunk
+  q: Quit
+
+We can see which hunks are left to review with::
+
+  $ git revision review status
+  Hunks that need review:
+
+    hunk@{0}: --- main.c:31-32 +++ main.c:31-32
+
+Once done with reviewing, we can call::
+
+  $ git revision review update
+
+If the review contains only approved hunks, the revision is considered approved.
+If the review contains unreviewed hunks, the revision is considered pending.
+If the review contains at least one rejected hunk, the revision is considered
+rejected in its current state.
+
+It's always possible to approve or reject all hunks via::
+
+  $ git revision approve
+
+and::
+
+  $ git revision reject
+
+This is useful if the revision was reviewed as a whole already.
+
+General commands
+^^^^^^^^^^^^^^^^
+It's possible to add/remove reviewers via::
+
+  $ git revision reviewers add @tom
+  $ git revision reviewers remove @tom
+
+And list the current ones via::
+
+  $ git revision reviewers list
+  @tom (pending)
+  @jon (approved)
+
+Revisions and Proposals
+^^^^^^^^^^^^^^^^^^^^^^^
+A revision is simply a set of changes (diff) meant to be merged in some branch.
+A proposal is a revision with some extra metadata:
+  * A title
+  * A description
+
+Revisions can close issues by include some text in any of the commits which
+pertain to that revision, eg. ``Closes #413``.
+
+Revisions can link to issues too, via simply ``#114``.
+Revisions can link to commits, via the hash or short hash: ``aef948a``
+Revisions can link to other revisions, via ``revision/44``.
+
+An alternative syntax for linking to issues and commits is the path syntax:
+``issue/114`` and ``commit/aef948a``.
+
+This also allows cross-linking between repositories, via: ``stdlib/issue/98``
+
+To notify people, we use ``@user``, eg. ``Hey @tom, check this out``.
+
+.. vim: filetype=rst

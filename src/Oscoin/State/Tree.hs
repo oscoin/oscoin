@@ -3,10 +3,11 @@ module Oscoin.State.Tree where
 import           Oscoin.Prelude
 
 import qualified Data.Map as Map
+import qualified Data.ByteString.Lazy as LBS
 
 type Key = Text
 type Path = [Text]
-type Val = LByteString
+type Val = LBS.ByteString
 
 -- | Key/value tree data-structure.
 type Tree k v = Map k v

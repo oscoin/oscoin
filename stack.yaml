@@ -4,22 +4,23 @@ packages:
 - .
 
 extra-deps:
-- acid-state-0.14.3
 - algebraic-graphs-0.1.1.1
 - merkle-tree-0.1.0
 - base58-bytestring-0.1.0
-- monad-stm-0.1.0.2
 - Spock-0.13.0.0
 - Spock-core-0.13.0.0
 - reroute-0.5.0.0
+- serialise-0.2.0.0
+- cborg-0.2.0.0
+- half-0.2.2.3
 
 - git: git@github.com:cloudhead/wai
   commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
   subdirs:
     - wai-extra
 
-- git: http://git.oscoin.io/radicle
-  commit: f4c769750b4c6b9d2e839b80f243ba3eb375cc01
+- git: git@github.com:oscoin/radicle
+  commit: 2b9ddab4963bf04f0148ff0974acdb5ebab5834f
 
 ghc-options:
   "$locals": -fhide-source-paths

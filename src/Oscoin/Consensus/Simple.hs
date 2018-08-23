@@ -22,7 +22,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
-import           Oscoin.Consensus.Evaluator
+import           Oscoin.Consensus.Evaluator hiding (Env)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), mkBlock, emptyHeader, validateBlock, toOrphan, hashTxs)
 import           Oscoin.Crypto.Hash
