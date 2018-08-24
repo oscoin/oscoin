@@ -96,7 +96,7 @@ request method (encodeUtf8 -> path) headers body =
   where
     req = Wai.defaultRequest
         { Wai.requestMethod = HTTP.renderStdMethod method
-        , Wai.requestHeaders = headers
+        , Wai.requestHeaders = (HTTP.hAccept, "application/json") : headers
         }
     reqBody Nothing    = LBS.empty
     reqBody (Just obj) = Aeson.encode obj
@@ -112,12 +112,12 @@ delete path = request DELETE path [] noBody
 -- | A PUT request.
 put :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
 put path body =
-    request PUT path [] (Just body)
+    request PUT path [(HTTP.hContentType, "application/json")] (Just body)
 
 -- | A POST request.
 post :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
 post path body =
-    request POST path [] (Just body)
+    request POST path [(HTTP.hContentType, "application/json")] (Just body)
 
 -- | Represents an empty request body.
 noBody :: Maybe ()

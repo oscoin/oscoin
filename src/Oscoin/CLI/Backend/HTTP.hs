@@ -14,7 +14,7 @@ import           Data.IP (IP)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Client
-import           Network.HTTP.Types.Header (hAccept)
+import           Network.HTTP.Types.Header (hAccept, hContentType)
 
 data Handle = Handle
     { httpRemoteIp   :: IP
@@ -65,9 +65,13 @@ request Handle{..} reqMethod reqPath reqBody = do
         , host           = C8.pack (show httpRemoteIp)
         , port           = fromIntegral httpRemotePort
         , path           = fromPath reqPath
-        , requestHeaders = [(hAccept, "application/cbor")]
-        , requestBody    = RequestBodyLBS . maybe LBS.empty serialise $ reqBody
+        , requestHeaders = (hAccept, "application/cbor") : contentType reqBody
+        , requestBody    = maybe (RequestBodyLBS LBS.empty)
+                                 (RequestBodyLBS . serialise)
+                                 reqBody
         }
+    contentType (Just _) = [(hContentType, "application/cbor")]
+    contentType _        = []
 
 evalPath :: Path
 evalPath = "/radicle/eval"

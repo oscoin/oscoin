@@ -8,21 +8,22 @@ import           Oscoin.Environment
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
 
-import           Data.Aeson (object, (.=), FromJSON, ToJSON)
+import           Codec.Serialise (Serialise)
+import           Data.Aeson (FromJSON, ToJSON)
 import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
 import           Data.Typeable (Typeable)
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
-import           Web.Spock (get, json, middleware, post, root, var, (<//>))
+import           Web.Spock (get, middleware, post, root, var, (<//>))
 
 withAPI
-    :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx)
+    :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx, Serialise tx)
     => Environment -> (Api tx s i () -> m a) -> m a
 withAPI env f = f (api env)
 
 -- | Entry point for API.
-api :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx)
+api :: (Typeable tx, FromJSON tx, ToJSON tx, Hashable tx, Serialise tx)
     => Environment
     -> Api tx s i ()
 api env = do
@@ -31,8 +32,7 @@ api env = do
 
     -- / ----------------------------------------------------------------------
 
-    get root $
-        json $ object [ "ok" .= True ]
+    get root Handlers.root
 
     -- /node/mempool ----------------------------------------------------------
 

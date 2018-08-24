@@ -40,6 +40,7 @@ import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Radicle as Rad
 
+import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (ToJSON, toJSON, object, (.=))
@@ -219,6 +220,9 @@ getPath k = do
 
 -- | A transaction receipt. Contains the hashed transaction.
 newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
+    deriving (Show)
+
+deriving instance Serialise (Receipt tx)
 
 instance Hashable tx => ToJSON (Receipt tx) where
     toJSON (Receipt tx) =

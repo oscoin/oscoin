@@ -22,6 +22,10 @@ import           Crypto.Hash (Digest, Blake2b_256(..))
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Crypto.PubKey.ECC.ECDSA.Extended ()
+import           Codec.Serialise (Serialise)
+import qualified Codec.Serialise as Serial
+import qualified Codec.Serialise.Decoding as Serial
+import qualified Codec.Serialise.Encoding as Serial
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Put as Binary
 import qualified Data.Binary.Get as Binary
@@ -71,6 +75,10 @@ instance Binary (Hashed' Blake2b_256 a) where
     put = Binary.put <$> fromHashed
     get = Hashed <$> Binary.get
 
+instance Serialise (Hashed' Blake2b_256 a) where
+    encode = Serial.encode <$> fromHashed
+    decode = Hashed <$> Serial.decode
+
 instance FromHttpApiData (Hashed' Blake2b_256 a) where
     parseQueryParam txt =
         case fromHex (encodeUtf8 txt) of
@@ -102,6 +110,12 @@ instance Binary (Digest Blake2b_256) where
         fromJust . Crypto.digestFromByteString <$> Binary.getByteString size
       where
         size = Crypto.hashDigestSize Blake2b_256
+
+instance Serialise (Digest Blake2b_256) where
+    encode digest =
+        Serial.encodeBytes (convert digest :: ByteString)
+    decode =
+        fromJust . Crypto.digestFromByteString <$> Serial.decodeBytes
 
 instance ToJSON (Digest Blake2b_256) where
     toJSON =

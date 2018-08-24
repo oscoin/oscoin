@@ -17,9 +17,11 @@ import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(.
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (Signature(..))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import           Crypto.Random.Types (MonadRandom)
 
+import           Codec.Serialise
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
@@ -29,7 +31,27 @@ import           Data.ByteString.Base64.Extended (Base64(..))
 import           Web.HttpApiData
 
 data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
-    deriving (Show)
+    deriving (Show, Generic)
+
+instance Serialise PublicKey
+
+deriving instance Generic ECDSA.PublicKey
+instance Serialise ECDSA.PublicKey
+
+deriving instance Generic ECC.Curve
+instance Serialise ECC.Curve
+
+deriving instance Generic ECC.Point
+instance Serialise ECC.Point
+
+deriving instance Generic ECC.CurveBinary
+instance Serialise ECC.CurveBinary
+
+deriving instance Generic ECC.CurvePrime
+instance Serialise ECC.CurvePrime
+
+deriving instance Generic ECC.CurveCommon
+instance Serialise ECC.CurveCommon
 
 instance Eq PublicKey where
     (==) (PublicKey _ h) (PublicKey _ h') = h == h'
@@ -42,6 +64,8 @@ publicKeyHash (PublicKey _ h) = h
 
 newtype PrivateKey = PrivateKey ECDSA.PrivateKey
     deriving (Show, Eq)
+
+--------------------------------------------------------------------------------
 
 instance Ord Signature where
     (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
@@ -64,12 +88,16 @@ instance Binary Signature where
 instance FromHttpApiData Signature where
     parseQueryParam _txt = notImplemented
 
+deriving instance Generic Signature
+instance Serialise Signature
+
 -- | A signed message.
 -- Create these with "sign" and verify them with "verify".
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
 
 instance Binary msg => Binary (Signed msg)
+instance Serialise msg => Serialise (Signed msg)
 
 instance Hashable msg => Hashable (Signed msg) where
     hash :: Signed msg -> Hashed (Signed msg)

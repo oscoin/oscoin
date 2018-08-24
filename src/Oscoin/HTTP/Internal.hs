@@ -5,7 +5,8 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 
-import           Data.Aeson ((.=))
+import           Codec.Serialise (Serialise, serialise)
+import           Data.Aeson (ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.HTTP.Types.Status as HTTP
@@ -36,6 +37,9 @@ type MonadApi tx s i m = (HasSpock m, SpockConn m ~ Node.Handle tx s i)
 mkState :: State
 mkState = State ()
 
+getHeader :: Text -> ApiAction tx s i (Maybe Text)
+getHeader = Spock.header
+
 getBody :: Aeson.FromJSON a => ApiAction tx s i (Maybe a)
 getBody = Spock.jsonBody
 
@@ -52,11 +56,18 @@ param' = Spock.param'
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction tx s i ()
-respond status (Just body) =
+respondJson :: ToJSON a => HTTP.Status -> a -> ApiAction tx s i ()
+respondJson status body = do
+    Spock.setHeader "Content-Type" "application/json"
     respondBytes status (Aeson.encode body)
-respond status Nothing =
-    respondBytes status ""
+
+respond :: HTTP.Status -> ApiAction tx s i ()
+respond = Spock.setStatus
+
+respondCbor :: Serialise a => HTTP.Status -> a -> ApiAction tx s i ()
+respondCbor status body = do
+    Spock.setHeader "Content-Type" "application/cbor"
+    respondBytes status (serialise body)
 
 respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction tx s i ()
 respondBytes status body = do
@@ -65,7 +76,7 @@ respondBytes status body = do
 
 notImplemented :: ApiAction tx s i ()
 notImplemented =
-    respond HTTP.notImplemented501 (Just body)
+    respondJson HTTP.notImplemented501 body
   where
     body = errorBody "Not implemented"
 

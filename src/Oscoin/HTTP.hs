@@ -4,4 +4,4 @@ module Oscoin.HTTP
     ) where
 
 import Oscoin.HTTP.Internal (run)
-import Oscoin.HTTP.API (api)
+import Oscoin.HTTP.API (withAPI)

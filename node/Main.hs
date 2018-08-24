@@ -9,7 +9,7 @@ import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.HTTP as HTTP
-import           Oscoin.HTTP.API (withAPI)
+import           Oscoin.HTTP (withAPI)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
