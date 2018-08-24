@@ -19,7 +19,7 @@ extra-deps:
   subdirs:
     - wai-extra
 
-- git: git@github.com:oscoin/radicle
+- git: http://git.oscoin.io/radicle
   commit: 2b9ddab4963bf04f0148ff0974acdb5ebab5834f
 
 ghc-options:
