@@ -42,3 +42,7 @@ api env = do
     -- /node/mempool/:id ------------------------------------------------------
 
     get ("node" <//> "mempool" <//> var) Handlers.getTransaction
+
+    -- /node/state/:key -------------------------------------------------------
+
+    get ("node" <//> "state" <//> var) Handlers.getStatePath

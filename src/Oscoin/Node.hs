@@ -214,9 +214,7 @@ getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 
 -- | Get a state value at the given path.
 getPath :: MonadIO m => STree.Path -> NodeT tx s i m (Maybe STree.Val)
-getPath k = do
-    Handle{hStateTree} <- ask
-    lift $ STree.get hStateTree k
+getPath = queryM
 
 -- | A transaction receipt. Contains the hashed transaction.
 newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }

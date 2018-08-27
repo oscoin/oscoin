@@ -73,17 +73,17 @@ request Handle{..} reqMethod reqPath reqBody = do
     contentType (Just _) = [(hContentType, "application/cbor")]
     contentType _        = []
 
-evalPath :: Path
-evalPath = "/radicle/eval"
+submitPath :: Path
+submitPath = "/node/mempool"
 
 readPath :: Path
-readPath = "/radicle/state"
+readPath = "/node/state"
 
 --------------------------------------------------------------------------------
 
 revisionCreate :: FromRadicle a => Handle -> Revision -> IO (Result a)
 revisionCreate h rev =
-    fromRadicle <$> post h evalPath (toRadicle rev)
+    fromRadicle <$> post h submitPath (toRadicle rev)
 
 revisionStatus :: FromRadicle a => Handle -> RevisionId -> IO (Result a)
 revisionStatus h (RevisionId id) =

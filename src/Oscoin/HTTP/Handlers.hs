@@ -6,6 +6,7 @@ import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
+import           Oscoin.State.Tree (Key)
 
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (FromJSON, ToJSON)
@@ -35,6 +36,15 @@ submitTransaction = do
         pure $ Node.Receipt (hash tx)
 
     respondBody receipt
+
+getStatePath :: Key -> ApiAction tx s i ()
+getStatePath k = do
+    result <- node $ Node.getPath [k]
+    case result of
+        Just val ->
+            respondCbor ok200 val
+        Nothing ->
+            respond notFound404
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi tx s i m => Node.NodeT tx s i IO a -> m a
