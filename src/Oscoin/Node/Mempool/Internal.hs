@@ -19,7 +19,6 @@ import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Aeson as Aeson
-import qualified Data.HashMap.Strict as HashMap
 
 -- Mempool --------------------------------------------------------------------
 
@@ -27,14 +26,8 @@ import qualified Data.HashMap.Strict as HashMap
 newtype Mempool tx = Mempool (Map (Hashed tx) tx)
     deriving (Show, Semigroup, Monoid, Eq)
 
--- | The 'Aeson.ToJSON' instance of 'Mempool' includes transaction ids as fields
--- inside the transaction object.
 instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool tx) where
-    toJSON (Mempool txs) =
-        Aeson.toJSON [addId (Aeson.toJSON k) (Aeson.toJSON v) | (k, v) <- Map.toList txs]
-      where
-        addId k (Aeson.Object hm) = Aeson.Object $ HashMap.insert "id" k hm
-        addId _ _                 = error "Unexpected value encountered"
+    toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
 
 -- | Lookup a transaction in a mempool.
 lookup :: Hashed tx -> Mempool tx -> Maybe tx

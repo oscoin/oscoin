@@ -34,7 +34,7 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (MonadNetwork(..), Msg, runNetworkT)
+import           Oscoin.P2P (MonadNetwork(..), runNetworkT)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Storage.Block as BlockStore
 
@@ -109,7 +109,7 @@ step :: forall proxy      r tx          m.
      => proxy tx
      -> m ()
 step _ = do
-    r <- recvM :: m (Msg tx)
+    r <- recvM
     t <- currentTick
     o <- stepM t r
     sendM o

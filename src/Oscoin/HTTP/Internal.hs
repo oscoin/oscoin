@@ -105,7 +105,7 @@ getBody = do
     ct   <- getHeader' "Content-Type"
     body <- getRawBody
     case decode ct body of
-        Left l  -> respond HTTP.badRequest400
+        Left _  -> respond HTTP.badRequest400
         Right a -> pure a
   where
     decode :: (Serialise a, FromJSON a) => Text -> LBS.ByteString -> Either Text a
