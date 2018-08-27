@@ -4,14 +4,16 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 import           Oscoin.HTTP.Internal
-import           Oscoin.Data.Operation (Operation(..))
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import qualified Oscoin.Crypto.PubKey as PubKey
 
-import           Codec.Serialise
-import           Data.Aeson (FromJSON, ToJSON)
+import           Codec.Serialise hiding (encode)
+import           Data.Aeson (FromJSON, ToJSON, eitherDecode', encode)
+import qualified Web.Spock as Spock
+import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Types.Status
+import           Data.ByteString.Char8 (pack)
 
 root :: ApiAction tx s i ()
 root = respond ok200
@@ -30,37 +32,39 @@ getTransaction txId = do
 
 submitTransaction :: (Hashable tx, FromJSON tx, Serialise tx) => ApiAction tx s i ()
 submitTransaction = do
-    h <- getHeader "Accept"
-    case h of
-        Just "application/json" -> submitTransactionJson
-        Just "application/cbor" -> submitTransactionCbor
-        _                       -> respond notAcceptable406
+    ct      <- getHeader "Content-Type"
+    accept  <- getHeader "Accept"
+    body    <- getRawBody
+    submit (respond' accept) $ decode' ct body
+  where
+    submit _    (Left status) = respond status
+    submit resp (Right tx) = do
+      receipt <- node $ do
+        addTxs [PubKey.unsign tx]
+        pure $ Node.Receipt (hash tx)
+      resp receipt
 
-submitTransactionJson :: (Hashable tx, FromJSON tx) => ApiAction tx s i ()
-submitTransactionJson = do
-    -- TODO: Create a pattern for this.
-    result :: Maybe tx <- getBody
-    case result of
-        Just tx -> do
-            -- TODO: Verify signature passed in url.
-            receipt <- node $ do
-                addTxs [tx]
-                pure $ Node.Receipt (hash tx)
-            respondJson accepted202 receipt
-        Nothing ->
-            respond badRequest400
+respond' :: (ToJSON a, Serialise a) => Maybe Text -> a -> ApiAction tx s i ()
+respond' Nothing       _ = respond notAcceptable406
+respond' (Just accept) a = do
+  Spock.setHeader "Content-Type" accept
+  case encode' accept a of
+    Nothing -> respond notAcceptable406
+    Just bs -> respondBytes accepted202 bs
 
-submitTransactionCbor :: forall tx s i. (Hashable tx, Serialise tx) => ApiAction tx s i ()
-submitTransactionCbor = do
-    body <- getRawBody
-    case deserialiseOrFail body of
-        Left _ ->
-            respond badRequest400
-        Right Operation{opMessage} -> do
-            receipt <- node $ do
-                addTxs [PubKey.unsign opMessage]
-                pure $ Node.Receipt (hash opMessage)
-            respondCbor accepted202 receipt
+decode' :: (Serialise tx, FromJSON tx) => Maybe Text -> LBS.ByteString -> Either Status tx
+decode' ct
+  | Just "application/cbor" <- ct = convert . deserialiseOrFail
+  | Just "application/json" <- ct = convert . eitherDecode'
+  | otherwise                     = const $ Left $ notAcceptable406
+  where
+    convert (Left err) = Left  $ mkStatus 400 $ pack $ show err
+    convert (Right tx) = Right $ tx
+
+encode' :: (Serialise a, ToJSON a) => Text -> a -> Maybe LBS.ByteString
+encode' "application/json" = Just . encode
+encode' "application/cbor" = Just . serialise
+encode' _                  = const Nothing
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi tx s i m => Node.NodeT tx s i IO a -> m a
