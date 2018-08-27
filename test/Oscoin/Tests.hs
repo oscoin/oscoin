@@ -18,7 +18,7 @@ import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
-import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith)
+import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbitrarySigned)
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.Test.P2P as P2P
@@ -52,6 +52,7 @@ tests = testGroup "Oscoin"
     , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
+    , testProperty   "JSON instance of Signed"        propSignedJSON
     , testProperty   "Hexadecimal encoding"           propHexEncoding
     , testGroup      "Consensus"                      Consensus.tests
     , testGroup      "P2P"                            P2P.tests
@@ -166,3 +167,8 @@ propHashedJSON x = (Aeson.decode . Aeson.encode) x == Just x
 
 propHexEncoding :: ByteString -> Bool
 propHexEncoding x = (Crypto.fromHex . Crypto.toHex) x == Right x
+
+propSignedJSON :: Property
+propSignedJSON =
+    forAll (arbitrarySigned :: Gen (Crypto.Signed Text)) $ \msg ->
+        (Aeson.decode . Aeson.encode) msg == Just msg
