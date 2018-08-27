@@ -66,12 +66,12 @@ testOscoinAPI = runSession nodeConfig 42 $ do
     get "/node/mempool" >>= assertBody emptyArray
 
     -- Now let's create a transaction.
-    let tx' :: DummyTx = ()
+    let tx :: DummyTx = ()
 
     -- Now generate a key pair and sign the transaction.
     -- TODO(cloudhead): This doesn't work anymore.
-    -- (_, priKey) <- Crypto.generateKeyPair
-    -- tx'         <- Crypto.sign priKey tx
+    (_, priKey) <- Crypto.generateKeyPair
+    tx'         <- Crypto.sign priKey tx
 
     -- Submit the transaction to the mempool.
     resp <- post "/node/mempool" tx' ; assertStatus 202 resp

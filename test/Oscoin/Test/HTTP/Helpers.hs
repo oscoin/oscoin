@@ -7,6 +7,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, Block)
+import           Oscoin.Crypto.PubKey (Signed)
 import           Oscoin.Environment
 import           Oscoin.HTTP.API (api)
 import           Oscoin.HTTP.Internal (mkMiddleware)
@@ -53,7 +54,7 @@ runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.connect
-    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block DummyTx ())
+    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed DummyTx) ())
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) nh)
