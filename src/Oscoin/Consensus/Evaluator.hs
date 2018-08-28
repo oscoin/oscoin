@@ -14,7 +14,6 @@ module Oscoin.Consensus.Evaluator
 import           Oscoin.Prelude
 
 import qualified Radicle as Rad
-import qualified Data.IntMap as IntMap
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
@@ -23,16 +22,8 @@ type Evaluator s a b = a -> s -> Maybe (b, s)
 
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
 
-instance Semigroup Env where
-    (<>) (Env a) (Env b) = Env Rad.Bindings
-        { Rad.bindingsEnv     = Rad.bindingsEnv     a <> Rad.bindingsEnv b
-        , Rad.bindingsPrimops = Rad.bindingsPrimops a <> Rad.bindingsPrimops b
-        , Rad.bindingsRefs    = Rad.bindingsRefs    a <> IntMap.mapKeys (+ Rad.bindingsNextRef a) (Rad.bindingsRefs b)
-        , Rad.bindingsNextRef = Rad.bindingsNextRef a + Rad.bindingsNextRef b
-        }
-
-instance Monoid Env where
-    mempty = Env Rad.Bindings
+instance Default Env where
+    def = Env Rad.Bindings
         { Rad.bindingsEnv = mempty
         , Rad.bindingsPrimops = mempty
         , Rad.bindingsRefs = mempty

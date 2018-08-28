@@ -132,12 +132,12 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisHeader :: (Foldable t, Binary tx, Monoid s) => Timestamp -> t tx -> BlockHeader s
+genesisHeader :: (Foldable t, Binary tx, Default s) => Timestamp -> t tx -> BlockHeader s
 genesisHeader t txs = emptyHeader
     { blockDataHash  = hashTxs txs
     , blockTimestamp = t
     , blockStateHash = zeroHash
-    , blockState     = mempty
+    , blockState     = def
     }
 
 genesisBlock
@@ -153,7 +153,7 @@ genesisBlock s eval t xs =
     blk = mkBlock (genesisHeader t xs) xs :: Block tx ()
 
 emptyGenesisBlock
-    :: forall tx s. (Binary tx, Monoid s)
+    :: forall tx s. (Binary tx, Default s)
     => Timestamp
     -> Block tx s
 emptyGenesisBlock t =

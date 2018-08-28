@@ -11,6 +11,6 @@ import Data.Binary (Binary)
 
 import Test.QuickCheck
 
-instance (Binary tx, Arbitrary tx, Monoid s) => Arbitrary (BlockStore tx s) where
+instance (Binary tx, Arbitrary tx, Default s) => Arbitrary (BlockStore tx s) where
     arbitrary =
         genesisBlockStore <$> arbitraryGenesis
