@@ -29,7 +29,7 @@ You can list revisions and see the recently created one::
 
   $ git revision list
   * [Fixed typo] revision/41 (open)
-    [Fixed bug]  revision/29 (closed)
+    [Fixed bug]  revision/29 (closed) [3 comments, 2 suggestions]
 
 The current revision is marked with a ``*``. The CLI is able to determine which
 revision the current working copy corresponts to. You can get information on
@@ -104,6 +104,10 @@ You want to review her suggestion::
   + // Nothing like a boolean
   ...
   => Accept? [y/n]
+
+*The function of ``revision review`` depends on whether the caller is the author
+of the revision. If they are, they will be reviewing comments and suggestions.
+If they are a reviewer, they will be reviewing diffs.*
 
 You accept her suggestion by typing ``y``. The suggestion is added to staging::
 
@@ -186,6 +190,8 @@ The options are::
 
   a: Approve this hunk
   r: Reject this hunk
+  c: Comment on this hunk
+  s: Make a suggestion on this hunk
   j: Decide later, go to next hunk
   k: Decide later, go to previous hunk
   q: Quit
@@ -208,7 +214,7 @@ rejected in its current state.
 
 It's always possible to approve or reject all hunks via::
 
-  $ git revision approve
+  $ git revision approve [-m <comment>]
 
 and::
 
@@ -228,6 +234,10 @@ And list the current ones via::
   $ git revision reviewers list
   @tom (pending)
   @jon (approved)
+
+One can also comment on the revision as a whole::
+
+  $ git revision comment [-m <comment>]
 
 Revisions and Proposals
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -249,5 +259,85 @@ An alternative syntax for linking to issues and commits is the path syntax:
 This also allows cross-linking between repositories, via: ``stdlib/issue/98``
 
 To notify people, we use ``@user``, eg. ``Hey @tom, check this out``.
+
+Implementation considerations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Tomás said::
+
+  "What do you think of making all automated checks be just like "reviewers", in
+  the sense that for instance our current build in CircleCI could review the
+  code, comment on it, and leave suggestions. The level of integration could be
+  as deep as leaving in-line comments and suggestions like Github's newer
+  Checks functionality, or more coarse grained like leaving global comment (not
+  associated with any specific file) with a link to CircleCI's web interface
+  where a build passed or failed."
+
+Ideas around UI for author review of comments/suggestions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: diff
+    $ git revision review 41
+    commit  0d315c8e151c13efbf15c1e65f5fc5a09973d1ae
+    comment 5366fcd697b6e80d71c1d84bb4ab5c62c45f9981
+    Author:     Kim Altintop <kim@monadic.xyz>
+    AuthorDate: Mon Feb 26 21:22:43 2018 -0500
+    Committer:  Kim Altintop <kim@monadix.xyz>
+    CommitDate: Mon Feb 26 21:22:43 2018 -0500
+    Reviewer:   Alexis Sellier <alexis@monadic.xyz>
+    ReviewDate: Mon Feb 26 21:36:54 2018 -0500
+
+        Use $> instead of const x <$>
+
+    diff --git a/src/Oscoin/Account/Transaction.hs b/src/Oscoin/Account/Transaction.hs
+    index 590081a..1ebd1e6 100644
+    --- a/src/Oscoin/Account/Transaction.hs
+    +++ b/src/Oscoin/Account/Transaction.hs
+    @@ -81,7 +81,7 @@ instance FromJSON Tx where
+
+     validateTransaction :: Signed Tx -> Either Error (Signed Tx)
+     validateTransaction stx@(Signed tx _) =
+    -    const stx <$> validateTransaction' tx
+    +    validateTransaction' tx $> stx
+    #  _________________________________________________________________________
+    # /                                                                         \
+    # | @cloudhead commented on line 81:                                        |
+    # |    I'm not so sure about this change. Could you please elaborate on it? |
+    # \_________________________________________________________________________/
+
+     validateTransaction' :: Tx -> Either Error Tx
+     validateTransaction' tx@(SetTx accId accKey _)
+
+
+    commit     83d60a3e128c072d0fed15ca2986390b0bb47add
+    suggestion d697f2630c27d92489d346d95d37132834580067
+    Author:     Kim Altintop <kim@monadic.xyz>
+    AuthorDate: Tue Aug 7 17:21:07 2018 +0200
+    Committer:  Kim Altintop <kim@monadic.xyz>
+    CommitDate: Tue Aug 7 17:21:07 2018 +0200
+    Reviewer:   Alexis Sellier <alexis@monadic.xyz>
+    ReviewDate: Mon Feb 26 21:36:54 2018 -0500
+
+        -O is enough for the test suite
+
+    diff --git a/package.yaml b/package.yaml
+    index 4fb0003..6e32816 100644
+    --- a/package.yaml
+    +++ b/package.yaml
+    @@ -78,7 +78,7 @@ tests:
+           - -threaded
+           - -rtsopts
+           - -with-rtsopts=-N
+    #  ___________________________________________________________________
+    # /                                                                   \
+    # | @cloudhead suggested a patch on line 78:                          |
+    # |     Unfortunately we need a SUPER FAST AND OPTIMIZED TEST SUITE.  |
+    # \___________________________________________________________________/
+    #
+    +      - -O2
+    -      - -O
+         dependencies:
+           - algebraic-graphs
+           - microlens
 
 .. vim: filetype=rst
