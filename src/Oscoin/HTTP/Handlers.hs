@@ -2,32 +2,31 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import           Oscoin.State.Tree (Key)
 
-import           Codec.Serialise (Serialise)
-import           Data.Aeson (FromJSON, ToJSON)
+import           Data.Aeson.Extended ()
 import           Network.HTTP.Types.Status
 
-root :: ApiAction tx s i ()
+root :: ApiAction s i ()
 root = respond ok200
 
-getAllTransactions :: ToJSON tx => ApiAction tx s i ()
+getAllTransactions :: ApiAction s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
     respondJson ok200 mp
 
-getTransaction :: (Hashable tx, ToJSON tx) => Hashed tx -> ApiAction tx s i ()
+getTransaction :: Hashed ApiTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
     case mtx of
         Just tx -> respondJson ok200 tx
         Nothing -> respond notFound404
 
-submitTransaction :: (Hashable tx, FromJSON tx, Serialise tx) => ApiAction tx s i ()
+submitTransaction :: ApiAction s i ()
 submitTransaction = do
     tx <- getBody
 
@@ -37,7 +36,7 @@ submitTransaction = do
 
     respondBody receipt
 
-getStatePath :: Key -> ApiAction tx s i ()
+getStatePath :: Key -> ApiAction s i ()
 getStatePath k = do
     result <- node $ Node.getPath [k]
     case result of
@@ -47,6 +46,6 @@ getStatePath k = do
             respond notFound404
 
 -- | Runs a NodeT action in a MonadApi monad.
-node :: MonadApi tx s i m => Node.NodeT tx s i IO a -> m a
+node :: MonadApi s i m => Node.NodeT ApiTx s i IO a -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s

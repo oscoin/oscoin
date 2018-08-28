@@ -66,7 +66,7 @@ testOscoinAPI = runSession nodeConfig 42 $ do
     get "/node/mempool" >>= assertBody emptyArray
 
     -- Now let's create a transaction.
-    let tx :: DummyTx = ()
+    let tx :: DummyTx = "<transaction>"
 
     -- Now generate a key pair and sign the transaction.
     -- TODO(cloudhead): This doesn't work anymore.

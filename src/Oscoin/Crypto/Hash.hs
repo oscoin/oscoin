@@ -7,6 +7,7 @@ module Oscoin.Crypto.Hash
     , fromHashed
     , digestFromByteString
     , hashBinary
+    , hashSerial
     , HashAlgorithm
     , hashAlgorithm
     , maxHash
@@ -62,24 +63,24 @@ instance Hashable a => Monoid (Hashed' HashAlgorithm a) where
 instance Show (Hashed' algo a) where
     show = show . fromHashed
 
-instance ToJSON (Hashed' Blake2b_256 a) where
+instance ToJSON (Hashed' HashAlgorithm a) where
     toJSON (Hashed digest) = toJSON digest
 
-instance FromJSON (Hashed' Blake2b_256 a) where
+instance FromJSON (Hashed' HashAlgorithm a) where
     parseJSON = withText "Hashed' Blake2b_256 a" $ \t ->
         case fromHex (encodeUtf8 t) of
             Right bs -> pure $ Binary.decode (LBS.fromStrict bs)
             Left err -> fail (T.unpack $ fromError err)
 
-instance Binary (Hashed' Blake2b_256 a) where
+instance Binary (Hashed' HashAlgorithm a) where
     put = Binary.put <$> fromHashed
     get = Hashed <$> Binary.get
 
-instance Serialise (Hashed' Blake2b_256 a) where
+instance Serialise (Hashed' HashAlgorithm a) where
     encode = Serial.encode <$> fromHashed
     decode = Hashed <$> Serial.decode
 
-instance FromHttpApiData (Hashed' Blake2b_256 a) where
+instance FromHttpApiData (Hashed' HashAlgorithm a) where
     parseQueryParam txt =
         case fromHex (encodeUtf8 txt) of
             Left err -> Left (fromError err)
@@ -103,7 +104,7 @@ type HashAlgorithm = Blake2b_256
 hashAlgorithm :: Blake2b_256
 hashAlgorithm = Blake2b_256
 
-instance Binary (Digest Blake2b_256) where
+instance Binary (Digest HashAlgorithm) where
     put digest =
         Binary.putByteString (convert digest :: ByteString)
     get =
@@ -111,13 +112,13 @@ instance Binary (Digest Blake2b_256) where
       where
         size = Crypto.hashDigestSize Blake2b_256
 
-instance Serialise (Digest Blake2b_256) where
+instance Serialise (Digest HashAlgorithm) where
     encode digest =
         Serial.encodeBytes (convert digest :: ByteString)
     decode =
         fromJust . Crypto.digestFromByteString <$> Serial.decodeBytes
 
-instance ToJSON (Digest Blake2b_256) where
+instance ToJSON (Digest HashAlgorithm) where
     toJSON =
         String . decodeUtf8 . toHex . LBS.toStrict . Binary.encode
 
@@ -157,6 +158,9 @@ class Hashable a where
 
 hashBinary :: Binary a => a -> Hashed a
 hashBinary = Hashed . Crypto.hash . LBS.toStrict . Binary.encode
+
+hashSerial :: Serialise a => a -> Hashed a
+hashSerial = Hashed . Crypto.hash . LBS.toStrict . Serial.serialise
 
 instance Hashable () where
     hash () = Hashed zeroHash

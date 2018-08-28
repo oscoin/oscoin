@@ -87,17 +87,16 @@ open hConfig hNodeId hMempool hStateTree hBlockStore =
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-tick :: forall proxy tx m.
+tick :: forall tx m.
         ( MonadNetwork  tx m
         , MonadProtocol tx m
         , MonadClock       m
         )
-     => proxy tx
-     -> m ()
-tick _ =
+     => m ()
+tick =
     currentTick >>= tickM >>= sendM
 
-step :: forall proxy      r tx          m.
+step :: forall            r tx          m.
         ( MonadNetwork      tx          m
         , MonadProtocol     tx          m
         , MonadBlockStore   tx Eval.Env m
@@ -106,9 +105,8 @@ step :: forall proxy      r tx          m.
         , Has Log.Logger  r
         , MonadIO                       m
         )
-     => proxy tx
-     -> m ()
-step _ = do
+     => m ()
+step = do
     r <- recvM
     t <- currentTick
     o <- stepM t r

@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
+import           Oscoin.Data.Tx (Tx)
 
 import           Codec.Serialise (Serialise, serialise)
 import qualified Codec.Serialise as Serialise
@@ -24,70 +25,73 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction tx s i = SpockAction (Node.Handle tx s i) () State
+type ApiAction s i = SpockAction (Node.Handle ApiTx s i) () State
 
-instance MonadFail (ApiAction tx s i) where
+-- | The type of a block transaction in the API.
+type ApiTx = Tx ByteString
+
+instance MonadFail (ApiAction s i) where
     fail = error "failing!"
 
 -- | The type of our api.
-type Api tx s i = SpockM (Node.Handle tx s i) () State
+type Api s i = SpockM (Node.Handle ApiTx s i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi tx s i m = (HasSpock m, SpockConn m ~ Node.Handle tx s i)
+type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle ApiTx s i)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State ()
 
-getHeader :: Text -> ApiAction tx s i (Maybe Text)
+getHeader :: Text -> ApiAction s i (Maybe Text)
 getHeader = Spock.header
 
-getHeader' :: Text -> ApiAction tx s i Text
+getHeader' :: Text -> ApiAction s i Text
 getHeader' h = do
     mh <- getHeader h
     case mh of
         Just v  -> pure v
         Nothing -> respond HTTP.badRequest400
 
-getRawBody :: ApiAction tx s i LBS.ByteString
+getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-getAccept :: ApiAction tx s i Text
+getAccept :: ApiAction s i Text
 getAccept = do
     result <- getHeader "Accept"
     case result of
         Nothing     -> respond HTTP.notAcceptable406
         Just accept -> pure accept
 
-getState :: ApiAction tx s i State
+getState :: ApiAction s i State
 getState = Spock.getState
 
-param' :: (FromHttpApiData p) => Text -> ApiAction tx s i p
+param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respondJson :: ToJSON a => HTTP.Status -> a -> ApiAction tx s i ()
+respondJson :: ToJSON a => HTTP.Status -> a -> ApiAction s i ()
 respondJson status body = do
     Spock.setHeader "Content-Type" "application/json"
     respondBytes status (Aeson.encode body)
 
-respond :: HTTP.Status -> ApiAction tx s i a
+respond :: HTTP.Status -> ApiAction s i a
 respond status = respondBytes status mempty
 
-respondCbor :: Serialise a => HTTP.Status -> a -> ApiAction tx s i b
+respondCbor :: Serialise a => HTTP.Status -> a -> ApiAction s i b
 respondCbor status body = do
     Spock.setHeader "Content-Type" "application/cbor"
     respondBytes status (serialise body)
 
-respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction tx s i a
+respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction s i a
 respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body
 
-respondBody :: (ToJSON a, Serialise a) => a -> ApiAction tx s i ()
+respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
 respondBody a = do
     accept <- getAccept
     Spock.setHeader "Content-Type" accept
@@ -100,7 +104,7 @@ respondBody a = do
     encode "application/cbor" = Just . Serialise.serialise
     encode _                  = const Nothing
 
-getBody :: (Serialise a, FromJSON a) => ApiAction tx s i a
+getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
     ct   <- getHeader' "Content-Type"
     body <- getRawBody
@@ -113,7 +117,7 @@ getBody = do
     decode "application/cbor" bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
     decode contentType        _  = Left $ "unknown content type " ++ contentType
 
-notImplemented :: ApiAction tx s i ()
+notImplemented :: ApiAction s i ()
 notImplemented =
     respondJson HTTP.notImplemented501 body
   where
@@ -122,16 +126,16 @@ notImplemented =
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run :: Api tx s i ()
+run :: Api s i ()
     -> Int
-    -> Node.Handle tx s i
+    -> Node.Handle ApiTx s i
     -> IO ()
 run app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
-    :: Api tx s i ()
-    -> Node.Handle tx s i
+    :: Api s i ()
+    -> Node.Handle ApiTx s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

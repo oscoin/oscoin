@@ -6,8 +6,7 @@ module Oscoin.Test.HTTP.Helpers where
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, Block)
-import           Oscoin.Crypto.PubKey (Signed)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Environment
 import           Oscoin.HTTP.API (api)
 import           Oscoin.HTTP.Internal (mkMiddleware)
@@ -15,6 +14,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Data.Tx (Tx)
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
@@ -37,7 +37,7 @@ import           Web.Spock (spockAsApp)
 type Session = Wai.Session
 
 -- | Dummy transaction type used for testing.
-type DummyTx = ()
+type DummyTx = ByteString
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
@@ -54,7 +54,7 @@ runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.connect
-    bs <- BlockStore.newIO $ genesisBlockStore (emptyGenesisBlock 0 :: Block (Signed DummyTx) ())
+    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @(Tx DummyTx) @() 0
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) nh)

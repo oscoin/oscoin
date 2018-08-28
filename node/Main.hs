@@ -7,6 +7,7 @@ import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, n
 import           Oscoin.Consensus.Evaluator (radicleEval)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
+import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.HTTP as HTTP
 import           Oscoin.HTTP (withAPI)
@@ -59,8 +60,8 @@ main = do
                 env = defaultNakamotoEnv { nakEval = radicleEval, nakLogger = lgr }
              in do
                  void $ Async.async $ HTTP.run api 8080 nod -- TODO(cloudhead): Eventually we should terminate gracefully.
-                 Async.race_ (run . forever $ Node.step (Proxy @Text))
-                             (run . forever $ Node.tick (Proxy @Text))
+                 Async.race_ (run . forever $ Node.step)
+                             (run . forever $ Node.tick)
   where
     mkP2PConfig ip port = P2P.defaultConfig
         { P2P.cfgBindIP   = ip
