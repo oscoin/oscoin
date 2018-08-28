@@ -37,7 +37,7 @@ import           Web.Spock (spockAsApp)
 type Session = Wai.Session
 
 -- | Dummy transaction type used for testing.
-type DummyTx = ByteString
+type DummyTx = Tx ByteString
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
@@ -54,7 +54,7 @@ runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.connect
-    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @(Tx DummyTx) @() 0
+    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @DummyTx @() 0
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) nh)

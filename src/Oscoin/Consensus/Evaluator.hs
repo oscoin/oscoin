@@ -1,9 +1,7 @@
 module Oscoin.Consensus.Evaluator
     ( Evaluator
     , EvalError
-    , Env(..)
     , identityEval
-    , radicleEval
     , foldEval
     , constEval
     , evals
@@ -13,22 +11,10 @@ module Oscoin.Consensus.Evaluator
 
 import           Oscoin.Prelude
 
-import qualified Radicle as Rad
-
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
 
 type Evaluator s a b = a -> s -> Maybe (b, s)
-
-newtype Env = Env { fromEnv :: Rad.Bindings Identity }
-
-instance Default Env where
-    def = Env Rad.Bindings
-        { Rad.bindingsEnv = mempty
-        , Rad.bindingsPrimops = mempty
-        , Rad.bindingsRefs = mempty
-        , Rad.bindingsNextRef = 0
-        }
 
 -- | The identity evaluator. An evaluator that accepts any expression and has
 -- no state.
@@ -38,13 +24,6 @@ identityEval _ s = Just ((), s)
 -- | An evaluator that rejects any expression and has no state.
 rejectEverythingEval :: Evaluator s a b
 rejectEverythingEval _ = const Nothing
-
--- | A radicle evaluator.
-radicleEval :: Evaluator Env Text ()
-radicleEval expr (Env st) =
-    case runIdentity . Rad.runLang st $ Rad.interpretMany "chain" expr of
-        (Left _, _)  -> Nothing
-        (Right _, s) -> Just ((), Env s)
 
 foldEval :: Monoid w => Evaluator w w ()
 foldEval x xs = Just ((), xs <> x)

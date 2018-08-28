@@ -8,6 +8,7 @@ import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip,
 import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, toOrphan, validateBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Data.Tx (Tx, mkTx)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
@@ -19,6 +20,7 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, 
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbitrarySigned)
+import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.Test.P2P as P2P
@@ -65,16 +67,17 @@ testOscoinAPI = runSession nodeConfig 42 $ do
     -- The mempool is empty.
     get "/node/mempool" >>= assertBody emptyArray
 
-    -- Now let's create a transaction.
-    let tx :: DummyTx = "<transaction>"
+    -- Now let's create a transaction message.
+    let msg :: ByteString = "<transaction>"
 
     -- Now generate a key pair and sign the transaction.
-    -- TODO(cloudhead): This doesn't work anymore.
-    (_, priKey) <- Crypto.generateKeyPair
-    tx'         <- Crypto.sign priKey tx
+    (pubKey, priKey) <- Crypto.generateKeyPair
+    msg'             <- Crypto.sign priKey msg
+
+    let tx :: Tx ByteString = mkTx msg' (Crypto.hash pubKey)
 
     -- Submit the transaction to the mempool.
-    resp <- post "/node/mempool" tx' ; assertStatus 202 resp
+    resp <- post "/node/mempool" tx ; assertStatus 202 resp
 
     -- The response is a transaction receipt, with the transaction
     -- id (hash).

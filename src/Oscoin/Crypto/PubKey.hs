@@ -12,7 +12,7 @@ module Oscoin.Crypto.PubKey
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed)
+import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed, hash)
 
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (Signature(..))
@@ -34,6 +34,9 @@ data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
     deriving (Show, Generic)
 
 instance Serialise PublicKey
+
+instance Hashable PublicKey where
+    hash (PublicKey _ h) = toHashed (fromHashed h)
 
 deriving instance Generic ECDSA.PublicKey
 instance Serialise ECDSA.PublicKey

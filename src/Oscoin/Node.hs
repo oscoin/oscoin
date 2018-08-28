@@ -6,6 +6,7 @@ module Oscoin.Node
     , withNode
     , open
     , close
+    , nodeEval
 
     , runNodeT
     , runEffects
@@ -24,9 +25,10 @@ import           Oscoin.Prelude
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
-import qualified Oscoin.Consensus.Evaluator as Eval
+import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
+import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import           Oscoin.Logging ((%))
@@ -115,6 +117,9 @@ step = do
     st <- Rad.bindingsEnv . Eval.fromEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
     Log.debugM ("State: " % Log.shown) st
+
+nodeEval :: Tx ByteString -> Eval.Env -> Maybe ((), Eval.Env)
+nodeEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------
 
