@@ -77,7 +77,7 @@ getAccepted = do
         [] -> pure $ rights $ accepted
         _  -> respond HTTP.badRequest400
 
--- | Returns the Just the first `accepted` content type also present in `offered`
+-- | Returns Just the first `accepted` content type also present in `offered`
 -- or Nothing if no offers match the accepted types.
 bestContentType :: [Text] -> [Text] -> Maybe Text
 bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
