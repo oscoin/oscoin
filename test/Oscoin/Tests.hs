@@ -176,5 +176,5 @@ propHexEncoding x = (Crypto.fromHex . Crypto.toHex) x == Right x
 
 propSignedJSON :: Property
 propSignedJSON =
-    forAll (arbitrarySigned :: Gen (Crypto.Signed Text)) $ \msg ->
+    forAll (arbitrarySigned :: Gen (Crypto.Signed ByteString)) $ \msg ->
         (Aeson.decode . Aeson.encode) msg == Just msg

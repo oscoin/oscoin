@@ -24,7 +24,7 @@ instance Binary msg => Binary (Tx msg)
 instance Binary msg => Hashable (Tx msg) where
     hash = hashBinary
 
-instance ToJSON msg => ToJSON (Tx msg) where
+instance ToJSON (Tx ByteString) where
     toJSON Tx{..} =
         object [ "msg"     .= toJSON txMessage
                , "pubkey"  .= toJSON txPubKey
@@ -33,7 +33,7 @@ instance ToJSON msg => ToJSON (Tx msg) where
                , "ctx"     .= toJSON txContext
                ]
 
-instance FromJSON msg => FromJSON (Tx msg) where
+instance FromJSON (Tx ByteString) where
     parseJSON = withObject "Tx" $ \o -> do
         txMessage <- o .: "msg"
         txPubKey  <- o .: "pubkey"

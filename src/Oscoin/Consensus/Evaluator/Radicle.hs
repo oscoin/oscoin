@@ -12,7 +12,6 @@ import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
 
 import qualified Radicle as Rad
 import           Codec.Serialise (serialise, deserialise)
-import qualified Data.IntMap as IntMap
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Binary
 import qualified Data.Map as Map

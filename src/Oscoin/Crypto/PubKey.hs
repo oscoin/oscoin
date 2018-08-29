@@ -27,7 +27,6 @@ import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText, withObject, object, (.=), (.:))
 import qualified Data.ByteString.Base64.Extended as Base64
-import           Data.ByteString.Base64.Extended (Base64(..))
 import           Web.HttpApiData
 
 data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
@@ -79,7 +78,7 @@ instance ToJSON Signature where
 instance FromJSON Signature where
     parseJSON = withText "Signature" $
         -- TODO: Can we use the FromJSON instance of Base64?
-        pure . Binary.decode . Base64.decodeLazy . Base64 . encodeUtf8
+        pure . Binary.decode . Base64.decodeLazy . Base64.fromText
 
 instance Binary Signature where
     put sig =
@@ -106,17 +105,17 @@ instance Hashable msg => Hashable (Signed msg) where
     hash :: Signed msg -> Hashed (Signed msg)
     hash (Signed msg _) = toHashed (fromHashed (hash msg))
 
-instance ToJSON msg => ToJSON (Signed msg) where
+instance ToJSON (Signed ByteString) where
     toJSON (Signed msg sig) =
-        object [ "msg" .= toJSON msg
+        object [ "msg" .= toJSON (Base64.encode msg)
                , "sig" .= toJSON sig
                ]
 
-instance FromJSON msg => FromJSON (Signed msg) where
+instance FromJSON (Signed ByteString) where
     parseJSON = withObject "Signed Tx" $ \o -> do
         msg <- o .: "msg"
         sig <- o .: "sig"
-        pure $ signed sig msg
+        pure $ signed sig (Base64.decode msg)
 
 instance Binary PublicKey where
     put (PublicKey key _) = Binary.put key

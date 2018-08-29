@@ -8,7 +8,6 @@ import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import           Oscoin.State.Tree (Key)
 
-import           Data.Aeson.Extended ()
 import           Network.HTTP.Types.Status
 
 root :: ApiAction s i ()
