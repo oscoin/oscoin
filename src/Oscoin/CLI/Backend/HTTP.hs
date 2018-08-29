@@ -66,9 +66,7 @@ request Handle{..} reqMethod reqPath reqBody = do
         , port           = fromIntegral httpRemotePort
         , path           = fromPath reqPath
         , requestHeaders = (hAccept, "application/cbor") : contentType reqBody
-        , requestBody    = maybe (RequestBodyLBS LBS.empty)
-                                 (RequestBodyLBS . serialise)
-                                 reqBody
+        , requestBody    = (RequestBodyLBS . maybe LBS.empty serialise) reqBody
         }
     contentType (Just _) = [(hContentType, "application/cbor")]
     contentType _        = []
