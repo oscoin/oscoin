@@ -56,12 +56,9 @@ getHeader' h = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
+-- | Gets the Accept header, defaulting to applicatio/json if not present.
 getAccept :: ApiAction s i Text
-getAccept = do
-    result <- getHeader "Accept"
-    case result of
-        Nothing     -> respond HTTP.notAcceptable406
-        Just accept -> pure accept
+getAccept = maybe "application/json" identity <$> getHeader "Accept"
 
 getState :: ApiAction s i State
 getState = Spock.getState
