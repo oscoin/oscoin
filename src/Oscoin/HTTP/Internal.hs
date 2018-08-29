@@ -133,12 +133,10 @@ respondBody a = do
 
 getContentType :: ApiAction s i Text
 getContentType = do
-    ctype <- getHeader "Content-Type"
-    case ctype of
-        Nothing -> respond HTTP.unsupportedMediaType415
-        Just ct -> case decodeUtf8' $ fst $ parseContentType $ encodeUtf8 ct of
-            Left  _ -> respond HTTP.unsupportedMediaType415
-            Right t -> pure t
+    ctype <- getHeader' "Content-Type"
+    case decodeUtf8' $ fst $ parseContentType $ encodeUtf8 ctype of
+        Left  _ -> respond HTTP.unsupportedMediaType415
+        Right ct -> pure ct
 
 getSupportedContentType :: ApiAction s i Text
 getSupportedContentType = do
