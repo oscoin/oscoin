@@ -12,7 +12,7 @@ import           Data.Aeson (FromJSON, ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Maybe (listToMaybe)
-import           Data.List (intersect)
+import           Data.List (intersect, elem)
 import           Data.Text.Encoding (decodeUtf8')
 import qualified Data.Text as T
 import qualified Network.HTTP.Types.Status as HTTP
@@ -71,11 +71,11 @@ getAccept = maybe "application/json" identity <$> getHeader "Accept"
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
 getAccepted :: ApiAction s i [Text]
 getAccepted = do
-  accept <- getAccept
-  let accepted = decodeUtf8' <$> parseHttpAccept (encodeUtf8 accept)
-  case lefts accepted of
-    [] -> pure $ rights accepted
-    _  -> respond HTTP.badRequest400
+    accept <- getAccept
+    let accepted = decodeUtf8' <$> parseHttpAccept (encodeUtf8 accept)
+    case lefts accepted of
+        [] -> pure $ rights $ accepted
+        _  -> respond HTTP.badRequest400
 
 -- | Returns the Just the first `accepted` content type also present in `offered`
 -- or Nothing if no offers match the accepted types.
@@ -85,10 +85,10 @@ bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
 -- | Negotiates the best response content type from the request's accept header.
 negotiateContentType :: [Text] -> ApiAction s i Text
 negotiateContentType offered = do
-  accepted <- getAccepted
-  case bestContentType accepted offered of
-    Nothing -> respond HTTP.notAcceptable406
-    Just ct -> pure ct
+    accepted <- getAccepted
+    case bestContentType accepted offered of
+        Nothing -> respond HTTP.notAcceptable406
+        Just ct -> pure ct
 
 getState :: ApiAction s i State
 getState = Spock.getState
@@ -131,9 +131,27 @@ respondBody a = do
     encode "application/cbor" = Just . Serialise.serialise
     encode _                  = const Nothing
 
+getContentType :: ApiAction s i Text
+getContentType = do
+    ctype <- getHeader "Content-Type"
+    case ctype of
+        Nothing -> respond HTTP.unsupportedMediaType415
+        Just ct -> case decodeUtf8' $ fst $ parseContentType $ encodeUtf8 ct of
+            Left  _ -> respond HTTP.unsupportedMediaType415
+            Right t -> pure t
+
+getSupportedContentType :: ApiAction s i Text
+getSupportedContentType = do
+    ct <- getContentType
+    if ct `elem` contentTypes then
+        pure ct
+    else
+        respond HTTP.unsupportedMediaType415
+
+
 getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
-    ct   <- getHeader' "Content-Type"
+    ct <- getSupportedContentType
     body <- getRawBody
     case decode ct body of
         Left _  -> respond HTTP.badRequest400
@@ -142,7 +160,8 @@ getBody = do
     decode :: (Serialise a, FromJSON a) => Text -> LBS.ByteString -> Either Text a
     decode "application/json" bs = first T.pack          (Aeson.eitherDecode' bs)
     decode "application/cbor" bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
-    decode contentType        _  = Left $ "unknown content type " ++ contentType
+    decode _ _                   = Left $ "unknown content type"
+
 
 notImplemented :: ApiAction s i ()
 notImplemented =
