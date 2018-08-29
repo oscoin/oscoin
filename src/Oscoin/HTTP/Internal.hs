@@ -11,9 +11,13 @@ import qualified Codec.Serialise as Serialise
 import           Data.Aeson (FromJSON, ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
+import           Data.Maybe (listToMaybe)
+import           Data.List (intersect)
+import           Data.Text.Encoding (decodeUtf8')
 import qualified Data.Text as T
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
+import           Network.Wai.Parse (parseHttpAccept, parseContentType)
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
@@ -56,9 +60,35 @@ getHeader' h = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
--- | Gets the Accept header, defaulting to applicatio/json if not present.
+-- | Supported content types.
+contentTypes :: [Text]
+contentTypes = ["application/json", "application/cbor"]
+
+-- | Gets the Accept header, defaulting to application/json if not present.
 getAccept :: ApiAction s i Text
 getAccept = maybe "application/json" identity <$> getHeader "Accept"
+
+-- | Gets the parsed content types out of the Accept header, ordered by priority.
+getAccepted :: ApiAction s i [Text]
+getAccepted = do
+  accept <- getAccept
+  let accepted = decodeUtf8' <$> parseHttpAccept (encodeUtf8 accept)
+  case lefts accepted of
+    [] -> pure $ rights accepted
+    _  -> respond HTTP.badRequest400
+
+-- | Returns the Just the first `accepted` content type also present in `offered`
+-- or Nothing if no offers match the accepted types.
+bestContentType :: [Text] -> [Text] -> Maybe Text
+bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
+
+-- | Negotiates the best response content type from the request's accept header.
+negotiateContentType :: [Text] -> ApiAction s i Text
+negotiateContentType offered = do
+  accepted <- getAccepted
+  case bestContentType accepted offered of
+    Nothing -> respond HTTP.notAcceptable406
+    Just ct -> pure ct
 
 getState :: ApiAction s i State
 getState = Spock.getState
@@ -90,9 +120,9 @@ respondBytes status body = do
 
 respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
 respondBody a = do
-    accept <- getAccept
-    Spock.setHeader "Content-Type" accept
-    case encode accept a of
+    ct <- negotiateContentType contentTypes
+    Spock.setHeader "Content-Type" ct
+    case encode ct a of
         Nothing -> respond HTTP.notAcceptable406
         Just bs -> respondBytes HTTP.accepted202 bs
   where
