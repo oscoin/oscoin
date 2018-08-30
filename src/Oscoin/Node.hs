@@ -30,6 +30,7 @@ import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
 import           Oscoin.Data.Tx (Tx, toProgram)
+import           Oscoin.Data.Query
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import           Oscoin.Logging ((%))
@@ -62,7 +63,7 @@ data Config = Config
 data Handle tx s i = Handle
     { hConfig     :: Config
     , hNodeId     :: i
-    , hStateTree  :: STree.Handle
+    , hStateTree  :: STree.Handle s
     , hBlockStore :: BlockStore.Handle tx s
     , hMempool    :: Mempool.Handle tx
     }
@@ -71,7 +72,7 @@ withNode
     :: Config
     -> i
     -> Mempool.Handle tx
-    -> STree.Handle
+    -> STree.Handle s
     -> BlockStore.Handle tx s
     -> (Handle tx s i -> IO c)
     -> IO c
@@ -81,7 +82,7 @@ withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 open :: Config
      -> i
      -> Mempool.Handle tx
-     -> STree.Handle
+     -> STree.Handle s
      -> BlockStore.Handle tx s
      -> IO (Handle tx s i)
 open hConfig hNodeId hMempool hStateTree hBlockStore =
@@ -208,13 +209,13 @@ instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (Node
     {-# INLINE orphans        #-}
     {-# INLINE maximumChainBy #-}
 
-instance (Monad m, MonadIO m) => MonadQuery (NodeT tx s i m) where
+instance (Monad m, MonadIO m, Query s) => MonadQuery (NodeT tx s i m) where
     type Key (NodeT tx s i m) = STree.Path
-    type Val (NodeT tx s i m) = STree.Val
+    type Val (NodeT tx s i m) = QueryVal s
 
     queryM k = do
         st <- asks hStateTree
-        lift $ STree.get st k
+        lift $ STree.getPath st k
     {-# INLINE queryM #-}
 
 instance MonadClock m => MonadClock (NodeT tx s i m) where
@@ -233,7 +234,7 @@ getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 
 -- | Get a state value at the given path.
-getPath :: MonadIO m => STree.Path -> NodeT tx s i m (Maybe STree.Val)
+getPath :: (Query s, MonadIO m) => STree.Path -> NodeT tx s i m (Maybe (QueryVal s))
 getPath = queryM
 
 -- | A transaction receipt. Contains the hashed transaction.

@@ -1,48 +1,43 @@
 module Oscoin.Node.Tree
     ( Handle
-    , Val
     , Path
-    , connect
+    , new
     , close
-    , get
-    , set
-    , update
+    , getPath
+    , updateTree
     ) where
 
 import           Oscoin.Prelude
-import qualified Oscoin.State.Tree as Tree
-import           Oscoin.State.Tree (Tree, Val, Path)
-import           Data.IORef
+import           Oscoin.State.Tree (Path)
+import           Oscoin.Data.Query
+
+import           Control.Concurrent.STM.TVar
 
 -- | Database connection.
 type Connection = ()
 
 -- | State tree handle.
-data Handle = Handle
-    { hTree :: IORef (Tree Path Val) -- ^ In-memory representation of the state tree.
-    , hConn :: Connection            -- ^ Connection to database.
+data Handle s = Handle
+    { hTree :: TVar s            -- ^ In-memory representation of the state tree.
+    , hConn :: Connection        -- ^ Connection to database.
     }
 
-connect :: MonadIO m => m Handle
-connect = do
-    ref <- io $ newIORef mempty
+new :: (MonadIO m, Default s) => m (Handle s)
+new = do
+    ref <- io $ newTVarIO def
     pure Handle
         { hTree = ref
         , hConn = ()
         }
 
-close :: MonadIO m => Handle -> m ()
+close :: MonadIO m => Handle s -> m ()
 close _ = pass
 
-get :: MonadIO m => Handle -> Path -> m (Maybe Val)
-get Handle{hTree} k = do
-    t <- io $ readIORef hTree
-    pure $ Tree.get k t
+getPath :: (Query s, MonadIO m) => Handle s -> Path -> m (Maybe (QueryVal s))
+getPath Handle{hTree} k = do
+    t <- io $ readTVarIO hTree
+    pure $ query k t
 
-set :: MonadIO m => Handle -> Path -> Val -> m ()
-set Handle{hTree} k v =
-    io $ modifyIORef hTree (Tree.set k v)
-
-update :: MonadIO m => Handle -> (Tree Path Val -> Tree Path Val) -> m ()
-update Handle{hTree} f =
-    io $ modifyIORef hTree f
+updateTree :: Handle s -> s -> STM ()
+updateTree Handle{hTree} tree =
+    writeTVar hTree tree

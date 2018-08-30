@@ -10,6 +10,7 @@ import           Oscoin.Environment
 
 import qualified Oscoin.HTTP.Handlers as Handlers
 import           Oscoin.HTTP.Internal
+import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 
 import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
@@ -17,11 +18,11 @@ import qualified Network.Wai.Middleware.Static as Wai
 -- TODO: Don't import this here? Create a HTTP.Routing module?
 import           Web.Spock (get, middleware, post, root, var, (<//>), wildcard)
 
-withAPI :: Environment -> (Api s i () -> m a) -> m a
+withAPI :: Environment -> (Api Rad.Env i () -> m a) -> m a
 withAPI env f = f (api env)
 
 -- | Entry point for API.
-api :: Environment -> Api s i ()
+api :: Environment -> Api Rad.Env i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")

@@ -53,8 +53,8 @@ instance MonadRandom Session where
 runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
-    st <- STree.connect
-    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @DummyTx @() 0
+    st <- STree.new
+    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @DummyTx 0
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) nh)

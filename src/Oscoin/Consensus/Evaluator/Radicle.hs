@@ -9,10 +9,12 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Evaluator (Evaluator)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
+import           Oscoin.Data.Query
 
 import qualified Radicle as Rad
 import           Codec.Serialise (Serialise)
 import qualified Data.Map as Map
+import qualified Data.Text as T
 
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
 
@@ -23,6 +25,16 @@ instance Default Env where
         , Rad.bindingsRefs = mempty
         , Rad.bindingsNextRef = 0
         }
+
+instance Query Env where
+    type QueryVal Env = Rad.Value
+
+    query path (Env bindings) =
+        case Rad.mkIdent (T.intercalate "/" path) of
+            Just ident ->
+                Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
+            Nothing ->
+                Nothing
 
 data Program = Program
     { progValue   :: Rad.Value
