@@ -4,12 +4,23 @@ import           Oscoin.Prelude
 
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
+import           Oscoin.Data.Tx (Tx)
 
-import           Data.Aeson ((.=))
+import           Codec.Serialise (Serialise, serialise)
+import qualified Codec.Serialise as Serialise
+import           Data.Aeson (FromJSON, ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
+import           Data.Maybe (listToMaybe)
+import           Data.List (intersect, elem)
+import           Data.Text.Encoding (decodeUtf8')
+import qualified Data.Text as T
 import qualified Network.HTTP.Types.Status as HTTP
+import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.Wai as Wai
+import           Network.Wai.Parse (parseHttpAccept, parseContentType)
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
@@ -21,67 +32,156 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction tx s i = SpockAction (Node.Handle tx s i) () State
+type ApiAction s i = SpockAction (Node.Handle ApiTx s i) () State
 
-instance MonadFail (ApiAction tx s i) where
+-- | The type of a block transaction in the API.
+type ApiTx = Tx ByteString
+
+instance MonadFail (ApiAction s i) where
     fail = error "failing!"
 
 -- | The type of our api.
-type Api tx s i = SpockM (Node.Handle tx s i) () State
+type Api s i = SpockM (Node.Handle ApiTx s i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi tx s i m = (HasSpock m, SpockConn m ~ Node.Handle tx s i)
+type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle ApiTx s i)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State ()
 
-getBody :: Aeson.FromJSON a => ApiAction tx s i (Maybe a)
-getBody = Spock.jsonBody
+getHeader :: HeaderName -> ApiAction s i (Maybe Text)
+getHeader name = do
+    header <- Spock.rawHeader name
+    pure $ header >>= (rightToMaybe . decodeUtf8')
 
-getRawBody :: ApiAction tx s i LBS.ByteString
+getHeader' :: HeaderName -> ApiAction s i Text
+getHeader' name = do
+    header <- getHeader name
+    case header of
+        Just v  -> pure v
+        Nothing -> respond HTTP.badRequest400
+
+getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-getState :: ApiAction tx s i State
+supportedContentTypes :: NonEmpty Text
+supportedContentTypes = "application/json" :| ["application/cbor"]
+
+-- | Gets the Accept header, defaulting to application/json if not present.
+getAccept :: ApiAction s i Text
+getAccept = maybe (NonEmpty.head supportedContentTypes) identity <$> getHeader "Accept"
+
+-- | Gets the parsed content types out of the Accept header, ordered by priority.
+getAccepted :: ApiAction s i [Text]
+getAccepted = do
+    accept <- getAccept
+    let accepted = decodeUtf8' <$> parseHttpAccept (encodeUtf8 accept)
+    case lefts accepted of
+        [] -> pure $ rights $ accepted
+        _  -> respond HTTP.badRequest400
+
+-- | Returns Just the first `accepted` content type also present in `offered`
+-- or Nothing if no offers match the accepted types.
+bestContentType :: [Text] -> [Text] -> Maybe Text
+bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
+
+-- | Negotiates the best response content type from the request's accept header.
+negotiateContentType :: ApiAction s i Text
+negotiateContentType = do
+    accepted <- getAccepted
+    let offered = NonEmpty.toList supportedContentTypes
+    case bestContentType accepted offered of
+        Nothing -> respond HTTP.notAcceptable406
+        Just ct -> pure ct
+
+getState :: ApiAction s i State
 getState = Spock.getState
 
-param' :: (FromHttpApiData p) => Text -> ApiAction tx s i p
+param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respond :: HTTP.Status -> Maybe Aeson.Value -> ApiAction tx s i ()
-respond status (Just body) =
+respondJson :: ToJSON a => HTTP.Status -> a -> ApiAction s i ()
+respondJson status body = do
+    Spock.setHeader "Content-Type" "application/json"
     respondBytes status (Aeson.encode body)
-respond status Nothing =
-    respondBytes status ""
 
-respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction tx s i ()
+respond :: HTTP.Status -> ApiAction s i a
+respond status = respondBytes status mempty
+
+respondCbor :: Serialise a => HTTP.Status -> a -> ApiAction s i b
+respondCbor status body = do
+    Spock.setHeader "Content-Type" "application/cbor"
+    respondBytes status (serialise body)
+
+respondBytes :: HTTP.Status -> LBS.ByteString -> ApiAction s i a
 respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body
 
-notImplemented :: ApiAction tx s i ()
+respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
+respondBody a = do
+    ct <- negotiateContentType
+    Spock.setHeader "Content-Type" ct
+    case encode ct a of
+        Nothing -> respond HTTP.notAcceptable406
+        Just bs -> respondBytes HTTP.accepted202 bs
+  where
+    encode :: (Serialise a, ToJSON a) => Text -> a -> Maybe LBS.ByteString
+    encode "application/json" = Just . Aeson.encode
+    encode "application/cbor" = Just . Serialise.serialise
+    encode _                  = const Nothing
+
+getContentType :: ApiAction s i Text
+getContentType = do
+    ctype <- getHeader' "Content-Type"
+    case decodeUtf8' $ fst $ parseContentType $ encodeUtf8 ctype of
+        Left  _ -> respond HTTP.unsupportedMediaType415
+        Right ct -> pure ct
+
+getSupportedContentType :: ApiAction s i Text
+getSupportedContentType = do
+    ct <- getContentType
+    if ct `elem` supportedContentTypes then pure ct
+    else respond HTTP.unsupportedMediaType415
+
+getBody :: (Serialise a, FromJSON a) => ApiAction s i a
+getBody = do
+    ct <- getSupportedContentType
+    body <- getRawBody
+    case decode ct body of
+        Left _  -> respond HTTP.badRequest400
+        Right a -> pure a
+  where
+    decode :: (Serialise a, FromJSON a) => Text -> LBS.ByteString -> Either Text a
+    decode "application/json" bs = first T.pack          (Aeson.eitherDecode' bs)
+    decode "application/cbor" bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
+    decode _ _                   = Left $ "unknown content type"
+
+
+notImplemented :: ApiAction s i ()
 notImplemented =
-    respond HTTP.notImplemented501 (Just body)
+    respondJson HTTP.notImplemented501 body
   where
     body = errorBody "Not implemented"
 
 errorBody :: Text -> Aeson.Value
 errorBody msg = Aeson.object ["error" .= msg]
 
-run :: Api tx s i ()
+run :: Api s i ()
     -> Int
-    -> Node.Handle tx s i
+    -> Node.Handle ApiTx s i
     -> IO ()
 run app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
-    :: Api tx s i ()
-    -> Node.Handle tx s i
+    :: Api s i ()
+    -> Node.Handle ApiTx s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

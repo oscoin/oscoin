@@ -14,7 +14,7 @@ import           Data.IP (IP)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Client
-import           Network.HTTP.Types.Header (hAccept)
+import           Network.HTTP.Types.Header (hAccept, hContentType)
 
 data Handle = Handle
     { httpRemoteIp   :: IP
@@ -65,21 +65,23 @@ request Handle{..} reqMethod reqPath reqBody = do
         , host           = C8.pack (show httpRemoteIp)
         , port           = fromIntegral httpRemotePort
         , path           = fromPath reqPath
-        , requestHeaders = [(hAccept, "application/cbor")]
-        , requestBody    = RequestBodyLBS . maybe LBS.empty serialise $ reqBody
+        , requestHeaders = (hAccept, "application/cbor") : contentType reqBody
+        , requestBody    = (RequestBodyLBS . maybe LBS.empty serialise) reqBody
         }
+    contentType (Just _) = [(hContentType, "application/cbor")]
+    contentType _        = []
 
-evalPath :: Path
-evalPath = "/radicle/eval"
+submitPath :: Path
+submitPath = "/node/mempool"
 
 readPath :: Path
-readPath = "/radicle/state"
+readPath = "/node/state"
 
 --------------------------------------------------------------------------------
 
 revisionCreate :: FromRadicle a => Handle -> Revision -> IO (Result a)
 revisionCreate h rev =
-    fromRadicle <$> post h evalPath (toRadicle rev)
+    fromRadicle <$> post h submitPath (toRadicle rev)
 
 revisionStatus :: FromRadicle a => Handle -> RevisionId -> IO (Result a)
 revisionStatus h (RevisionId id) =

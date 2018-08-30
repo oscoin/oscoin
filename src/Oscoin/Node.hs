@@ -6,6 +6,7 @@ module Oscoin.Node
     , withNode
     , open
     , close
+    , nodeEval
 
     , runNodeT
     , runEffects
@@ -24,9 +25,10 @@ import           Oscoin.Prelude
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
-import qualified Oscoin.Consensus.Evaluator as Eval
+import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
+import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import           Oscoin.Logging ((%))
@@ -34,12 +36,13 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (MonadNetwork(..), Msg, runNetworkT)
+import           Oscoin.P2P (MonadNetwork(..), runNetworkT)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Radicle as Rad
 
+import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (ToJSON, toJSON, object, (.=))
@@ -86,17 +89,16 @@ open hConfig hNodeId hMempool hStateTree hBlockStore =
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-tick :: forall proxy tx m.
+tick :: forall tx m.
         ( MonadNetwork  tx m
         , MonadProtocol tx m
         , MonadClock       m
         )
-     => proxy tx
-     -> m ()
-tick _ =
+     => m ()
+tick =
     currentTick >>= tickM >>= sendM
 
-step :: forall proxy      r tx          m.
+step :: forall            r tx          m.
         ( MonadNetwork      tx          m
         , MonadProtocol     tx          m
         , MonadBlockStore   tx Eval.Env m
@@ -105,10 +107,9 @@ step :: forall proxy      r tx          m.
         , Has Log.Logger  r
         , MonadIO                       m
         )
-     => proxy tx
-     -> m ()
-step _ = do
-    r <- recvM :: m (Msg tx)
+     => m ()
+step = do
+    r <- recvM
     t <- currentTick
     o <- stepM t r
     sendM o
@@ -116,6 +117,9 @@ step _ = do
     st <- Rad.bindingsEnv . Eval.fromEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
     Log.debugM ("State: " % Log.shown) st
+
+nodeEval :: Tx ByteString -> Eval.Env -> Maybe ((), Eval.Env)
+nodeEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------
 
@@ -213,12 +217,13 @@ getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 
 -- | Get a state value at the given path.
 getPath :: MonadIO m => STree.Path -> NodeT tx s i m (Maybe STree.Val)
-getPath k = do
-    Handle{hStateTree} <- ask
-    lift $ STree.get hStateTree k
+getPath = queryM
 
 -- | A transaction receipt. Contains the hashed transaction.
 newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
+    deriving (Show)
+
+deriving instance Serialise (Receipt tx)
 
 instance Hashable tx => ToJSON (Receipt tx) where
     toJSON (Receipt tx) =

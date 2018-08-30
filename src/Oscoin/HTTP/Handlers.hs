@@ -2,41 +2,49 @@ module Oscoin.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.HTTP.Internal
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
+import           Oscoin.State.Tree (Key)
 
-import           Data.Aeson (FromJSON, ToJSON, toJSON)
 import           Network.HTTP.Types.Status
 
-getAllTransactions :: ToJSON tx => ApiAction tx s i ()
+root :: ApiAction s i ()
+root = respond ok200
+
+getAllTransactions :: ApiAction s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
-    respond ok200 (Just (toJSON mp))
+    respondJson ok200 mp
 
-getTransaction :: (Hashable tx, ToJSON tx) => Hashed tx -> ApiAction tx s i ()
+getTransaction :: Hashed ApiTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
     case mtx of
-        Just tx -> respond ok200 (Just (toJSON tx))
-        Nothing -> respond notFound404 Nothing
+        Just tx -> respondJson ok200 tx
+        Nothing -> respond notFound404
 
-submitTransaction :: (Hashable tx, FromJSON tx) => ApiAction tx s i ()
+submitTransaction :: ApiAction s i ()
 submitTransaction = do
-    -- TODO: Create a pattern for this.
-    result :: Maybe tx <- getBody
+    tx <- getBody
+
+    receipt <- node $ do
+        addTxs [tx]
+        pure $ Node.Receipt (hash tx)
+
+    respondBody receipt
+
+getStatePath :: Key -> ApiAction s i ()
+getStatePath k = do
+    result <- node $ Node.getPath [k]
     case result of
-        Just tx -> do
-            -- TODO: Verify signature passed in url.
-            receipt <- node $ do
-                addTxs [tx]
-                pure $ Node.Receipt (hash tx)
-            respond accepted202 (Just (toJSON receipt))
+        Just val ->
+            respondCbor ok200 val
         Nothing ->
-            respond badRequest400 Nothing
+            respond notFound404
 
 -- | Runs a NodeT action in a MonadApi monad.
-node :: MonadApi tx s i m => Node.NodeT tx s i IO a -> m a
+node :: MonadApi s i m => Node.NodeT ApiTx s i IO a -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s

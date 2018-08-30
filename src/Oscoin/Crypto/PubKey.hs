@@ -12,24 +12,48 @@ module Oscoin.Crypto.PubKey
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed)
+import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed, hash)
 
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.ECDSA (Signature(..))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import           Crypto.Random.Types (MonadRandom)
 
+import           Codec.Serialise
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText, withObject, object, (.=), (.:))
 import qualified Data.ByteString.Base64.Extended as Base64
-import           Data.ByteString.Base64.Extended (Base64(..))
 import           Web.HttpApiData
 
 data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
-    deriving (Show)
+    deriving (Show, Generic)
+
+instance Serialise PublicKey
+
+instance Hashable PublicKey where
+    hash (PublicKey _ h) = toHashed (fromHashed h)
+
+deriving instance Generic ECDSA.PublicKey
+instance Serialise ECDSA.PublicKey
+
+deriving instance Generic ECC.Curve
+instance Serialise ECC.Curve
+
+deriving instance Generic ECC.Point
+instance Serialise ECC.Point
+
+deriving instance Generic ECC.CurveBinary
+instance Serialise ECC.CurveBinary
+
+deriving instance Generic ECC.CurvePrime
+instance Serialise ECC.CurvePrime
+
+deriving instance Generic ECC.CurveCommon
+instance Serialise ECC.CurveCommon
 
 instance Eq PublicKey where
     (==) (PublicKey _ h) (PublicKey _ h') = h == h'
@@ -43,6 +67,8 @@ publicKeyHash (PublicKey _ h) = h
 newtype PrivateKey = PrivateKey ECDSA.PrivateKey
     deriving (Show, Eq)
 
+--------------------------------------------------------------------------------
+
 instance Ord Signature where
     (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
 
@@ -52,7 +78,7 @@ instance ToJSON Signature where
 instance FromJSON Signature where
     parseJSON = withText "Signature" $
         -- TODO: Can we use the FromJSON instance of Base64?
-        pure . Binary.decode . Base64.decodeLazy . Base64 . encodeUtf8
+        pure . Binary.decode . Base64.decodeLazy . Base64.fromText
 
 instance Binary Signature where
     put sig =
@@ -64,28 +90,32 @@ instance Binary Signature where
 instance FromHttpApiData Signature where
     parseQueryParam _txt = notImplemented
 
+deriving instance Generic Signature
+instance Serialise Signature
+
 -- | A signed message.
 -- Create these with "sign" and verify them with "verify".
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
 
 instance Binary msg => Binary (Signed msg)
+instance Serialise msg => Serialise (Signed msg)
 
 instance Hashable msg => Hashable (Signed msg) where
     hash :: Signed msg -> Hashed (Signed msg)
     hash (Signed msg _) = toHashed (fromHashed (hash msg))
 
-instance ToJSON msg => ToJSON (Signed msg) where
+instance ToJSON (Signed ByteString) where
     toJSON (Signed msg sig) =
-        object [ "msg" .= toJSON msg
+        object [ "msg" .= toJSON (Base64.encode msg)
                , "sig" .= toJSON sig
                ]
 
-instance FromJSON msg => FromJSON (Signed msg) where
+instance FromJSON (Signed ByteString) where
     parseJSON = withObject "Signed Tx" $ \o -> do
         msg <- o .: "msg"
         sig <- o .: "sig"
-        pure $ signed sig msg
+        pure $ signed sig (Base64.decode msg)
 
 instance Binary PublicKey where
     put (PublicKey key _) = Binary.put key

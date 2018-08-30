@@ -1,12 +1,21 @@
-module Data.ByteString.Base64.Extended where
+module Data.ByteString.Base64.Extended
+    ( Base64 ()
+    , encode
+    , encodeLazy
+    , encodeBinary
+    , decode
+    , decodeLazy
+    , fromText
+    ) where
 
 import           Prelude
 
 import           Data.ByteString
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Aeson
+import           Data.Aeson hiding (encode, decode)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import           Data.Text (Text)
 import qualified Data.Binary as Binary
 import           Data.Binary (Binary)
 
@@ -17,8 +26,7 @@ instance ToJSON (Base64 a) where
     toJSON (Base64 bs) = String $ decodeUtf8 bs
 
 instance FromJSON (Base64 a) where
-    parseJSON = withText "Base64" $ \t ->
-        pure $ Base64 (encodeUtf8 t)
+    parseJSON = withText "Base64" $ pure . fromText
 
 encode :: ByteString -> Base64 a
 encode bs = Base64 (Base64.encode bs)
@@ -34,3 +42,6 @@ decode (Base64 bs) = Base64.decodeLenient bs
 
 decodeLazy :: Base64 a -> LBS.ByteString
 decodeLazy (Base64 bs) = LBS.fromStrict $ Base64.decodeLenient bs
+
+fromText :: Text -> Base64 a
+fromText = Base64 . encodeUtf8
