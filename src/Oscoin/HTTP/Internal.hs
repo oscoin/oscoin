@@ -53,11 +53,7 @@ mkState = State ()
 getHeader :: HeaderName -> ApiAction s i (Maybe Text)
 getHeader name = do
     header <- Spock.rawHeader name
-    pure $ case header of
-        Nothing -> Nothing
-        Just h  -> case decodeUtf8' h of
-            Left  _ -> Nothing
-            Right t -> Just t
+    pure $ header >>= (rightToMaybe . decodeUtf8')
 
 getHeader' :: HeaderName -> ApiAction s i Text
 getHeader' name = do

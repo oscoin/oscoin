@@ -63,6 +63,7 @@ module Oscoin.Prelude
     , equal
     , toSeconds
     , chunksOf
+    , rightToMaybe
     ) where
 
 import           Prelude hiding ( fail, read, readIO, readFile
@@ -213,3 +214,17 @@ chunksOf _ [] = []
 chunksOf n l
   | n > 0     = take n l : chunksOf n (drop n l)
   | otherwise = repeat []
+
+-- | Maybe get the 'Right' side of an 'Either'.
+--
+-- @
+-- 'rightToMaybe' ≡ 'either' ('const' 'Nothing') 'Just'
+-- @
+--
+-- >>> rightToMaybe (Left 12)
+-- Nothing
+--
+-- >>> rightToMaybe (Right 12)
+-- Just 12
+rightToMaybe :: Either a b -> Maybe b
+rightToMaybe = either (const Nothing) Just
