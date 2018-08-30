@@ -23,6 +23,7 @@ import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbit
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
+import qualified Oscoin.Test.HTTP as HTTP
 import qualified Oscoin.Test.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
@@ -47,7 +48,7 @@ nodeConfig = Node.Config
 
 tests :: TestTree
 tests = testGroup "Oscoin"
-    [ testCase       "API"                            testOscoinAPI
+    [ testGroup      "API"                            (apiTests nodeConfig)
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
@@ -60,8 +61,13 @@ tests = testGroup "Oscoin"
     , testGroup      "P2P"                            P2P.tests
     ]
 
-testOscoinAPI :: Assertion
-testOscoinAPI = runSession nodeConfig 42 $ do
+apiTests :: Node.Config -> [TestTree]
+apiTests cfg =
+    testCase "Smoke test" (smokeTestOscoinAPI cfg) :
+        HTTP.tests cfg
+
+smokeTestOscoinAPI :: Node.Config -> Assertion
+smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     get "/" >>= assertOK
 
     -- The mempool is empty.
