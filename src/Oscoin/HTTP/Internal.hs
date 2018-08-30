@@ -65,7 +65,7 @@ supportedContentTypes = ["application/json", "application/cbor"]
 
 -- | Gets the Accept header, defaulting to application/json if not present.
 getAccept :: ApiAction s i Text
-getAccept = maybe "application/json" identity <$> getHeader "Accept"
+getAccept = maybe (head supportedContentTypes) identity <$> getHeader "Accept"
 
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
 getAccepted :: ApiAction s i [Text]
