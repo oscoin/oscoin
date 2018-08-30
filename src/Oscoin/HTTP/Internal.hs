@@ -60,9 +60,8 @@ getHeader' h = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
--- | Supported content types.
-contentTypes :: [Text]
-contentTypes = ["application/json", "application/cbor"]
+supportedContentTypes :: [Text]
+supportedContentTypes = ["application/json", "application/cbor"]
 
 -- | Gets the Accept header, defaulting to application/json if not present.
 getAccept :: ApiAction s i Text
@@ -120,7 +119,7 @@ respondBytes status body = do
 
 respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
 respondBody a = do
-    ct <- negotiateContentType contentTypes
+    ct <- negotiateContentType supportedContentTypes
     Spock.setHeader "Content-Type" ct
     case encode ct a of
         Nothing -> respond HTTP.notAcceptable406
@@ -141,7 +140,7 @@ getContentType = do
 getSupportedContentType :: ApiAction s i Text
 getSupportedContentType = do
     ct <- getContentType
-    if ct `elem` contentTypes then
+    if ct `elem` supportedContentTypes then
         pure ct
     else
         respond HTTP.unsupportedMediaType415
