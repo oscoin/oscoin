@@ -22,7 +22,6 @@ import           Data.IP (IP)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Client
-import           Network.HTTP.Types.Status
 import           Network.HTTP.Types.Header (hAccept, hContentType)
 
 data Handle = Handle
@@ -92,8 +91,6 @@ submitTransaction h tx = do
            Left err  -> throwIO (HttpClientException $ "Oscoin.CLI.Backend.HTTP: Failed to deserialise body: " <> tshow err)
            Right val -> pure val
 
---------------------------------------------------------------------------------
-
 createRevisionTx
     :: MonadRandom m => Revision -> (PublicKey, PrivateKey) -> m ApiTx
 createRevisionTx rev (pk, sk) = do
@@ -103,18 +100,21 @@ createRevisionTx rev (pk, sk) = do
 --------------------------------------------------------------------------------
 
 revisionCreate :: Handle -> Revision -> (PublicKey, PrivateKey) -> IO (Result Text)
-revisionCreate h rev kp =
-    ResultValue . tshow <$>
-        (submitTransaction h =<< createRevisionTx rev kp)
+revisionCreate h rev kp = do
+    result <- submitTransaction h =<< createRevisionTx rev kp
+    pure $ case result of
+        API.Ok v    -> ResultValue (tshow v)
+        API.Err err -> ResultError err
 
 revisionStatus :: FromRadicle a => Handle -> RevisionId -> IO (Result a)
 revisionStatus h (RevisionId id) = do
     resp <- get h (readPath <> "/revisions/" <> fromString (show id))
-    if responseStatus resp == ok200
-    then case fromRadicle <$> deserialise (responseBody resp) of
-        Just val -> pure $ ResultValue val
-        Nothing  -> throwIO (HttpClientException "Oscoin.CLI.Backend.HTTP: Error parsing response body")
-    else throwIO (HttpClientException ("Error status " <> tshow (responseStatus resp)))
+    if LBS.null (responseBody resp)
+       then throwIO (HttpClientException "Oscoin.CLI.Backend.HTTP: Empty body")
+       else case deserialiseOrFail (responseBody resp) of
+           Left err          -> throwIO (HttpClientException $ "Oscoin.CLI.Backend.HTTP: Failed to deserialise body: " <> tshow err)
+           Right (API.Ok v)  -> pure $ ResultValue $ fromRadicle v
+           Right (API.Err e) -> pure $ ResultError e
 
 revisionMerge :: Handle -> RevisionId -> IO (Result a)
 revisionMerge _ _ = pure ResultOk
