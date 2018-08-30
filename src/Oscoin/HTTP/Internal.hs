@@ -5,10 +5,12 @@ import           Oscoin.Prelude
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import           Oscoin.Data.Tx (Tx)
+import           Oscoin.HTTP.API.Result (Result)
+import qualified Oscoin.HTTP.API.Result as Result
 
 import           Codec.Serialise (Serialise, serialise)
 import qualified Codec.Serialise as Serialise
-import           Data.Aeson (FromJSON, ToJSON, (.=))
+import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -105,7 +107,7 @@ param' = Spock.param'
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-respondJson :: ToJSON a => HTTP.Status -> a -> ApiAction s i ()
+respondJson :: ToJSON a => HTTP.Status -> Result a -> ApiAction s i ()
 respondJson status body = do
     Spock.setHeader "Content-Type" "application/json"
     respondBytes status (Aeson.encode body)
@@ -113,7 +115,7 @@ respondJson status body = do
 respond :: HTTP.Status -> ApiAction s i a
 respond status = respondBytes status mempty
 
-respondCbor :: Serialise a => HTTP.Status -> a -> ApiAction s i b
+respondCbor :: Serialise a => HTTP.Status -> Result a -> ApiAction s i b
 respondCbor status body = do
     Spock.setHeader "Content-Type" "application/cbor"
     respondBytes status (serialise body)
@@ -123,15 +125,14 @@ respondBytes status body = do
     Spock.setStatus status
     Spock.lazyBytes body
 
-respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
-respondBody a = do
+respondBody :: (ToJSON a, Serialise a) => HTTP.Status -> a -> ApiAction s i b
+respondBody status a = do
     ct <- negotiateContentType
     Spock.setHeader "Content-Type" ct
     case encode ct a of
-        Nothing -> respond HTTP.notAcceptable406
-        Just bs -> respondBytes HTTP.accepted202 bs
+        Nothing -> respond HTTP.internalServerError500
+        Just bs -> respondBytes status bs
   where
-    encode :: (Serialise a, ToJSON a) => Text -> a -> Maybe LBS.ByteString
     encode "application/json" = Just . Aeson.encode
     encode "application/cbor" = Just . Serialise.serialise
     encode _                  = const Nothing
@@ -152,25 +153,18 @@ getSupportedContentType = do
 getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
     ct <- getSupportedContentType
-    body <- getRawBody
+    !body <- getRawBody
     case decode ct body of
-        Left _  -> respond HTTP.badRequest400
-        Right a -> pure a
+        Left err -> respondBody HTTP.badRequest400 (Result.err @() (tshow err))
+        Right a  -> pure a
   where
-    decode :: (Serialise a, FromJSON a) => Text -> LBS.ByteString -> Either Text a
     decode "application/json" bs = first T.pack          (Aeson.eitherDecode' bs)
     decode "application/cbor" bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
     decode _ _                   = Left $ "unknown content type"
 
-
 notImplemented :: ApiAction s i ()
 notImplemented =
-    respondJson HTTP.notImplemented501 body
-  where
-    body = errorBody "Not implemented"
-
-errorBody :: Text -> Aeson.Value
-errorBody msg = Aeson.object ["error" .= msg]
+    respondJson HTTP.notImplemented501 (Result.err @() "not implemented")
 
 run :: Api s i ()
     -> Int

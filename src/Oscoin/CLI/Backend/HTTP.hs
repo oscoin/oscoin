@@ -8,12 +8,21 @@ import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.Revision
 import           Oscoin.CLI.Radicle
 
+import           Oscoin.Data.Tx
+import qualified Oscoin.Node as Node
+import qualified Oscoin.HTTP.API.Result as API
+import           Oscoin.HTTP.API (ApiTx)
+import           Oscoin.Crypto.PubKey
+import           Oscoin.Crypto.Hash (hash)
+
 import           Codec.Serialise
 import           Control.Exception (Exception, throwIO)
+import           Crypto.Random.Types (MonadRandom)
 import           Data.IP (IP)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Client
+import           Network.HTTP.Types.Status
 import           Network.HTTP.Types.Header (hAccept, hContentType)
 
 data Handle = Handle
@@ -45,20 +54,17 @@ new ip port = do
         , Backend.revisionSuggest = revisionSuggest h
         }
 
-get :: Serialise a => Handle -> Path -> IO a
+get :: Handle -> Path -> IO (Response LBS.ByteString)
 get h reqPath =
     request @() h GET reqPath Nothing
 
-post :: (Serialise a, Serialise b) => Handle -> Path -> b -> IO a
+post :: Serialise a => Handle -> Path -> a -> IO (Response LBS.ByteString)
 post h reqPath reqBody =
     request h POST reqPath (Just reqBody)
 
-request :: (Serialise a, Serialise b) => Handle -> Method -> Path -> Maybe a -> IO b
-request Handle{..} reqMethod reqPath reqBody = do
-    res <- httpLbs req httpManager
-    case deserialise (responseBody res) of
-        Just json -> pure json
-        Nothing   -> throwIO (HttpClientException "Error parsing response body")
+request :: Serialise a => Handle -> Method -> Path -> Maybe a -> IO (Response LBS.ByteString)
+request Handle{..} reqMethod reqPath reqBody =
+    httpLbs req httpManager
   where
     req = defaultRequest
         { method         = C8.pack (show reqMethod)
@@ -77,15 +83,38 @@ submitPath = "/node/mempool"
 readPath :: Path
 readPath = "/node/state"
 
+submitTransaction :: Handle -> ApiTx -> IO (API.Result (Node.Receipt a))
+submitTransaction h tx = do
+    resp <- post h submitPath tx
+    if LBS.null (responseBody resp)
+       then throwIO (HttpClientException "Oscoin.CLI.Backend.HTTP: Empty body")
+       else case deserialiseOrFail (responseBody resp) of
+           Left err  -> throwIO (HttpClientException $ "Oscoin.CLI.Backend.HTTP: Failed to deserialise body: " <> tshow err)
+           Right val -> pure val
+
 --------------------------------------------------------------------------------
 
-revisionCreate :: FromRadicle a => Handle -> Revision -> IO (Result a)
-revisionCreate h rev =
-    fromRadicle <$> post h submitPath (toRadicle rev)
+createRevisionTx
+    :: MonadRandom m => Revision -> (PublicKey, PrivateKey) -> m ApiTx
+createRevisionTx rev (pk, sk) = do
+    msg <- sign sk (LBS.toStrict $ serialise (toRadicle rev))
+    pure $ mkTx msg (hash pk)
+
+--------------------------------------------------------------------------------
+
+revisionCreate :: Handle -> Revision -> (PublicKey, PrivateKey) -> IO (Result Text)
+revisionCreate h rev kp =
+    ResultValue . tshow <$>
+        (submitTransaction h =<< createRevisionTx rev kp)
 
 revisionStatus :: FromRadicle a => Handle -> RevisionId -> IO (Result a)
-revisionStatus h (RevisionId id) =
-    fromRadicle <$> get h (readPath <> "/revisions/" <> fromString (show id))
+revisionStatus h (RevisionId id) = do
+    resp <- get h (readPath <> "/revisions/" <> fromString (show id))
+    if responseStatus resp == ok200
+    then case fromRadicle <$> deserialise (responseBody resp) of
+        Just val -> pure $ ResultValue val
+        Nothing  -> throwIO (HttpClientException "Oscoin.CLI.Backend.HTTP: Error parsing response body")
+    else throwIO (HttpClientException ("Error status " <> tshow (responseStatus resp)))
 
 revisionMerge :: Handle -> RevisionId -> IO (Result a)
 revisionMerge _ _ = pure ResultOk

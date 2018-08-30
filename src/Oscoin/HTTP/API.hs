@@ -1,4 +1,8 @@
-module Oscoin.HTTP.API where
+module Oscoin.HTTP.API
+    ( ApiTx
+    , api
+    , withAPI
+    ) where
 
 import           Oscoin.Prelude
 

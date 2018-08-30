@@ -12,6 +12,8 @@ import           Oscoin.CLI.Backend
 import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.Revision
 
+import           Oscoin.Crypto.PubKey
+
 data Command =
       RevisionCreate
     | RevisionList
@@ -34,8 +36,9 @@ defaultOptions = Options
     }
 
 runCommand :: Backend a -> Command -> Options -> IO (Result a)
-runCommand Backend{..} RevisionCreate _opts =
-    revisionCreate emptyRevision
+runCommand Backend{..} RevisionCreate _opts = do
+    pair <- generateKeyPair
+    revisionCreate emptyRevision pair
 runCommand Backend{..} RevisionList _opts =
     notImplemented
 runCommand Backend{..} RevisionStatus _opts =
