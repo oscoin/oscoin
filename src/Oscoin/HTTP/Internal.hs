@@ -18,6 +18,7 @@ import           Data.List (intersect, elem)
 import           Data.Text.Encoding (decodeUtf8')
 import qualified Data.Text as T
 import qualified Network.HTTP.Types.Status as HTTP
+import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.Wai as Wai
 import           Network.Wai.Parse (parseHttpAccept, parseContentType)
 import qualified Network.Wai.Middleware.RequestLogger as Wai
@@ -49,13 +50,19 @@ type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle ApiTx s i)
 mkState :: State
 mkState = State ()
 
-getHeader :: Text -> ApiAction s i (Maybe Text)
-getHeader = Spock.header
+getHeader :: HeaderName -> ApiAction s i (Maybe Text)
+getHeader name = do
+    header <- Spock.rawHeader name
+    pure $ case header of
+        Nothing -> Nothing
+        Just h  -> case decodeUtf8' h of
+            Left  _ -> Nothing
+            Right t -> Just t
 
-getHeader' :: Text -> ApiAction s i Text
-getHeader' h = do
-    mh <- getHeader h
-    case mh of
+getHeader' :: HeaderName -> ApiAction s i Text
+getHeader' name = do
+    header <- getHeader name
+    case header of
         Just v  -> pure v
         Nothing -> respond HTTP.badRequest400
 
