@@ -35,7 +35,7 @@ defaultOptions = Options
 
 runCommand :: Backend a -> Command -> Options -> IO (Result a)
 runCommand Backend{..} RevisionCreate _opts =
-    revisionCreate (undefined :: Revision)
+    revisionCreate emptyRevision
 runCommand Backend{..} RevisionList _opts =
     notImplemented
 runCommand Backend{..} RevisionStatus _opts =

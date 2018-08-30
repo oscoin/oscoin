@@ -6,4 +6,4 @@ import           Oscoin.CLI.Radicle
 type Commit = ()
 
 newtype Changeset = Changeset [Commit]
-    deriving (Show, ToRadicle)
+    deriving (Show, ToRadicle, Semigroup, Monoid)

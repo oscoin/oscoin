@@ -11,7 +11,7 @@ import qualified Radicle as Rad
 import qualified Data.Map as Map
 
 newtype RevisionId = RevisionId { fromRevisionId :: Int }
-    deriving (Show, Eq, Read, ToRadicle)
+    deriving (Show, Num, Eq, Read, ToRadicle)
 
 data RevisionStatus =
       RevisionOpen
@@ -27,6 +27,11 @@ instance ToRadicle RevisionStatus where
       where
         key = Rad.Keyword . fromJust . Rad.mkIdent
 
+type Ref = Text
+
+newtype RevisionBase = RevisionBase Ref
+    deriving (Show, Eq, IsString, ToRadicle)
+
 data Revision = Revision
       { revId          :: RevisionId
       , revTitle       :: Text
@@ -35,6 +40,7 @@ data Revision = Revision
       , revAuthor      :: User
       , revReviewers   :: Set User
       , revStatus      :: RevisionStatus
+      , revBase        :: RevisionBase
       } deriving (Show)
 
 instance ToRadicle Revision where
@@ -47,10 +53,11 @@ instance ToRadicle Revision where
             , ("author",      toRadicle revAuthor)
             , ("reviewers",   toRadicle revReviewers)
             , ("status",      toRadicle revStatus)
+            , ("base",        toRadicle revBase)
             ]
 
-mkRevision :: RevisionId -> Text -> Text -> Changeset -> User -> Revision
-mkRevision id title desc changes author =
+mkRevision :: RevisionId -> Text -> Text -> Changeset -> User -> RevisionBase -> Revision
+mkRevision id title desc changes author base =
     Revision
         { revId = id
         , revTitle = title
@@ -59,7 +66,11 @@ mkRevision id title desc changes author =
         , revAuthor = author
         , revReviewers = mempty
         , revStatus = RevisionOpen
+        , revBase = base
         }
+
+emptyRevision :: Revision
+emptyRevision = mkRevision 0 "" "" mempty "anonymous" "master"
 
 newtype SuggestionId = SuggestionId Int
     deriving (Show, Eq, Read)

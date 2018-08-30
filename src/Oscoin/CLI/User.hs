@@ -4,4 +4,4 @@ import           Oscoin.CLI.Radicle
 import           Oscoin.Prelude
 
 newtype User = User Text
-    deriving (Show, Eq, Ord, ToRadicle)
+    deriving (Show, IsString, Eq, Ord, ToRadicle)
