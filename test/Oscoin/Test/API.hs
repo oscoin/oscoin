@@ -20,11 +20,11 @@ import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
 tests :: [TestTree]
 tests =
     [ testCase "Smoke test" (smokeTestOscoinAPI cfg)
-    , testGroup "GET /transactions/:hash" $
-        [ test "Tx Not Found" getTxNotFound
-        , test "Accept JSON"  getTxAcceptJSON
-        , test "Accept CBOR"  getTxAcceptCBOR
-        ] <&> ($ cfg)
+    -- , testGroup "GET /transactions/:hash" $
+    --     [ test "Tx Not Found" getTxNotFound
+    --     , test "Accept JSON"  getTxAcceptJSON
+    --     , test "Accept CBOR"  getTxAcceptCBOR
+    --     ] <&> ($ cfg)
     ]
     where cfg = Node.Config {
           Node.cfgServiceName = "http"
