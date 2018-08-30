@@ -34,10 +34,8 @@ close :: MonadIO m => Handle s -> m ()
 close _ = pass
 
 getPath :: (Query s, MonadIO m) => Handle s -> Path -> m (Maybe (QueryVal s))
-getPath Handle{hTree} k = do
-    t <- io $ readTVarIO hTree
-    pure $ query k t
+getPath Handle{hTree} k =
+    query k <$> io (readTVarIO hTree)
 
 updateTree :: Handle s -> s -> STM ()
-updateTree Handle{hTree} tree =
-    writeTVar hTree tree
+updateTree = writeTVar . hTree
