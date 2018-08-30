@@ -82,10 +82,10 @@ bestContentType :: [Text] -> [Text] -> Maybe Text
 bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
 
 -- | Negotiates the best response content type from the request's accept header.
-negotiateContentType :: [Text] -> ApiAction s i Text
-negotiateContentType offered = do
+negotiateContentType :: ApiAction s i Text
+negotiateContentType = do
     accepted <- getAccepted
-    case bestContentType accepted offered of
+    case bestContentType accepted supportedContentTypes of
         Nothing -> respond HTTP.notAcceptable406
         Just ct -> pure ct
 
@@ -119,7 +119,7 @@ respondBytes status body = do
 
 respondBody :: (ToJSON a, Serialise a) => a -> ApiAction s i ()
 respondBody a = do
-    ct <- negotiateContentType supportedContentTypes
+    ct <- negotiateContentType
     Spock.setHeader "Content-Type" ct
     case encode ct a of
         Nothing -> respond HTTP.notAcceptable406
