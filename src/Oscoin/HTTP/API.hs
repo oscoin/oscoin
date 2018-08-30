@@ -15,7 +15,7 @@ import           Network.Wai.Middleware.Static ((>->))
 import qualified Network.Wai.Middleware.Static as Wai
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
-import           Web.Spock (get, middleware, post, root, var, (<//>))
+import           Web.Spock (get, middleware, post, root, var, (<//>), wildcard)
 
 withAPI :: Environment -> (Api s i () -> m a) -> m a
 withAPI env f = f (api env)
@@ -41,4 +41,4 @@ api env = do
 
     -- /node/state/:key -------------------------------------------------------
 
-    get ("node" <//> "state" <//> var) Handlers.getStatePath
+    get ("node" <//> "state" <//> wildcard) Handlers.getStatePath

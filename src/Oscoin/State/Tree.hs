@@ -4,10 +4,14 @@ import           Oscoin.Prelude
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text as T
 
 type Key = Text
 type Path = [Text]
 type Val = LBS.ByteString
+
+keyToPath :: Key -> Path
+keyToPath = T.splitOn "/"
 
 -- | Key/value tree data-structure.
 type Tree k v = Map k v

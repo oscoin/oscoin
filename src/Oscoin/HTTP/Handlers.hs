@@ -7,7 +7,7 @@ import           Oscoin.HTTP.Internal
 import qualified Oscoin.HTTP.API.Result as Result
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
-import           Oscoin.State.Tree (Key)
+import           Oscoin.State.Tree (Key, keyToPath)
 
 import           Network.HTTP.Types.Status
 
@@ -38,7 +38,7 @@ submitTransaction = do
 
 getStatePath :: Key -> ApiAction s i ()
 getStatePath k = do
-    result <- node $ Node.getPath [k]
+    result <- node $ Node.getPath (keyToPath k)
     case result of
         Just val ->
             respondCbor ok200 (Result.ok val)
