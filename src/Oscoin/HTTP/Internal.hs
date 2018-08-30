@@ -140,11 +140,8 @@ getContentType = do
 getSupportedContentType :: ApiAction s i Text
 getSupportedContentType = do
     ct <- getContentType
-    if ct `elem` supportedContentTypes then
-        pure ct
-    else
-        respond HTTP.unsupportedMediaType415
-
+    if ct `elem` supportedContentTypes then pure ct
+    else respond HTTP.unsupportedMediaType415
 
 getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
