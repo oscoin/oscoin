@@ -42,7 +42,7 @@ main = do
     nid <- NodeId . publicKeyHash . fst <$> generateKeyPair -- TODO: read from disk
     rng <- newStdGen
     mem <- Mempool.newIO
-    str <- STree.connect
+    str <- STree.new
     blk <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock 0
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
 
