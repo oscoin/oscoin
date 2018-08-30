@@ -8,10 +8,6 @@ import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip,
 import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, toOrphan, validateBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (Tx, mkTx)
-import           Oscoin.Environment (Environment(Testing))
-import qualified Oscoin.Logging as Log
-import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
@@ -23,7 +19,7 @@ import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbit
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
-import qualified Oscoin.Test.HTTP as HTTP
+import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
@@ -32,23 +28,12 @@ import           Test.Tasty.HUnit hiding ((@?=))
 import           Test.Tasty.QuickCheck
 
 import qualified Data.Aeson as Aeson
-import           Data.Aeson.Types (emptyArray)
 import qualified Data.Binary as Binary
 import qualified Data.List.NonEmpty as NonEmpty
-import           Lens.Micro ((^?!))
-import           Lens.Micro.Aeson (key, _String)
-
-nodeConfig :: Node.Config
-nodeConfig = Node.Config
-    { Node.cfgServiceName = "http"
-    , Node.cfgPeers       = []
-    , Node.cfgEnv         = Testing
-    , Node.cfgLogger      = Log.noLogger
-    }
 
 tests :: TestTree
 tests = testGroup "Oscoin"
-    [ testGroup      "API"                            (apiTests nodeConfig)
+    [ testGroup      "API"                            API.tests
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
@@ -60,42 +45,6 @@ tests = testGroup "Oscoin"
     , testGroup      "Consensus"                      Consensus.tests
     , testGroup      "P2P"                            P2P.tests
     ]
-
-apiTests :: Node.Config -> [TestTree]
-apiTests cfg =
-    testCase "Smoke test" (smokeTestOscoinAPI cfg) :
-        HTTP.tests cfg
-
-smokeTestOscoinAPI :: Node.Config -> Assertion
-smokeTestOscoinAPI cfg = runSession cfg 42 $ do
-    get "/" >>= assertOK
-
-    -- The mempool is empty.
-    get "/node/mempool" >>= assertBody emptyArray
-
-    -- Now let's create a transaction message.
-    let msg :: ByteString = "<transaction>"
-
-    -- Now generate a key pair and sign the transaction.
-    (pubKey, priKey) <- Crypto.generateKeyPair
-    msg'             <- Crypto.sign priKey msg
-
-    let tx :: Tx ByteString = mkTx msg' (Crypto.hash pubKey)
-
-    -- Submit the transaction to the mempool.
-    resp <- post "/node/mempool" tx ; assertStatus 202 resp
-
-    -- The response is a transaction receipt, with the transaction
-    -- id (hash).
-    let txId = responseBody resp ^?! key "tx" . _String
-
-    -- Get the mempool once again, make sure the transaction is in there.
-    _mp <- responseBody <$> get "/node/mempool"
-
-    -- TODO(cloudhead): This doesn't work anymore.
-    -- mp ^? nth 0 . key "id" . _String @?= Just txId
-
-    get ("/node/mempool/" <> txId) >>= assertOK <> assertJSON
 
 testOscoinCrypto :: Assertion
 testOscoinCrypto = do
