@@ -11,6 +11,8 @@ import qualified Codec.Serialise as Serialise
 import           Data.Aeson (FromJSON, ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Maybe (listToMaybe)
 import           Data.List (intersect, elem)
 import           Data.Text.Encoding (decodeUtf8')
@@ -60,12 +62,12 @@ getHeader' h = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-supportedContentTypes :: [Text]
-supportedContentTypes = ["application/json", "application/cbor"]
+supportedContentTypes :: NonEmpty Text
+supportedContentTypes = "application/json" :| ["application/cbor"]
 
 -- | Gets the Accept header, defaulting to application/json if not present.
 getAccept :: ApiAction s i Text
-getAccept = maybe (head supportedContentTypes) identity <$> getHeader "Accept"
+getAccept = maybe (NonEmpty.head supportedContentTypes) identity <$> getHeader "Accept"
 
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
 getAccepted :: ApiAction s i [Text]
@@ -85,7 +87,8 @@ bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
 negotiateContentType :: ApiAction s i Text
 negotiateContentType = do
     accepted <- getAccepted
-    case bestContentType accepted supportedContentTypes of
+    let offered = NonEmpty.toList supportedContentTypes
+    case bestContentType accepted offered of
         Nothing -> respond HTTP.notAcceptable406
         Just ct -> pure ct
 
