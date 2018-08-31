@@ -29,15 +29,17 @@ import           System.Random (newStdGen)
 
 import           Options.Generic
 
-data Args = Args { listenIp :: Text, listenPort :: Word16, seed :: [FilePath] }
-    deriving (Generic, Show)
+data Args = Args
+    { listen :: Text
+    , seed   :: [FilePath]
+    } deriving (Generic, Show)
 
 instance ParseRecord Args
 
 main :: IO ()
 main = do
-    args@Args{..} <- getRecord "oscoin cli"
-    print (args :: Args)
+    Args{..} <- getRecord "oscoin cli"
+    let P2P.NodeAddr{..} = read listen
 
     nid <- NodeId . publicKeyHash . fst <$> generateKeyPair -- TODO: read from disk
     rng <- newStdGen
@@ -46,13 +48,11 @@ main = do
     blk <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock 0
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
 
-    let !ip = read listenIp
-
     withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }        $ \lgr ->
         withNode  (Node.Config "xyz" [] Testing lgr) nid mem str blk    $ \nod ->
         withAPI   Testing                                               $ \api ->
-        withDisco (mkDisco lgr sds nid ip listenPort)                   $ \dis ->
-        withP2P   (mkP2PConfig ip listenPort) lgr dis                   $ \p2p ->
+        withDisco (mkDisco lgr sds nid addrIP addrPort)                 $ \dis ->
+        withP2P   (mkP2PConfig addrIP addrPort) lgr dis                 $ \p2p ->
             let run = Node.runEffects p2p nod (evalNakamotoT env rng)
                 env = defaultNakamotoEnv { nakEval = nodeEval, nakLogger = lgr }
              in do

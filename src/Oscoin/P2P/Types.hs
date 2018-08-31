@@ -34,6 +34,12 @@ instance FromJSON NodeAddr where
         addrPort <-          o .: "port"
         pure NodeAddr{..}
 
+instance Read NodeAddr where
+    readsPrec _ input =
+        let ip = takeWhile (/= ':') input
+            port = tail $ dropWhile (/= ':') input
+         in [(NodeAddr (readStr ip) (readStr port), "")]
+
 instance Binary NodeAddr where
     put NodeAddr{addrIP, addrPort} = do
         put $ show addrIP
