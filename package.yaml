@@ -56,6 +56,9 @@ dependencies:
   - writer-cps-mtl
   - yaml
 
+data-files:
+  - node/rad/prelude.rad
+
 library:
   source-dirs: src
 

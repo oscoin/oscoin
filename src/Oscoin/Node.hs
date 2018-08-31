@@ -48,20 +48,17 @@ import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (ToJSON, toJSON, object, (.=))
-import qualified Data.ByteString.Lazy as LBS
-import qualified Network.Socket as NS
 
 -- | Node static config.
-data Config = Config
-    { cfgServiceName :: NS.ServiceName
-    , cfgPeers       :: [(NS.HostName, NS.ServiceName)]
-    , cfgEnv         :: Environment
+data Config tx = Config
+    { cfgEnv         :: Environment
     , cfgLogger      :: Log.Logger
+    , cfgPrelude     :: [tx]
     }
 
 -- | Node handle.
 data Handle tx s i = Handle
-    { hConfig     :: Config
+    { hConfig     :: Config tx
     , hNodeId     :: i
     , hStateTree  :: STree.Handle s
     , hBlockStore :: BlockStore.Handle tx s
@@ -69,7 +66,7 @@ data Handle tx s i = Handle
     }
 
 withNode
-    :: Config
+    :: Config tx
     -> i
     -> Mempool.Handle tx
     -> STree.Handle s
@@ -79,7 +76,7 @@ withNode
 withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
 -- | Connect to state storage.
-open :: Config
+open :: Config tx
      -> i
      -> Mempool.Handle tx
      -> STree.Handle s

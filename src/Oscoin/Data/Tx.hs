@@ -9,7 +9,9 @@ import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import qualified Radicle as Rad
 
 import           Codec.Serialise
+import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
+import qualified Data.ByteString.Lazy as LBS
 import           Data.Binary
 
 data Tx msg = Tx
@@ -63,3 +65,9 @@ toProgram Tx{..} =
         , Rad.progChainId = txChainId
         , Rad.progNonce   = txNonce
         }
+
+-- | Create a 'Tx' from a 'Serialise' message and key pair.
+createTx :: (Serialise msg, MonadRandom m) => (PublicKey, PrivateKey) -> msg -> m (Tx ByteString)
+createTx (pk, sk) val = do
+    sval <- sign sk (LBS.toStrict $ serialise val)
+    pure $ mkTx sval (hash pk)

@@ -2,7 +2,11 @@ module Oscoin.Consensus.Evaluator.Radicle
     ( Env(..)
     , Program(..)
     , radicleEval
+    , parseValue
     , fromSource
+
+    -- * Re-exports
+    , Rad.Value
     ) where
 
 import           Oscoin.Prelude
@@ -45,17 +49,21 @@ data Program = Program
 
 instance Serialise Program
 
+parseValue :: Text -> Text -> Either Text Rad.Value
+parseValue name src =
+    Rad.parse name src primops
+  where
+    primops = Map.keys $ Rad.bindingsPrimops $ Rad.pureEnv @Identity
+
 fromSource :: Text -> Text -> Either Text Program
 fromSource name src = do
-    values <- Rad.parse name src primops
+    value <- parseValue name src
     pure Program
-        { progValue   = values
+        { progValue  = value
         , progAuthor  = toHashed zeroHash
         , progChainId = 0
         , progNonce   = 0
         }
-  where
-    primops = Map.keys $ Rad.bindingsPrimops $ Rad.pureEnv @Identity
 
 -- | A radicle evaluator.
 radicleEval :: Evaluator Env Program ()

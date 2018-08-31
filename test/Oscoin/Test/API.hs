@@ -29,17 +29,17 @@ tests =
             , test "Accept CBOR"  getTxAcceptCBOR
             ] <&> ($ cfg)
     ]
-    where cfg = Node.Config {
-          Node.cfgServiceName = "http"
-        , Node.cfgPeers       = []
-        , Node.cfgEnv         = Testing
-        , Node.cfgLogger      = Log.noLogger
-        }
+  where
+    cfg = Node.Config
+      { Node.cfgEnv         = Testing
+      , Node.cfgLogger      = Log.noLogger
+      , Node.cfgPrelude     = []
+      }
 
-test :: TestName -> Session () -> Node.Config -> TestTree
+test :: TestName -> Session () -> Node.Config DummyTx -> TestTree
 test name session cfg = testCase name $ runSession cfg 42 session
 
-smokeTestOscoinAPI :: Node.Config -> Assertion
+smokeTestOscoinAPI :: Node.Config DummyTx -> Assertion
 smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     get "/" >>= assertOK
 
