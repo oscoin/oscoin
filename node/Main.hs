@@ -81,7 +81,7 @@ main = do
         result <- Rad.parseValue (T.pack path) <$> readFile path
         case result of
             Left err -> error $
-                "Main.hs: Error reading prelude ('" ++ path ++ "'): " ++ T.unpack err
+                "Main.hs: error reading prelude: " ++ T.unpack err
             Right val -> createTx kp val
 
     mkDisco lgr [] nid ip prt = MCast.mkDisco lgr . MCast.mkConfig nid $ endpoints ip prt
