@@ -15,16 +15,18 @@ import           Lens.Micro ((^?!))
 import           Lens.Micro.Aeson (key, _String)
 import           Test.Tasty
 import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
+import           Test.Tasty.ExpectedFailure (expectFailBecause)
 
 
 tests :: [TestTree]
 tests =
     [ testCase "Smoke test" (smokeTestOscoinAPI cfg)
-    -- , testGroup "GET /transactions/:hash" $
-    --     [ test "Tx Not Found" getTxNotFound
-    --     , test "Accept JSON"  getTxAcceptJSON
-    --     , test "Accept CBOR"  getTxAcceptCBOR
-    --     ] <&> ($ cfg)
+    , expectFailBecause "Tests not implemented" $
+        testGroup "GET /transactions/:hash" $
+            [ test "Tx Not Found" getTxNotFound
+            , test "Accept JSON"  getTxAcceptJSON
+            , test "Accept CBOR"  getTxAcceptCBOR
+            ] <&> ($ cfg)
     ]
     where cfg = Node.Config {
           Node.cfgServiceName = "http"
