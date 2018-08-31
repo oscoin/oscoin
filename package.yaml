@@ -97,6 +97,7 @@ tests:
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
+      - tasty-expected-failure
       - vector
 
 default-extensions:
