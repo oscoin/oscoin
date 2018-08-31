@@ -12,7 +12,8 @@ import           Oscoin.Test.HTTP.Helpers
 
 import           Data.Aeson.Types (emptyArray)
 import           Lens.Micro ((^?!))
-import           Lens.Micro.Aeson (key, _String)
+import           Lens.Micro.Extras (preview)
+import           Lens.Micro.Aeson (key, _String, _JSON, nth)
 import           Test.Tasty
 import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
 import           Test.Tasty.ExpectedFailure (expectFailBecause)
@@ -64,8 +65,7 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     -- Get the mempool once again, make sure the transaction is in there.
     _mp <- responseBody <$> get "/node/mempool"
 
-    -- TODO(cloudhead): This doesn't work anymore.
-    -- mp ^? nth 0 . key "id" . _String @?= Just txId
+    preview (nth 0 . _JSON) _mp @?= Just tx
 
     get ("/node/mempool/" <> txId) >>= assertOK <> assertJSON
 
