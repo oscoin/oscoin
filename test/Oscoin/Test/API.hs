@@ -33,7 +33,6 @@ tests =
     cfg = Node.Config
       { Node.cfgEnv         = Testing
       , Node.cfgLogger      = Log.noLogger
-      , Node.cfgPrelude     = []
       }
 
 test :: TestName -> Session () -> Node.Config DummyTx -> TestTree

@@ -5,9 +5,9 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, NakamotoEnv(..), easyDifficulty)
 import           Oscoin.Crypto.Blockchain (Difficulty)
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
-import           Oscoin.Data.Tx (Tx, createTx)
+import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.HTTP as HTTP
 import           Oscoin.HTTP (withAPI)
@@ -54,12 +54,12 @@ main = do
     rng <- newStdGen
     mem <- Mempool.newIO
     str <- STree.new
-    blk <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock 0
+    gen <- genesisFromPath prelude kp
+    blk <- BlockStore.newIO $ genesisBlockStore gen
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
-    pre <- preludeFromPath prelude kp :: IO (Tx ByteString)
 
     withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }        $ \lgr ->
-        withNode  (mkNodeConfig Testing lgr pre) nid mem str blk        $ \nod ->
+        withNode  (mkNodeConfig Testing lgr) nid mem str blk            $ \nod ->
         withAPI   Testing                                               $ \api ->
         withDisco (mkDisco lgr sds nid addrIP addrPort)                 $ \dis ->
         withP2P   (mkP2PConfig addrIP addrPort) lgr dis                 $ \p2p ->
@@ -74,22 +74,25 @@ main = do
                  Async.race_ (run . forever $ Node.step)
                              (run . forever $ Node.tick)
   where
-    mkNodeConfig env lgr pre = Node.Config
+    mkNodeConfig env lgr = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
-        , Node.cfgPrelude = [pre]
         }
     mkP2PConfig ip port = P2P.defaultConfig
         { P2P.cfgBindIP   = ip
         , P2P.cfgBindPort = port
         }
 
-    preludeFromPath path kp = do
+    genesisFromPath path kp = do
         result <- Rad.parseValue (T.pack path) <$> readFile path
         case result of
             Left err -> error $
                 "Main.hs: error reading prelude: " ++ T.unpack err
-            Right val -> createTx kp val
+            Right val -> do
+                tx <- createTx kp val
+                pure $ maybe (error "Main.hs: error evaluating prelude")
+                             identity
+                             (genesisBlock def nodeEval 0 [tx])
 
     mkDisco lgr [] nid ip prt = MCast.mkDisco lgr . MCast.mkConfig nid $ endpoints ip prt
     mkDisco _   ss _   _  _   = pure . Static.mkDisco . toKnownPeers $ ss

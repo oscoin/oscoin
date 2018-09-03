@@ -53,7 +53,6 @@ import           Data.Aeson (ToJSON, toJSON, object, (.=))
 data Config tx = Config
     { cfgEnv         :: Environment
     , cfgLogger      :: Log.Logger
-    , cfgPrelude     :: [tx]
     }
 
 -- | Node handle.
@@ -152,8 +151,8 @@ runNodeT env (NodeT ma) = runReaderT ma env
 runEffects
     :: P2P.Handle
     -> Handle tx s i
-    -> (c -> NodeT tx s i (P2P.NetworkT tx m) a)
-    -> c
+    -> (cfg -> NodeT tx s i (P2P.NetworkT tx m) a)
+    -> cfg
     -> m a
 runEffects p2p node evalConsensusT =
     runNetworkT p2p . runNodeT node . evalConsensusT
