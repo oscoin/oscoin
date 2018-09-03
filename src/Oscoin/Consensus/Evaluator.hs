@@ -1,6 +1,7 @@
 module Oscoin.Consensus.Evaluator
     ( Evaluator
     , EvalError
+    , evalError
     , identityEval
     , foldEval
     , constEval
@@ -14,29 +15,32 @@ import           Oscoin.Prelude
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
 
-type Evaluator s a b = a -> s -> Maybe (b, s)
+evalError :: Text -> EvalError
+evalError = EvalError
+
+type Evaluator s a b = a -> s -> Either [EvalError] (b, s)
 
 -- | The identity evaluator. An evaluator that accepts any expression and has
 -- no state.
 identityEval :: Evaluator s a ()
-identityEval _ s = Just ((), s)
+identityEval _ s = Right ((), s)
 
 -- | An evaluator that rejects any expression and has no state.
 rejectEverythingEval :: Evaluator s a b
-rejectEverythingEval _ = const Nothing
+rejectEverythingEval _ = const (Left [])
 
 foldEval :: Monoid w => Evaluator w w ()
-foldEval x xs = Just ((), xs <> x)
+foldEval x xs = Right ((), xs <> x)
 
 constEval :: s -> Evaluator s a ()
-constEval s _ _ = Just ((), s)
+constEval s _ _ = Right ((), s)
 
 -- | Evaluates a list of expressions with the given starting state and evaluator.
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
 -- is returned. Otherwise, the final state is returned.
 evals :: Foldable t => t a -> s -> Evaluator s a b -> Either [EvalError] s
 evals exprs st eval =
-    if any isLeft results then Left (lefts results) else Right st'
+    if any isLeft results then Left (concat $ lefts results) else Right st'
   where
     (results, st') = applyValidExprs exprs st eval
 
@@ -50,14 +54,14 @@ applyValidExprs
     => t a                             -- ^ The expressions to evaluate.
     -> s                               -- ^ The initial state.
     -> Evaluator s a b                 -- ^ The evaluation funcion.
-    -> ([Either EvalError (a, b)], s)  -- ^ A list of results and a new state @s@.
+    -> ([Either [EvalError] (a, b)], s)  -- ^ A list of results and a new state @s@.
 applyValidExprs exprs st eval =
     go [] (toList exprs) st
   where
     go acc (expr:es) s =
         case eval expr s of
-            Just (res, s') -> -- Successful evaluation.
+            Right (res, s') -> -- Successful evaluation.
                 go (Right (expr, res) : acc) es s'
-            Nothing        -> -- Failed evaluation.
-                go (Left (EvalError "Evaluation failed") : acc) es s
+            Left errs       -> -- Failed evaluation.
+                go (Left errs : acc) es s
     go acc [] s = (reverse acc, s)

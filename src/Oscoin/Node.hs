@@ -26,6 +26,7 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
+import           Oscoin.Consensus.Evaluator (EvalError)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
@@ -48,6 +49,7 @@ import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (ToJSON, toJSON, object, (.=))
+import qualified Data.ByteString.Lazy as LBS
 
 -- | Node static config.
 data Config tx = Config
@@ -132,7 +134,7 @@ step = do
       <$> maximumChainBy (comparing height)
     Log.debugM ("State: " % Log.shown) st
 
-nodeEval :: Tx ByteString -> Eval.Env -> Maybe ((), Eval.Env)
+nodeEval :: Tx ByteString -> Eval.Env -> Either [EvalError] ((), Eval.Env)
 nodeEval tx st = Eval.radicleEval (toProgram $ deserialise . LBS.fromStrict <$> tx) st
 
 -------------------------------------------------------------------------------
