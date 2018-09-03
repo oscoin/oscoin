@@ -3,7 +3,8 @@ module Main (main) where
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, nakEval, nakLogger)
+import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, NakamotoEnv(..), easyDifficulty)
+import           Oscoin.Crypto.Blockchain (Difficulty)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
 import           Oscoin.Data.Tx (Tx, createTx)
@@ -34,9 +35,10 @@ import qualified Data.Text as T
 import           Options.Generic
 
 data Args = Args
-    { listen  :: Text
-    , seed    :: [FilePath]
-    , prelude :: FilePath
+    { listen        :: Text
+    , seed          :: [FilePath]
+    , prelude       :: FilePath
+    , difficulty    :: Maybe Difficulty
     } deriving (Generic, Show)
 
 instance ParseRecord Args
@@ -45,6 +47,7 @@ main :: IO ()
 main = do
     Args{..} <- getRecord "oscoin"
     let P2P.NodeAddr{..} = read listen
+    let dif = maybe easyDifficulty identity difficulty
 
     kp  <- generateKeyPair
     nid <- pure (NodeId . publicKeyHash . fst $ kp) -- TODO: read from disk
@@ -61,7 +64,11 @@ main = do
         withDisco (mkDisco lgr sds nid addrIP addrPort)                 $ \dis ->
         withP2P   (mkP2PConfig addrIP addrPort) lgr dis                 $ \p2p ->
             let run = Node.runEffects p2p nod (evalNakamotoT env rng)
-                env = defaultNakamotoEnv { nakEval = nodeEval, nakLogger = lgr }
+                env = defaultNakamotoEnv
+                    { nakEval = nodeEval
+                    , nakLogger = lgr
+                    , nakDifficulty = dif
+                    }
              in do
                  void $ Async.async $ HTTP.run api 8080 nod -- TODO(cloudhead): Eventually we should terminate gracefully.
                  Async.race_ (run . forever $ Node.step)
