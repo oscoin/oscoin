@@ -19,16 +19,18 @@ import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Aeson as Aeson
+import           Codec.Serialise (Serialise)
 
 -- Mempool --------------------------------------------------------------------
 
 -- | A map of transaction keys to transactions.
 newtype Mempool tx = Mempool (Map (Hashed tx) tx)
-    deriving (Show, Semigroup, Monoid, Eq)
+    deriving (Show, Semigroup, Monoid, Eq, Generic)
+
+instance Serialise tx => Serialise (Mempool tx)
 
 instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool tx) where
     toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
-
 -- | Lookup a transaction in a mempool.
 lookup :: Hashed tx -> Mempool tx -> Maybe tx
 lookup h (Mempool txs) = Map.lookup h txs
