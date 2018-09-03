@@ -27,9 +27,9 @@ import           Algebra.Graph.AdjacencyMap (AdjacencyMap)
 import qualified Algebra.Graph.AdjacencyMap as Alga
 import qualified Algebra.Graph.Export.Dot as Alga (exportViaShow)
 import           Control.Monad ((>=>))
+import qualified Data.HashSet as Set
 import           Data.IORef
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -86,14 +86,17 @@ genBroadcasts (length -> glen) = do
 settle :: Nodes -> [Outgoing NodeId] -> IO ()
 settle nodes outs = loop $ pure outs
   where
+    loop :: Maybe [Outgoing NodeId] -> IO ()
     loop = maybe (pure ()) (foldMap dispatch >=> loop)
 
+    dispatch :: Outgoing NodeId -> IO (Maybe [Outgoing NodeId])
     dispatch (Eager to msg)   = onNode to $ receive msg
     dispatch (Lazy  to ihave) = onNode to $ receive (IHaveM ihave)
     dispatch (After 0 _ ma)   = Just <$> io ma
     dispatch (After t k ma)   = pure $ Just [After (t - 1000000) k ma]
     dispatch _                = pure mempty
 
+    onNode :: NodeId -> Plumtree NodeId a -> IO (Maybe a)
     onNode n ma = for (Map.lookup n nodes) $ \(hdl,_) -> runPlumtree hdl ma
 
 initNodes :: Contacts -> IO Nodes
@@ -103,7 +106,7 @@ initNodes net = do
             store <- newIORef mempty
             hdl   <- new self (Set.fromList peers) (simpleCallbacks store)
             pure (self, (hdl, store))
-    pure $ Map.fromList $ nodes
+    pure $ Map.fromList nodes
 
 simpleCallbacks :: Store -> Callbacks
 simpleCallbacks ref = Callbacks {..}

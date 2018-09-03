@@ -6,33 +6,37 @@ import           Oscoin.Prelude
 
 import           Oscoin.P2P.Gossip.Membership
 
-import           Oscoin.Test.P2P.Gossip.Gen (Contacts, NodeId)
+import           Oscoin.Test.P2P.Gossip.Gen (Contacts, NodeId, SplitMixSeed)
 import qualified Oscoin.Test.P2P.Gossip.Gen as Gen
 
 import qualified Algebra.Graph.AdjacencyMap as Alga
+import           Control.Monad ((>=>))
+import qualified Data.HashSet as Set
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import qualified System.Random.MWC as MWC
+import           System.Random.SplitMix (seedSMGen')
 
 import           Hedgehog
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
+type Node  = Handle NodeId
+type Nodes = Map NodeId Node
+
 tests :: TestTree
 tests = testGroup "Membership"
     [ testGroup "Overlay convergence with healthy underlay"
         [ testProperty "Disconnected network" . property $ do
-            seed <- forAll Gen.mwcSeed
+            seed <- forAll Gen.splitMixSeed
             boot <- forAll $ Gen.disconnectedContacts Gen.defaultNetworkBounds
             propActiveDisconnected seed boot
 
         , testProperty "Circular network" . property $ do
-            seed <- forAll Gen.mwcSeed
+            seed <- forAll Gen.splitMixSeed
             boot <- forAll $ Gen.circularContacts Gen.defaultNetworkBounds
             propActiveConnected seed boot
 
         , testProperty "Connected network" . property $ do
-            seed <- forAll Gen.mwcSeed
+            seed <- forAll Gen.splitMixSeed
             boot <- forAll $ Gen.connectedContacts Gen.defaultNetworkBounds
             propActiveConnected seed boot
         ]
@@ -40,9 +44,9 @@ tests = testGroup "Membership"
 
 -- | Bootstrap the protocol with the respective contacts given by 'Contacts',
 -- and assert the network of active views converged to a connected state.
-propActiveConnected :: MWC.Seed -> Contacts -> PropertyT IO ()
+propActiveConnected :: SplitMixSeed -> Contacts -> PropertyT IO ()
 propActiveConnected seed boot = do
-    peers <- lift $ runNetwork' seed noopCallbacks boot
+    peers <- lift $ runNetwork seed noopCallbacks boot
     annotateShow $ passiveNetwork peers
     assert $ isConnected (activeNetwork peers)
 
@@ -52,18 +56,18 @@ propActiveConnected seed boot = do
 -- This exists to suppress output which 'Test.Tasty.ExpectedFailure.expectFail'
 -- would produce, and also because there's no point in letting hedgehog shrink
 -- on failure.
-propActiveDisconnected :: MWC.Seed -> Contacts -> PropertyT IO ()
+propActiveDisconnected :: SplitMixSeed -> Contacts -> PropertyT IO ()
 propActiveDisconnected seed boot = do
-    peers <- lift $ runNetwork' seed noopCallbacks boot
+    peers <- lift $ runNetwork seed noopCallbacks boot
     annotateShow $ passiveNetwork peers
     assert $ not $ isConnected (activeNetwork peers)
 
 --------------------------------------------------------------------------------
 
-activeNetwork :: [(NodeId, Peers NodeId a)] -> [(NodeId, [NodeId])]
-activeNetwork = map (second (Map.keys . active))
+activeNetwork :: [(NodeId, Peers NodeId)] -> [(NodeId, [NodeId])]
+activeNetwork = map (second (Set.toList . active))
 
-passiveNetwork :: [(NodeId, Peers NodeId a)] -> [(NodeId, [NodeId])]
+passiveNetwork :: [(NodeId, Peers NodeId)] -> [(NodeId, [NodeId])]
 passiveNetwork = map (second (Set.toList . passive))
 
 isConnected :: [(NodeId, [NodeId])] -> Bool
@@ -74,46 +78,35 @@ isConnected adj =
 
 --------------------------------------------------------------------------------
 
-runNetwork :: MWC.Seed -> Callbacks NodeId c -> Contacts -> IO [Node NodeId c]
-runNetwork seed cbs net = do
-    nodes <- flip zip contacts <$> initNodes seed cbs boot
-    (rpcs, nodes') <- sequenceA <$> traverse (uncurry joinNetwork) nodes
-    settle nodes' rpcs
+runNetwork :: SplitMixSeed -> Callbacks NodeId -> Contacts -> IO [(NodeId, Peers NodeId)]
+runNetwork seed cbs boot = do
+    nodes <- initNodes seed cbs init'
+    rpcs  <-
+        flip foldMap (zip contacts (map snd nodes)) $ \(cs, hdl) ->
+            runHyParView hdl $ joinAny cs
+    settle (Map.fromList nodes) rpcs
+    for nodes $ \(n, hdl) ->
+        (n,) <$> runHyParView hdl getPeers'
   where
-    (boot, contacts) = unzip net
+    (init', contacts) = unzip boot
 
-    joinNetwork n = runNode n . joinAny
+settle :: Nodes -> [RPC NodeId] -> IO ()
+settle nodes rpcs = loop $ pure rpcs
+  where
+    loop :: Maybe [RPC NodeId] -> IO ()
+    loop = maybe (pure ()) (foldMap dispatch >=> loop)
 
-runNetwork' :: MWC.Seed -> Callbacks NodeId c -> Contacts -> IO [(NodeId, Peers NodeId c)]
-runNetwork' seed cbs net = map (first hSelf) <$> runNetwork seed cbs net
+    dispatch :: RPC NodeId -> IO (Maybe [RPC NodeId])
+    dispatch rpc =
+        for (Map.lookup (rpcRecipient rpc) nodes) $ \hdl ->
+            runHyParView hdl (receive rpc)
 
-settle :: (Ord n, Show n) => [Node n c] -> [RPC n] -> IO [Node n c]
-settle []    _    = pure []
-settle nodes []   = pure nodes
-settle nodes rpcs = do
-    (out, nodes') <- map sequenceA $ traverse (deliver rpcs) nodes
-    case out of
-        [] -> pure nodes'
-        xs -> settle nodes' xs
-
-deliver :: Ord n => [RPC n] -> Node n c -> IO ([RPC n], Node n c)
-deliver rpcs n =
-    runNode n . map concat
-              . traverse receive
-              . filter ((== hSelf (fst n)) . rpcRecipient)
-              $ rpcs
-
-initNodes :: MWC.Seed -> Callbacks NodeId c -> [NodeId] -> IO [Node NodeId c]
+initNodes :: SplitMixSeed -> Callbacks NodeId -> [NodeId] -> IO [(NodeId, Node)]
 initNodes seed cbs ns = do
-    prng <- MWC.initialize (MWC.fromSeed seed)
-    pure $ map (\n -> (new n defaultConfig prng cbs, mempty)) ns
+    let prng = seedSMGen' seed
+    traverse (\n -> (n,) <$> new n defaultConfig prng cbs) ns
 
-type Node n c = (Handle n c, Peers n c)
-
-runNode :: Node n c -> HyParView n c a -> IO (a, Node n c)
-runNode (hdl, peers) ma = second (hdl,) <$> runHyParView hdl peers ma
-
-noopCallbacks :: Callbacks n ()
+noopCallbacks :: Callbacks n
 noopCallbacks = Callbacks
     { neighborUp   = const $ pure ()
     , neighborDown = const $ pure ()

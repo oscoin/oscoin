@@ -33,8 +33,11 @@ module Oscoin.P2P.Gossip.Broadcast
 import           Oscoin.Prelude
 
 import           Control.Concurrent.STM
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
+import           Data.Hashable (Hashable)
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as Map
+import           Data.HashSet (HashSet)
+import qualified Data.HashSet as Set
 import           Lens.Micro (Lens', lens, over, set)
 import           Lens.Micro.Extras (view)
 
@@ -97,17 +100,17 @@ data Callbacks = Callbacks
 data Handle n = Handle
     { hSelf           :: n
     -- ^ Identity of this node.
-    , hEagerPushPeers :: TVar (Set n)
+    , hEagerPushPeers :: TVar (HashSet n)
     -- ^ The peers to eager push to.
-    , hLazyPushPeers  :: TVar (Set n)
+    , hLazyPushPeers  :: TVar (HashSet n)
     -- ^ The peers to lazy push to.
-    , hMissing        :: TVar (Map MessageId (IHave n))
+    , hMissing        :: TVar (HashMap MessageId (IHave n))
     -- ^ Received 'IHave's for which we haven't requested the value yet.
     , hCallbacks      :: Callbacks
     -- ^ 'Callbacks' interface.
     }
 
-new :: Ord n => n -> Set n -> Callbacks -> IO (Handle n)
+new :: (Eq n, Hashable n) => n -> HashSet n -> Callbacks -> IO (Handle n)
 new self peers callbacks =
     Handle self <$> newTVarIO (Set.delete self peers)
                 <*> newTVarIO mempty
@@ -119,10 +122,10 @@ type Plumtree n = ReaderT (Handle n) IO
 runPlumtree :: Handle n -> Plumtree n a -> IO a
 runPlumtree r s = runReaderT s r
 
-eagerPushPeers :: Plumtree n (Set n)
+eagerPushPeers :: Plumtree n (HashSet n)
 eagerPushPeers = asks hEagerPushPeers >>= io . readTVarIO
 
-lazyPushPeers :: Plumtree n (Set n)
+lazyPushPeers :: Plumtree n (HashSet n)
 lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
 
 -- | Broadcast some arbitrary data to the network.
@@ -131,7 +134,7 @@ lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
 -- that subsequent 'lookupMessage' calls would return 'Just' the 'ByteString'
 -- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
 -- 'Stale' (or 'ApplyError').
-broadcast :: Ord n => MessageId -> ByteString -> Plumtree n [Outgoing n]
+broadcast :: (Eq n, Hashable n) => MessageId -> ByteString -> Plumtree n [Outgoing n]
 broadcast mid msg = do
     self <- asks hSelf
     push Gossip
@@ -144,7 +147,7 @@ broadcast mid msg = do
         }
 
 -- | Receive and handle some 'Message' from the network.
-receive :: Ord n => Message n -> Plumtree n [Outgoing n]
+receive :: (Eq n, Hashable n) => Message n -> Plumtree n [Outgoing n]
 receive (GossipM g) = do
     Handle { hSelf      = self
            , hMissing   = missing
@@ -236,7 +239,7 @@ receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
 -- \"When a new member is detected, it is simply added to the set of
 -- eagerPushPeers, i.e. it is considered as a candidate to become part of the
 -- tree.\".
-neighborUp :: Ord n => n -> Plumtree n ()
+neighborUp :: (Eq n, Hashable n) => n -> Plumtree n ()
 neighborUp n = do
     eagers <- asks hEagerPushPeers
     io . atomically . modifyTVar' eagers $ Set.insert n
@@ -248,7 +251,7 @@ neighborUp n = do
 -- \"When a neighbor is detected to leave the overlay, it is simple[sic!]
 -- removed from the membership. Furthermore, the record of 'IHave' messages sent
 -- from failed members is deleted from the missing history.\"
-neighborDown :: Ord n => n -> Plumtree n ()
+neighborDown :: (Eq n, Hashable n) => n -> Plumtree n ()
 neighborDown n = do
     Handle { hEagerPushPeers = eagers
            , hLazyPushPeers  = lazies
@@ -262,7 +265,7 @@ neighborDown n = do
 
 -- Internal --------------------------------------------------------------------
 
-scheduleGraft :: Ord n => MessageId -> Plumtree n [Outgoing n]
+scheduleGraft :: (Eq n, Hashable n) => MessageId -> Plumtree n [Outgoing n]
 scheduleGraft mid = do
     hdl <- ask
     pure [timer hdl timeout1 $ Just (timer hdl timeout2 Nothing)]
@@ -270,15 +273,13 @@ scheduleGraft mid = do
     timeout1 = 5 * 1000000
     timeout2 = 1 * 1000000
 
-    timer :: Ord n => Handle n -> Int -> Maybe (Outgoing n) -> Outgoing n
+    timer :: (Eq n, Hashable n) => Handle n -> Int -> Maybe (Outgoing n) -> Outgoing n
     timer hdl@Handle{hSelf = self, hMissing = missing} timeout k =
         After timeout mid $ do
             ann <-
                 atomically $ do
-                    (ann, missing') <-
-                            Map.updateLookupWithKey (\_ _ -> Nothing) mid
-                        <$> readTVar missing
-                    writeTVar missing missing'
+                    ann <- Map.lookup mid <$> readTVar missing
+                    modifyTVar' missing $ Map.delete mid
                     pure ann
 
             grf <-
@@ -290,7 +291,7 @@ scheduleGraft mid = do
 
             pure $ catMaybes [grf, k]
 
-push :: Ord n => Gossip n -> Plumtree n [Outgoing n]
+push :: (Eq n, Hashable n) => Gossip n -> Plumtree n [Outgoing n]
 push g = do
     hdl <- ask
     liftA2 (<>) (eagerPush hdl) (lazyPush hdl)
@@ -307,12 +308,12 @@ push g = do
 
 -- Helpers ---------------------------------------------------------------------
 
-moveToLazy :: Ord n => n -> Plumtree n ()
+moveToLazy :: (Eq n, Hashable n) => n -> Plumtree n ()
 moveToLazy peer = do
     hdl <- ask
     io $ updatePeers hdl Set.delete Set.insert peer
 
-moveToEager :: Ord n => n -> Plumtree n ()
+moveToEager :: (Eq n, Hashable n) => n -> Plumtree n ()
 moveToEager peer = do
     hdl <- ask
     io $ updatePeers hdl Set.insert Set.delete peer
@@ -320,8 +321,8 @@ moveToEager peer = do
 updatePeers
     :: Eq n
     => Handle n
-    -> (n -> Set n -> Set n)
-    -> (n -> Set n -> Set n)
+    -> (n -> HashSet n -> HashSet n)
+    -> (n -> HashSet n -> HashSet n)
     -> n
     -> IO ()
 updatePeers Handle { hSelf           = self

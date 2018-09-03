@@ -32,7 +32,6 @@ dependencies:
   - merkle-tree
   - microlens
   - mtl
-  - mwc-random
   - network
   - network-multicast
   - primitive
@@ -44,6 +43,7 @@ dependencies:
   - scientific
   - serialise
   - semigroups
+  - splitmix
   - Spock
   - stm >=2.4.5.0
   - text

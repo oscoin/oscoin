@@ -13,8 +13,6 @@ import           Data.Bifunctor (second)
 import qualified Data.Graph as Graph
 import           Data.List (unfoldr)
 import qualified Data.Set as Set
-import qualified Data.Vector as Vector
-import qualified System.Random.MWC as MWC
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -101,9 +99,9 @@ nodeIds NetworkBounds{..} =
 nodeId :: MonadGen m => Int -> m NodeId
 nodeId maxNodes = Gen.word16 (Range.constant 0 (fromIntegral $ maxNodes - 1))
 
-mwcSeed :: MonadGen m => m MWC.Seed
-mwcSeed =
-    map (MWC.toSeed . Vector.fromList)
-        . Gen.prune -- No shrinking!
-        . Gen.list (Range.singleton 258)
-        $ Gen.word32 Range.constantBounded
+type SplitMixSeed = (Word64, Word64)
+
+splitMixSeed :: MonadGen m => m SplitMixSeed
+splitMixSeed = liftA2 (,) word64 word64
+  where
+    word64 = Gen.prune $ Gen.word64 Range.constantBounded
