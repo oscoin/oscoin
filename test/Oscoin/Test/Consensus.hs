@@ -68,7 +68,7 @@ tests =
                 txs   = rights $ map (fromSource "test") ["(define x 42)", "(define answer (+ x x))"]
 
             case mgen of
-                Just gen ->
+                Right gen ->
                     let i = fromJust $ Rad.mkIdent "answer"
                         v = Map.lookup i
                           . Rad.fromEnv . Rad.bindingsEnv
@@ -76,8 +76,8 @@ tests =
                           $ gen
                      in
                         v @?= Just (Rad.Number (42 + 42))
-                Nothing ->
-                    assertFailure "Genesis block failed to evaluate"
+                Left errs ->
+                    assertFailure $ "Genesis block failed to evaluate:\n" ++ unlines (map show errs)
         ]
 
     , testGroup "BlockStore"

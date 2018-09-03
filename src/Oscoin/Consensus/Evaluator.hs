@@ -34,9 +34,9 @@ constEval s _ _ = Just ((), s)
 -- | Evaluates a list of expressions with the given starting state and evaluator.
 -- If any expression fails to evaluate, the function aborts and 'Nothing'
 -- is returned. Otherwise, the final state is returned.
-evals :: Foldable t => t a -> s -> Evaluator s a b -> Maybe s
+evals :: Foldable t => t a -> s -> Evaluator s a b -> Either [EvalError] s
 evals exprs st eval =
-    if any isLeft results then Nothing else Just st'
+    if any isLeft results then Left (lefts results) else Right st'
   where
     (results, st') = applyValidExprs exprs st eval
 

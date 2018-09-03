@@ -90,9 +90,11 @@ main = do
                 "Main.hs: error reading prelude: " ++ T.unpack err
             Right val -> do
                 tx <- createTx kp val
-                pure $ maybe (error "Main.hs: error evaluating prelude")
-                             identity
-                             (genesisBlock def nodeEval 0 [tx])
+                case genesisBlock def nodeEval 0 [tx] of
+                    Left errs ->
+                        error $ "Main.hs: error evaluating prelude:\n" ++ unlines (map show errs)
+                    Right blk ->
+                        pure blk
 
     mkDisco lgr [] nid ip prt = MCast.mkDisco lgr . MCast.mkConfig nid $ endpoints ip prt
     mkDisco _   ss _   _  _   = pure . Static.mkDisco . toKnownPeers $ ss

@@ -64,6 +64,7 @@ module Oscoin.Prelude
     , toSeconds
     , chunksOf
     , rightToMaybe
+    , fromRight
     ) where
 
 import           Prelude hiding ( fail, read, readIO, readFile
@@ -228,3 +229,8 @@ chunksOf n l
 -- Just 12
 rightToMaybe :: Either a b -> Maybe b
 rightToMaybe = either (const Nothing) Just
+
+-- | Like 'fromJust', for 'Either'.
+fromRight :: HasCallStack => Either a b -> b
+fromRight (Right x) = x
+fromRight _         = error "Either.fromRight: Left"

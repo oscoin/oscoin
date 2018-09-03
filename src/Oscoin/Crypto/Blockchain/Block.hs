@@ -22,7 +22,7 @@ module Oscoin.Crypto.Blockchain.Block
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash
-import           Oscoin.Consensus.Evaluator (Evaluator, evals)
+import           Oscoin.Consensus.Evaluator (Evaluator, EvalError, evals)
 
 import qualified Prelude
 import           Data.Bifunctor (Bifunctor(..))
@@ -151,7 +151,7 @@ genesisBlock
     -> Evaluator s tx ()
     -> Timestamp
     -> t tx
-    -> Maybe (Block tx s)
+    -> Either [EvalError] (Block tx s)
 genesisBlock s eval t xs =
     evalBlock s eval blk
   where
@@ -174,13 +174,13 @@ evalBlock
     :: s                 -- ^ Input state
     -> Evaluator s tx () -- ^ Evaluator
     -> Block tx ()       -- ^ Block to evaluate
-    -> Maybe (Block tx s)
+    -> Either [EvalError] (Block tx s)
 evalBlock s eval blk =
     sequence $ blk $> evals (blockData blk) s eval
 
 toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
-    blk $> \s -> evals (blockData blk) s eval
+    blk $> \s -> rightToMaybe (evals (blockData blk) s eval)
 
 blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)

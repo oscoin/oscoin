@@ -66,7 +66,7 @@ arbitraryGenesisWith
      -> [tx]
      -> Gen (Block tx s)
 arbitraryGenesisWith eval txs =
-    map fromJust $ genesisBlock @[] @tx @s def eval <$> arbitrary <*> pure txs
+    map fromRight $ genesisBlock @[] @tx @s def eval <$> arbitrary <*> pure txs
 
 arbitraryEmptyGenesis
     :: forall tx s. (Serialise tx, Default s) => Gen (Block tx s)
