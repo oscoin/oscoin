@@ -24,8 +24,8 @@ data Tx msg = Tx
 
 instance Binary msg => Binary (Tx msg)
 
-instance Binary msg => Hashable (Tx msg) where
-    hash = hashBinary
+instance Serialise msg => Hashable (Tx msg) where
+    hash = hashSerial
 
 instance ToJSON (Tx ByteString) where
     toJSON Tx{..} =
@@ -67,7 +67,7 @@ toProgram Tx{..} =
         }
 
 -- | Create a 'Tx' from a 'Serialise' message and key pair.
-createTx :: (Serialise msg, MonadRandom m) => (PublicKey, PrivateKey) -> msg -> m (Tx ByteString)
+createTx :: (Serialise msg, MonadRandom m) => (PublicKey, PrivateKey) -> msg -> m (Tx msg)
 createTx (pk, sk) val = do
-    sval <- sign sk (LBS.toStrict $ serialise val)
+    sval <- sign sk val
     pure $ mkTx sval (hash pk)

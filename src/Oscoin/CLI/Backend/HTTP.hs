@@ -94,7 +94,7 @@ submitTransaction h tx = do
 createRevisionTx
     :: MonadRandom m => Revision -> (PublicKey, PrivateKey) -> m ApiTx
 createRevisionTx rev (pk, sk) = do
-    msg <- sign sk (LBS.toStrict $ serialise (toRadicle rev))
+    msg <- sign sk (toRadicle rev)
     pure $ mkTx msg (hash pk)
 
 --------------------------------------------------------------------------------

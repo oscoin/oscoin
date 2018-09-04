@@ -130,9 +130,9 @@ generateKeyPair = do
     pure (PublicKey pk (hash pk), PrivateKey sk)
 
 -- | Sign a message with a private key.
-sign :: (MonadRandom m, Binary msg) => PrivateKey -> msg -> m (Signed msg)
+sign :: (MonadRandom m, Serialise msg) => PrivateKey -> msg -> m (Signed msg)
 sign (PrivateKey key) msg =
-    Signed msg <$> ECDSA.sign key hashAlgorithm (LBS.toStrict $ Binary.encode msg)
+    Signed msg <$> ECDSA.sign key hashAlgorithm (LBS.toStrict $ serialise msg)
 
 -- | Create a signed message from a message and a signature.
 signed :: Signature -> msg -> Signed msg
