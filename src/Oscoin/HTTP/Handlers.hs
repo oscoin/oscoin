@@ -11,35 +11,32 @@ import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import           Oscoin.State.Tree (Key, keyToPath)
 
 import           Network.HTTP.Types.Status
-import           Codec.Serialise (Serialise)
+import           Codec.Serialise (Serialise, serialise)
 
 root :: ApiAction s i ()
-root = respond ok200 nobody
+root = respond ok200 noBody
 
 getAllTransactions :: ApiAction s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
-    ct <- negotiateContentType
-    respond ok200 $ body $ encode ct $ Result.ok mp
+    respond ok200 $ body (Result.ok mp)
 
 getTransaction :: Hashed ApiTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
-    ct  <- negotiateContentType
     case mtx of
-        Just tx -> respond ok200 $ body $ encode ct $ Result.ok tx
-        Nothing -> respond notFound404 nobody
+        Just tx -> respond ok200 $ body (Result.ok tx)
+        Nothing -> respond notFound404 noBody
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do
     tx <- getBody @ApiTx
-    ct <- negotiateContentType
 
     receipt <- node $ do
         addTxs [tx]
         pure $ Node.Receipt (hash tx)
 
-    respond accepted202 $ body $ encode ct $ Result.ok receipt
+    respond accepted202 $ body (Result.ok receipt)
 
 getStatePath
     :: (Serialise (QueryVal s), Query s)
@@ -48,9 +45,9 @@ getStatePath k = do
     result <- node $ Node.getPath (keyToPath k)
     case result of
         Just val ->
-            respond ok200 $ body $ cbor $ Result.ok val
+            respondBytes ok200 CBOR (serialise $ Result.ok val)
         Nothing ->
-            respond notFound404 nobody
+            respond notFound404 noBody
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi s i m => Node.NodeT ApiTx s i IO a -> m a
