@@ -11,6 +11,7 @@ data Result a =
     deriving (Show, Eq, Generic)
 
 instance Aeson.ToJSON a => Aeson.ToJSON (Result a)
+instance Aeson.FromJSON a => Aeson.FromJSON (Result a)
 instance Serial.Serialise a => Serial.Serialise (Result a)
 
 ok :: a -> Result a

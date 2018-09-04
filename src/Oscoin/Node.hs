@@ -48,7 +48,7 @@ import qualified Radicle as Rad
 import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Data.Aeson (ToJSON, toJSON, object, (.=))
+import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, toJSON, object, (.=), (.:))
 import qualified Data.ByteString.Lazy as LBS
 
 -- | Node static config.
@@ -244,3 +244,7 @@ deriving instance Serialise (Receipt tx)
 instance Hashable tx => ToJSON (Receipt tx) where
     toJSON (Receipt tx) =
         object [ "tx" .= decodeUtf8 (toHex tx) ]
+
+instance Hashable tx => FromJSON (Receipt tx) where
+    parseJSON = withObject "Receipt" $ \o ->
+        Receipt <$> o .: "tx"
