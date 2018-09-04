@@ -139,8 +139,8 @@ step = do
       <$> maximumChainBy (comparing height)
     Log.debugM ("State: " % Log.shown) st
 
-nodeEval :: Tx ByteString -> Eval.Env -> Either [EvalError] ((), Eval.Env)
-nodeEval tx st = Eval.radicleEval (toProgram $ deserialise . LBS.fromStrict <$> tx) st
+nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
+nodeEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------
 

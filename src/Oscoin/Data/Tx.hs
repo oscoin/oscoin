@@ -27,25 +27,27 @@ instance Binary msg => Binary (Tx msg)
 instance Serialise msg => Hashable (Tx msg) where
     hash = hashSerial
 
-instance ToJSON (Tx ByteString) where
+instance Serialise msg => Serialise (Tx msg)
+
+instance Serialise msg => ToJSON (Tx msg) where
     toJSON Tx{..} =
-        object [ "msg"     .= toJSON txMessage
+        object [ "msg"     .= toJSON (LBS.toStrict . serialise <$> txMessage)
                , "pubkey"  .= toJSON txPubKey
                , "chainId" .= toJSON txChainId
                , "nonce"   .= toJSON txNonce
                , "ctx"     .= toJSON txContext
                ]
 
-instance FromJSON (Tx ByteString) where
+instance Serialise msg => FromJSON (Tx msg) where
     parseJSON = withObject "Tx" $ \o -> do
-        txMessage <- o .: "msg"
+        smsg <- o .: "msg"
+        let txMessage = deserialise . LBS.fromStrict <$> smsg
+
         txPubKey  <- o .: "pubkey"
         txChainId <- o .: "chainId"
         txNonce   <- o .: "nonce"
         txContext <- o .: "ctx"
         pure Tx{..}
-
-instance Serialise msg => Serialise (Tx msg)
 
 mkTx :: Signed msg -> Hashed PublicKey -> Tx msg
 mkTx sm p = Tx
