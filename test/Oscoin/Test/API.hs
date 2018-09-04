@@ -8,12 +8,9 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (Tx, mkTx)
+import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
 
-import           Data.Aeson.Types (emptyArray)
-import           Lens.Micro ((^?!))
-import           Lens.Micro.Extras (preview)
-import           Lens.Micro.Aeson (key, _String, _JSON, nth)
 import           Test.Tasty
 import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
 import           Test.Tasty.ExpectedFailure (expectFailBecause)
@@ -43,7 +40,7 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     get "/" >>= assertOK
 
     -- The mempool is empty.
-    get "/node/mempool" >>= assertBody emptyArray
+    get "/node/mempool" >>= assertBody (Result.ok ())
 
     -- Now let's create a transaction message.
     let msg :: ByteString = "<transaction>"
@@ -57,16 +54,15 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     -- Submit the transaction to the mempool.
     resp <- post "/node/mempool" tx ; assertStatus 202 resp
 
-    -- The response is a transaction receipt, with the transaction
-    -- id (hash).
-    let txId = responseBody resp ^?! key "tx" . _String
+    Result.Ok receipt <- jsonBody resp
+
+    let txHash = decodeUtf8 $ Crypto.toHex $ Node.fromReceipt @DummyTx receipt
 
     -- Get the mempool once again, make sure the transaction is in there.
-    _mp <- responseBody <$> get "/node/mempool"
+    mp <- jsonBody =<< get "/node/mempool"
+    mp @?= Result.ok [tx]
 
-    preview (nth 0 . _JSON) _mp @?= Just tx
-
-    get ("/node/mempool/" <> txId) >>= assertOK <> assertJSON
+    get ("/node/mempool/" <> txHash) >>= assertOK <> assertJSON
 
 getTxNotFound :: Session ()
 getTxNotFound = notTested

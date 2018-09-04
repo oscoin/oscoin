@@ -31,6 +31,7 @@ instance Serialise tx => Serialise (Mempool tx)
 
 instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool tx) where
     toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
+
 -- | Lookup a transaction in a mempool.
 lookup :: Hashed tx -> Mempool tx -> Maybe tx
 lookup h (Mempool txs) = Map.lookup h txs

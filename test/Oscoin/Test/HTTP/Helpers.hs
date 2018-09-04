@@ -73,7 +73,7 @@ assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Sessio
 assertBody obj = Wai.assertBody (Aeson.encode obj)
 
 assertJSON :: HasCallStack => Wai.SResponse -> Wai.Session ()
-assertJSON = void . jsonBody
+assertJSON = void . jsonValueBody
 
 -- | Assert a response status is 200 OK.
 assertOK :: HasCallStack => Wai.SResponse -> Wai.Session ()
@@ -130,10 +130,13 @@ t = identity
 responseBody :: Wai.SResponse -> LBS.ByteString
 responseBody = Wai.simpleBody
 
-jsonBody :: HasCallStack => Wai.SResponse -> Wai.Session Aeson.Value
+jsonBody :: (Aeson.FromJSON a, HasCallStack) => Wai.SResponse -> Wai.Session a
 jsonBody resp =
     let body = Wai.simpleBody resp
         in case Aeson.decode body of
             Just obj -> pure obj
             Nothing  -> io $ assertFailure
                 ("Could not decode body as JSON:\n`" <> L8.unpack body <> "`\n")
+
+jsonValueBody :: HasCallStack => Wai.SResponse -> Wai.Session Aeson.Value
+jsonValueBody = jsonBody
