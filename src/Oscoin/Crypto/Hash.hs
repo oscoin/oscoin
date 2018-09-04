@@ -81,10 +81,11 @@ instance Serialise (Hashed' HashAlgorithm a) where
     decode = Hashed <$> Serial.decode
 
 instance FromHttpApiData (Hashed' HashAlgorithm a) where
-    parseQueryParam txt =
-        case fromHex (encodeUtf8 txt) of
-            Left err -> Left (fromError err)
-            Right bs -> Right $ Binary.decode $ LBS.fromStrict bs
+    parseQueryParam txt = case fromHex $ encodeUtf8 txt of
+        Left err -> Left $ fromError err
+        Right h  -> case Binary.decodeOrFail $ LBS.fromStrict h of
+            Left  (_, _, err) -> Left $ T.pack err
+            Right (_, _, bs)  -> Right $ bs
 
 -- | Wrap a 'Crypto.Digest' 'HashAlgorithm' into a 'Hashed'.
 toHashed :: Crypto.Digest HashAlgorithm -> Hashed a

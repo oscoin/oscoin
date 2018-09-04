@@ -13,18 +13,17 @@ import           Oscoin.Test.HTTP.Helpers
 
 import           Test.Tasty
 import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
-import           Test.Tasty.ExpectedFailure (expectFailBecause)
+import           Test.Tasty.ExpectedFailure (expectFail)
 
 
 tests :: [TestTree]
 tests =
     [ testCase "Smoke test" (smokeTestOscoinAPI cfg)
-    , expectFailBecause "Tests not implemented" $
-        testGroup "GET /transactions/:hash" $
-            [ test "Tx Not Found" getTxNotFound
-            , test "Accept JSON"  getTxAcceptJSON
-            , test "Accept CBOR"  getTxAcceptCBOR
-            ] <&> ($ cfg)
+    , testGroup "GET /transactions/:hash" $
+        [ test "Tx Not Found" getTxNotFound
+        , expectFail . test "Accept JSON"  getTxAcceptJSON
+        , expectFail . test "Accept CBOR"  getTxAcceptCBOR
+        ] <&> ($ cfg)
     ]
   where
     cfg = Node.Config
@@ -65,7 +64,7 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     get ("/transactions/" <> txHash) >>= assertOK <> assertJSON
 
 getTxNotFound :: Session ()
-getTxNotFound = notTested
+getTxNotFound = get "/transactions/deadbeef" >>= assertStatus 404
 
 getTxAcceptJSON :: Session ()
 getTxAcceptJSON = notTested
