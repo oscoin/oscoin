@@ -218,7 +218,7 @@ prettyBlock (Block bh@BlockHeader{..} txs) h = execWriter $ do
 
     for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
         tell $ printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hash tx)
-        tell $ printf "│ %-64s              │\n" (renderStrict . layoutCompact . pretty $ tx)
+        tell $ printf "│ %-64s              │\n" (renderStrict . layoutSmart defaultLayoutOptions . pretty $ tx)
         tell $ printf "├────────%s──────────┤\n" (Prelude.replicate 60 '─')
 
     tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
