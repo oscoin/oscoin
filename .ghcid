@@ -1,1 +1,1 @@
--c "stack repl --test --ghc-options=-fno-hide-source-paths"
+-c "stack ghci --test --ghci-options=-fno-code --ghci-options=-fno-break-on-exception --ghci-options=-fno-break-on-error --ghci-options=-v1 --ghci-options=-ferror-spans --ghci-options=-j" --restart=package.yaml --restart=stack.yaml --restart=oscoin.cabal
