@@ -65,7 +65,7 @@ getHeader' name = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
--- A sum type of supported content types.
+-- | A sum type of supported content types.
 data ContentType = JSON | CBOR deriving (Ord, Eq, Show)
 
 fromContentType :: ContentType -> Text
