@@ -35,6 +35,7 @@ dependencies:
   - network
   - network-multicast
   - primitive
+  - prettyprinter
   - radicle
   - random
   - random-shuffle

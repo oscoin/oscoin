@@ -13,6 +13,7 @@ import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Binary
+import           Data.Text.Prettyprint.Doc
 
 data Tx msg = Tx
     { txMessage :: Signed msg
@@ -48,6 +49,9 @@ instance Serialise msg => FromJSON (Tx msg) where
         txNonce   <- o .: "nonce"
         txContext <- o .: "ctx"
         pure Tx{..}
+
+instance Pretty msg => Pretty (Tx msg) where
+    pretty Tx{txMessage} = pretty txMessage
 
 mkTx :: Signed msg -> Hashed PublicKey -> Tx msg
 mkTx sm p = Tx

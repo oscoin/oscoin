@@ -49,7 +49,9 @@ import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, toJSON, object, (.=), (.:))
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text as T
+import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.Text
 
 -- | Node static config.
 data Config tx = Config
@@ -67,7 +69,7 @@ data Handle tx s i = Handle
     }
 
 withNode
-    :: (Hashable tx, Show tx)
+    :: (Hashable tx, Pretty tx)
     => Config tx
     -> i
     -> Mempool.Handle tx
@@ -78,7 +80,7 @@ withNode
 withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
 -- | Connect to state storage.
-open :: (Hashable tx, Show tx)
+open :: (Hashable tx, Pretty tx)
      => Config tx
      -> i
      -> Mempool.Handle tx
@@ -101,7 +103,7 @@ tick :: forall r tx m.
         , MonadClock          m
         , Log.MonadLogger r   m
         , Hashable         tx
-        , Show             tx
+        , Pretty           tx
         )
      => m ()
 tick = do
@@ -111,13 +113,13 @@ tick = do
 
 
 logMsg :: forall r tx m.
-    ( Hashable tx, Show tx, Log.MonadLogger r m )
+    ( Hashable tx, Pretty tx, Log.MonadLogger r m )
     => Msg tx -> m ()
 logMsg msg = Log.debugM Log.string (prettyMsg msg)
   where
     prettyMsg :: Msg tx -> String
     prettyMsg (BlockMsg blk)  = prettyBlock blk Nothing
-    prettyMsg (TxMsg    tx)   = show tx
+    prettyMsg (TxMsg    tx)   = T.unpack . renderStrict . layoutCompact . pretty $ tx
     prettyMsg (ReqBlockMsg h) = show h
 
 

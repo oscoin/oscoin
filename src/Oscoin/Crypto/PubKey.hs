@@ -25,6 +25,7 @@ import           Codec.Serialise
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
+import           Data.Text.Prettyprint.Doc
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText, withObject, object, (.=), (.:))
 import qualified Data.ByteString.Base64.Extended as Base64
 import           Web.HttpApiData
@@ -116,6 +117,9 @@ instance FromJSON (Signed ByteString) where
         msg <- o .: "msg"
         sig <- o .: "sig"
         pure $ signed sig (Base64.decode msg)
+
+instance Pretty msg => Pretty (Signed msg) where
+    pretty = pretty . unsign
 
 instance Binary PublicKey where
     put (PublicKey key _) = Binary.put key
