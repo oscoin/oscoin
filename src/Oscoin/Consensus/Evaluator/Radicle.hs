@@ -23,12 +23,7 @@ import qualified Data.Text as T
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
 
 instance Default Env where
-    def = Env Rad.Bindings
-        { Rad.bindingsEnv = mempty
-        , Rad.bindingsPrimops = mempty
-        , Rad.bindingsRefs = mempty
-        , Rad.bindingsNextRef = 0
-        }
+    def = Env Rad.pureEnv
 
 instance Query Env where
     type QueryVal Env = Rad.Value
