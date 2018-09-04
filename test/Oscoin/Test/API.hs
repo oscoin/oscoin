@@ -12,13 +12,13 @@ import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
 
 import           Test.Tasty
-import           Test.Tasty.HUnit (Assertion, testCase, assertFailure)
+import           Test.Tasty.HUnit (testCase, assertFailure)
 import           Test.Tasty.ExpectedFailure (expectFail)
 
 
 tests :: [TestTree]
 tests =
-    [ testCase "Smoke test" (smokeTestOscoinAPI cfg)
+    [ test "Smoke test" smokeTestOscoinAPI cfg
     , testGroup "GET /transactions/:hash" $
         [ test "Tx Not Found" getTxNotFound
         , expectFail . test "Accept JSON"  getTxAcceptJSON
@@ -34,8 +34,8 @@ tests =
 test :: TestName -> Session () -> Node.Config DummyTx -> TestTree
 test name session cfg = testCase name $ runSession cfg 42 session
 
-smokeTestOscoinAPI :: Node.Config DummyTx -> Assertion
-smokeTestOscoinAPI cfg = runSession cfg 42 $ do
+smokeTestOscoinAPI :: Session ()
+smokeTestOscoinAPI = do
     get "/" >>= assertOK
 
     -- The mempool is empty.
