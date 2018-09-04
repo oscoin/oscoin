@@ -15,6 +15,9 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     -- | Lookup a 'Block' by its header.
     lookupBlock :: BlockHash -> m (Maybe (Block tx s))
 
+    -- | Get the genesis block.
+    getGenesisBlock :: m (Block tx s)
+
     -- | Lookup a transaction by its hash.
     lookupTx :: Hashed tx -> m (Maybe tx)
 
@@ -38,6 +41,12 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
         => BlockHash -> m (Maybe (Block tx s))
     lookupBlock = lift . lookupBlock
     {-# INLINE lookupBlock #-}
+
+    default getGenesisBlock
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => m (Block tx s)
+    getGenesisBlock = lift getGenesisBlock
+    {-# INLINE getGenesisBlock #-}
 
     default lookupTx
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')

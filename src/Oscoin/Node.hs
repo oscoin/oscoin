@@ -67,7 +67,8 @@ data Handle tx s i = Handle
     }
 
 withNode
-    :: Config tx
+    :: (Hashable tx, Show tx)
+    => Config tx
     -> i
     -> Mempool.Handle tx
     -> STree.Handle s
@@ -77,13 +78,17 @@ withNode
 withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
 -- | Connect to state storage.
-open :: Config tx
+open :: (Hashable tx, Show tx)
+     => Config tx
      -> i
      -> Mempool.Handle tx
      -> STree.Handle s
      -> BlockStore.Handle tx s
      -> IO (Handle tx s i)
-open hConfig hNodeId hMempool hStateTree hBlockStore =
+open hConfig hNodeId hMempool hStateTree hBlockStore = do
+    gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
+        BlockStore.getGenesisBlock bs
+    Log.debug (cfgLogger hConfig) ("" % Log.string) (prettyBlock gen (Just 0))
     pure Handle{..}
 
 -- | Close the connection to state storage.
@@ -183,6 +188,12 @@ instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (Node
         io . atomically $
             BlockStore.for bs $
                 BlockStore.lookupBlock hdr
+
+    getGenesisBlock = do
+        bs <- asks hBlockStore
+        io . atomically $
+            BlockStore.for bs $
+                BlockStore.getGenesisBlock
 
     lookupTx tx = do
         bs <- asks hBlockStore

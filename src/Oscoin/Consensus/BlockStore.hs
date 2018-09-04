@@ -4,6 +4,7 @@ module Oscoin.Consensus.BlockStore
     , fromOrphans
 
     , maximumChainBy
+    , getGenesisBlock
     , insert
     , lookupBlock
     , lookupTx
@@ -12,7 +13,7 @@ module Oscoin.Consensus.BlockStore
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), blocks)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
@@ -51,6 +52,13 @@ maximumChainBy
 maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
 -- Nb. we guarantee that there is at least one chain in the store by exposing
 -- only the 'genesisBlockStore' smart constructor.
+
+-- | /O(n)/. Get the genesis block.
+getGenesisBlock :: BlockStore tx s -> Block tx s
+getGenesisBlock BlockStore{bsChains} =
+    genesis (snd $ Map.findMin bsChains)
+    -- Nb. since all blockchains share the same genesis block, we can just pick
+    -- any.
 
 insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
