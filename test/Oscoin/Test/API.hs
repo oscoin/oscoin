@@ -40,7 +40,7 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     get "/" >>= assertOK
 
     -- The mempool is empty.
-    get "/node/mempool" >>= assertBody (Result.ok ())
+    get "/transactions" >>= assertBody (Result.ok ())
 
     -- Now let's create a transaction message.
     let msg :: ByteString = "<transaction>"
@@ -52,17 +52,17 @@ smokeTestOscoinAPI cfg = runSession cfg 42 $ do
     let tx :: Tx ByteString = mkTx msg' (Crypto.hash pubKey)
 
     -- Submit the transaction to the mempool.
-    resp <- post "/node/mempool" tx ; assertStatus 202 resp
+    resp <- post "/transactions" tx ; assertStatus 202 resp
 
     Result.Ok receipt <- jsonBody resp
 
     let txHash = decodeUtf8 $ Crypto.toHex $ Node.fromReceipt @DummyTx receipt
 
     -- Get the mempool once again, make sure the transaction is in there.
-    mp <- jsonBody =<< get "/node/mempool"
+    mp <- jsonBody =<< get "/transactions"
     mp @?= Result.ok [tx]
 
-    get ("/node/mempool/" <> txHash) >>= assertOK <> assertJSON
+    get ("/transactions/" <> txHash) >>= assertOK <> assertJSON
 
 getTxNotFound :: Session ()
 getTxNotFound = notTested

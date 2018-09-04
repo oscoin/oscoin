@@ -31,15 +31,16 @@ api env = do
 
     get root Handlers.root
 
-    -- /node/mempool ----------------------------------------------------------
+    -- /transactions ----------------------------------------------------------
 
-    get  ("node" <//> "mempool") Handlers.getAllTransactions
-    post ("node" <//> "mempool") Handlers.submitTransaction
+    get  "transactions" Handlers.getAllTransactions
+    post "transactions" Handlers.submitTransaction
 
-    -- /node/mempool/:id ------------------------------------------------------
+    -- /transactions/:id ------------------------------------------------------
 
-    get ("node" <//> "mempool" <//> var) Handlers.getTransaction
+    get ("transactions" <//> var) Handlers.getTransaction
 
-    -- /node/state/:key -------------------------------------------------------
+    -- /state/:key -------------------------------------------------------
 
-    get ("node" <//> "state" <//> wildcard) Handlers.getStatePath
+    get ("state" <//> wildcard) Handlers.getStatePath
+
