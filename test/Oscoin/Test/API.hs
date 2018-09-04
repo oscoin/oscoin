@@ -64,7 +64,13 @@ smokeTestOscoinAPI = do
     get ("/transactions/" <> txHash) >>= assertOK <> assertJSON
 
 getTxNotFound :: Session ()
-getTxNotFound = get "/transactions/deadbeef" >>= assertStatus 404
+getTxNotFound = do
+    -- Malformed transaction hash returns a 404
+    get "/transactions/not-a-hash" >>= assertStatus 404
+
+    -- Well formed but missing transaction hash returns a 404
+    let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
+    get ("/transactions/" <> missing) >>= assertStatus 404
 
 getTxAcceptJSON :: Session ()
 getTxAcceptJSON = notTested
