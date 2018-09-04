@@ -1,1 +1,18 @@
-(define noop (lambda () ()))
+(do
+  ;; ref functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define modify-ref
+    (lambda (r fn)
+      (write-ref r (fn (read-ref r)))))
+
+  ;; revisions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define revisions (ref (dict)))
+
+  (define create-revision
+    (lambda (rev)
+      (do
+        (modify-ref revisions (lambda (rs) (insert (lookup :id rev) rev rs)))
+        :ok
+      )))
+)
