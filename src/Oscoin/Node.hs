@@ -28,6 +28,7 @@ import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), Mona
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
+import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
 import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
@@ -36,7 +37,7 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (MonadNetwork(..), runNetworkT)
+import           Oscoin.P2P (MonadNetwork(..), Msg(..), runNetworkT)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.Storage.Block as BlockStore
 
@@ -90,14 +91,31 @@ open hConfig hNodeId hMempool hStateTree hBlockStore =
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-tick :: forall tx m.
-        ( MonadNetwork  tx m
-        , MonadProtocol tx m
-        , MonadClock       m
+tick :: forall r tx m.
+        ( MonadNetwork     tx m
+        , MonadProtocol    tx m
+        , MonadClock          m
+        , Log.MonadLogger r   m
+        , Hashable         tx
+        , Show             tx
         )
      => m ()
-tick =
-    currentTick >>= tickM >>= sendM
+tick = do
+    msgs <- tickM =<< currentTick
+    forM_ msgs logMsg
+    sendM msgs
+
+
+logMsg :: forall r tx m.
+    ( Hashable tx, Show tx, Log.MonadLogger r m )
+    => Msg tx -> m ()
+logMsg msg = Log.debugM Log.string (prettyMsg msg)
+  where
+    prettyMsg :: Msg tx -> String
+    prettyMsg (BlockMsg blk)  = prettyBlock blk Nothing
+    prettyMsg (TxMsg    tx)   = show tx
+    prettyMsg (ReqBlockMsg h) = show h
+
 
 step :: forall            r tx          m.
         ( MonadNetwork      tx          m

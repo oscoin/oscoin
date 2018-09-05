@@ -17,12 +17,14 @@ module Oscoin.Crypto.Blockchain.Block
     , emptyHeader
     , hashTx
     , hashTxs
+    , prettyBlock
     ) where
 
 import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash
 import           Oscoin.Consensus.Evaluator (Evaluator, evals)
 
+import qualified Prelude
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Codec.Serialise as Serialise
 import           Codec.Serialise (Serialise)
@@ -30,7 +32,9 @@ import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
 import           Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.Sequence as Seq
+import           Text.Printf
 import           GHC.Generics (Generic)
 
 -- | Block difficulty.
@@ -201,3 +205,20 @@ hashTxs txs
 hashTx :: Serialise tx => tx -> Hashed tx
 hashTx tx =
     toHashed (hashlazy (Serialise.serialise tx))
+
+prettyBlock :: (Hashable tx, Show tx) => Block tx s -> Maybe Int -> String
+prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
+    tell $ printf "┍━%-6s━━ %s ━━┑\n" height (C8.unpack $ toHex $ headerHash bh)
+    tell $ printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
+    tell $ printf "│ timestamp:  %-64d │\n" blockTimestamp
+    tell $ printf "│ rootHash:   %-64s │\n" (C8.unpack $ toHex blockStateHash)
+    tell $ printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
+
+    for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
+        tell $ printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hash tx)
+        tell $ printf "│ %-64s              │\n" (show tx)
+        tell $ printf "├────────%s──────────┤\n" (Prelude.replicate 60 '─')
+
+    tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
+  where
+    height = maybe "━━━━━━━" (\x -> " " ++ show x ++ " ") blockHeight
