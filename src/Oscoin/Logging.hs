@@ -20,6 +20,7 @@
 module Oscoin.Logging
     ( -- * Types
       Logger
+    , MonadLogger
     , Severity (..)
     , Namespace
 
@@ -141,6 +142,11 @@ data Config = Config
     -- ^ @fast-logger@ buffer size. Default: 'defaultBufSize'
     }
 
+type MonadLogger r m =
+    ( MonadReader r m
+    , Has Logger r
+    , MonadIO m)
+
 -- | Default 'Config'
 defaultConfig :: Config
 defaultConfig = Config Info Nothing FL.defaultBufSize
@@ -228,7 +234,7 @@ withExceptionLogged lgr ma =
 
 -- MonadReader -----------------------------------------------------------------
 
-logM :: (Has Logger r, MonadReader r m, MonadIO m)
+logM :: MonadLogger r m
      => Severity
      -> Maybe SrcLoc
      -> Format (m ()) a
@@ -251,17 +257,17 @@ logM sev loc fmt = F.runFormat fmt $ \bldr -> do
 -- :}
 -- oh la la at="I" loc="interactive:Ghci10:43:65"
 -- shhh at="D" loc="interactive:Ghci10:43:85"
-debugM :: (Has Logger r, MonadReader r m, MonadIO m, HasCallStack) => Format (m ()) a -> a
+debugM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
 debugM = logM Debug getLoc
 {-# INLINE debugM #-}
 
 -- | Like 'debugM', but at 'Info'
-infoM :: (Has Logger r, MonadReader r m, MonadIO m, HasCallStack) => Format (m ()) a -> a
+infoM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
 infoM = logM Info getLoc
 {-# INLINE infoM #-}
 
 -- | Like 'debugM', but at 'Err'
-errM :: (Has Logger r, MonadReader r m, MonadIO m, HasCallStack) => Format (m ()) a -> a
+errM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
 errM = logM Err getLoc
 {-# INLINE errM #-}
 
@@ -285,7 +291,7 @@ withoutLogging = local (set hasLens noLogger)
 -- | Like 'logException', but in a transformer stack which has access to a
 -- 'Logger'.
 logExceptionM
-    :: (Exception e, HasCallStack, Has Logger r, MonadReader r m, MonadIO m)
+    :: (Exception e, HasCallStack, MonadLogger r m)
     => e
     -> m ()
 logExceptionM e = asks getter >>= liftIO . (`logException` e)
@@ -293,7 +299,7 @@ logExceptionM e = asks getter >>= liftIO . (`logException` e)
 -- | Like 'withExceptionLogged', but in a transformer stack which has access to
 -- a 'Logger'.
 withExceptionLoggedM
-    :: (Has Logger r, MonadReader r m, MonadIO m, MonadMask m, HasCallStack)
+    :: (MonadLogger r m, MonadMask m, HasCallStack)
     => m a
     -> m a
 withExceptionLoggedM ma = asks getter >>= (`withExceptionLogged` ma)
@@ -339,7 +345,7 @@ flush lgr =
     traverse_ $ \(LogRecord sev loc msg) -> logIO lgr sev loc F.builder msg
 
 -- | Like 'flush', but in a transformer stack which has access to a 'Logger'
-flushM :: (Has Logger r, MonadReader r m, MonadIO m, Foldable t) => t LogRecord -> m ()
+flushM :: (MonadLogger r m, Foldable t) => t LogRecord -> m ()
 flushM xs = asks getter >>= (liftIO . (`flush` xs))
 
 -- Formatters ------------------------------------------------------------------

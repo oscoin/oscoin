@@ -104,9 +104,7 @@ step :: forall            r tx          m.
         , MonadProtocol     tx          m
         , MonadBlockStore   tx Eval.Env m
         , MonadClock                    m
-        , MonadReader     r             m
-        , Has Log.Logger  r
-        , MonadIO                       m
+        , Log.MonadLogger r             m
         )
      => m ()
 step = do
