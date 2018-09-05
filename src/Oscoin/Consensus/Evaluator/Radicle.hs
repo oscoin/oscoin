@@ -11,8 +11,7 @@ import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
 
 import qualified Radicle as Rad
-import           Codec.Serialise (Serialise, serialise, deserialise)
-import qualified Data.ByteString.Lazy as LBS
+import           Codec.Serialise (Serialise)
 import qualified Data.Map as Map
 
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
@@ -26,7 +25,7 @@ instance Default Env where
         }
 
 data Program = Program
-    { progSource  :: ByteString
+    { progValue   :: Rad.Value
     , progAuthor  :: Hashed PublicKey
     , progChainId :: Word16
     , progNonce   :: Word32
@@ -36,23 +35,20 @@ instance Serialise Program
 
 fromSource :: Text -> Text -> Either Text Program
 fromSource name src = do
-    values <- parse
+    values <- Rad.parse name src primops
     pure Program
-        { progSource  = LBS.toStrict (serialise values)
+        { progValue   = values
         , progAuthor  = toHashed zeroHash
         , progChainId = 0
         , progNonce   = 0
         }
   where
-    parse   = Rad.parse name src primops
     primops = Map.keys $ Rad.bindingsPrimops $ Rad.pureEnv @Identity
 
 -- | A radicle evaluator.
 radicleEval :: Evaluator Env Program ()
 radicleEval Program{..} (Env st) =
-    case runIdentity . Rad.runLang st $ Rad.eval value of
+    case runIdentity . Rad.runLang st $ Rad.eval progValue of
         (Left _, _)  -> Nothing
         (Right _, s) -> Just ((), Env s)
-  where
-    value = deserialise (LBS.fromStrict progSource)
 

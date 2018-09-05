@@ -46,6 +46,7 @@ import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson (ToJSON, toJSON, object, (.=))
+import qualified Data.ByteString.Lazy as LBS
 import qualified Network.Socket as NS
 
 -- | Node static config.
@@ -119,7 +120,7 @@ step = do
     Log.debugM ("State: " % Log.shown) st
 
 nodeEval :: Tx ByteString -> Eval.Env -> Maybe ((), Eval.Env)
-nodeEval tx st = Eval.radicleEval (toProgram tx) st
+nodeEval tx st = Eval.radicleEval (toProgram $ deserialise . LBS.fromStrict <$> tx) st
 
 -------------------------------------------------------------------------------
 

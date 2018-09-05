@@ -6,6 +6,7 @@ import           Oscoin.Crypto.PubKey
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import qualified Radicle as Rad
 
 import           Codec.Serialise
 import           Data.Aeson
@@ -17,7 +18,7 @@ data Tx msg = Tx
     , txChainId :: Word16
     , txNonce   :: Word32
     , txContext :: BlockHash
-    } deriving (Show, Eq, Ord, Generic)
+    } deriving (Show, Eq, Ord, Generic, Functor)
 
 instance Binary msg => Binary (Tx msg)
 
@@ -54,10 +55,10 @@ mkTx sm p = Tx
     }
 
 -- | Convert a 'Tx' to a Radicle 'Program'.
-toProgram :: Tx ByteString -> Rad.Program
+toProgram :: Tx Rad.Value -> Rad.Program
 toProgram Tx{..} =
     Rad.Program
-        { Rad.progSource  = unsign txMessage
+        { Rad.progValue   = unsign txMessage
         , Rad.progAuthor  = txPubKey
         , Rad.progChainId = txChainId
         , Rad.progNonce   = txNonce
