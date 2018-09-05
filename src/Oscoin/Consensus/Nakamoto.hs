@@ -37,7 +37,7 @@ import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
-import           Data.Binary (Binary)
+import           Codec.Serialise (Serialise)
 import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Maybe (maybeToList, catMaybes)
@@ -75,7 +75,7 @@ instance Has Log.Logger (NakamotoEnv tx s) where
     getter         = nakLogger
     modifier f env = env { nakLogger = f (nakLogger env) }
 
-defaultNakamotoEnv :: Binary tx => NakamotoEnv tx s
+defaultNakamotoEnv :: Serialise tx => NakamotoEnv tx s
 defaultNakamotoEnv = NakamotoEnv
     { nakEval = identityEval
     , nakDifficulty = easyDifficulty
@@ -181,7 +181,7 @@ evalNakamotoT env rng (NakamotoT ma) = evalRWST ma env rng
 
 -- | Attempt to mine a 'Block'. Returns 'Nothing' if all nonces were tried
 -- unsuccessfully.
-mineBlock :: Binary tx => NakamotoMiner tx s
+mineBlock :: Serialise tx => NakamotoMiner tx s
 mineBlock tick _ evalFn d txs parent = do
     let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
         validTxs      = map fst (rights results)
@@ -190,7 +190,7 @@ mineBlock tick _ evalFn d txs parent = do
 
 -- | Like 'mineBlock', but attempts to mine a block only 10% of the time it
 -- is called. Useful for test environments with very low difficulty.
-mineBlockRandom :: Binary tx => NakamotoMiner tx s
+mineBlockRandom :: Serialise tx => NakamotoMiner tx s
 mineBlockRandom t rng evalFn d txs parent =
     let (r, rng') = randomR (0, 1) rng
         p = 0.1 :: Float
@@ -253,7 +253,7 @@ findPoW bh@BlockHeader { blockNonce }
         Nothing
 
 findBlock
-    :: (Foldable t, Binary tx)
+    :: (Foldable t, Serialise tx)
     => Tick
     -> BlockHash
     -> s

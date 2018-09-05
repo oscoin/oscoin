@@ -24,7 +24,8 @@ import           Oscoin.Crypto.Hash
 import           Oscoin.Consensus.Evaluator (Evaluator, evals)
 
 import           Data.Bifunctor (Bifunctor(..))
-import           Data.Binary (Binary(..), encode)
+import qualified Codec.Serialise as Serialise
+import           Codec.Serialise (Serialise)
 import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
@@ -55,10 +56,10 @@ deriving instance {-# OVERLAPPING #-} Ord (BlockHeader ())
 instance {-# OVERLAPPABLE #-} Eq (BlockHeader s) where
     (==) a b = void a == void b
 
-instance Binary (BlockHeader ())
+instance Serialise (BlockHeader ())
 
 instance Hashable (BlockHeader ()) where
-    hash = hashBinary
+    hash = hashSerial
 
 -- | Create an empty block header.
 emptyHeader :: BlockHeader ()
@@ -101,7 +102,7 @@ instance {-# OVERLAPPABLE #-} (Eq tx)  => Eq (Block tx s) where
 instance {-# OVERLAPPABLE #-} (Ord tx)  => Ord (Block tx s) where
     (<=) a b = void a <= void b
 
-instance (Binary tx) => Binary (Block tx ())
+instance (Serialise tx) => Serialise (Block tx ())
 
 instance Bifunctor Block where
     first f b = b { blockData = f <$> blockData b }
@@ -132,7 +133,7 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisHeader :: (Foldable t, Binary tx, Default s) => Timestamp -> t tx -> BlockHeader s
+genesisHeader :: (Foldable t, Serialise tx, Default s) => Timestamp -> t tx -> BlockHeader s
 genesisHeader t txs = emptyHeader
     { blockDataHash  = hashTxs txs
     , blockTimestamp = t
@@ -141,7 +142,7 @@ genesisHeader t txs = emptyHeader
     }
 
 genesisBlock
-    :: forall t tx s. (Foldable t, Binary tx)
+    :: forall t tx s. (Foldable t, Serialise tx)
     => s
     -> Evaluator s tx ()
     -> Timestamp
@@ -153,7 +154,7 @@ genesisBlock s eval t xs =
     blk = mkBlock (genesisHeader t xs) xs :: Block tx ()
 
 emptyGenesisBlock
-    :: forall tx s. (Binary tx, Default s)
+    :: forall tx s. (Serialise tx, Default s)
     => Timestamp
     -> Block tx s
 emptyGenesisBlock t =
@@ -183,7 +184,7 @@ blockHash blk = headerHash (blockHeader blk)
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
 linkBlock (blockState . blockHeader -> s) = traverse ($ s)
 
-hashTxs :: (Foldable t, Binary tx) => t tx -> Hash
+hashTxs :: (Foldable t, Serialise tx) => t tx -> Hash
 hashTxs txs
     -- TODO: Get rid of merkle-tree dependency, or create our own that doesn't
     -- depend on protolude.
@@ -195,8 +196,8 @@ hashTxs txs
         Crypto.hash
         . Merkle.mtHash
         . Merkle.mkMerkleTree
-        $ map (toStrict . encode) (toList txs)
+        $ map (toStrict . Serialise.serialise) (toList txs)
 
-hashTx :: Binary tx => tx -> Hashed tx
+hashTx :: Serialise tx => tx -> Hashed tx
 hashTx tx =
-    toHashed (hashlazy (encode tx))
+    toHashed (hashlazy (Serialise.serialise tx))

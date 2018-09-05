@@ -18,8 +18,8 @@ import           Oscoin.Prelude hiding (toList)
 
 import qualified Prelude
 
+import           Codec.Serialise (Serialise)
 import           Data.Bifunctor (Bifunctor(..))
-import           Data.Binary (Binary)
 import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -31,7 +31,7 @@ import           GHC.Exts (IsList(toList))
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
     deriving (Functor, Traversable, Foldable)
 
-instance (Hashable s, Binary tx) => Show (Blockchain tx s) where
+instance (Hashable s, Serialise tx) => Show (Blockchain tx s) where
     show = showBlockchain
 
 instance Semigroup (Blockchain tx s) where
@@ -96,7 +96,7 @@ showBlockDigest b@Block{blockHeader} =
   where
     time :: NominalDiffTime = toEnum (fromIntegral $ blockTimestamp blockHeader)
 
-showBlockchain :: Binary tx => Blockchain tx s -> String
+showBlockchain :: Serialise tx => Blockchain tx s -> String
 showBlockchain chain = execWriter $ do
     tell "\n"
     for_ (zip heights (toList chain)) $ \(h, Block bh@BlockHeader{..} txs) -> do

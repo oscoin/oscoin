@@ -19,6 +19,7 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
 
+import           Codec.Serialise (Serialise)
 import           Control.Monad.State.Strict
 import           Data.Binary (Binary)
 import qualified Data.Hashable as Hashable
@@ -27,7 +28,7 @@ import           Lens.Micro
 import           Test.QuickCheck
 
 newtype DummyTx = DummyTx Word8
-    deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary)
+    deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary, Serialise)
 
 instance Show DummyTx where
     show (DummyTx x) = show x

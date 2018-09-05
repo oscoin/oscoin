@@ -35,8 +35,8 @@ import           Oscoin.P2P.Discovery (Disco(..))
 import           Oscoin.P2P.Types
 
 import           Control.Exception.Safe
-import           Data.Binary (Binary)
-import qualified Data.Binary as Binary
+import           Codec.Serialise (Serialise)
+import qualified Codec.Serialise as Serialise
 import           Data.ByteString.Lazy (fromStrict, toChunks)
 import           Data.IP (IP)
 import qualified Network.Socket as Net
@@ -66,7 +66,7 @@ instance Show tx => Show (Msg tx) where
     show (TxMsg     txs) = "TxMsg " ++ show txs
     show (ReqBlockMsg h) = "ReqBlockMsg " ++ show h
 
-instance Binary tx => Binary (Msg tx)
+instance Serialise tx => Serialise (Msg tx)
 
 class Monad m => MonadNetwork tx m | m -> tx where
     sendM :: Foldable t => t (Msg tx) -> m ()
@@ -95,7 +95,7 @@ newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
 
 type NetworkIO tx = NetworkT tx IO
 
-instance (Binary tx, Show tx, MonadIO m) => MonadNetwork tx (NetworkT tx m) where
+instance (Serialise tx, Show tx, MonadIO m) => MonadNetwork tx (NetworkT tx m) where
     sendM msgs = ask >>= io . (`send` msgs)
     recvM      = ask >>= io . receive
 
@@ -139,9 +139,9 @@ close :: Handle -> IO ()
 close Handle{hLogger, hSocket} =
     withExceptionLogged hLogger (Net.close hSocket)
 
-send :: (Binary tx, Foldable t) => Handle -> t (Msg tx) -> IO ()
+send :: (Serialise tx, Foldable t) => Handle -> t (Msg tx) -> IO ()
 send Handle{hDiscovery, hSocket} msgs = do
-    let payloads = map (toChunks . Binary.encode) (toList msgs)
+    let payloads = map (toChunks . Serialise.serialise) (toList msgs)
     peers <- knownPeers hDiscovery
     for_ peers $ \peer ->
         for_ payloads $ \payload ->
@@ -149,15 +149,15 @@ send Handle{hDiscovery, hSocket} msgs = do
   where
     addr = toSockAddr . p2pEndpoint
 
-receive :: (Show tx, Binary tx) => Handle -> IO (Msg tx)
+receive :: (Show tx, Serialise tx) => Handle -> IO (Msg tx)
 receive Handle{hLogger, hSocket} = loop
   where
     loop = do
         (pkt,_) <- NetBS.recvFrom hSocket 1024
-        case Binary.decodeOrFail (fromStrict pkt) of
+        case Serialise.deserialiseOrFail (fromStrict pkt) of
             Left  _         -> do
                 Log.err hLogger "Dropping invalid packet"
                 loop
-            Right (_,_,msg) -> do
+            Right msg -> do
                 Log.info hLogger ("Received: " % shown) msg
                 pure msg

@@ -11,9 +11,8 @@ import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
 
 import qualified Radicle as Rad
-import           Codec.Serialise (serialise, deserialise)
+import           Codec.Serialise (Serialise, serialise, deserialise)
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Binary
 import qualified Data.Map as Map
 
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
@@ -33,7 +32,7 @@ data Program = Program
     , progNonce   :: Word32
     } deriving (Show, Generic)
 
-instance Binary Program
+instance Serialise Program
 
 fromSource :: Text -> Text -> Either Text Program
 fromSource name src = do
