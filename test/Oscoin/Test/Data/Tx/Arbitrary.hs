@@ -7,9 +7,9 @@ import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary
 
 import           Test.QuickCheck
-import           Data.Binary (Binary)
+import           Codec.Serialise (Serialise)
 
-instance (Binary a, Arbitrary a) => Arbitrary (Tx a) where
+instance (Serialise a, Arbitrary a) => Arbitrary (Tx a) where
     arbitrary = do
         (pub, priv) <- arbitraryKeyPair
         msg         <- arbitrarySignedWith priv

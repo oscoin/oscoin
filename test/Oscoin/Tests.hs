@@ -17,6 +17,7 @@ import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbitrarySigned)
 import           Oscoin.Test.Data.Tx.Arbitrary ()
+import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.Test.API as API

@@ -7,7 +7,7 @@ import Oscoin.Crypto.PubKey (Signed, PublicKey, PrivateKey, Signed, sign, genera
 
 import Crypto.Random.Types (MonadRandom(..))
 import Data.ByteArray (convert)
-import Data.Binary (Binary)
+import Codec.Serialise (Serialise)
 
 import Test.QuickCheck
 import Test.QuickCheck.Instances ()
@@ -17,14 +17,14 @@ instance MonadRandom Gen where
         convert <$> resize n (arbitrary :: Gen ByteString)
 
 arbitrarySignedWith
-    :: (Arbitrary a, Binary a) => PrivateKey -> Gen (Signed a)
+    :: (Arbitrary a, Serialise a) => PrivateKey -> Gen (Signed a)
 arbitrarySignedWith pk =
     arbitrary >>= sign pk
 
 arbitraryKeyPair :: Gen (PublicKey, PrivateKey)
 arbitraryKeyPair = generateKeyPair
 
-arbitrarySigned :: (Binary a, Arbitrary a) => Gen (Signed a)
+arbitrarySigned :: (Serialise a, Arbitrary a) => Gen (Signed a)
 arbitrarySigned = do
     (_, priv) <- arbitraryKeyPair
     arbitrarySignedWith priv

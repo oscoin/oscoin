@@ -33,11 +33,15 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 import           Web.Spock (spockAsApp)
 
+import qualified Radicle as Rad
+
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
 
 -- | Dummy transaction type used for testing.
-type DummyTx = Tx ByteString
+type DummyTx = Tx Rad.Value
+
+
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
