@@ -119,7 +119,7 @@ propOscoinBlockStore chainGen =
         let txs  = concatMap (toList . blockData) $ reverse blks
         counterexample ("From input: " ++ show txs ++ ", Expected: "
                                        ++ show (concat txs) ++ " but got "
-                                       ++ show z ++ show best) (concat txs == z)
+                                       ++ show z ++ ", " ++ show best) (concat txs == z)
 
 propHashedBinary :: Crypto.Hashed ByteString -> Bool
 propHashedBinary x = (Binary.decode . Binary.encode) x == x

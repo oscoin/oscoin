@@ -209,7 +209,7 @@ hashTx tx =
     toHashed (hashlazy (Serialise.serialise tx))
 
 prettyBlock :: (Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> String
-prettyBlock (Block bh@BlockHeader{..} txs) h = execWriter $ do
+prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
     tell $ printf "┍━%-6s━━ %s ━━┑\n" height (C8.unpack $ toHex $ headerHash bh)
     tell $ printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
     tell $ printf "│ timestamp:  %-64d │\n" blockTimestamp
@@ -223,4 +223,4 @@ prettyBlock (Block bh@BlockHeader{..} txs) h = execWriter $ do
 
     tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
   where
-    height = maybe "━━━━━━━" (\x -> " " ++ show x ++ " ") h
+    height = maybe "━━━━━━━" (\x -> " " ++ show x ++ " ") blockHeight

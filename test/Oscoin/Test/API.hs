@@ -10,6 +10,7 @@ import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (Tx, mkTx)
 import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
+import           Radicle as Rad
 
 import           Test.Tasty
 import           Test.Tasty.HUnit (testCase, assertFailure)
@@ -42,13 +43,13 @@ smokeTestOscoinAPI = do
     get "/transactions" >>= assertBody (Result.ok ())
 
     -- Now let's create a transaction message.
-    let msg :: ByteString = "<transaction>"
+    let msg = Rad.String "transaction"
 
     -- Now generate a key pair and sign the transaction.
     (pubKey, priKey) <- Crypto.generateKeyPair
     msg'             <- Crypto.sign priKey msg
 
-    let tx :: Tx ByteString = mkTx msg' (Crypto.hash pubKey)
+    let tx :: DummyTx = mkTx msg' (Crypto.hash pubKey)
 
     -- Submit the transaction to the mempool.
     resp <- post "/transactions" tx ; assertStatus 202 resp
