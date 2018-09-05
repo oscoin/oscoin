@@ -30,7 +30,7 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.State
-import           Data.Binary (Binary)
+import           Codec.Serialise (Serialise)
 import           Data.Bool (bool)
 import           Data.Functor (($>))
 import           Data.Maybe (maybeToList)
@@ -63,7 +63,7 @@ instance MonadTrans (SimpleT tx i) where
 
 instance ( MonadMempool    tx    m
          , MonadBlockStore tx () m
-         , Binary          tx
+         , Serialise       tx
          , Ord i
          ) => MonadProtocol tx (SimpleT tx i m)
   where
