@@ -22,7 +22,7 @@ import qualified Data.Text as T
 import qualified Network.HTTP.Types.Status as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.Wai as Wai
-import           Network.Wai.Parse (parseHttpAccept, parseContentType)
+import qualified Network.Wai.Parse as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
@@ -74,6 +74,13 @@ fromContentType :: ContentType -> Text
 fromContentType JSON = "application/json"
 fromContentType CBOR = "application/cbor"
 
+parseContentType :: Text -> Either Text ContentType
+parseContentType t = case decodeUtf8' $ fst $ Wai.parseContentType $ encodeUtf8 t of
+    Left  e  -> Left $ T.pack $ show e
+    Right ctype -> case lookup ctype $ NonEmpty.toList supportedContentTypes of
+        Nothing -> Left $ "Content-Type '" ++ ctype ++ "' not supported."
+        Just ct -> Right $ ct
+
 supportedContentTypes :: NonEmpty (Text, ContentType)
 supportedContentTypes = NonEmpty.fromList $ [(fromContentType ct, ct) | ct <- [JSON, CBOR]]
 
@@ -85,7 +92,7 @@ getAccept = maybe ((fst . NonEmpty.head) supportedContentTypes) identity <$> get
 getAccepted :: ApiAction s i [Text]
 getAccepted = do
     accept <- getAccept
-    let accepted = decodeUtf8' <$> parseHttpAccept (encodeUtf8 accept)
+    let accepted = decodeUtf8' <$> Wai.parseHttpAccept (encodeUtf8 accept)
     case lefts accepted of
         [] -> pure $ rights $ accepted
         _  -> respond HTTP.badRequest400 noBody
@@ -146,7 +153,7 @@ respondBytes status ct bdy = do
 getContentType :: ApiAction s i Text
 getContentType = do
     ctype <- getHeader' "Content-Type"
-    case decodeUtf8' $ fst $ parseContentType $ encodeUtf8 ctype of
+    case decodeUtf8' $ fst $ Wai.parseContentType $ encodeUtf8 ctype of
         Left  _  -> respond HTTP.unsupportedMediaType415 noBody
         Right ct -> pure ct
 

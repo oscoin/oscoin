@@ -9,7 +9,7 @@ import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Environment
 import           Oscoin.HTTP.API (api)
-import           Oscoin.HTTP.Internal (mkMiddleware)
+import           Oscoin.HTTP.Internal (mkMiddleware, decode, encode, parseContentType, ContentType(..))
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
@@ -18,13 +18,15 @@ import           Oscoin.Data.Tx (Tx)
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
-import           Test.Tasty.HUnit (Assertion, assertFailure)
+import           Test.Tasty.HUnit (Assertion)
 import qualified Test.Tasty.HUnit as Tasty
 
 import           Crypto.Random.Types (MonadRandom(..))
+import           Data.List (lookup)
 import qualified Data.Aeson as Aeson
+import           Data.Aeson (ToJSON, FromJSON)
+import           Codec.Serialise (Serialise)
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Lazy.Char8 as L8
 
 import qualified Network.HTTP.Types.Header as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
@@ -40,8 +42,6 @@ type Session = Wai.Session
 
 -- | Dummy transaction type used for testing.
 type DummyTx = Tx Rad.Value
-
-
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
@@ -72,16 +72,10 @@ infix 1 @?=, @=?
 (@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
 
--- TODO: Should also assert status is 2xx.
-assertBody :: HasCallStack => Aeson.ToJSON a => a -> Wai.SResponse -> Wai.Session ()
-assertBody obj = Wai.assertBody (Aeson.encode obj)
-
-assertJSON :: HasCallStack => Wai.SResponse -> Wai.Session ()
-assertJSON = void . jsonValueBody
-
--- | Assert a response status is 200 OK.
-assertOK :: HasCallStack => Wai.SResponse -> Wai.Session ()
-assertOK = Wai.assertStatus 200
+assertBody :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a) => a -> Wai.SResponse -> Wai.Session ()
+assertBody expected resp = io $ case decodeBody resp of
+    Left err -> Tasty.assertFailure $ show err
+    Right actual -> Tasty.assertEqual "" expected actual
 
 -- | Assert a response status is the given code.
 assertStatus :: HasCallStack => Int -> Wai.SResponse -> Wai.Session ()
@@ -89,43 +83,70 @@ assertStatus = Wai.assertStatus
 
 -- | Low-level HTTP request helper.
 request
-    :: Aeson.ToJSON a
-    => HTTP.StdMethod                    -- ^ Request method
+    :: HTTP.StdMethod                    -- ^ Request method
     -> Text                              -- ^ Request path
     -> HTTP.RequestHeaders               -- ^ Request headers
-    -> Maybe a                           -- ^ Request body
+    -> LBS.ByteString                    -- ^ Request body
     -> Wai.Session Wai.SResponse
 request method (encodeUtf8 -> path) headers body =
-    Wai.srequest $ Wai.SRequest (Wai.setPath req path) (reqBody body)
-  where
+    Wai.srequest $ Wai.SRequest (mkRequest method path headers) body
+
+mkRequest :: HTTP.StdMethod -> ByteString -> HTTP.RequestHeaders -> Wai.Request
+mkRequest method path headers = Wai.setPath req path where
     req = Wai.defaultRequest
         { Wai.requestMethod = HTTP.renderStdMethod method
-        , Wai.requestHeaders = (HTTP.hAccept, "application/json") : headers
+        , Wai.requestHeaders = headers
         }
-    reqBody Nothing    = LBS.empty
-    reqBody (Just obj) = Aeson.encode obj
 
--- | A GET request.
-get :: Text -> Wai.Session Wai.SResponse
-get path = request GET path [] noBody
+-- | @Codec@ represents the @ContentType@ of sent HTTP request bodies and
+-- the accepted (i.e. desired) @ContentType@ of the correspondent HTTP response
+-- bodies.
+data Codec = Codec ContentType ContentType
 
--- | A DELETE request.
-delete :: Text -> Wai.Session Wai.SResponse
-delete path = request DELETE path [] noBody
+instance Show Codec where
+    show (Codec content accept') =
+        "(Accept: " ++ show accept' ++ ", Content-Type: " ++ show content ++ ")"
 
--- | A PUT request.
-put :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
-put path body =
-    request PUT path [(HTTP.hContentType, "application/json")] (Just body)
+codecHeaders :: Codec -> [HTTP.Header]
+codecHeaders (Codec content accept) = [contentTypeHeader content, acceptHeader accept]
 
--- | A POST request.
-post :: Aeson.ToJSON a => Text -> a -> Wai.Session Wai.SResponse
-post path body =
-    request POST path [(HTTP.hContentType, "application/json")] (Just body)
+contentTypeHeader, acceptHeader :: ContentType -> HTTP.Header
+contentTypeHeader JSON = (HTTP.hContentType, "application/json")
+contentTypeHeader CBOR = (HTTP.hContentType, "application/cbor")
+acceptHeader      JSON = (HTTP.hAccept,      "application/json")
+acceptHeader      CBOR = (HTTP.hAccept,      "application/cbor")
+
+supportedContentType :: [HTTP.Header] -> Either Text ContentType
+supportedContentType headers = case lookup HTTP.hContentType headers of
+    Nothing -> Left $ "No Content-Type found in headers"
+    Just ct -> parseContentType $ decodeUtf8 ct
+
+encodeBody :: (ToJSON a, Serialise a) => ContentType -> a -> LBS.ByteString
+encodeBody = encode
+
+decodeBody :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
+decodeBody resp = case supportedContentType (Wai.simpleHeaders resp) of
+    Left err -> Left err
+    Right ct -> decode ct $ Wai.simpleBody resp
+
+get, delete :: ContentType -> Text -> Wai.Session Wai.SResponse
+get = withoutBody GET
+delete = withoutBody DELETE
+
+put, post  :: (Aeson.ToJSON a, Serialise a) => ContentType -> Text -> a -> Wai.Session Wai.SResponse
+put  = withBody PUT
+post = withBody POST
+
+withoutBody :: HTTP.StdMethod -> ContentType -> Text -> Wai.Session Wai.SResponse
+withoutBody method ct path = request method path [acceptHeader ct] noBody
+
+withBody :: (Aeson.ToJSON a, Serialise a) => HTTP.StdMethod -> ContentType -> Text -> a -> Wai.Session Wai.SResponse
+withBody method ct path body = request method path headers $ encode ct body where
+    headers = [contentTypeHeader ct, acceptHeader ct]
 
 -- | Represents an empty request body.
-noBody :: Maybe ()
-noBody = Nothing
+noBody :: LBS.ByteString
+noBody = LBS.empty
 
 -- | Helper for string literals.
 t :: Text -> Text
@@ -133,14 +154,3 @@ t = identity
 
 responseBody :: Wai.SResponse -> LBS.ByteString
 responseBody = Wai.simpleBody
-
-jsonBody :: (Aeson.FromJSON a, HasCallStack) => Wai.SResponse -> Wai.Session a
-jsonBody resp =
-    let body = Wai.simpleBody resp
-        in case Aeson.decode body of
-            Just obj -> pure obj
-            Nothing  -> io $ assertFailure
-                ("Could not decode body as JSON:\n`" <> L8.unpack body <> "`\n")
-
-jsonValueBody :: HasCallStack => Wai.SResponse -> Wai.Session Aeson.Value
-jsonValueBody = jsonBody

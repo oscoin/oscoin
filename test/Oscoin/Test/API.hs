@@ -10,37 +10,35 @@ import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
 import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
+import           Oscoin.HTTP.Internal (ContentType(..))
 import           Radicle as Rad
+
+import           Network.HTTP.Types.Method (StdMethod(..))
 
 import           Test.Tasty
 import           Test.Tasty.HUnit (testCase, assertFailure)
-import           Test.Tasty.ExpectedFailure (expectFail)
-
 
 tests :: [TestTree]
-tests =
-    [ test "Smoke test" smokeTestOscoinAPI cfg
-    , testGroup "GET /transactions/:hash" $
-        [ test "Tx Not Found" getTxNotFound
-        , expectFail . test "Accept JSON"  getTxAcceptJSON
-        , expectFail . test "Accept CBOR"  getTxAcceptCBOR
-        ] <&> ($ cfg)
-    ]
-  where
-    cfg = Node.Config
-      { Node.cfgEnv         = Testing
-      , Node.cfgLogger      = Log.noLogger
-      }
+tests = do
+    content <- [JSON, CBOR]
+    accept  <- [JSON, CBOR]
 
-test :: TestName -> Session () -> Node.Config -> TestTree
-test name session cfg = testCase name $ runSession cfg 42 session
+    let codec = Codec content accept
+    let cfg = Node.Config { Node.cfgEnv = Testing, Node.cfgLogger = Log.noLogger}
 
-smokeTestOscoinAPI :: Session ()
-smokeTestOscoinAPI = do
-    get "/" >>= assertOK
+    [test cfg ("API Smoke test " ++ show codec) (smokeTestOscoinAPI codec),
+     test cfg ("Tx Not Found " ++ show codec) (getTxNotFound codec) ]
+
+test :: Node.Config -> TestName -> Session () -> TestTree
+test cfg name session = testCase name $ runSession cfg 42 session
+
+smokeTestOscoinAPI :: Codec -> Session ()
+smokeTestOscoinAPI codec@(Codec content accept) = do
+    get accept "/" >>= assertStatus 200
 
     -- The mempool is empty.
-    get "/transactions" >>= assertBody (Result.ok ())
+    txs <- get accept "/transactions"
+    assertStatus 200 txs; assertBody (Result.ok ([] :: [DummyTx])) txs
 
     -- Now let's create a transaction message.
     let msg = Rad.String "transaction"
@@ -50,34 +48,28 @@ smokeTestOscoinAPI = do
     msg'             <- Crypto.sign priKey msg
 
     let tx :: DummyTx = mkTx msg' (Crypto.hash pubKey)
+    let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     -- Submit the transaction to the mempool.
-    resp <- post "/transactions" tx ; assertStatus 202 resp
-
-    Result.Ok receipt <- jsonBody resp
-
-    let txHash = decodeUtf8 $ Crypto.toHex $ Node.fromReceipt @DummyTx receipt
+    tx' <- request POST "/transactions" (codecHeaders codec) (encodeBody content tx)
+    assertStatus 202 tx'
+    assertBody (Result.Ok Node.Receipt{fromReceipt = Crypto.hash tx}) tx'
 
     -- Get the mempool once again, make sure the transaction is in there.
-    mp <- jsonBody =<< get "/transactions"
-    mp @?= Result.ok [tx]
+    txs' <- get accept "/transactions"
+    assertStatus 200 txs'; assertBody (Result.Ok [tx]) txs'
 
-    get ("/transactions/" <> txHash) >>= assertOK <> assertJSON
+    tx'' <- get accept ("/transactions/" <> txHash)
+    assertStatus 200 tx''; assertBody (Result.Ok tx) tx''
 
-getTxNotFound :: Session ()
-getTxNotFound = do
+getTxNotFound :: Codec -> Session ()
+getTxNotFound (Codec _ accept) = do
     -- Malformed transaction hash returns a 404
-    get "/transactions/not-a-hash" >>= assertStatus 404
+    get accept "/transactions/not-a-hash" >>= assertStatus 404
 
     -- Well formed but missing transaction hash returns a 404
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
-    get ("/transactions/" <> missing) >>= assertStatus 404
-
-getTxAcceptJSON :: Session ()
-getTxAcceptJSON = notTested
-
-getTxAcceptCBOR :: Session ()
-getTxAcceptCBOR = notTested
+    get accept ("/transactions/" <> missing) >>= assertStatus 404
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"

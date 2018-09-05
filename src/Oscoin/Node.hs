@@ -250,7 +250,7 @@ getPath = queryM
 
 -- | A transaction receipt. Contains the hashed transaction.
 newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
-    deriving (Show)
+    deriving (Show, Eq)
 
 deriving instance Serialise (Receipt tx)
 
