@@ -9,7 +9,7 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Data.Aeson (FromJSON, ToJSON)
 import           Codec.Serialise (Serialise)
 
--- | Response type for the GET /transactions/:id API endpoint.
+-- | Response type for the GET /transactions/:hash API endpoint.
 data GetTxResponse = GetTxResponse
     { txHash          :: Hashed ApiTx
     , txBlockHash     :: BlockHash
