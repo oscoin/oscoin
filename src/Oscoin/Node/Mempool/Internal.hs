@@ -19,7 +19,7 @@ import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Aeson as Aeson
-import           Codec.Serialise (Serialise)
+import           Codec.Serialise (Serialise(..))
 
 -- Mempool --------------------------------------------------------------------
 
@@ -27,7 +27,9 @@ import           Codec.Serialise (Serialise)
 newtype Mempool tx = Mempool (Map (Hashed tx) tx)
     deriving (Show, Semigroup, Monoid, Eq, Generic)
 
-instance Serialise tx => Serialise (Mempool tx)
+instance Serialise tx => Serialise (Mempool tx) where
+    encode (Mempool txs) = encode (Map.elems txs)
+    decode               = Mempool <$> decode
 
 instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool tx) where
     toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
