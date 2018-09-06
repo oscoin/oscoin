@@ -6,7 +6,6 @@ import           Oscoin.Crypto.PubKey
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-import qualified Radicle as Rad
 
 import           Codec.Serialise
 import           Crypto.Random.Types (MonadRandom(..))

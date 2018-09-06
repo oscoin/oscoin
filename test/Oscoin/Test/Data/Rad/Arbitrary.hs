@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Test.Data.Rad.Arbitrary where
 
 import           Oscoin.Prelude

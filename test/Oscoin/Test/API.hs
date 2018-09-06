@@ -7,7 +7,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
-import           Oscoin.Data.Tx (Tx, mkTx)
+import           Oscoin.Data.Tx (mkTx)
 import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
 import           Radicle as Rad
@@ -32,7 +32,7 @@ tests =
       , Node.cfgLogger      = Log.noLogger
       }
 
-test :: TestName -> Session () -> Node.Config DummyTx -> TestTree
+test :: TestName -> Session () -> Node.Config -> TestTree
 test name session cfg = testCase name $ runSession cfg 42 session
 
 smokeTestOscoinAPI :: Session ()

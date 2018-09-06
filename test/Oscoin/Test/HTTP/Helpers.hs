@@ -54,7 +54,7 @@ instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: Node.Config DummyTx -> DummyNodeId -> Session () -> Assertion
+runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.new

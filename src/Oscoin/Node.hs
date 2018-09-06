@@ -54,14 +54,14 @@ import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
 
 -- | Node static config.
-data Config tx = Config
+data Config = Config
     { cfgEnv         :: Environment
     , cfgLogger      :: Log.Logger
     }
 
 -- | Node handle.
 data Handle tx s i = Handle
-    { hConfig     :: Config tx
+    { hConfig     :: Config
     , hNodeId     :: i
     , hStateTree  :: STree.Handle s
     , hBlockStore :: BlockStore.Handle tx s
@@ -70,7 +70,7 @@ data Handle tx s i = Handle
 
 withNode
     :: (Hashable tx, Pretty tx)
-    => Config tx
+    => Config
     -> i
     -> Mempool.Handle tx
     -> STree.Handle s
@@ -81,7 +81,7 @@ withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
 -- | Connect to state storage.
 open :: (Hashable tx, Pretty tx)
-     => Config tx
+     => Config
      -> i
      -> Mempool.Handle tx
      -> STree.Handle s
