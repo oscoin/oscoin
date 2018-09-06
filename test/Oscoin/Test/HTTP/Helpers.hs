@@ -141,8 +141,8 @@ withoutBody :: HTTP.StdMethod -> ContentType -> Text -> Wai.Session Wai.SRespons
 withoutBody method ct path = request method path [acceptHeader ct] noBody
 
 withBody :: (Aeson.ToJSON a, Serialise a) => HTTP.StdMethod -> ContentType -> Text -> a -> Wai.Session Wai.SResponse
-withBody method ct path body = request method path headers $ encode ct body where
-    headers = [contentTypeHeader ct, acceptHeader ct]
+withBody method ct path body = request method path headers $ encode ct body
+    where headers = [contentTypeHeader ct, acceptHeader ct]
 
 -- | Represents an empty request body.
 noBody :: LBS.ByteString
