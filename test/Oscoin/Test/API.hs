@@ -24,10 +24,10 @@ tests = do
     accept  <- [JSON, CBOR]
 
     let codec = Codec content accept
-    let cfg = Node.Config { Node.cfgEnv = Testing, Node.cfgLogger = Log.noLogger}
+    let cfg = Node.Config {Node.cfgEnv = Testing, Node.cfgLogger = Log.noLogger}
 
-    [test cfg ("API Smoke test " ++ show codec) (smokeTestOscoinAPI codec),
-     test cfg ("Tx Not Found " ++ show codec) (getTxNotFound codec) ]
+    [ test cfg ("API Smoke test " ++ show codec) (smokeTestOscoinAPI codec),
+      test cfg ("Tx Not Found " ++ show codec) (getTxNotFound codec) ]
 
 test :: Node.Config -> TestName -> Session () -> TestTree
 test cfg name session = testCase name $ runSession cfg 42 session
