@@ -1,4 +1,4 @@
-module Oscoin.HTTP.API.Result where
+module Oscoin.API.HTTP.Result where
 
 import           Oscoin.Prelude
 

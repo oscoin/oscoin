@@ -1,11 +1,11 @@
-module Oscoin.HTTP.Handlers where
+module Oscoin.API.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Query
-import           Oscoin.HTTP.Internal
-import qualified Oscoin.HTTP.API.Result as Result
+import           Oscoin.API.HTTP.Internal
+import qualified Oscoin.API.HTTP.Result as Result
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import           Oscoin.State.Tree (Key, keyToPath)

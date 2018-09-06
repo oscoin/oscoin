@@ -8,8 +8,8 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Environment
-import           Oscoin.HTTP.API (api)
-import           Oscoin.HTTP.Internal (mkMiddleware, decode, encode, parseContentType, ContentType(..))
+import           Oscoin.API.HTTP (api)
+import           Oscoin.API.HTTP.Internal (mkMiddleware, decode, encode, parseContentType, ContentType(..))
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree

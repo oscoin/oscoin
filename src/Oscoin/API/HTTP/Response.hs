@@ -1,8 +1,8 @@
-module Oscoin.HTTP.API.Response where
+module Oscoin.API.HTTP.Response where
 
 import           Oscoin.Prelude
 
-import           Oscoin.HTTP.Internal (ApiTx)
+import           Oscoin.API.HTTP.Internal (ApiTx)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 
