@@ -12,7 +12,7 @@ import           Codec.Serialise (Serialise)
 -- | Response type for the GET /transactions/:hash API endpoint.
 data GetTxResponse = GetTxResponse
     { txHash          :: Hashed ApiTx
-    , txBlockHash     :: BlockHash
+    , txBlockHash     :: Maybe BlockHash
     , txConfirmations :: Word64
     , txPayload       :: ApiTx
     } deriving (Show, Eq, Generic)
