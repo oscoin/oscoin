@@ -11,19 +11,28 @@ import           Oscoin.Data.Tx                 ( mkTx )
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.HTTP.Result        as Result
 import           Oscoin.API.HTTP.Internal       ( ContentType(..) )
+import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
 import           Radicle                       as Rad
 import           Network.HTTP.Types.Method      ( StdMethod(..) )
 
+import           Test.QuickCheck                ( generate
+                                                , arbitrary
+                                                )
 import           Test.Tasty
+import           Test.Tasty.ExpectedFailure     ( expectFail )
 import           Test.Tasty.HUnit               ( testCase
                                                 , assertFailure
                                                 )
 
 tests :: [TestTree]
 tests =
-    [ test "API Smoke test" smokeTestOscoinAPI
-    , test "Tx Not Found "  getTxNotFound
+    [ test "API smoke test" smokeTestOscoinAPI
+    , testGroup
+        "GET /transactions/:hash"
+        [ test "404 Not Found" getTransaction404NotFound
+        , expectFail $ test "200 OK" getTransaction200OK
+        ]
     ]
   where
     test   = httpTest cfg codecs
@@ -47,15 +56,8 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     get accept "/transactions" >>= assertStatus 200 <> assertBody
         (Result.ok ([] @DummyTx))
 
-    -- Now let's create a transaction message.
-    let msg = Rad.String "transaction"
-
-    -- Now generate a key pair and sign the transaction.
-    (pubKey, priKey) <- Crypto.generateKeyPair
-    msg'             <- Crypto.sign priKey msg
-
-    let tx :: DummyTx = mkTx msg' (Crypto.hash pubKey)
-    let txHash        = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+    -- Generate a dummy transaction
+    (txHash, tx) <- io $ genDummyTx
 
     -- Submit the transaction to the mempool.
     request POST "/transactions" (codecHeaders codec) (encodeBody content tx)
@@ -69,8 +71,8 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     get accept ("/transactions/" <> txHash) >>= assertStatus 200 <> assertBody
         (Result.Ok tx)
 
-getTxNotFound :: Codec -> Session ()
-getTxNotFound (Codec _ accept) = do
+getTransaction404NotFound :: Codec -> Session ()
+getTransaction404NotFound (Codec _ accept) = do
     -- Malformed transaction hash returns a 404
     get accept "/transactions/not-a-hash" >>= assertStatus 404
 
@@ -78,5 +80,20 @@ getTxNotFound (Codec _ accept) = do
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
     get accept ("/transactions/" <> missing) >>= assertStatus 404
 
+
+getTransaction200OK :: Codec -> Session ()
+getTransaction200OK _ = notTested
+
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"
+
+genDummyTx :: IO (Text, DummyTx)
+genDummyTx = do
+    msg :: Rad.Value <- generate arbitrary
+    (pubKey, priKey) <- Crypto.generateKeyPair
+    signed           <- Crypto.sign priKey msg
+
+    let tx :: DummyTx = mkTx signed (Crypto.hash pubKey)
+    let txHash        = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+
+    pure $ (txHash, tx)
