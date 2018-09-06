@@ -9,8 +9,8 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
-import qualified Oscoin.HTTP.API.Result as Result
-import           Oscoin.HTTP.Internal (ContentType(..))
+import qualified Oscoin.API.HTTP.Result as Result
+import           Oscoin.API.HTTP.Internal (ContentType(..))
 
 import           Radicle as Rad
 import           Network.HTTP.Types.Method (StdMethod(..))

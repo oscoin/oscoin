@@ -1,16 +1,17 @@
-module Oscoin.HTTP.API
+module Oscoin.API.HTTP
     ( ApiTx
+    , run
     , api
     , withAPI
     ) where
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Environment
 
-import qualified Oscoin.HTTP.Handlers as Handlers
-import           Oscoin.HTTP.Internal
-import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import qualified Oscoin.API.HTTP.Handlers as Handlers
+import           Oscoin.API.HTTP.Internal
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
 import           Web.Spock (get, middleware, post, root, var, (<//>), wildcard)

@@ -10,8 +10,8 @@ import           Oscoin.CLI.Radicle
 
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
-import qualified Oscoin.HTTP.API.Result as API
-import           Oscoin.HTTP.API (ApiTx)
+import qualified Oscoin.API.HTTP.Result as API
+import           Oscoin.API.HTTP (ApiTx)
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Crypto.Hash (hash)
 
