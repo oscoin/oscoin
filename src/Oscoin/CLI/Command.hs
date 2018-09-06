@@ -8,11 +8,15 @@ module Oscoin.CLI.Command
 
 import           Oscoin.Prelude
 
-import           Oscoin.CLI.Backend
+import qualified Oscoin.API.Types as API
+import qualified Oscoin.API.Client as API
 import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.Revision
+import           Oscoin.CLI.Radicle
+import           Oscoin.Crypto.PubKey (sign, generateKeyPair)
+import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.Data.Tx (mkTx)
 
-import           Oscoin.Crypto.PubKey
 
 data Command =
       RevisionCreate
@@ -35,11 +39,19 @@ defaultOptions = Options
     { optsRevisionId = Nothing
     }
 
-runCommand :: Backend a -> Command -> Options -> IO (Result a)
-runCommand Backend{..} RevisionCreate _opts = do
-    pair <- generateKeyPair
-    revisionCreate emptyRevision pair
-runCommand Backend{..} RevisionList _opts =
-    notImplemented
-runCommand Backend{..} RevisionStatus _opts =
-    notImplemented
+runCommand :: (MonadIO m, API.MonadClient m) => Command -> Options -> m (Result Text)
+runCommand RevisionCreate _opts = do
+    tx <- io createTransaction
+    result <- API.submitTransaction tx
+    pure $ case result of
+        API.Ok v    -> ResultValue (tshow v)
+        API.Err err -> ResultError err
+  where
+    createTransaction :: IO API.RadTx
+    createTransaction = do
+        (pk, sk) <- generateKeyPair
+        let rev = emptyRevision
+        msg <- sign sk (toRadicle rev)
+        pure $ mkTx msg (hash pk)
+
+runCommand _ _ = notImplemented
