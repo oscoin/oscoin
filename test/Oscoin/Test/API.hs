@@ -37,8 +37,9 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     get accept "/" >>= assertStatus 200
 
     -- The mempool is empty.
-    txs <- get accept "/transactions"
-    assertStatus 200 txs; assertBody (Result.ok ([] :: [DummyTx])) txs
+    get accept "/transactions" >>=
+        assertStatus 200 <>
+        assertBody (Result.ok ([] @DummyTx))
 
     -- Now let's create a transaction message.
     let msg = Rad.String "transaction"
@@ -51,25 +52,29 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     -- Submit the transaction to the mempool.
-    tx' <- request POST "/transactions" (codecHeaders codec) (encodeBody content tx)
-    assertStatus 202 tx'
-    assertBody (Result.Ok Node.Receipt{fromReceipt = Crypto.hash tx}) tx'
+    request POST "/transactions" (codecHeaders codec) (encodeBody content tx) >>=
+        assertStatus 202 <>
+        assertBody (Result.Ok Node.Receipt{fromReceipt = Crypto.hash tx})
 
     -- Get the mempool once again, make sure the transaction is in there.
-    txs' <- get accept "/transactions"
-    assertStatus 200 txs'; assertBody (Result.Ok [tx]) txs'
+    get accept "/transactions" >>=
+        assertStatus 200 <>
+        assertBody (Result.Ok [tx])
 
-    tx'' <- get accept ("/transactions/" <> txHash)
-    assertStatus 200 tx''; assertBody (Result.Ok tx) tx''
+    get accept ("/transactions/" <> txHash) >>=
+        assertStatus 200 <>
+        assertBody (Result.Ok tx)
 
 getTxNotFound :: Codec -> Session ()
 getTxNotFound (Codec _ accept) = do
     -- Malformed transaction hash returns a 404
-    get accept "/transactions/not-a-hash" >>= assertStatus 404
+    get accept "/transactions/not-a-hash" >>=
+        assertStatus 404
 
     -- Well formed but missing transaction hash returns a 404
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
-    get accept ("/transactions/" <> missing) >>= assertStatus 404
+    get accept ("/transactions/" <> missing) >>=
+        assertStatus 404
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"
