@@ -8,11 +8,11 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
-import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.Test.HTTP.Helpers
+import qualified Oscoin.HTTP.API.Result as Result
 import           Oscoin.HTTP.Internal (ContentType(..))
-import           Radicle as Rad
 
+import           Radicle as Rad
 import           Network.HTTP.Types.Method (StdMethod(..))
 
 import           Test.Tasty
