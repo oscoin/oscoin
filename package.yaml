@@ -4,7 +4,7 @@ synopsis: open-source collaboration network
 author: Monadic
 maintainer: team@monadic.xyz
 copyright: 2018 Monadic
-license: BSD3
+license: BSD4
 github: oscoin/oscoin
 
 dependencies:
