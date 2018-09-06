@@ -4,9 +4,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
-import           Oscoin.Data.Tx (Tx)
-
-import qualified Radicle as Rad
+import           Oscoin.API.Types
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
@@ -35,9 +33,6 @@ data State = State ()
 
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction s i = SpockAction (Node.Handle ApiTx s i) () State
-
--- | The type of a block transaction in the API.
-type ApiTx = Tx Rad.Value
 
 instance MonadFail (ApiAction s i) where
     fail = error "failing!"

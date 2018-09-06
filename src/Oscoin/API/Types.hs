@@ -1,9 +1,25 @@
-module Oscoin.API.HTTP.Result where
+module Oscoin.API.Types
+    ( ApiTx
+    , Result(..)
+    , isOk
+    , isErr
+    , Receipt
+    , Key
+    , Query(..)
+    ) where
 
 import           Oscoin.Prelude
+import           Oscoin.Data.Query (Query(..))
+import           Oscoin.Data.Tx (Tx)
+import           Oscoin.Node (Receipt)
+import           Oscoin.State.Tree (Key)
+import qualified Radicle as Rad
 
 import qualified Data.Aeson as Aeson
 import qualified Codec.Serialise as Serial
+
+-- | The type of a block transaction in the API.
+type ApiTx = Tx Rad.Value
 
 data Result a =
       Ok  a
@@ -13,12 +29,6 @@ data Result a =
 instance Aeson.ToJSON a => Aeson.ToJSON (Result a)
 instance Aeson.FromJSON a => Aeson.FromJSON (Result a)
 instance Serial.Serialise a => Serial.Serialise (Result a)
-
-ok :: a -> Result a
-ok = Ok
-
-err :: Text -> Result b
-err = Err
 
 isOk :: Result a -> Bool
 isOk (Ok _) = True

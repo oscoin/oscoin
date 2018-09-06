@@ -2,7 +2,7 @@ module Oscoin.API.HTTP.Response where
 
 import           Oscoin.Prelude
 
-import           Oscoin.API.HTTP.Internal (ApiTx)
+import           Oscoin.API.Types (ApiTx)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 
