@@ -31,12 +31,14 @@ import           Codec.Serialise (Serialise)
 import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
-import           Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8 as C8
+import           Data.ByteString.Lazy (toStrict)
 import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
-import           Text.Printf
+import           Formatting ((%), (%.))
+import qualified Formatting as Fmt
 import           GHC.Generics (Generic)
 
 -- | Block difficulty.
@@ -210,17 +212,24 @@ hashTx tx =
 
 prettyBlock :: (Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> String
 prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
-    tell $ printf "┍━%-6s━━ %s ━━┑\n" height (C8.unpack $ toHex $ headerHash bh)
-    tell $ printf "│ prevHash:   %-64s │\n" (C8.unpack $ toHex blockPrevHash)
-    tell $ printf "│ timestamp:  %-64d │\n" blockTimestamp
-    tell $ printf "│ rootHash:   %-64s │\n" (C8.unpack $ toHex blockStateHash)
-    tell $ printf "├────────%s─────────┤\n" (Prelude.replicate 61 '─')
+    tell $ formatHeaderWith (Fmt.string % "━━ " % formatHex % " ") height (headerHash bh)
+    tell $ fencedLineFormat ("prevHash:   " % formatHex) blockPrevHash
+    tell $ fencedLineFormat ("timestamp:  " % Fmt.right 64 ' ') blockTimestamp
+    tell $ fencedLineFormat ("rootHash:   " % formatHex) blockStateHash
+    tell $ "├" <> Prelude.replicate 78 '─' <> "┤\n"
 
     for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
-        tell $ printf "│ %03d:  %-64s       │\n" n (C8.unpack $ toHex $ hash tx)
-        tell $ printf "│ %-64s              │\n" (renderStrict . layoutSmart defaultLayoutOptions . pretty $ tx)
-        tell $ printf "├────────%s──────────┤\n" (Prelude.replicate 60 '─')
+        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % formatHex) n (hash tx)
+        tell $ fencedLineFormat Fmt.string ""
+        let txContent = renderStrict $ layoutSmart layoutOptions $ pretty $ tx
+        for_ (T.lines txContent) $ tell . fencedLineFormat Fmt.stext
+        tell $ "├" <> Prelude.replicate 78 '─' <> "┤\n"
 
-    tell $ printf "└────────%s─────────┘\n" (Prelude.replicate 61 '─')
+    tell $ "└" <> Prelude.replicate 78 '─' <> "┘\n"
   where
+    formatHex :: ByteArrayAccess ba => Fmt.Format r (ba -> r)
+    formatHex = Fmt.mapf (C8.unpack . toHex) $ Fmt.right 64 ' '
+    formatHeaderWith format = Fmt.formatToString $ "┍━" % (Fmt.left  76 '━' %. format) % "━┑\n"
+    fencedLineFormat format = Fmt.formatToString $ "│ " % (Fmt.right 76 ' ' %. format) % " │\n"
     height = maybe "━━━━━━━" (\x -> " " ++ show x ++ " ") blockHeight
+    layoutOptions = LayoutOptions {layoutPageWidth = AvailablePerLine 76 1.0}
