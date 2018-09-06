@@ -13,6 +13,7 @@ module Oscoin.Crypto.Hash
     , maxHash
     , zeroHash
     , toHex
+    , toHexText
     , fromHex
     , shortHash
     ) where
@@ -140,6 +141,9 @@ zeroHash = fromJust $
 toHex :: ByteArrayAccess ba => ba -> ByteString
 toHex =
     Base16.encode . convert
+
+toHexText :: ByteArrayAccess ba => ba -> Text
+toHexText = decodeUtf8 . toHex
 
 -- TODO: Make result type polymorphic: `Either Error ba`.
 fromHex :: ByteString -> Either Error ByteString
