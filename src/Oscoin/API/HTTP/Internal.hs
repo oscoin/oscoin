@@ -32,16 +32,16 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction s i = SpockAction (Node.Handle ApiTx s i) () State
+type ApiAction s i = SpockAction (Node.Handle RadTx s i) () State
 
 instance MonadFail (ApiAction s i) where
     fail = error "failing!"
 
 -- | The type of our api.
-type Api s i = SpockM (Node.Handle ApiTx s i) () State
+type Api s i = SpockM (Node.Handle RadTx s i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle ApiTx s i)
+type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx s i)
 
 -- | Create an empty state.
 mkState :: State
@@ -173,14 +173,14 @@ notImplemented = respond HTTP.notImplemented501 noBody
 
 run :: Api s i ()
     -> Int
-    -> Node.Handle ApiTx s i
+    -> Node.Handle RadTx s i
     -> IO ()
 run app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
     :: Api s i ()
-    -> Node.Handle ApiTx s i
+    -> Node.Handle RadTx s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

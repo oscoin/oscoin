@@ -21,7 +21,7 @@ getAllTransactions = do
     mp <- node Node.getMempool
     respond ok200 $ body (Ok mp)
 
-getTransaction :: Hashed ApiTx -> ApiAction s i ()
+getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
     case mtx of
@@ -30,7 +30,7 @@ getTransaction txId = do
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do
-    tx <- getBody @ApiTx
+    tx <- getBody @RadTx
 
     receipt <- node $ do
         addTxs [tx]
@@ -50,6 +50,6 @@ getStatePath k = do
             respond notFound404 noBody
 
 -- | Runs a NodeT action in a MonadApi monad.
-node :: MonadApi s i m => Node.NodeT ApiTx s i IO a -> m a
+node :: MonadApi s i m => Node.NodeT RadTx s i IO a -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s

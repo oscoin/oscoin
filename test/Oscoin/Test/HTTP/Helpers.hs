@@ -15,7 +15,6 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
-import           Oscoin.Data.Tx (Tx)
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
@@ -37,13 +36,9 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 import           Web.Spock (spockAsApp)
 
-import qualified Radicle as Rad
 
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
-
--- | Dummy transaction type used for testing.
-type DummyTx = Tx Rad.Value
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
@@ -60,7 +55,7 @@ runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
 runSession cfg nid sess = do
     mp <- Mempool.newIO
     st <- STree.new
-    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @DummyTx 0
+    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @API.RadTx 0
     nh <- Node.open cfg nid mp st bs
 
     app <- spockAsApp (mkMiddleware (api Testing) nh)

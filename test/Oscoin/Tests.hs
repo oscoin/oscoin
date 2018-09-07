@@ -2,6 +2,7 @@ module Oscoin.Tests where
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip, validateBlockchain)
@@ -64,7 +65,7 @@ testOscoinMempool = do
     mp <- Mempool.newIO
 
     -- Create some arbitrary transactions.
-    txs <- generate arbitrary :: IO [DummyTx]
+    txs <- generate arbitrary :: IO [API.RadTx]
 
     -- Subscribe to the mempool with the subscription tokens.
     chan1 <- atomically $ Mempool.subscribe mp
@@ -94,13 +95,13 @@ testOscoinBlockchain = do
     (_, key') <- Crypto.generateKeyPair
 
     txs <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed DummyTx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed API.RadTx]
 
     gblock <- generate $ arbitraryGenesisWith identityEval txs
     assertNoError $ validateBlock gblock
 
     txs' <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed DummyTx]
+        arbitrarySignedWith key' :: IO [Crypto.Signed API.RadTx]
 
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 

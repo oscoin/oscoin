@@ -1,5 +1,5 @@
 module Oscoin.API.HTTP
-    ( ApiTx
+    ( RadTx
     , run
     , api
     , withAPI
@@ -7,7 +7,7 @@ module Oscoin.API.HTTP
 
 import           Oscoin.Prelude
 
-import           Oscoin.API.Types (ApiTx)
+import           Oscoin.API.Types (RadTx)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Environment
 

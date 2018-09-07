@@ -9,6 +9,7 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
+import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
@@ -46,7 +47,7 @@ smokeTestOscoinAPI codec@(Codec _ accept) = do
     -- The mempool is empty.
     get accept "/transactions" >>=
         assertStatus ok200 <>
-        assertResultOK ([] @DummyTx)
+        assertResultOK ([] @API.RadTx)
 
     -- Generate a dummy transaction
     (txHash, tx) <- io $ genDummyTx
@@ -81,13 +82,13 @@ getTransaction200OK _ = notTested
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"
 
-genDummyTx :: IO (Text, DummyTx)
+genDummyTx :: IO (Text, API.RadTx)
 genDummyTx = do
     msg :: Rad.Value <- generate arbitrary
     (pubKey, priKey) <- Crypto.generateKeyPair
     signed           <- Crypto.sign priKey msg
 
-    let tx :: DummyTx = mkTx signed (Crypto.hash pubKey)
-    let txHash        = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+    let tx :: API.RadTx = mkTx signed (Crypto.hash pubKey)
+    let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     pure $ (txHash, tx)

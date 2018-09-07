@@ -11,7 +11,7 @@ import           Oscoin.CLI.Radicle
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 import qualified Oscoin.API.Types as API
-import           Oscoin.API.Types (ApiTx)
+import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Crypto.Hash (hash)
 
@@ -82,7 +82,7 @@ submitPath = "/node/mempool"
 readPath :: Path
 readPath = "/node/state"
 
-submitTransaction :: Handle -> ApiTx -> IO (API.Result (Node.Receipt a))
+submitTransaction :: Handle -> RadTx -> IO (API.Result (Node.Receipt a))
 submitTransaction h tx = do
     resp <- post h submitPath tx
     if LBS.null (responseBody resp)
@@ -92,7 +92,7 @@ submitTransaction h tx = do
            Right val -> pure val
 
 createRevisionTx
-    :: MonadRandom m => Revision -> (PublicKey, PrivateKey) -> m ApiTx
+    :: MonadRandom m => Revision -> (PublicKey, PrivateKey) -> m RadTx
 createRevisionTx rev (pk, sk) = do
     msg <- sign sk (toRadicle rev)
     pure $ mkTx msg (hash pk)

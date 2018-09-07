@@ -1,5 +1,5 @@
 module Oscoin.API.Types
-    ( ApiTx
+    ( RadTx
     , Result(..)
     , isOk
     , isErr
@@ -19,7 +19,7 @@ import qualified Data.Aeson as Aeson
 import qualified Codec.Serialise as Serial
 
 -- | The type of a block transaction in the API.
-type ApiTx = Tx Rad.Value
+type RadTx = Tx Rad.Value
 
 data Result a =
       Ok  a

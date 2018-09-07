@@ -8,11 +8,11 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Radicle as Rad
 
 class Monad m => MonadClient m where
-    submitTransaction :: ApiTx -> m (Result (Receipt ApiTx))
+    submitTransaction :: RadTx -> m (Result (Receipt RadTx))
 
     -- | Returns an error result if a transaction with the given hash
     -- was not found.
-    getTransaction :: Hashed ApiTx -> m (Result ApiTx)
+    getTransaction :: Hashed RadTx -> m (Result RadTx)
 
     -- | Returns an error result if a value with the given key was not
     -- found.
