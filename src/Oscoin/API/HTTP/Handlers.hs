@@ -5,7 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Query
 import           Oscoin.API.HTTP.Internal
-import qualified Oscoin.API.HTTP.Result as Result
+import           Oscoin.API.Types
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
 import           Oscoin.State.Tree (Key, keyToPath)
@@ -19,13 +19,13 @@ root = respond ok200 noBody
 getAllTransactions :: ApiAction s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
-    respond ok200 $ body (Result.ok mp)
+    respond ok200 $ body (Ok mp)
 
 getTransaction :: Hashed ApiTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
     case mtx of
-        Just tx -> respond ok200 $ body (Result.ok tx)
+        Just tx -> respond ok200 $ body (Ok tx)
         Nothing -> respond notFound404 noBody
 
 submitTransaction :: ApiAction s i a
@@ -36,7 +36,7 @@ submitTransaction = do
         addTxs [tx]
         pure $ Node.Receipt (hash tx)
 
-    respond accepted202 $ body (Result.ok receipt)
+    respond accepted202 $ body (Ok receipt)
 
 getStatePath
     :: (Serialise (QueryVal s), Query s)
@@ -45,7 +45,7 @@ getStatePath k = do
     result <- node $ Node.getPath (keyToPath k)
     case result of
         Just val ->
-            respondBytes ok200 CBOR (serialise $ Result.ok val)
+            respondBytes ok200 CBOR (serialise $ Ok val)
         Nothing ->
             respond notFound404 noBody
 

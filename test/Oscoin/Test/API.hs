@@ -9,7 +9,7 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
-import qualified Oscoin.API.HTTP.Result as Result
+import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
@@ -47,7 +47,7 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     -- The mempool is empty.
     get accept "/transactions" >>=
         assertStatus 200 <>
-        assertBody (Result.ok ([] @DummyTx))
+        assertBody (API.Ok ([] @DummyTx))
 
     -- Generate a dummy transaction
     (txHash, tx) <- io $ genDummyTx
@@ -55,16 +55,16 @@ smokeTestOscoinAPI codec@(Codec content accept) = do
     -- Submit the transaction to the mempool.
     request POST "/transactions" (codecHeaders codec) (encodeBody content tx) >>=
         assertStatus 202 <>
-        assertBody (Result.Ok Node.Receipt {fromReceipt = Crypto.hash tx})
+        assertBody (API.Ok Node.Receipt{fromReceipt = Crypto.hash tx})
 
     -- Get the mempool once again, make sure the transaction is in there.
     get accept "/transactions" >>=
         assertStatus 200 <>
-        assertBody (Result.Ok [tx])
+        assertBody (API.Ok [tx])
 
     get accept ("/transactions/" <> txHash) >>=
         assertStatus 200 <>
-        assertBody (Result.Ok tx)
+        assertBody (API.Ok tx)
 
 getTransaction404NotFound :: Codec -> Session ()
 getTransaction404NotFound (Codec _ accept) = do

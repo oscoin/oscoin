@@ -7,6 +7,7 @@ module Oscoin.API.HTTP
 
 import           Oscoin.Prelude
 
+import           Oscoin.API.Types (ApiTx)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Environment
 
@@ -40,4 +41,3 @@ api env = do
     -- /state/:key -------------------------------------------------------
 
     get ("state" <//> wildcard) Handlers.getStatePath
-
