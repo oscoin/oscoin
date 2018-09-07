@@ -2,34 +2,30 @@ module Oscoin.Test.API where
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Node                   as Node
-import qualified Oscoin.Crypto.Hash            as Crypto
-import qualified Oscoin.Crypto.PubKey          as Crypto
-import qualified Oscoin.Logging                as Log
-import           Oscoin.Environment             ( Environment(Testing) )
-import           Oscoin.Data.Tx                 ( mkTx )
+import qualified Oscoin.Node as Node
+import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Logging as Log
+import           Oscoin.Environment (Environment(Testing))
+import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
-import qualified Oscoin.API.HTTP.Result        as Result
-import           Oscoin.API.HTTP.Internal       ( ContentType(..) )
+import qualified Oscoin.API.HTTP.Result as Result
+import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
-import           Radicle                       as Rad
-import           Network.HTTP.Types.Method      ( StdMethod(..) )
+import           Radicle as Rad
+import           Network.HTTP.Types.Method (StdMethod(..))
 
-import           Test.QuickCheck                ( generate
-                                                , arbitrary
-                                                )
+import           Test.QuickCheck (generate, arbitrary)
 import           Test.Tasty
-import           Test.Tasty.ExpectedFailure     ( expectFail )
-import           Test.Tasty.HUnit               ( testCase
-                                                , assertFailure
-                                                )
+import           Test.Tasty.ExpectedFailure (expectFail)
+import           Test.Tasty.HUnit (testCase, assertFailure)
+
 
 tests :: [TestTree]
 tests =
     [ test "API smoke test" smokeTestOscoinAPI
-    , testGroup
-        "GET /transactions/:hash"
+    , testGroup "GET /transactions/:hash"
         [ test "404 Not Found" getTransaction404NotFound
         , expectFail $ test "200 OK" getTransaction200OK
         ]
@@ -40,36 +36,35 @@ tests =
     ctypes = [JSON, CBOR]
     codecs = [ Codec content accept | content <- ctypes, accept <- ctypes ]
 
-httpTest
-    :: Node.Config -> [Codec] -> TestName -> (Codec -> Session ()) -> TestTree
-httpTest cfg codecs name session = testGroup
-    name
-    [ testCase (show codec) $ runSession cfg 42 (session codec)
-    | codec <- codecs
-    ]
+httpTest :: Node.Config -> [Codec] -> TestName -> (Codec -> Session ()) -> TestTree
+httpTest cfg codecs name session = testGroup name
+    [ testCase (show codec) $ runSession cfg 42 (session codec) | codec <- codecs ]
 
 smokeTestOscoinAPI :: Codec -> Session ()
 smokeTestOscoinAPI codec@(Codec content accept) = do
     get accept "/" >>= assertStatus 200
 
     -- The mempool is empty.
-    get accept "/transactions" >>= assertStatus 200 <> assertBody
-        (Result.ok ([] @DummyTx))
+    get accept "/transactions" >>=
+        assertStatus 200 <>
+        assertBody (Result.ok ([] @DummyTx))
 
     -- Generate a dummy transaction
     (txHash, tx) <- io $ genDummyTx
 
     -- Submit the transaction to the mempool.
-    request POST "/transactions" (codecHeaders codec) (encodeBody content tx)
-        >>= assertStatus 202
-        <>  assertBody (Result.Ok Node.Receipt {fromReceipt = Crypto.hash tx})
+    request POST "/transactions" (codecHeaders codec) (encodeBody content tx) >>=
+        assertStatus 202 <>
+        assertBody (Result.Ok Node.Receipt {fromReceipt = Crypto.hash tx})
 
     -- Get the mempool once again, make sure the transaction is in there.
-    get accept "/transactions" >>= assertStatus 200 <> assertBody
-        (Result.Ok [tx])
+    get accept "/transactions" >>=
+        assertStatus 200 <>
+        assertBody (Result.Ok [tx])
 
-    get accept ("/transactions/" <> txHash) >>= assertStatus 200 <> assertBody
-        (Result.Ok tx)
+    get accept ("/transactions/" <> txHash) >>=
+        assertStatus 200 <>
+        assertBody (Result.Ok tx)
 
 getTransaction404NotFound :: Codec -> Session ()
 getTransaction404NotFound (Codec _ accept) = do
