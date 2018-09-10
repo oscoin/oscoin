@@ -12,7 +12,7 @@ import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.State.Tree (Key, keyToPath)
+import           Oscoin.State.Tree (Key)
 
 import           Codec.Serialise (Serialise, serialise)
 import           Network.HTTP.Types.Status
@@ -76,13 +76,18 @@ getBlock h = do
 getStatePath
     :: (Serialise (QueryVal s), Query s)
     => Key -> ApiAction s i ()
-getStatePath k = do
-    result <- node $ Node.getPath (keyToPath k)
+getStatePath _chain = do
+    result <- decodeListParam <$> param' "q"
     case result of
-        Just val ->
-            respondBytes ok200 CBOR (serialise $ Ok val)
-        Nothing ->
-            respond notFound404 noBody
+        Left err ->
+            respond badRequest400 (errBody err)
+        Right path -> do
+            result' <- node $ Node.getPath path
+            case result' of
+                Just val ->
+                    respondBytes ok200 CBOR (serialise $ Ok val)
+                Nothing ->
+                    respond notFound404 noBody
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi s i m => Node.NodeT RadTx s i IO a -> m a

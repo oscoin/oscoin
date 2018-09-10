@@ -23,7 +23,7 @@ import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
-import           Web.HttpApiData (FromHttpApiData)
+import           Web.HttpApiData (FromHttpApiData, parseQueryParam)
 import           Web.Spock
                  (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
 import qualified Web.Spock as Spock
@@ -107,8 +107,16 @@ getState = Spock.getState
 param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
+
 param :: (FromHttpApiData p) => Text -> ApiAction s i (Maybe p)
 param = Spock.param
+
+decodeListParam :: FromHttpApiData p => Text -> Either Text [p]
+decodeListParam =
+    traverse parseQueryParam . list . inner
+  where
+    inner = T.dropWhile (== '[') . T.dropWhileEnd (== ']')
+    list  = T.splitOn ","
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
@@ -119,6 +127,9 @@ body = Just
 
 noBody :: Maybe ()
 noBody = Nothing
+
+errBody :: Text -> Maybe (Result ())
+errBody = Just . Err
 
 encode :: (Serialise a, ToJSON a) => MediaType -> a -> LBS.ByteString
 encode JSON = Aeson.encode
