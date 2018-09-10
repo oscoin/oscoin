@@ -69,7 +69,7 @@ module Oscoin.Prelude
 
 import           Control.Applicative (liftA2, (<|>))
 import           Control.Concurrent.STM (STM, atomically)
-import           Control.Monad (forM, forM_, forever, mapM)
+import           Control.Monad (forM, forM_, forever, mapM, unless)
 import           Control.Monad.Fail (MonadFail, fail)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader

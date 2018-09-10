@@ -123,13 +123,23 @@ tick = do
     forM_ msgs logMsg
     sendM msgs
 
-    st  <- latestState
-    hst <- asks hStateTree
-    io . atomically $ STree.updateTree hst st
+    unless (null msgs) updateState
 
 latestState :: MonadBlockStore tx s m => m s
 latestState =
     blockState . blockHeader . tip <$> maximumChainBy (comparing height)
+
+updateState
+    :: ( MonadNetwork     tx   m
+       , MonadBlockStore  tx s m
+       , Log.MonadLogger  r    m
+       , r ~ Handle tx s i
+       )
+    => m ()
+updateState = do
+    st  <- latestState
+    hst <- asks hStateTree
+    io . atomically $ STree.updateTree hst st
 
 logMsg :: forall r tx m.
     ( Hashable tx, Pretty tx, Log.MonadLogger r m )
@@ -142,20 +152,18 @@ logMsg msg = Log.debugM Log.string (prettyMsg msg)
     prettyMsg (ReqBlockMsg h) = show h
 
 
-step :: forall            r tx          m.
-        ( MonadNetwork      tx          m
-        , MonadProtocol     tx          m
-        , MonadBlockStore   tx Eval.Env m
-        , MonadClock                    m
-        , Log.MonadLogger r             m
+step :: ( MonadNetwork      tx   m
+        , MonadProtocol     tx   m
+        , MonadBlockStore   tx s m
+        , MonadClock             m
+        , Log.MonadLogger r      m
+        , r ~ Handle tx s i
         )
      => m ()
 step = do
     t <- currentTick
     sendM =<< stepM t =<< recvM
-
-    st <- Rad.bindingsEnv . Eval.fromEnv <$> latestState
-    Log.debugM ("State: " % Log.shown) st
+    updateState
 
 nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
 nodeEval tx st = Eval.radicleEval (toProgram tx) st
