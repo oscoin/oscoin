@@ -12,6 +12,7 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
+import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
@@ -36,6 +37,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 tests :: TestTree
 tests = testGroup "Oscoin"
     [ testGroup      "API"                            API.tests
+    , testGroup      "CLI"                            CLI.tests
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain

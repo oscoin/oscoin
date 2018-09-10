@@ -10,7 +10,7 @@ data Result a =
     | ResultValue a
     | ResultValues [a]
     | ResultError Text
-    deriving (Show)
+    deriving (Show, Eq, Functor)
 
 printResult :: Show a => Result a -> IO ()
 printResult ResultOk          = putStrLn "<ok>"
