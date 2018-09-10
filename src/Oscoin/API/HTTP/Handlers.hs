@@ -8,7 +8,7 @@ import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.API.Types
 import qualified Oscoin.Node as Node
-import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
+import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.State.Tree (Key, keyToPath)
 
 import           Network.HTTP.Types.Status
@@ -24,22 +24,24 @@ getAllTransactions = do
 
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
-    mtx <- node (lookupTx txId)
+    mtx <- node (Mempool.lookupTx txId)
     case mtx of
         Just tx -> respond ok200 $ body $ Ok GetTxResponse
             { txHash = hash tx
             , txBlockHash = Nothing
-            , txConfirmations = 0
+            , txConfirmations = confirmations tx
             , txPayload = tx
             }
         Nothing -> respond notFound404 noBody
+    where
+        confirmations _ = 0
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do
     tx <- getBody @RadTx
 
     receipt <- node $ do
-        addTxs [tx]
+        Mempool.addTxs [tx]
         pure $ Node.Receipt (hash tx)
 
     respond accepted202 $ body (Ok receipt)
