@@ -3,6 +3,7 @@ module Oscoin.API.HTTP.Handlers where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Blockchain.Block (headerHash, emptyHeader)
 import           Oscoin.Data.Query
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
@@ -28,12 +29,12 @@ getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
     Just tx -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash = Nothing
+        , txBlockHash = Just $ headerHash emptyHeader -- FIXME(tsenart)
         , txConfirmations = confirmations tx
         , txPayload = tx
         }
     where
-        confirmations _ = 0
+        confirmations _ = 0 -- FIXME(tsenart)
         lookupTx id = Mempool.lookupTx id >>= \case
             Just tx -> pure $ Just tx
             Nothing -> BlockStore.lookupTx id

@@ -35,7 +35,7 @@ import qualified Data.Binary as Binary
 import qualified Data.List.NonEmpty as NonEmpty
 
 tests :: TestTree
-tests = testGroup "Oscoin"
+tests = localOption (mkTimeout 10000000) $ testGroup "Oscoin"
     [ testGroup      "API"                            API.tests
     , testGroup      "CLI"                            CLI.tests
     , testCase       "Crypto"                         testOscoinCrypto

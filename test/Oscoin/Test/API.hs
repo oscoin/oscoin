@@ -14,6 +14,8 @@ import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
+import           Control.Monad.Loops (untilJust)
+import           Control.Concurrent (threadDelay)
 import           Radicle as Rad
 import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.HTTP.Types.Status
@@ -24,7 +26,7 @@ import           Test.Tasty.HUnit (testCase, assertFailure)
 
 tests :: [TestTree]
 tests =
-    [ test "API smoke test" smokeTestOscoinAPI
+    [ test "Smoke test" smokeTestOscoinAPI
     , testGroup "GET /transactions/:hash"
         [ test "404 Not Found" getTransaction404NotFound
         , test "200 OK" getTransaction200OK
@@ -66,7 +68,7 @@ getTransaction200OK = testSubmittedTxIsConfirmed
 
 testSubmittedTxIsConfirmed :: Codec -> Session ()
 testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
-    (txHash, tx) <- io $ genDummyTx
+    (txId, tx) <- io $ genDummyTx
 
     request POST "/transactions" (codecHeaders codec) (Just tx) >>=
         assertStatus accepted202 <>
@@ -76,14 +78,21 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
         assertStatus ok200 <>
         assertResultOKIncludes tx
 
-    get accept ("/transactions/" <> txHash) >>=
-        assertStatus ok200 <>
-        assertResultOK GetTxResponse
-            { txHash = Crypto.hash tx
-            , txBlockHash = Nothing
-            , txConfirmations = 0
-            , txPayload = tx
-            }
+    _ <- untilJust $ do
+        resp <- get accept ("/transactions/" <> txId)
+        assertStatus ok200 resp
+        case responseBodyResultOK resp of
+            Left err -> io $ assertFailure $ show err
+            Right r  -> do
+                check txHash (== Crypto.hash tx) r
+                check txPayload (== tx) r
+                check txConfirmations (>= 0) r
+                io $ threadDelay 500000 -- 500ms
+                pure $ txBlockHash r
+
+    pure ()
+
+    where check g = assert (Right . g)
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"

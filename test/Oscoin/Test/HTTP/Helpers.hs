@@ -82,13 +82,8 @@ assertResultOKIncludes
     => a -> Wai.SResponse -> Wai.Session ()
 assertResultOKIncludes v = assert responseBodyResultOK (elem v :: [a] -> Bool)
 
-assert
-    :: HasCallStack
-    => (Wai.SResponse -> Either Text a)
-    -> (a -> Bool)
-    -> Wai.SResponse
-    -> Wai.Session ()
-assert f predicate resp = io $ case f resp of
+assert :: HasCallStack => (r -> Either Text a) -> (a -> Bool) -> r -> Wai.Session ()
+assert f predicate obj = io $ case f obj of
     Left err -> Tasty.assertFailure $ show err
     Right v  -> Tasty.assertBool "" $ predicate v
 
