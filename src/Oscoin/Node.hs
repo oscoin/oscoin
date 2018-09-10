@@ -108,13 +108,14 @@ open hConfig hNodeId hMempool hStateTree hBlockStore = do
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-tick :: forall r tx m.
-        ( MonadNetwork     tx m
-        , MonadProtocol    tx m
-        , MonadClock          m
-        , Log.MonadLogger r   m
+tick :: ( MonadNetwork     tx   m
+        , MonadProtocol    tx   m
+        , MonadBlockStore  tx s m
+        , MonadClock            m
+        , Log.MonadLogger  r    m
         , Hashable         tx
         , Pretty           tx
+        , r ~ Handle tx s i
         )
      => m ()
 tick = do
@@ -122,6 +123,13 @@ tick = do
     forM_ msgs logMsg
     sendM msgs
 
+    st  <- latestState
+    hst <- asks hStateTree
+    io . atomically $ STree.updateTree hst st
+
+latestState :: MonadBlockStore tx s m => m s
+latestState =
+    blockState . blockHeader . tip <$> maximumChainBy (comparing height)
 
 logMsg :: forall r tx m.
     ( Hashable tx, Pretty tx, Log.MonadLogger r m )
@@ -146,8 +154,7 @@ step = do
     t <- currentTick
     sendM =<< stepM t =<< recvM
 
-    st <- Rad.bindingsEnv . Eval.fromEnv . blockState . blockHeader . tip
-      <$> maximumChainBy (comparing height)
+    st <- Rad.bindingsEnv . Eval.fromEnv <$> latestState
     Log.debugM ("State: " % Log.shown) st
 
 nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
