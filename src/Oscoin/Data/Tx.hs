@@ -61,6 +61,10 @@ mkTx sm p = Tx
     , txContext = toHashed zeroHash
     }
 
+
+txMessageContent :: Tx a -> a
+txMessageContent = sigMessage . txMessage
+
 -- | Convert a 'Tx' to a Radicle 'Program'.
 toProgram :: Tx Rad.Value -> Rad.Program
 toProgram Tx{..} =
