@@ -1,3 +1,5 @@
+{-# LANGUAGE DefaultSignatures #-}
+
 module Oscoin.Clock
     ( Tick
     , MonadClock (..)
@@ -12,6 +14,13 @@ type Tick = NominalDiffTime
 
 class Monad m => MonadClock m where
     currentTick :: m Tick
+
+    default currentTick
+        :: (MonadTrans t, m ~ t m', MonadClock m')
+        => m Tick
+    currentTick = lift currentTick
+    {-# INLINE currentTick #-}
+
 
 instance MonadClock IO where
     currentTick = getPOSIXTime

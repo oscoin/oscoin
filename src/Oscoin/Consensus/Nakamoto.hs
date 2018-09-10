@@ -91,18 +91,14 @@ newtype NakamotoT tx s m a = NakamotoT (RWST (NakamotoEnv tx s) () StdGen m a)
              , MonadReader (NakamotoEnv tx s)
              , MonadWriter ()
              , MonadState StdGen
+             , MonadTrans
              )
+
+instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx s m)
 
 score :: Blockchain tx s -> Blockchain tx s -> Ordering
 score = comparing height
 
-instance MonadTrans (NakamotoT tx s) where
-    lift = NakamotoT . lift
-    {-# INLINE lift #-}
-
-instance MonadClock m => MonadClock (NakamotoT tx s m) where
-    currentTick = lift currentTick
-    {-# INLINE currentTick #-}
 
 instance ( MonadMempool    tx   m
          , MonadBlockStore tx s m

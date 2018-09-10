@@ -152,6 +152,7 @@ newtype NodeT tx s i m a = NodeT (ReaderT (Handle tx s i) m a)
              , Monad
              , MonadReader (Handle tx s i)
              , MonadTrans
+             , MonadIO
              )
 
 runNodeT :: Handle tx s i -> NodeT tx s i m a -> m a
@@ -229,13 +230,7 @@ instance (Monad m, MonadIO m, Query s) => MonadQuery (NodeT tx s i m) where
         lift $ STree.getPath st k
     {-# INLINE queryM #-}
 
-instance MonadClock m => MonadClock (NodeT tx s i m) where
-    currentTick = lift currentTick
-    {-# INLINE currentTick #-}
-
-instance MonadIO m => MonadIO (NodeT tx s i m) where
-    liftIO = lift . liftIO
-    {-# INLINE liftIO #-}
+instance MonadClock m => MonadClock (NodeT tx s i m)
 
 instance MonadNetwork tx m => MonadNetwork tx (NodeT tx s i m)
 

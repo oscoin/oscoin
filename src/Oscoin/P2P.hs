@@ -99,9 +99,7 @@ instance (Serialise tx, Show tx, MonadIO m) => MonadNetwork tx (NetworkT tx m) w
     sendM msgs = ask >>= io . (`send` msgs)
     recvM      = ask >>= io . receive
 
-instance MonadClock m => MonadClock (NetworkT tx m) where
-    currentTick = lift currentTick
-    {-# INLINE currentTick #-}
+instance MonadClock m => MonadClock (NetworkT tx m)
 
 runNetworkT :: Handle -> NetworkT tx m a -> m a
 runNetworkT h (NetworkT ma) = runReaderT ma h
