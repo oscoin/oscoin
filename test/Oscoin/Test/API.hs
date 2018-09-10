@@ -11,6 +11,7 @@ import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
+import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
 import           Radicle as Rad
@@ -77,7 +78,12 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
 
     get accept ("/transactions/" <> txHash) >>=
         assertStatus ok200 <>
-        assertResultOK tx
+        assertResultOK GetTxResponse
+            { txHash = Crypto.hash tx
+            , txBlockHash = Nothing
+            , txConfirmations = 0
+            , txPayload = tx
+            }
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"

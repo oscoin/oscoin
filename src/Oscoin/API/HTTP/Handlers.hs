@@ -5,6 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Query
 import           Oscoin.API.HTTP.Internal
+import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.API.Types
 import qualified Oscoin.Node as Node
 import           Oscoin.Node.Mempool.Class (lookupTx, addTxs)
@@ -25,7 +26,12 @@ getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
     mtx <- node (lookupTx txId)
     case mtx of
-        Just tx -> respond ok200 $ body (Ok tx)
+        Just tx -> respond ok200 $ body $ Ok GetTxResponse
+            { txHash = hash tx
+            , txBlockHash = Nothing
+            , txConfirmations = 0
+            , txPayload = tx
+            }
         Nothing -> respond notFound404 noBody
 
 submitTransaction :: ApiAction s i a
