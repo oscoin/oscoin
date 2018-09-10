@@ -14,7 +14,7 @@ extra-deps:
 - cborg-0.2.0.0
 - half-0.2.2.3
 
-- git: git@github.com:cloudhead/wai
+- git: https://github.com/cloudhead/wai.git
   commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
   subdirs:
     - wai-extra
