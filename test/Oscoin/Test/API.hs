@@ -19,7 +19,6 @@ import           Network.HTTP.Types.Status
 
 import           Test.QuickCheck (generate, arbitrary)
 import           Test.Tasty
-import           Test.Tasty.ExpectedFailure (expectFail)
 import           Test.Tasty.HUnit (testCase, assertFailure)
 
 tests :: [TestTree]
@@ -27,7 +26,7 @@ tests =
     [ test "API smoke test" smokeTestOscoinAPI
     , testGroup "GET /transactions/:hash"
         [ test "404 Not Found" getTransaction404NotFound
-        , expectFail $ test "200 OK" getTransaction200OK
+        , test "200 OK" getTransaction200OK
         ]
     ]
   where
@@ -49,22 +48,7 @@ smokeTestOscoinAPI codec@(Codec _ accept) = do
         assertStatus ok200 <>
         assertResultOK ([] @API.RadTx)
 
-    -- Generate a dummy transaction
-    (txHash, tx) <- io $ genDummyTx
-
-    -- Submit the transaction to the mempool.
-    request POST "/transactions" (codecHeaders codec) (Just tx) >>=
-        assertStatus accepted202 <>
-        assertResultOK (Node.Receipt {fromReceipt = Crypto.hash tx})
-
-    -- Get the mempool once again, make sure the transaction is in there.
-    get accept "/transactions" >>=
-        assertStatus ok200 <>
-        assertResultOK [tx]
-
-    get accept ("/transactions/" <> txHash) >>=
-        assertStatus ok200 <>
-        assertResultOK tx
+    testSubmittedTxIsConfirmed codec
 
 getTransaction404NotFound :: Codec -> Session ()
 getTransaction404NotFound (Codec _ accept) = do
@@ -77,7 +61,23 @@ getTransaction404NotFound (Codec _ accept) = do
 
 
 getTransaction200OK :: Codec -> Session ()
-getTransaction200OK _ = notTested
+getTransaction200OK = testSubmittedTxIsConfirmed
+
+testSubmittedTxIsConfirmed :: Codec -> Session ()
+testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
+    (txHash, tx) <- io $ genDummyTx
+
+    request POST "/transactions" (codecHeaders codec) (Just tx) >>=
+        assertStatus accepted202 <>
+        assertResultOK Node.Receipt{fromReceipt = Crypto.hash tx}
+
+    get accept "/transactions" >>=
+        assertStatus ok200 <>
+        assertResultOKIncludes tx
+
+    get accept ("/transactions/" <> txHash) >>=
+        assertStatus ok200 <>
+        assertResultOK tx
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"

@@ -75,7 +75,12 @@ assertStatus status = assert responseStatus (== status)
 assertResultOK
     :: (HasCallStack, FromJSON a, Serialise a, Eq a)
     => a -> Wai.SResponse -> Wai.Session ()
-assertResultOK v = assert responseBody (== API.Ok v)
+assertResultOK v = assert responseBodyResultOK (== v)
+
+assertResultOKIncludes
+    :: forall a. (HasCallStack, FromJSON a, Serialise a, Eq a)
+    => a -> Wai.SResponse -> Wai.Session ()
+assertResultOKIncludes v = assert responseBodyResultOK (elem v :: [a] -> Bool)
 
 assert
     :: HasCallStack
@@ -137,6 +142,13 @@ responseBody :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
 responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
     Left err -> Left err
     Right ct -> decode ct $ Wai.simpleBody resp
+
+responseBodyResultOK :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
+responseBodyResultOK resp = case responseBody resp of
+    Left err  -> Left err
+    Right res -> case res of
+        API.Err err -> Left err
+        API.Ok  v   -> Right v
 
 responseStatus :: Wai.SResponse -> Either Text HTTP.Status
 responseStatus = Right . Wai.simpleStatus
