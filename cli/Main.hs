@@ -4,7 +4,8 @@ import           Oscoin.Prelude
 
 import           Oscoin.CLI (Command(..), runCommand, Options(..), defaultOptions)
 import           Oscoin.CLI.Command.Result (printResult)
-import qualified Oscoin.CLI.Backend.HTTP as Backend
+
+import           Oscoin.API.HTTP.Client (runHttpClientT)
 
 import           System.Environment
 import           System.Console.GetOpt
@@ -50,5 +51,5 @@ fatal = void . die . unwords
 main :: IO ()
 main = do
     (!cmd, opts) <- readCommand
-    backend      <- Backend.new "0.0.0.0" 8080
-    printResult =<< runCommand backend cmd opts
+    result <- runHttpClientT "http://127.0.0.1:8080" $ runCommand cmd opts
+    printResult result
