@@ -9,6 +9,7 @@ import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.API.Types
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
+import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
 
 import           Network.HTTP.Types.Status
@@ -23,18 +24,19 @@ getAllTransactions = do
     respond ok200 $ body (Ok mp)
 
 getTransaction :: Hashed RadTx -> ApiAction s i ()
-getTransaction txId = do
-    mtx <- node (Mempool.lookupTx txId)
-    case mtx of
-        Just tx -> respond ok200 $ body $ Ok GetTxResponse
-            { txHash = hash tx
-            , txBlockHash = Nothing
-            , txConfirmations = confirmations tx
-            , txPayload = tx
-            }
-        Nothing -> respond notFound404 noBody
+getTransaction txId = node (lookupTx txId) >>= \case
+    Nothing -> respond notFound404 noBody
+    Just tx -> respond ok200 $ body $ Ok GetTxResponse
+        { txHash = hash tx
+        , txBlockHash = Nothing
+        , txConfirmations = confirmations tx
+        , txPayload = tx
+        }
     where
         confirmations _ = 0
+        lookupTx id = Mempool.lookupTx id >>= \case
+            Just tx -> pure $ Just tx
+            Nothing -> BlockStore.lookupTx id
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do

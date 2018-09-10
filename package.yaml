@@ -117,6 +117,7 @@ default-extensions:
   - GADTs
   - GeneralizedNewtypeDeriving
   - InstanceSigs
+  - LambdaCase
   - MonadFailDesugaring
   - MultiParamTypeClasses
   - MultiWayIf
