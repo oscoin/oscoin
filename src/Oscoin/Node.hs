@@ -145,10 +145,8 @@ step :: forall            r tx          m.
         )
      => m ()
 step = do
-    r <- recvM
     t <- currentTick
-    o <- stepM t r
-    sendM o
+    sendM =<< stepM t =<< recvM
 
     st <- Rad.bindingsEnv . Eval.fromEnv . blockState . blockHeader . tip
       <$> maximumChainBy (comparing height)
@@ -199,35 +197,11 @@ instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (Node
         bs <- asks hBlockStore
         io . atomically $ BlockStore.put bs blk
 
-    lookupBlock hdr = do
-        bs <- asks hBlockStore
-        io . atomically $
-            BlockStore.for bs $
-                BlockStore.lookupBlock hdr
-
-    getGenesisBlock = do
-        bs <- asks hBlockStore
-        io . atomically $
-            BlockStore.for bs $
-                BlockStore.getGenesisBlock
-
-    lookupTx tx = do
-        bs <- asks hBlockStore
-        io . atomically $
-            BlockStore.for bs $
-                BlockStore.lookupTx tx
-
-    orphans = do
-        bs <- asks hBlockStore
-        io . atomically $
-            BlockStore.for bs $
-                BlockStore.orphans
-
-    maximumChainBy cmp = do
-        bs <- asks hBlockStore
-        io . atomically $
-            BlockStore.for bs $
-                BlockStore.maximumChainBy cmp
+    lookupBlock     = withBlockStore . BlockStore.lookupBlock
+    getGenesisBlock = withBlockStore   BlockStore.getGenesisBlock
+    lookupTx        = withBlockStore . BlockStore.lookupTx
+    orphans         = withBlockStore   BlockStore.orphans
+    maximumChainBy  = withBlockStore . BlockStore.maximumChainBy
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
@@ -248,6 +222,14 @@ instance MonadClock m => MonadClock (NodeT tx s i m)
 instance MonadNetwork tx m => MonadNetwork tx (NodeT tx s i m)
 
 -------------------------------------------------------------------------------
+
+withBlockStore
+    :: (MonadReader (Handle tx s si) m, MonadIO m)
+    => (BlockStore.BlockStore tx s -> b) -> m b
+withBlockStore f = do
+    bs <- asks hBlockStore
+    io . atomically $
+        BlockStore.for bs f
 
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
