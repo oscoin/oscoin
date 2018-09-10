@@ -92,7 +92,6 @@ withNode
     -> IO c
 withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
 
--- | Connect to state storage.
 open :: (Hashable tx, Pretty tx)
      => Config
      -> i
@@ -106,7 +105,6 @@ open hConfig hNodeId hMempool hStateTree hBlockStore = do
     Log.debug (cfgLogger hConfig) ("" % Log.string) (prettyBlock gen (Just 0))
     pure Handle{..}
 
--- | Close the connection to state storage.
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
