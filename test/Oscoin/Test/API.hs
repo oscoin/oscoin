@@ -5,8 +5,6 @@ import           Oscoin.Prelude
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Logging as Log
-import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.Types as API
@@ -14,32 +12,36 @@ import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
-import           Control.Monad.Loops (untilJust)
 import           Radicle as Rad
 import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.HTTP.Types.Status
 
 import           Test.QuickCheck (generate, arbitrary)
 import           Test.Tasty
+import           Test.Tasty.ExpectedFailure (expectFail)
 import           Test.Tasty.HUnit (testCase, assertFailure)
 
 tests :: [TestTree]
 tests =
     [ test "Smoke test" smokeTestOscoinAPI
     , testGroup "GET /transactions/:hash"
-        [ test "404 Not Found" getTransaction404NotFound
-        , test "200 OK" getTransaction200OK
+        [ testGroup "404 Not Found"
+            [ test "Missing transaction" getMissingTransaction ]
+
+        , expectFail $ testGroup "200 OK"
+            [ test "Unconfirmed transaction" getUnconfirmedTransaction
+            , test "Confirmed transaction"   getConfirmedTransaction
+            ]
         ]
     ]
   where
-    test   = httpTest cfg codecs
-    cfg    = Node.Config {Node.cfgEnv = Testing, Node.cfgLogger = Log.noLogger}
+    test   = httpTest codecs
     ctypes = [JSON, CBOR]
     codecs = [ Codec content accept | content <- ctypes, accept <- ctypes ]
 
-httpTest :: Node.Config -> [Codec] -> TestName -> (Codec -> Session ()) -> TestTree
-httpTest cfg codecs name session = testGroup name
-    [ testCase (show codec) $ runSession cfg 42 (session codec) | codec <- codecs ]
+httpTest :: [Codec] -> TestName -> (Codec -> Session ()) -> TestTree
+httpTest codecs name test = testGroup name
+    [testCase (show codec) $ makeNode emptyNodeState >>= runSession (test codec) | codec <- codecs ]
 
 smokeTestOscoinAPI :: Codec -> Session ()
 smokeTestOscoinAPI codec@(Codec _ accept) = do
@@ -50,10 +52,28 @@ smokeTestOscoinAPI codec@(Codec _ accept) = do
         assertStatus ok200 <>
         assertResultOK ([] @API.RadTx)
 
-    testSubmittedTxIsConfirmed codec
+    (txHash, tx) <- io $ genDummyTx
+    -- Submit the transaction to the mempool.
+    request POST "/transactions" (codecHeaders codec) (Just tx) >>=
+        assertStatus accepted202 <>
+        assertResultOK (Node.Receipt {fromReceipt = Crypto.hash tx})
 
-getTransaction404NotFound :: Codec -> Session ()
-getTransaction404NotFound (Codec _ accept) = do
+    -- Get the mempool once again, make sure the transaction is in there.
+    get accept "/transactions" >>=
+        assertStatus ok200 <>
+        assertResultOK [tx]
+
+    get accept ("/transactions/" <> txHash) >>=
+        assertStatus ok200 <>
+        assertResultOK GetTxResponse
+            { txHash = Crypto.hash tx
+            , txBlockHash = Nothing
+            , txConfirmations = 0
+            , txPayload = tx
+            }
+
+getMissingTransaction :: Codec -> Session ()
+getMissingTransaction (Codec _ accept) = do
     -- Malformed transaction hash returns a 404
     get accept "/transactions/not-a-hash" >>= assertStatus notFound404
 
@@ -61,32 +81,11 @@ getTransaction404NotFound (Codec _ accept) = do
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
     get accept ("/transactions/" <> missing) >>= assertStatus notFound404
 
+getConfirmedTransaction :: Codec -> Session ()
+getConfirmedTransaction _ = notTested
 
-getTransaction200OK :: Codec -> Session ()
-getTransaction200OK = testSubmittedTxIsConfirmed
-
-testSubmittedTxIsConfirmed :: Codec -> Session ()
-testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
-    (txId, tx) <- io $ genDummyTx
-
-    request POST "/transactions" (codecHeaders codec) (Just tx) >>=
-        assertStatus accepted202 <>
-        assertResultOK Node.Receipt{fromReceipt = Crypto.hash tx}
-
-    get accept "/transactions" >>=
-        assertStatus ok200 <>
-        assertResultOKIncludes tx
-
-    void $ untilJust $ do
-        resp <- get accept ("/transactions/" <> txId)
-        assertStatus ok200 resp
-        case responseBodyResultOK resp of
-            Left err -> io $ assertFailure $ show err
-            Right r  -> do
-                txHash r @?= Crypto.hash tx
-                txPayload r @?= tx
-                txConfirmations r >= 0 @? "Confirmations are greater than zero"
-                pure $ txBlockHash r
+getUnconfirmedTransaction :: Codec -> Session ()
+getUnconfirmedTransaction _ = notTested
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"

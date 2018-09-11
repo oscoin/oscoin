@@ -6,12 +6,16 @@ module Oscoin.Test.HTTP.Helpers where
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+import           Oscoin.Consensus.Evaluator (identityEval)
+import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
+import           Oscoin.Crypto.Blockchain.Block (toOrphan, emptyGenesisBlock)
 import           Oscoin.Environment
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal (mkMiddleware, decode, encode, parseContentType, ContentType(..))
 import qualified Oscoin.Node as Node
+import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
@@ -40,6 +44,12 @@ import           Web.Spock (spockAsApp)
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
 
+-- | Node handle for API tests.
+type NodeHandle = Node.Handle API.RadTx Rad.Env DummyNodeId
+
+-- | Node state to instantiate a NodeHandle with.
+type NodeState = ([API.RadTx], Blockchain API.RadTx Rad.Env)
+
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
 
@@ -50,14 +60,32 @@ instance (Monoid a, Semigroup a) => Monoid (Session a) where
 instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
--- | Turn a "Session" into an "Assertion".
-runSession :: Node.Config -> DummyNodeId -> Session () -> Assertion
-runSession cfg nid sess = do
-    mp <- Mempool.newIO
-    st <- STree.new
-    bs <- BlockStore.newIO $ genesisBlockStore $ emptyGenesisBlock @API.RadTx 0
-    nh <- Node.open cfg nid mp st bs
+emptyNodeState :: NodeState
+emptyNodeState = (mempty, Blockchain $ emptyGenesisBlock 0 :| [])
 
+makeNode :: NodeState -> IO NodeHandle
+makeNode (mempool, chain) = do
+    let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger }
+
+    mp <- atomically $ do
+        mp' <- Mempool.new
+        Mempool.insertMany mp' mempool
+        pure $ mp'
+
+    bs <- atomically $ do
+        bs' <- BlockStore.new $ genesisBlockStore $ emptyGenesisBlock @API.RadTx 0
+        forM_ (blocks chain) $ \b ->
+            let orphaned = toOrphan identityEval b
+            in BlockStore.put bs' orphaned
+        pure $ bs'
+
+    st <- STree.new
+
+    Node.open cfg 42 mp st bs
+
+-- | Turn a "Session" into an "Assertion".
+runSession :: Session () -> NodeHandle -> Assertion
+runSession sess nh = do
     app <- spockAsApp (mkMiddleware (api Testing) nh)
     Wai.runSession sess app
 
@@ -80,11 +108,6 @@ assertResultOK
     :: (HasCallStack, FromJSON a, Serialise a, Eq a)
     => a -> Wai.SResponse -> Wai.Session ()
 assertResultOK v = assert responseBodyResultOK (== v)
-
-assertResultOKIncludes
-    :: forall a. (HasCallStack, FromJSON a, Serialise a, Eq a)
-    => a -> Wai.SResponse -> Wai.Session ()
-assertResultOKIncludes v = assert responseBodyResultOK (elem v :: [a] -> Bool)
 
 assert :: HasCallStack => (r -> Either Text a) -> (a -> Bool) -> r -> Wai.Session ()
 assert f predicate obj = io $ case f obj of
