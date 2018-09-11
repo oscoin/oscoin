@@ -15,7 +15,6 @@ import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
 import           Control.Monad.Loops (untilJust)
-import           Control.Concurrent (threadDelay)
 import           Radicle as Rad
 import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.HTTP.Types.Status
@@ -87,7 +86,6 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
                 check txHash (== Crypto.hash tx) r
                 check txPayload (== tx) r
                 check txConfirmations (>= 0) r
-                io $ threadDelay 500000 -- 500ms
                 pure $ txBlockHash r
 
     where check g = assert (Right . g)
