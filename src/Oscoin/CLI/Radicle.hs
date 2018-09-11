@@ -1,4 +1,8 @@
-module Oscoin.CLI.Radicle where
+module Oscoin.CLI.Radicle
+    ( ToRadicle(..)
+    , FromRadicle(..)
+    , fnApply
+    ) where
 
 import           Oscoin.Prelude
 
@@ -33,3 +37,8 @@ class FromRadicle a where
 instance FromRadicle Text where
     fromRadicle x = T.pack (show x)
 
+
+-- | Return a Radicle expression that applies @args@ to the function
+-- named @fnName@.
+fnApply :: Text -> [Rad.Value] -> Rad.Value
+fnApply fnName args = Rad.List $ (Rad.Atom $ Rad.Ident fnName) : args

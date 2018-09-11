@@ -6,12 +6,12 @@ import           Oscoin.Prelude
 
 import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
-
-import           Oscoin.Node (Receipt(..))
-import           Oscoin.Crypto.Hash (hash)
-
 import           Oscoin.CLI
 import           Oscoin.CLI.Command.Result
+import qualified Oscoin.CLI.Radicle as Rad
+import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.Data.Tx (txMessageContent)
+import           Oscoin.Node (Receipt(..))
 
 import           Control.Monad.State
 
@@ -54,4 +54,7 @@ assertResultValue result = assertFailure $ "Expected ResultValue, got " <> show 
 testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
     (result, TestApiClientState{..}) <- runCommandTest RevisionCreate defaultOptions
+    let submittedMsg = txMessageContent $ head submitTransactionCalls
+    let expectedMessage = Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
+    assertEqual "Expected message to be an empty revision" expectedMessage submittedMsg
     assertResultValue result
