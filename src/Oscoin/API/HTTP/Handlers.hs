@@ -13,6 +13,8 @@ import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
 
+import           Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
+
 import           Network.HTTP.Types.Status
 import           Codec.Serialise (Serialise, serialise)
 
@@ -35,9 +37,9 @@ getTransaction txId = node (lookupTx txId) >>= \case
         }
     where
         confirmations _ = 0 -- FIXME(tsenart)
-        lookupTx id = Mempool.lookupTx id >>= \case
-            Just tx -> pure $ Just tx
-            Nothing -> BlockStore.lookupTx id
+        lookupTx id = runMaybeT
+             $  MaybeT (Mempool.lookupTx id)
+            <|> MaybeT (BlockStore.lookupTx id)
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do
