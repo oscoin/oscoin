@@ -1,9 +1,6 @@
 module Oscoin.CLI.Command
     ( Command(..)
     , runCommand
-
-    , Options(..)
-    , defaultOptions
     ) where
 
 import           Oscoin.Prelude
@@ -24,23 +21,9 @@ data Command =
     | RevisionStatus
     deriving (Show)
 
-instance Read Command where
-    readsPrec _ "create" = [(RevisionCreate, "")]
-    readsPrec _ "list"   = [(RevisionList, "")]
-    readsPrec _ "status" = [(RevisionStatus, "")]
-    readsPrec _ cmd      = error $ "Invalid command '" ++ cmd ++ "'"
 
-data Options = Options
-    { optsRevisionId :: Maybe RevisionId
-    } deriving (Show)
-
-defaultOptions :: Options
-defaultOptions = Options
-    { optsRevisionId = Nothing
-    }
-
-runCommand :: (MonadIO m, API.MonadClient m) => Command -> Options -> m (Result Text)
-runCommand RevisionCreate _opts = do
+runCommand :: (MonadIO m, API.MonadClient m) => Command -> m (Result Text)
+runCommand RevisionCreate = do
     tx <- io createTransaction
     result <- API.submitTransaction tx
     pure $ case result of
@@ -55,4 +38,5 @@ runCommand RevisionCreate _opts = do
         msg <- sign sk msgContent
         pure $ mkTx msg (hash pk)
 
-runCommand _ _ = notImplemented
+
+runCommand _ = notImplemented
