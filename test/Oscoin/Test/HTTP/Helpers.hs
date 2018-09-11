@@ -18,7 +18,7 @@ import qualified Oscoin.Storage.Block as BlockStore
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
-import           Test.Tasty.HUnit (Assertion)
+import           Test.Tasty.HUnit (Assertion, AssertionPredicable)
 import qualified Test.Tasty.HUnit as Tasty
 
 import           Crypto.Random.Types (MonadRandom(..))
@@ -61,13 +61,17 @@ runSession cfg nid sess = do
     app <- spockAsApp (mkMiddleware (api Testing) nh)
     Wai.runSession sess app
 
-infix 1 @?=, @=?
+infix 1 @?=, @=?, @?
 
 (@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@?=) actual expected = io $ Tasty.assertEqual "" expected actual
 
 (@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
+
+(@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
+(@?) predi msg  = io $ Tasty.assertionPredicate predi >>= Tasty.assertBool msg
+
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
 assertStatus status = assert responseStatus (== status)

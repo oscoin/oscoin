@@ -83,12 +83,10 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
         case responseBodyResultOK resp of
             Left err -> io $ assertFailure $ show err
             Right r  -> do
-                check txHash (== Crypto.hash tx) r
-                check txPayload (== tx) r
-                check txConfirmations (>= 0) r
+                txHash r @?= Crypto.hash tx
+                txPayload r @?= tx
+                txConfirmations r >= 0 @? "Confirmations are greater than zero"
                 pure $ txBlockHash r
-
-    where check g = assert (Right . g)
 
 notTested :: Session ()
 notTested = io $ assertFailure "Not tested"
