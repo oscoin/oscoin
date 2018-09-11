@@ -32,7 +32,6 @@ dependencies:
   - merkle-tree
   - microlens
   - mtl
-  - monad-loops
   - network
   - network-multicast
   - primitive
