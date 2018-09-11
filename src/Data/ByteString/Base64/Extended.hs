@@ -4,6 +4,7 @@ module Data.ByteString.Base64.Extended
     , encodeLazy
     , encodeBinary
     , decode
+    , decodeOrFail
     , decodeLazy
     , fromText
     ) where
@@ -39,6 +40,9 @@ encodeBinary x = encodeLazy (Binary.encode x)
 
 decode :: Base64 a -> ByteString
 decode (Base64 bs) = Base64.decodeLenient bs
+
+decodeOrFail :: Base64 a -> Either String ByteString
+decodeOrFail (Base64 bs) = Base64.decode bs
 
 decodeLazy :: Base64 a -> LBS.ByteString
 decodeLazy (Base64 bs) = LBS.fromStrict $ Base64.decodeLenient bs
