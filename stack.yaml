@@ -14,11 +14,6 @@ extra-deps:
 - cborg-0.2.0.0
 - half-0.2.2.3
 
-- git: https://github.com/cloudhead/wai.git
-  commit: a3464cc76198d51ae7cf838690eadeeefd627f9c
-  subdirs:
-    - wai-extra
-
 - git: http://git.oscoin.io/radicle
   commit: 2b9ddab4963bf04f0148ff0974acdb5ebab5834f
 
