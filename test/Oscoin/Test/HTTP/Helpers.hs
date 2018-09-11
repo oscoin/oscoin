@@ -139,11 +139,7 @@ responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
     Right ct -> decode ct $ Wai.simpleBody resp
 
 responseBodyResultOK :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
-responseBodyResultOK resp = case responseBody resp of
-    Left err  -> Left err
-    Right res -> case res of
-        API.Err err -> Left err
-        API.Ok  v   -> Right v
+responseBodyResultOK resp = responseBody resp >>= API.resultToEither
 
 responseStatus :: Wai.SResponse -> Either Text HTTP.Status
 responseStatus = Right . Wai.simpleStatus

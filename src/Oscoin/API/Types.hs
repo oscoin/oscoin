@@ -3,6 +3,7 @@ module Oscoin.API.Types
     , Result(..)
     , isOk
     , isErr
+    , resultToEither
     , Receipt
     , Key
     , Query(..)
@@ -36,3 +37,7 @@ isOk _      = False
 
 isErr :: Result a -> Bool
 isErr = not . isOk
+
+resultToEither :: Result a -> Either Text a
+resultToEither (Ok a ) = Right a
+resultToEither (Err t) = Left t
