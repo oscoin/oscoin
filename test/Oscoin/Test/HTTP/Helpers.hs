@@ -171,24 +171,23 @@ responseBodyResultOK resp = responseBody resp >>= API.resultToEither
 responseStatus :: Wai.SResponse -> Either Text HTTP.Status
 responseStatus = Right . Wai.simpleStatus
 
-get, delete :: HasCallStack => ContentType -> Text -> Wai.Session Wai.SResponse
+get :: HasCallStack => Codec -> Text -> Wai.Session Wai.SResponse
 get = withoutBody GET
-delete = withoutBody DELETE
 
-put, post
+post
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => ContentType -> Text -> a -> Wai.Session Wai.SResponse
-put  = withBody PUT
+    => Codec -> Text -> a -> Wai.Session Wai.SResponse
 post = withBody POST
 
-withoutBody :: HasCallStack => HTTP.StdMethod -> ContentType -> Text -> Wai.Session Wai.SResponse
-withoutBody method ct path = request method path [acceptHeader ct] noBody
+withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Wai.Session Wai.SResponse
+withoutBody method (Codec _ acceptCt) path =
+    request method path [acceptHeader acceptCt] noBody
 
 withBody
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => HTTP.StdMethod -> ContentType -> Text -> a -> Wai.Session Wai.SResponse
-withBody method ct path body' = request method path headers $ Just body'
-    where headers = [contentTypeHeader ct, acceptHeader ct]
+    => HTTP.StdMethod -> Codec -> Text -> a -> Wai.Session Wai.SResponse
+withBody method codec path body' =
+    request method path (codecHeaders codec) $ Just body'
 
 -- | Represents an empty request body.
 noBody :: Maybe ()

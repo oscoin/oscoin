@@ -13,7 +13,6 @@ import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
 import           Radicle as Rad
-import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.HTTP.Types.Status
 
 import           Test.QuickCheck (generate, arbitrary)
@@ -47,26 +46,26 @@ httpTest :: NodeState -> Session () -> HTTPTest
 httpTest state sess = HTTPTest{ testState = state, testSession = sess }
 
 smokeTestOscoinAPI :: Codec -> HTTPTest
-smokeTestOscoinAPI codec@(Codec _ accept) = httpTest emptyNodeState $ do
-    get accept "/" >>= assertStatus ok200
+smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
+    get codec "/" >>= assertStatus ok200
 
     -- The mempool is empty.
-    get accept "/transactions" >>=
+    get codec "/transactions" >>=
         assertStatus ok200 <>
         assertResultOK ([] @API.RadTx)
 
     (txHash, tx) <- io $ genDummyTx
     -- Submit the transaction to the mempool.
-    request POST "/transactions" (codecHeaders codec) (Just tx) >>=
+    post codec "/transactions" tx >>=
         assertStatus accepted202 <>
         assertResultOK (Node.Receipt {fromReceipt = Crypto.hash tx})
 
     -- Get the mempool once again, make sure the transaction is in there.
-    get accept "/transactions" >>=
+    get codec "/transactions" >>=
         assertStatus ok200 <>
         assertResultOK [tx]
 
-    get accept ("/transactions/" <> txHash) >>=
+    get codec ("/transactions/" <> txHash) >>=
         assertStatus ok200 <>
         assertResultOK GetTxResponse
             { txHash = Crypto.hash tx
@@ -76,13 +75,13 @@ smokeTestOscoinAPI codec@(Codec _ accept) = httpTest emptyNodeState $ do
             }
 
 getMissingTransaction :: Codec -> HTTPTest
-getMissingTransaction (Codec _ accept) = httpTest emptyNodeState $ do
+getMissingTransaction codec = httpTest emptyNodeState $ do
     -- Malformed transaction hash returns a 404
-    get accept "/transactions/not-a-hash" >>= assertStatus notFound404
+    get codec "/transactions/not-a-hash" >>= assertStatus notFound404
 
     -- Well formed but missing transaction hash returns a 404
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
-    get accept ("/transactions/" <> missing) >>= assertStatus notFound404
+    get codec ("/transactions/" <> missing) >>= assertStatus notFound404
 
 getConfirmedTransaction :: Codec -> HTTPTest
 getConfirmedTransaction _ = notTested
