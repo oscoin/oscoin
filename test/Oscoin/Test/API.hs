@@ -35,16 +35,19 @@ tests =
         ]
     ]
   where
-    test   = httpTest codecs
-    ctypes = [JSON, CBOR]
-    codecs = [ Codec content accept | content <- ctypes, accept <- ctypes ]
+    test name mkTest = testGroup name $ do
+        let ctypes = [ JSON, CBOR ]
+        codec <- [ Codec content accept | content <- ctypes, accept <- ctypes ]
+        let HTTPTest{..} = mkTest codec
+        [testCase (show codec) $ makeNode testState >>= runSession testSession]
 
-httpTest :: [Codec] -> TestName -> (Codec -> Session ()) -> TestTree
-httpTest codecs name test = testGroup name
-    [testCase (show codec) $ makeNode emptyNodeState >>= runSession (test codec) | codec <- codecs ]
+data HTTPTest = HTTPTest { testState :: NodeState, testSession :: Session ()}
 
-smokeTestOscoinAPI :: Codec -> Session ()
-smokeTestOscoinAPI codec@(Codec _ accept) = do
+httpTest :: NodeState -> Session () -> HTTPTest
+httpTest state sess = HTTPTest{ testState = state, testSession = sess }
+
+smokeTestOscoinAPI :: Codec -> HTTPTest
+smokeTestOscoinAPI codec@(Codec _ accept) = httpTest emptyNodeState $ do
     get accept "/" >>= assertStatus ok200
 
     -- The mempool is empty.
@@ -72,8 +75,8 @@ smokeTestOscoinAPI codec@(Codec _ accept) = do
             , txPayload = tx
             }
 
-getMissingTransaction :: Codec -> Session ()
-getMissingTransaction (Codec _ accept) = do
+getMissingTransaction :: Codec -> HTTPTest
+getMissingTransaction (Codec _ accept) = httpTest emptyNodeState $ do
     -- Malformed transaction hash returns a 404
     get accept "/transactions/not-a-hash" >>= assertStatus notFound404
 
@@ -81,14 +84,14 @@ getMissingTransaction (Codec _ accept) = do
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
     get accept ("/transactions/" <> missing) >>= assertStatus notFound404
 
-getConfirmedTransaction :: Codec -> Session ()
+getConfirmedTransaction :: Codec -> HTTPTest
 getConfirmedTransaction _ = notTested
 
-getUnconfirmedTransaction :: Codec -> Session ()
+getUnconfirmedTransaction :: Codec -> HTTPTest
 getUnconfirmedTransaction _ = notTested
 
-notTested :: Session ()
-notTested = io $ assertFailure "Not tested"
+notTested :: HTTPTest
+notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
 
 genDummyTx :: IO (Text, API.RadTx)
 genDummyTx = do
