@@ -31,6 +31,7 @@ import qualified Data.Aeson as Aeson
 import           Data.Aeson (ToJSON, FromJSON)
 import           Codec.Serialise (Serialise)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text as T
 
 import qualified Network.HTTP.Types.Header as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
@@ -92,27 +93,31 @@ runSession sess nh = do
 infix 1 @?=, @=?, @?
 
 (@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
-(@?=) actual expected = io $ Tasty.assertEqual "" expected actual
+(@?=) actual expected = io $ (Tasty.@?=) actual expected
 
 (@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
 
 (@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
-(@?) predi msg  = io $ Tasty.assertionPredicate predi >>= Tasty.assertBool msg
+(@?) predi msg = io $ (Tasty.@?) predi msg
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
-assertStatus status = assert responseStatus (== status)
+assertStatus status = Wai.assertStatus $ HTTP.statusCode status
 
+-- | Assert that the response can be deserialised to @API.Ok actual@
+-- and @actual@ equals @expected@.
 assertResultOK
-    :: (HasCallStack, FromJSON a, Serialise a, Eq a)
+    :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a)
     => a -> Wai.SResponse -> Wai.Session ()
-assertResultOK v = assert responseBodyResultOK (== v)
+assertResultOK expected response = do
+    result <- case responseBody response of
+        Left err -> io $ Tasty.assertFailure $ show err
+        Right a -> pure $ a
+    case result of
+        API.Err err -> io $ Tasty.assertFailure $ "Received API error: " <> T.unpack err
+        API.Ok v -> expected @=? v
 
-assert :: HasCallStack => (r -> Either Text a) -> (a -> Bool) -> r -> Wai.Session ()
-assert f predicate obj = io $ case f obj of
-    Left err -> Tasty.assertFailure $ show err
-    Right v  -> Tasty.assertBool "" $ predicate v
 
 -- | Low-level HTTP request helper.
 request
@@ -164,12 +169,6 @@ responseBody :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
 responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
     Left err -> Left err
     Right ct -> decode ct $ Wai.simpleBody resp
-
-responseBodyResultOK :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
-responseBodyResultOK resp = responseBody resp >>= API.resultToEither
-
-responseStatus :: Wai.SResponse -> Either Text HTTP.Status
-responseStatus = Right . Wai.simpleStatus
 
 get :: HasCallStack => Codec -> Text -> Wai.Session Wai.SResponse
 get = withoutBody GET
