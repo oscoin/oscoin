@@ -78,7 +78,7 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
         assertStatus ok200 <>
         assertResultOKIncludes tx
 
-    _ <- untilJust $ do
+    void $ untilJust $ do
         resp <- get accept ("/transactions/" <> txId)
         assertStatus ok200 resp
         case responseBodyResultOK resp of
@@ -89,8 +89,6 @@ testSubmittedTxIsConfirmed codec@(Codec _ accept) = do
                 check txConfirmations (>= 0) r
                 io $ threadDelay 500000 -- 500ms
                 pure $ txBlockHash r
-
-    pure ()
 
     where check g = assert (Right . g)
 
