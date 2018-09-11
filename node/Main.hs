@@ -63,16 +63,16 @@ main = do
         withAPI   Testing                                               $ \api ->
         withDisco (mkDisco lgr sds nid addrIP addrPort)                 $ \dis ->
         withP2P   (mkP2PConfig addrIP addrPort) lgr dis                 $ \p2p ->
-            let run = Node.runEffects p2p nod (evalNakamotoT env rng)
+            let run = void . Node.runEffects p2p nod (evalNakamotoT env rng)
                 env = defaultNakamotoEnv
                     { nakEval = nodeEval
                     , nakLogger = lgr
                     , nakDifficulty = dif
                     }
-             in do
-                 void $ Async.async $ HTTP.run api 8080 nod -- TODO(cloudhead): Eventually we should terminate gracefully.
-                 Async.race_ (run . forever $ Node.step)
-                             (run . forever $ Node.tick)
+             in Async.runConcurrently $
+                     (Async.Concurrently $ HTTP.run api 8080 nod)
+                  <> (Async.Concurrently . run . forever $ Node.step)
+                  <> (Async.Concurrently . run . forever $ Node.tick)
   where
     mkNodeConfig env lgr = Node.Config
         { Node.cfgEnv = env
