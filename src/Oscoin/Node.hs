@@ -113,9 +113,9 @@ tick :: ( MonadNetwork     tx   m
         , MonadBlockStore  tx s m
         , MonadClock            m
         , Log.MonadLogger  r    m
+        , Has (STree.Handle s)  r
         , Hashable         tx
         , Pretty           tx
-        , r ~ Handle tx s i
         )
      => m ()
 tick = do
@@ -133,12 +133,12 @@ updateState
     :: ( MonadNetwork     tx   m
        , MonadBlockStore  tx s m
        , Log.MonadLogger  r    m
-       , r ~ Handle tx s i
+       , Has (STree.Handle s) r
        )
     => m ()
 updateState = do
     st  <- latestState
-    hst <- asks hStateTree
+    hst <- asks getter
     io . atomically $ STree.updateTree hst st
 
 logMsg :: forall r tx m.
@@ -157,7 +157,7 @@ step :: ( MonadNetwork      tx   m
         , MonadBlockStore   tx s m
         , MonadClock             m
         , Log.MonadLogger r      m
-        , r ~ Handle tx s i
+        , Has (STree.Handle s) r
         )
      => m ()
 step = do
