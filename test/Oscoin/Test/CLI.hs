@@ -14,6 +14,7 @@ import           Oscoin.Data.Tx (txMessageContent)
 import           Oscoin.Node (Receipt(..))
 
 import           Control.Monad.State
+import qualified Options.Applicative as Options
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -43,9 +44,15 @@ data TestApiClientState = TestApiClientState
     { submitTransactionCalls :: [ RadTx ] }
 
 
-runCommandTest :: Command -> Options -> IO (Result Text, TestApiClientState)
-runCommandTest cmd opts =
-    runStateT (runTestApiClient $ runCommand cmd opts) (TestApiClientState [])
+runTest :: [String] -> IO (Result Text, TestApiClientState)
+runTest args = do
+    cmd <- case execParserPure args of
+        Options.Success cmd -> pure $ cmd
+        Options.CompletionInvoked _ -> assertFailure "Unexpected CLI completion invoked"
+        Options.Failure failure ->
+            let failureMessage = fst $ Options.renderFailure failure ""
+            in assertFailure $ "Failed to parse CLI arguments: \n" <> failureMessage
+    runStateT (runTestApiClient $ runCommand cmd ) (TestApiClientState [])
 
 assertResultValue :: (Show a) => Result a -> Assertion
 assertResultValue (ResultValue _) = pure ()
@@ -53,7 +60,7 @@ assertResultValue result = assertFailure $ "Expected ResultValue, got " <> show 
 
 testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
-    (result, TestApiClientState{..}) <- runCommandTest RevisionCreate defaultOptions
+    (result, TestApiClientState{..}) <- runTest ["create"]
     let submittedMsg = txMessageContent $ head submitTransactionCalls
     let expectedMessage = Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
     assertEqual "Expected message to be an empty revision" expectedMessage submittedMsg
