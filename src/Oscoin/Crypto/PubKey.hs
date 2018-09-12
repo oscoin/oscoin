@@ -1,39 +1,50 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Crypto.PubKey
-    ( Signed(..)
+    ( Signed
+    , sigMessage
+    , sigSignature
+    , Signature
     , PublicKey
     , publicKeyHash
     , PrivateKey
+
     , generateKeyPair
+
     , sign
+    , signBytes
     , signed
     , unsign
     , verify
+    , verifyBytes
     ) where
 
 import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (Hashed, toHashed, hashAlgorithm, Hashable(..), fromHashed, hash)
 
-import           Crypto.PubKey.ECC.Generate (generate)
-import           Crypto.PubKey.ECC.ECDSA (Signature(..))
+import qualified Oscoin.Crypto.Hash as Crypto
+
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import qualified Crypto.PubKey.ECC.Types as ECC
+import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
+import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.Random.Types (MonadRandom)
 
-import           Codec.Serialise
-import           Codec.Serialise.JSON
+import           Codec.Serialise (Serialise(..))
+import qualified Codec.Serialise as CBOR
+import           Codec.Serialise.Decoding as CBOR
+import           Codec.Serialise.Encoding as CBOR
+import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
+import           Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+import qualified Data.ByteString.Base64.Extended as Base64
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
-import           Data.Aeson (FromJSON(..), ToJSON(..), withObject, object, (.=), (.:))
-import qualified Data.ByteString.Base64.Extended as Base64
 import           Web.HttpApiData
 
-data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
+data PublicKey = PublicKey ECDSA.PublicKey (Crypto.Hashed ECDSA.PublicKey)
     deriving (Show, Generic)
 
 mkPublicKey :: ECDSA.PublicKey -> PublicKey
-mkPublicKey pk = PublicKey pk (hash pk)
+mkPublicKey pk = PublicKey pk (Crypto.hash pk)
 
 instance Serialise PublicKey where
     encode (PublicKey pk _) = encode pk
@@ -45,8 +56,8 @@ instance ToJSON PublicKey where
 instance FromJSON PublicKey where
     parseJSON = deserialiseParseJSON
 
-instance Hashable PublicKey where
-    hash (PublicKey _ h) = toHashed (fromHashed h)
+instance Crypto.Hashable PublicKey where
+    hash (PublicKey _ h) = Crypto.toHashed (Crypto.fromHashed h)
 
 deriving instance Generic ECDSA.PublicKey
 instance Serialise ECDSA.PublicKey
@@ -72,7 +83,7 @@ instance Eq PublicKey where
 instance Ord PublicKey where
     (<=) (PublicKey _ h) (PublicKey _ h') = h <= h'
 
-publicKeyHash :: PublicKey -> Hashed ECDSA.PublicKey
+publicKeyHash :: PublicKey -> Crypto.Hashed ECDSA.PublicKey
 publicKeyHash (PublicKey _ h) = h
 
 newtype PrivateKey = PrivateKey ECDSA.PrivateKey
@@ -80,8 +91,12 @@ newtype PrivateKey = PrivateKey ECDSA.PrivateKey
 
 --------------------------------------------------------------------------------
 
+newtype Signature = Signature ECDSA.Signature
+    deriving (Eq, Show)
+
 instance Ord Signature where
-    (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
+    (Signature a) <= (Signature b) =
+        (ECDSA.sign_r a, ECDSA.sign_s a) <= (ECDSA.sign_r b, ECDSA.sign_s b)
 
 instance ToJSON Signature where
     toJSON = serialiseToJSON
@@ -92,8 +107,22 @@ instance FromJSON Signature where
 instance FromHttpApiData Signature where
     parseQueryParam _txt = notImplemented
 
-deriving instance Generic Signature
-instance Serialise Signature
+instance Serialise Signature where
+    encode (Signature ecdsa) =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord 0
+        <> CBOR.encodeInteger (ECDSA.sign_r ecdsa)
+        <> CBOR.encodeInteger (ECDSA.sign_s ecdsa)
+
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (3, 0) -> do
+                ecdsa <-
+                    liftA2 ECDSA.Signature CBOR.decodeInteger CBOR.decodeInteger
+                pure $ Signature ecdsa
+
+            _ -> fail "CBOR Signature: invalid ECDSA signature"
 
 -- | A signed message.
 -- Create these with "sign" and verify them with "verify".
@@ -102,9 +131,9 @@ data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
 
 instance Serialise msg => Serialise (Signed msg)
 
-instance Hashable msg => Hashable (Signed msg) where
-    hash :: Signed msg -> Hashed (Signed msg)
-    hash (Signed msg _) = toHashed (fromHashed (hash msg))
+instance Crypto.Hashable msg => Crypto.Hashable (Signed msg) where
+    hash :: Signed msg -> Crypto.Hashed (Signed msg)
+    hash (Signed msg _) = Crypto.toHashed (Crypto.fromHashed (Crypto.hash msg))
 
 instance ToJSON (Signed ByteString) where
     toJSON (Signed msg sig) =
@@ -126,12 +155,17 @@ instance Pretty msg => Pretty (Signed msg) where
 generateKeyPair :: MonadRandom m => m (PublicKey, PrivateKey)
 generateKeyPair = do
     (pk, sk) <- generate (getCurveByName SEC_p256k1)
-    pure (PublicKey pk (hash pk), PrivateKey sk)
+    pure (PublicKey pk (Crypto.hash pk), PrivateKey sk)
 
 -- | Sign a message with a private key.
 sign :: (MonadRandom m, Serialise msg) => PrivateKey -> msg -> m (Signed msg)
-sign (PrivateKey key) msg =
-    Signed msg <$> ECDSA.sign key hashAlgorithm (LBS.toStrict $ serialise msg)
+sign key msg = do
+    s <- signBytes key . LBS.toStrict $ CBOR.serialise msg
+    pure $ s $> msg
+
+signBytes :: MonadRandom m => PrivateKey -> ByteString -> m (Signed ByteString)
+signBytes (PrivateKey key) bytes =
+    Signed bytes . Signature <$> ECDSA.sign key Crypto.hashAlgorithm bytes
 
 -- | Create a signed message from a message and a signature.
 signed :: Signature -> msg -> Signed msg
@@ -143,5 +177,8 @@ unsign = sigMessage
 
 -- | Verify a signed message with the public key.
 verify :: Serialise msg => PublicKey -> Signed msg -> Bool
-verify (PublicKey key _) (Signed msg sig) =
-    ECDSA.verify hashAlgorithm key sig (LBS.toStrict $ serialise msg)
+verify key s = verifyBytes key $ map (LBS.toStrict . CBOR.serialise) s
+
+verifyBytes :: PublicKey -> Signed ByteString -> Bool
+verifyBytes (PublicKey key _) (Signed bytes (Signature sig)) =
+    ECDSA.verify Crypto.hashAlgorithm key sig bytes
