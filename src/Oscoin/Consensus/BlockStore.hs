@@ -79,14 +79,14 @@ orphans BlockStore{bsOrphans} =
 
 -- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
 -- blocks which lead back to genesis.
-lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe tx
-lookupTx h BlockStore{bsChains} =
+lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe (tx, BlockHash)
+lookupTx h BlockStore{bsChains} = lookup h $ do
     -- Nb. This is very slow. One way to make it faster would be to traverse
     -- all chains starting from the tip, in lock step, because it's likely
     -- that the transaction we're looking for is near the tip.
-    let txs  = [(hash tx, tx) | tx <- concatMap (toList . blockData) blks]
-        blks = concatMap blocks (Map.elems bsChains)
-     in lookup h txs
+    blk <- concatMap blocks (Map.elems bsChains)
+    tx  <- toList $ blockData blk
+    pure (hash tx, (tx, headerHash $ blockHeader blk))
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.

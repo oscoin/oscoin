@@ -29,17 +29,18 @@ getAllTransactions = do
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just tx -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, bh) -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash = Nothing
+        , txBlockHash = bh
         , txConfirmations = confirmations tx
         , txPayload = tx
         }
     where
         confirmations _ = 0 -- FIXME(tsenart)
-        lookupTx id = runMaybeT
-             $  MaybeT (Mempool.lookupTx id)
-            <|> MaybeT (BlockStore.lookupTx id)
+        lookupTx     id = runMaybeT $ inMempool id <|> inBlockstore id
+        inMempool    id = (, Nothing) <$> MaybeT (Mempool.lookupTx id)
+        inBlockstore id = second Just <$> MaybeT (BlockStore.lookupTx id)
+
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do

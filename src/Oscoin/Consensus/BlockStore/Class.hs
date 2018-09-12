@@ -19,7 +19,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     getGenesisBlock :: m (Block tx s)
 
     -- | Lookup a transaction by its hash.
-    lookupTx :: Hashed tx -> m (Maybe tx)
+    lookupTx :: Hashed tx -> m (Maybe (tx, BlockHash))
 
     -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
     orphans :: m (Set BlockHash)
@@ -50,7 +50,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
 
     default lookupTx
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => Hashed tx -> m (Maybe tx)
+        => Hashed tx -> m (Maybe (tx, BlockHash))
     lookupTx = lift . lookupTx
     {-# INLINE lookupTx #-}
 

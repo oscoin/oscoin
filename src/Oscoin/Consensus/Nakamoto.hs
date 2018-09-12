@@ -167,7 +167,7 @@ isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
 isNovelTx h = do
     inBlockStore <- BlockStore.lookupTx h
     inMempool    <- lookupTx h
-    pure . isNothing $ inBlockStore <|> inMempool
+    pure . isNothing $ (fst <$> inBlockStore) <|> inMempool
 
 runNakamotoT :: NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())
 runNakamotoT env rng (NakamotoT ma) = runRWST ma env rng
