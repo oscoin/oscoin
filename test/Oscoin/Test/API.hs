@@ -6,6 +6,8 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
+import           Oscoin.Crypto.Blockchain (Blockchain(..))
+import           Oscoin.Crypto.Blockchain.Block (mkBlock, genesisHeader, headerHash)
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
@@ -27,7 +29,7 @@ tests =
 
         , testGroup "200 OK"
             [ test "Unconfirmed transaction" getUnconfirmedTransaction
-            , expectFail $ test "Confirmed transaction"   getConfirmedTransaction
+            , expectFail $ test "Confirmed transaction" getConfirmedTransaction
             ]
         ]
     , testGroup "POST /transactions"
@@ -79,7 +81,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
         assertStatus ok200 <>
         assertResultOK [tx]
 
-    transactionIsUnconfirmed codec txHash tx
+    getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
 
 getMissingTransaction :: Codec -> IO HTTPTest
 getMissingTransaction codec = httpTest emptyNodeState $ do
@@ -91,24 +93,37 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
     get codec ("/transactions/" <> missing) >>= assertStatus notFound404
 
 getConfirmedTransaction :: Codec -> IO HTTPTest
-getConfirmedTransaction _ = notTested
+getConfirmedTransaction codec = do
+    (txHash, tx) <- genDummyTx
+    let bh = genesisHeader 0 [tx]
+    let bs = Blockchain $ mkBlock bh [tx] :| []
+    httpTest (nodeState mempty bs) $
+        getTransactionReturns codec txHash $ GetTxResponse
+            { txHash = Crypto.hash tx
+            , txBlockHash = Just $ headerHash bh
+            , txConfirmations = 1
+            , txPayload = tx
+            }
 
 getUnconfirmedTransaction :: Codec -> IO HTTPTest
 getUnconfirmedTransaction codec = do
     (txHash, tx) <- genDummyTx
     httpTest (nodeState [tx] emptyBlockstore) $
-        transactionIsUnconfirmed codec txHash tx
+        getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
 
-transactionIsUnconfirmed :: Codec -> Text -> API.RadTx -> Wai.Session ()
-transactionIsUnconfirmed codec txHash tx =
+unconfirmedGetTxResponse :: API.RadTx -> GetTxResponse
+unconfirmedGetTxResponse tx = GetTxResponse
+    { txHash = Crypto.hash tx
+    , txBlockHash = Nothing
+    , txConfirmations = 0
+    , txPayload = tx
+    }
+
+getTransactionReturns :: Codec -> Text -> GetTxResponse -> Wai.Session ()
+getTransactionReturns codec txHash expected =
     get codec ("/transactions/" <> txHash) >>=
     assertStatus ok200 <>
-    assertResultOK GetTxResponse
-        { txHash = Crypto.hash tx
-        , txBlockHash = Nothing
-        , txConfirmations = 0
-        , txPayload = tx
-        }
+    assertResultOK expected
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"

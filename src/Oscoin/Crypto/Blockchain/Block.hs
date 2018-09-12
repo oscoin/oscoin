@@ -9,6 +9,7 @@ module Oscoin.Crypto.Blockchain.Block
     , mkBlock
     , linkBlock
     , genesisBlock
+    , genesisHeader
     , emptyGenesisBlock
     , isGenesisBlock
     , validateBlock
