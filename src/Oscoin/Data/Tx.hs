@@ -11,7 +11,6 @@ import           Codec.Serialise
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Binary
 import           Data.Text.Prettyprint.Doc
 
 data Tx msg = Tx
@@ -21,8 +20,6 @@ data Tx msg = Tx
     , txNonce   :: Word32
     , txContext :: BlockHash
     } deriving (Show, Eq, Ord, Generic, Functor)
-
-instance Binary msg => Binary (Tx msg)
 
 instance Serialise msg => Hashable (Tx msg) where
     hash = hashSerial

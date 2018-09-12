@@ -22,18 +22,28 @@ import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import           Crypto.Random.Types (MonadRandom)
 
 import           Codec.Serialise
-import           Data.Binary (Binary)
-import qualified Data.Binary as Binary
+import           Codec.Serialise.JSON
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
-import           Data.Aeson (FromJSON(..), ToJSON(..), withText, withObject, object, (.=), (.:))
+import           Data.Aeson (FromJSON(..), ToJSON(..), withObject, object, (.=), (.:))
 import qualified Data.ByteString.Base64.Extended as Base64
 import           Web.HttpApiData
 
 data PublicKey = PublicKey ECDSA.PublicKey (Hashed ECDSA.PublicKey)
     deriving (Show, Generic)
 
-instance Serialise PublicKey
+mkPublicKey :: ECDSA.PublicKey -> PublicKey
+mkPublicKey pk = PublicKey pk (hash pk)
+
+instance Serialise PublicKey where
+    encode (PublicKey pk _) = encode pk
+    decode = mkPublicKey <$> decode
+
+instance ToJSON PublicKey where
+    toJSON = serialiseToJSON
+
+instance FromJSON PublicKey where
+    parseJSON = deserialiseParseJSON
 
 instance Hashable PublicKey where
     hash (PublicKey _ h) = toHashed (fromHashed h)
@@ -74,19 +84,10 @@ instance Ord Signature where
     (<=) a b = (sign_r a, sign_s a) <= (sign_r b, sign_s b)
 
 instance ToJSON Signature where
-    toJSON = toJSON . Base64.encodeLazy . Binary.encode
+    toJSON = serialiseToJSON
 
 instance FromJSON Signature where
-    parseJSON = withText "Signature" $
-        -- TODO: Can we use the FromJSON instance of Base64?
-        pure . Binary.decode . Base64.decodeLazy . Base64.fromText
-
-instance Binary Signature where
-    put sig =
-        Binary.put (sign_r sig, sign_s sig)
-    get = do
-        (sign_r, sign_s) <- Binary.get
-        pure Signature{..}
+    parseJSON = deserialiseParseJSON
 
 instance FromHttpApiData Signature where
     parseQueryParam _txt = notImplemented
@@ -99,7 +100,6 @@ instance Serialise Signature
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
     deriving (Show, Eq, Ord, Functor, Generic)
 
-instance Binary msg => Binary (Signed msg)
 instance Serialise msg => Serialise (Signed msg)
 
 instance Hashable msg => Hashable (Signed msg) where
@@ -121,11 +121,6 @@ instance FromJSON (Signed ByteString) where
 instance Pretty msg => Pretty (Signed msg) where
     pretty = pretty . unsign
 
-instance Binary PublicKey where
-    put (PublicKey key _) = Binary.put key
-    get = do
-        key <- Binary.get
-        pure $ PublicKey key (hash key)
 
 -- | Generate a new random keypair.
 generateKeyPair :: MonadRandom m => m (PublicKey, PrivateKey)
@@ -147,6 +142,6 @@ unsign :: Signed msg -> msg
 unsign = sigMessage
 
 -- | Verify a signed message with the public key.
-verify :: Binary msg => PublicKey -> Signed msg -> Bool
+verify :: Serialise msg => PublicKey -> Signed msg -> Bool
 verify (PublicKey key _) (Signed msg sig) =
-    ECDSA.verify hashAlgorithm key sig (LBS.toStrict $ Binary.encode msg)
+    ECDSA.verify hashAlgorithm key sig (LBS.toStrict $ serialise msg)
