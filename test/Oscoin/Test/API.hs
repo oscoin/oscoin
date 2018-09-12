@@ -12,6 +12,7 @@ import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 
 import           Network.HTTP.Types.Status
+import qualified Network.Wai.Test as Wai
 
 import           Test.Tasty
 import           Test.Tasty.ExpectedFailure (expectFail)
@@ -24,9 +25,9 @@ tests =
         [ testGroup "404 Not Found"
             [ test "Missing transaction" getMissingTransaction ]
 
-        , expectFail $ testGroup "200 OK"
+        , testGroup "200 OK"
             [ test "Unconfirmed transaction" getUnconfirmedTransaction
-            , test "Confirmed transaction"   getConfirmedTransaction
+            , expectFail $ test "Confirmed transaction"   getConfirmedTransaction
             ]
         ]
     , testGroup "POST /transactions"
@@ -78,14 +79,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
         assertStatus ok200 <>
         assertResultOK [tx]
 
-    get codec ("/transactions/" <> txHash) >>=
-        assertStatus ok200 <>
-        assertResultOK GetTxResponse
-            { txHash = Crypto.hash tx
-            , txBlockHash = Nothing
-            , txConfirmations = 0
-            , txPayload = tx
-            }
+    transactionIsUnconfirmed codec txHash tx
 
 getMissingTransaction :: Codec -> IO HTTPTest
 getMissingTransaction codec = httpTest emptyNodeState $ do
@@ -100,7 +94,21 @@ getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction _ = notTested
 
 getUnconfirmedTransaction :: Codec -> IO HTTPTest
-getUnconfirmedTransaction _ = notTested
+getUnconfirmedTransaction codec = do
+    (txHash, tx) <- genDummyTx
+    httpTest (nodeState [tx] emptyBlockstore) $
+        transactionIsUnconfirmed codec txHash tx
+
+transactionIsUnconfirmed :: Codec -> Text -> API.RadTx -> Wai.Session ()
+transactionIsUnconfirmed codec txHash tx =
+    get codec ("/transactions/" <> txHash) >>=
+    assertStatus ok200 <>
+    assertResultOK GetTxResponse
+        { txHash = Crypto.hash tx
+        , txBlockHash = Nothing
+        , txConfirmations = 0
+        , txPayload = tx
+        }
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"

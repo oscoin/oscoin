@@ -70,10 +70,13 @@ instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
 emptyNodeState :: NodeState
-emptyNodeState = NodeState
-    { mempoolState = mempty
-    , blockstoreState = Blockchain $ emptyGenesisBlock 0 :| []
-    }
+emptyNodeState = NodeState { mempoolState = mempty, blockstoreState = emptyBlockstore }
+
+nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
+nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
+
+emptyBlockstore :: Blockchain API.RadTx Rad.Env
+emptyBlockstore = Blockchain $ emptyGenesisBlock 0 :| []
 
 makeNode :: NodeState -> IO NodeHandle
 makeNode NodeState{..} = do
@@ -124,16 +127,8 @@ infix 1 @?=, @=?, @?
 (@?) predi msg = io $ (Tasty.@?) predi msg
 
 
-assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
-assertStatus expected response = io $ Tasty.assertBool msg (actual == expected)
-  where
-    actual = Wai.simpleStatus response
-    msg = concat
-        [ "Expected status code "
-        , show expected
-        , ", but received "
-        , show actual
-        ]
+assertStatus :: HTTP.Status -> Wai.SResponse -> Wai.Session ()
+assertStatus status = Wai.assertStatus $ HTTP.statusCode status
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
