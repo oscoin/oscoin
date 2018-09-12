@@ -4,18 +4,13 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
-import           Oscoin.Test.Data.Rad.Arbitrary ( )
 
-import           Radicle as Rad
 import           Network.HTTP.Types.Status
 
-import           Test.QuickCheck (generate, arbitrary)
 import           Test.Tasty
 import           Test.Tasty.ExpectedFailure (expectFail)
 import           Test.Tasty.HUnit (testCase, assertFailure)
@@ -37,15 +32,18 @@ tests =
     test name mkTest = testGroup name $ do
         let ctypes = [ JSON, CBOR ]
         codec <- [ Codec content accept | content <- ctypes, accept <- ctypes ]
-        let HTTPTest{..} = mkTest codec
-        [testCase (show codec) $ makeNode testState >>= runSession testSession]
+        [testCase (show codec) $ mkTest codec >>=
+            \HTTPTest{..} -> makeNode testState >>= runSession testSession]
 
-data HTTPTest = HTTPTest { testState :: NodeState, testSession :: Session ()}
+data HTTPTest = HTTPTest
+    { testState :: NodeState
+    , testSession :: Session ()
+    }
 
-httpTest :: NodeState -> Session () -> HTTPTest
-httpTest state sess = HTTPTest{ testState = state, testSession = sess }
+httpTest :: NodeState -> Session () -> IO HTTPTest
+httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
 
-smokeTestOscoinAPI :: Codec -> HTTPTest
+smokeTestOscoinAPI :: Codec -> IO HTTPTest
 smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
     get codec "/" >>= assertStatus ok200
 
@@ -74,7 +72,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
             , txPayload = tx
             }
 
-getMissingTransaction :: Codec -> HTTPTest
+getMissingTransaction :: Codec -> IO HTTPTest
 getMissingTransaction codec = httpTest emptyNodeState $ do
     -- Malformed transaction hash returns a 404
     get codec "/transactions/not-a-hash" >>= assertStatus notFound404
@@ -83,22 +81,11 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
     get codec ("/transactions/" <> missing) >>= assertStatus notFound404
 
-getConfirmedTransaction :: Codec -> HTTPTest
+getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction _ = notTested
 
-getUnconfirmedTransaction :: Codec -> HTTPTest
+getUnconfirmedTransaction :: Codec -> IO HTTPTest
 getUnconfirmedTransaction _ = notTested
 
-notTested :: HTTPTest
+notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
-
-genDummyTx :: IO (Text, API.RadTx)
-genDummyTx = do
-    msg :: Rad.Value <- generate arbitrary
-    (pubKey, priKey) <- Crypto.generateKeyPair
-    signed           <- Crypto.sign priKey msg
-
-    let tx :: API.RadTx = mkTx signed (Crypto.hash pubKey)
-    let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
-
-    pure $ (txHash, tx)

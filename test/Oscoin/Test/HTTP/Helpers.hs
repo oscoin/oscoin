@@ -8,6 +8,8 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Evaluator (identityEval)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
 import           Oscoin.Crypto.Blockchain.Block (toOrphan, emptyGenesisBlock)
 import           Oscoin.Environment
@@ -19,9 +21,12 @@ import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Data.Tx (mkTx)
 
+import           Oscoin.Test.Data.Rad.Arbitrary ( )
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
+import           Test.QuickCheck (generate, arbitrary)
 import           Test.Tasty.HUnit (Assertion, AssertionPredicable)
 import qualified Test.Tasty.HUnit as Tasty
 
@@ -49,7 +54,10 @@ type Session = Wai.Session
 type NodeHandle = Node.Handle API.RadTx Rad.Env DummyNodeId
 
 -- | Node state to instantiate a NodeHandle with.
-type NodeState = ([API.RadTx], Blockchain API.RadTx Rad.Env)
+data NodeState = NodeState
+    { mempoolState    :: [API.RadTx]
+    , blockstoreState :: Blockchain API.RadTx Rad.Env
+    }
 
 instance Semigroup a => Semigroup (Session a) where
     (<>) = liftA2 (<>)
@@ -62,20 +70,23 @@ instance MonadRandom Session where
     getRandomBytes = io . getRandomBytes
 
 emptyNodeState :: NodeState
-emptyNodeState = (mempty, Blockchain $ emptyGenesisBlock 0 :| [])
+emptyNodeState = NodeState
+    { mempoolState = mempty
+    , blockstoreState = Blockchain $ emptyGenesisBlock 0 :| []
+    }
 
 makeNode :: NodeState -> IO NodeHandle
-makeNode (mempool, chain) = do
+makeNode NodeState{..} = do
     let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger }
 
     mp <- atomically $ do
         mp' <- Mempool.new
-        Mempool.insertMany mp' mempool
+        Mempool.insertMany mp' mempoolState
         pure $ mp'
 
     bs <- atomically $ do
         bs' <- BlockStore.new $ genesisBlockStore $ emptyGenesisBlock @API.RadTx 0
-        forM_ (blocks chain) $ \b ->
+        forM_ (blocks blockstoreState) $ \b ->
             let orphaned = toOrphan identityEval b
             in BlockStore.put bs' orphaned
         pure $ bs'
@@ -83,6 +94,17 @@ makeNode (mempool, chain) = do
     st <- STree.new
 
     Node.open cfg 42 mp st bs
+
+genDummyTx :: IO (Text, API.RadTx)
+genDummyTx = do
+    msg :: Rad.Value <- generate $ arbitrary
+    (pubKey, priKey) <- Crypto.generateKeyPair
+    signed           <- Crypto.sign priKey msg
+
+    let tx :: API.RadTx = mkTx signed (Crypto.hash pubKey)
+    let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+
+    pure $ (txHash, tx)
 
 -- | Turn a "Session" into an "Assertion".
 runSession :: Session () -> NodeHandle -> Assertion
