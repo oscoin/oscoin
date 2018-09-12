@@ -8,6 +8,8 @@ module Oscoin.Crypto.PubKey
     , PublicKey
     , publicKeyHash
     , PrivateKey
+    , serialisePrivateKey
+    , deserialisePrivateKey
 
     , generateKeyPair
 
@@ -29,10 +31,12 @@ import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.Random.Types (MonadRandom)
 
+import qualified Codec.CBOR.Write as CBOR (toLazyByteString)
+import qualified Codec.CBOR.Read as CBOR (deserialiseFromBytes)
 import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise as CBOR
-import           Codec.Serialise.Decoding as CBOR
-import           Codec.Serialise.Encoding as CBOR
+import qualified Codec.Serialise.Decoding as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
 import           Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Base64.Extended as Base64
@@ -88,6 +92,25 @@ publicKeyHash (PublicKey _ h) = h
 
 newtype PrivateKey = PrivateKey ECDSA.PrivateKey
     deriving (Show, Eq)
+
+
+serialisePrivateKey :: PrivateKey -> LBS.ByteString
+serialisePrivateKey (PrivateKey sk) =
+    CBOR.toLazyByteString $
+       CBOR.encodeListLen 3
+    <> CBOR.encodeWord 0
+    <> encode (ECDSA.private_curve sk)
+    <> CBOR.encodeInteger (ECDSA.private_d sk)
+
+deserialisePrivateKey :: LBS.ByteString -> Either CBOR.DeserialiseFailure PrivateKey
+deserialisePrivateKey bs = second snd $ CBOR.deserialiseFromBytes decoder bs
+  where
+    decoder = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (3, 0) ->
+                PrivateKey <$> (ECDSA.PrivateKey <$> decode <*> CBOR.decodeInteger)
+            _ -> fail "CBOR: Invalid PrivateKey"
 
 --------------------------------------------------------------------------------
 

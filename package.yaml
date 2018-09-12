@@ -16,13 +16,16 @@ dependencies:
   - base64-bytestring
   - binary
   - bytestring
+  - cborg
   - conduit
   - containers
   - cryptonite
   - data-default
   - data-has
+  - directory
   - dlist
   - fast-logger
+  - filepath
   - focus
   - formatting
   - hashable
