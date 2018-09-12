@@ -127,8 +127,16 @@ infix 1 @?=, @=?, @?
 (@?) predi msg = io $ (Tasty.@?) predi msg
 
 
-assertStatus :: HTTP.Status -> Wai.SResponse -> Wai.Session ()
-assertStatus status = Wai.assertStatus $ HTTP.statusCode status
+assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
+assertStatus expected response = io $ Tasty.assertBool msg (actual == expected)
+  where
+    actual = Wai.simpleStatus response
+    msg = concat
+        [ "Expected status code "
+        , show expected
+        , ", but received "
+        , show actual
+        ]
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
