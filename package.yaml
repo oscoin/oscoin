@@ -145,6 +145,7 @@ default-extensions:
   - TypeFamilies
   - TypeOperators
   - TypeSynonymInstances
+  - TupleSections
   - ViewPatterns
 
 ghc-options:
