@@ -12,6 +12,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
+import qualified Data.List.NonEmpty as NonEmpty
 
 import           Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
@@ -29,17 +30,19 @@ getAllTransactions = do
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just (tx, bh) -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, lineage) -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash = bh
-        , txConfirmations = confirmations tx
+        , txBlockHash = NonEmpty.last <$> lineage
+        , txConfirmations = confirmations lineage
         , txPayload = tx
         }
     where
-        confirmations _ = 0 -- FIXME(tsenart)
         lookupTx     id = runMaybeT $ inMempool id <|> inBlockstore id
         inMempool    id = (, Nothing) <$> MaybeT (Mempool.lookupTx id)
         inBlockstore id = second Just <$> MaybeT (BlockStore.lookupTx id)
+
+        confirmations (Just lineage) = fromIntegral $ NonEmpty.length lineage
+        confirmations Nothing        = 0
 
 
 submitTransaction :: ApiAction s i a

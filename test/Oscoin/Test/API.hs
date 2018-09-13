@@ -17,7 +17,6 @@ import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 
 import           Test.Tasty
-import           Test.Tasty.ExpectedFailure (expectFail)
 import           Test.Tasty.HUnit (testCase, assertFailure)
 
 tests :: [TestTree]
@@ -29,7 +28,7 @@ tests =
 
         , testGroup "200 OK"
             [ test "Unconfirmed transaction" getUnconfirmedTransaction
-            , expectFail $ test "Confirmed transaction" getConfirmedTransaction
+            , test "Confirmed transaction" getConfirmedTransaction
             ]
         ]
     , testGroup "POST /transactions"
@@ -74,7 +73,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
     -- Submit the transaction to the mempool.
     post codec "/transactions" tx >>=
         assertStatus accepted202 <>
-        assertResultOK (Node.Receipt {fromReceipt = Crypto.hash tx})
+        assertResultOK Node.Receipt {fromReceipt = Crypto.hash tx}
 
     -- Get the mempool once again, make sure the transaction is in there.
     get codec "/transactions" >>=
