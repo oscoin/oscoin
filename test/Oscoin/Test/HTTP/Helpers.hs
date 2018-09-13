@@ -101,7 +101,7 @@ genDummyTx = do
     (pubKey, priKey) <- Crypto.generateKeyPair
     signed           <- Crypto.sign priKey msg
 
-    let tx :: API.RadTx = mkTx signed (Crypto.hash pubKey)
+    let tx :: API.RadTx = mkTx signed pubKey
     let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     pure $ (txHash, tx)
@@ -141,12 +141,29 @@ assertResultOK
     :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a)
     => a -> Wai.SResponse -> Wai.Session ()
 assertResultOK expected response = do
-    result <- case responseBody response of
-        Left err -> io $ Tasty.assertFailure $ show err
-        Right a -> pure $ a
+    result <- assertResponseBody response
     case result of
         API.Err err -> io $ Tasty.assertFailure $ "Received API error: " <> T.unpack err
         API.Ok v -> expected @=? v
+
+-- | Assert that the response can be deserialised to @API.Err actual@
+-- and @actual@ equals @expected@.
+assertResultErr
+    :: (HasCallStack)
+    => Text -> Wai.SResponse -> Wai.Session ()
+assertResultErr expected response = do
+    result <- assertResponseBody @(API.Result ()) response
+    case result of
+        API.Err err -> expected @=? err
+        API.Ok _ -> io $ Tasty.assertFailure $ "Received unexpected API OK result"
+
+assertResponseBody
+    :: (HasCallStack, FromJSON a, Serialise a)
+    => Wai.SResponse -> Wai.Session a
+assertResponseBody response =
+    case responseBody response of
+        Left err -> io $ Tasty.assertFailure $ show err
+        Right a -> pure $ a
 
 
 -- | Low-level HTTP request helper.

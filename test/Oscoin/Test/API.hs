@@ -4,6 +4,8 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Data.Tx (txPubKey)
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
@@ -27,6 +29,10 @@ tests =
             , test "Confirmed transaction"   getConfirmedTransaction
             ]
         ]
+    , testGroup "POST /transactions"
+        [ testGroup "400 Bad Request"
+            [ test "Invalid signature" postTransactionWithInvalidSignature]
+        ]
     ]
   where
     test name mkTest = testGroup name $ do
@@ -42,6 +48,15 @@ data HTTPTest = HTTPTest
 
 httpTest :: NodeState -> Session () -> IO HTTPTest
 httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
+
+postTransactionWithInvalidSignature :: Codec -> IO HTTPTest
+postTransactionWithInvalidSignature codec = httpTest emptyNodeState $ do
+    (_, tx) <- io $ genDummyTx
+    otherPubKey <- fst <$> Crypto.generateKeyPair
+    let tx' = tx { txPubKey = otherPubKey }
+    post codec "/transactions" tx' >>=
+        assertResultErr "Invalid transaction signature" <>
+        assertStatus badRequest400
 
 smokeTestOscoinAPI :: Codec -> IO HTTPTest
 smokeTestOscoinAPI codec = httpTest emptyNodeState $ do

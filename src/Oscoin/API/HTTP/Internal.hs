@@ -165,7 +165,7 @@ getBody = do
     ct <- getSupportedContentType
     !body' <- getRawBody
     case decode ct body' of
-        Left  _ -> respond HTTP.badRequest400 noBody
+        Left  _ -> respond HTTP.badRequest400 $ body $ Err @() "Failed to decode body"
         Right a -> pure a
 
 notImplemented :: ApiAction s i ()

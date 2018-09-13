@@ -11,7 +11,6 @@ import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.Revision
 import qualified Oscoin.CLI.Radicle as Rad
 import           Oscoin.Crypto.PubKey (sign, generateKeyPair)
-import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Data.Tx (mkTx)
 
 
@@ -36,7 +35,7 @@ runCommand RevisionCreate = do
         let rev = emptyRevision
         let msgContent = Rad.fnApply "create-revision" [Rad.toRadicle rev]
         msg <- sign sk msgContent
-        pure $ mkTx msg (hash pk)
+        pure $ mkTx msg pk
 
 
 runCommand _ = notImplemented

@@ -4,6 +4,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Query
+import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.API.Types
@@ -42,13 +43,18 @@ getTransaction txId = node (lookupTx txId) >>= \case
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do
-    tx <- getBody @RadTx
-
+    tx <- getVerifiedTxBody
     receipt <- node $ do
         Mempool.addTxs [tx]
         pure $ Node.Receipt (hash tx)
 
     respond accepted202 $ body (Ok receipt)
+  where
+    getVerifiedTxBody = do
+        tx <- getBody
+        if verifyTx tx
+        then pure tx
+        else respond badRequest400 $ body $ Err @() "Invalid transaction signature"
 
 getStatePath
     :: (Serialise (QueryVal s), Query s)

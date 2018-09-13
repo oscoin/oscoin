@@ -15,7 +15,7 @@ import           Data.Text.Prettyprint.Doc
 
 data Tx msg = Tx
     { txMessage :: Signed msg
-    , txPubKey  :: Hashed PublicKey
+    , txPubKey  :: PublicKey
     , txChainId :: Word16
     , txNonce   :: Word32
     , txContext :: BlockHash
@@ -49,10 +49,10 @@ instance Serialise msg => FromJSON (Tx msg) where
 instance Pretty msg => Pretty (Tx msg) where
     pretty Tx{txMessage} = pretty txMessage
 
-mkTx :: Signed msg -> Hashed PublicKey -> Tx msg
-mkTx sm p = Tx
+mkTx :: Signed msg -> PublicKey -> Tx msg
+mkTx sm pk = Tx
     { txMessage = sm
-    , txPubKey  = p
+    , txPubKey  = pk
     , txChainId = 0
     , txNonce   = 0
     , txContext = toHashed zeroHash
@@ -67,7 +67,7 @@ toProgram :: Tx Rad.Value -> Rad.Program
 toProgram Tx{..} =
     Rad.Program
         { Rad.progValue   = unsign txMessage
-        , Rad.progAuthor  = txPubKey
+        , Rad.progAuthor  = hash txPubKey
         , Rad.progChainId = txChainId
         , Rad.progNonce   = txNonce
         }
@@ -76,4 +76,7 @@ toProgram Tx{..} =
 createTx :: (Serialise msg, MonadRandom m) => (PublicKey, PrivateKey) -> msg -> m (Tx msg)
 createTx (pk, sk) val = do
     sval <- sign sk val
-    pure $ mkTx sval (hash pk)
+    pure $ mkTx sval pk
+
+verifyTx :: Serialise msg => Tx msg -> Bool
+verifyTx Tx{..} = verify txPubKey txMessage
