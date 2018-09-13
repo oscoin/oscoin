@@ -13,13 +13,14 @@ module Oscoin.Consensus.BlockStore
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), Lineage, blockHash, tip, (|>), blocks, genesis)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), genesis)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
 import           Control.Monad (guard)
 import           Data.Maybe (listToMaybe)
-import qualified Data.List.NonEmpty as NonEmpty
+import           Data.List (sortBy)
+import           Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -82,16 +83,12 @@ orphans BlockStore{bsOrphans} =
 
 -- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
 -- blocks which lead back to genesis.
-lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe (tx, Lineage)
-lookupTx h BlockStore{bsChains} = listToMaybe $ do
-    chain    <- reverse . blocks <$> Map.elems bsChains
-    (i, blk) <- zip [1..] chain
-    tx       <- toList $ blockData blk
-
+lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe (tx, Blockchain tx s)
+lookupTx h BlockStore{bsChains} = listToMaybe $ sortBy (flip compare `on` (length . snd)) $ do
+    chain <- Map.elems bsChains
+    tx    <- toList $ blockData (tip chain)
     guard (hash tx == h)
-
-    let lineage = (NonEmpty.fromList . reverse) $ headerHash . blockHeader <$> take i chain
-    pure (tx, lineage)
+    pure  (tx, chain)
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.

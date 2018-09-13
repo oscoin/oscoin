@@ -3,6 +3,7 @@ module Oscoin.API.HTTP.Handlers where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Blockchain (tip, height, headerHash, blockHeader)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
@@ -12,7 +13,6 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
-import qualified Data.List.NonEmpty as NonEmpty
 
 import           Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
@@ -30,10 +30,10 @@ getAllTransactions = do
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just (tx, lineage) -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, blockchain) -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash = NonEmpty.last <$> lineage
-        , txConfirmations = confirmations lineage
+        , txBlockHash =  headerHash . blockHeader . tip <$> blockchain
+        , txConfirmations = confirmations blockchain
         , txPayload = tx
         }
     where
@@ -41,7 +41,7 @@ getTransaction txId = node (lookupTx txId) >>= \case
         inMempool    id = (, Nothing) <$> MaybeT (Mempool.lookupTx id)
         inBlockstore id = second Just <$> MaybeT (BlockStore.lookupTx id)
 
-        confirmations (Just lineage) = fromIntegral $ NonEmpty.length lineage
+        confirmations (Just chain) = fromIntegral $ height chain
         confirmations Nothing        = 0
 
 

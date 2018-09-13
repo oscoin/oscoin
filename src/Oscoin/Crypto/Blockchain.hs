@@ -1,6 +1,5 @@
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
-    , Lineage
     , (|>)
     , tip
     , genesis
@@ -27,10 +26,6 @@ import           GHC.Exts (IsList(toList))
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
     deriving (Show, Functor, Traversable, Foldable)
-
--- | The @Lineage@ of a @Block@ is the @NonEmpty@ list of @BlockHash@es of all
--- the non @Orphan@ parent @Block@s up until the @Block@ itself.
-type Lineage = NonEmpty BlockHash
 
 instance Semigroup (Blockchain tx s) where
     (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)

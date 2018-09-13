@@ -4,7 +4,7 @@ module Oscoin.Consensus.BlockStore.Class where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain, Lineage)
+import           Oscoin.Crypto.Blockchain (Blockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan)
 import           Oscoin.Crypto.Hash (Hashed)
 
@@ -19,7 +19,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     getGenesisBlock :: m (Block tx s)
 
     -- | Lookup a transaction by its hash.
-    lookupTx :: Hashed tx -> m (Maybe (tx, Lineage))
+    lookupTx :: Hashed tx -> m (Maybe (tx, Blockchain tx s))
 
     -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
     orphans :: m (Set BlockHash)
@@ -50,7 +50,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
 
     default lookupTx
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => Hashed tx -> m (Maybe (tx, Lineage))
+        => Hashed tx -> m (Maybe (tx, Blockchain tx s))
     lookupTx = lift . lookupTx
     {-# INLINE lookupTx #-}
 
