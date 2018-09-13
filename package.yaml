@@ -24,7 +24,6 @@ dependencies:
   - data-has
   - directory
   - dlist
-  - Diff
   - fast-logger
   - filepath
   - focus
@@ -39,7 +38,6 @@ dependencies:
   - microlens
   - microlens-mtl
   - mtl
-  - nicify-lib
   - network
   - network-multicast
   - optparse-applicative
@@ -102,9 +100,11 @@ tests:
       - -O
     dependencies:
       - algebraic-graphs
+      - Diff
       - hedgehog
       - microlens
       - microlens-aeson
+      - nicify-lib
       - oscoin
       - QuickCheck
       - quickcheck-instances
