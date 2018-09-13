@@ -31,6 +31,8 @@ import           Test.Tasty.HUnit (Assertion, AssertionPredicable)
 import qualified Test.Tasty.HUnit as Tasty
 
 import           Crypto.Random.Types (MonadRandom(..))
+import           Text.Nicify (nicify)
+import           Data.Algorithm.Diff (Diff(..), getDiff)
 import           Data.List (lookup)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Aeson as Aeson
@@ -119,26 +121,26 @@ runSession sess nh = do
 
 infix 1 @?=, @=?, @?
 
+(@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
+(@?) predi msg = io $ (Tasty.@?) predi msg
+
 (@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
-(@?=) actual expected = io $ (Tasty.@?=) actual expected
+(@?=) have want = have == want @? prettyDiff have want
 
 (@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
 
-(@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
-(@?) predi msg = io $ (Tasty.@?) predi msg
+prettyDiff :: Show a => a -> a -> String
+prettyDiff have want = unlines $ addSign <$> getDiff (pp have) (pp want)
+    where
+        pp = lines . nicify . show
+        addSign (Both _ s) = "       " ++ s
+        addSign (First  s) = "have ->" ++ s
+        addSign (Second s) = "want ->" ++ s
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
-assertStatus expected response = io $ Tasty.assertBool msg (actual == expected)
-  where
-    actual = Wai.simpleStatus response
-    msg = concat
-        [ "Expected status code "
-        , show expected
-        , ", but received "
-        , show actual
-        ]
+assertStatus want (Wai.simpleStatus -> have) = have @?= want
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
