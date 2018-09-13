@@ -32,6 +32,7 @@ import qualified Test.Tasty.HUnit as Tasty
 
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.List (lookup)
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Aeson as Aeson
 import           Data.Aeson (ToJSON, FromJSON)
 import           Codec.Serialise (Serialise)
@@ -87,8 +88,9 @@ makeNode NodeState{..} = do
         Mempool.insertMany mp' mempoolState
         pure $ mp'
 
+    let genesis = NonEmpty.head $ fromBlockchain blockstoreState
     bs <- atomically $ do
-        bs' <- BlockStore.new $ genesisBlockStore $ emptyGenesisBlock @API.RadTx 0
+        bs' <- BlockStore.new $ genesisBlockStore genesis
         forM_ (blocks blockstoreState) $ \b ->
             let orphaned = toOrphan identityEval b
             in BlockStore.put bs' orphaned
