@@ -3,7 +3,8 @@ module Oscoin.API.HTTP.Handlers where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
-import           Oscoin.Crypto.Blockchain (genesis, height, headerHash, blockHeader, lookupTx)
+import           Oscoin.Crypto.Blockchain (TxLookup(..))
+import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
@@ -13,8 +14,6 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
-
-import           Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
 import           Network.HTTP.Types.Status
 import           Codec.Serialise (Serialise, serialise)
@@ -28,23 +27,23 @@ getAllTransactions = do
     respond ok200 $ body (Ok mp)
 
 getTransaction :: Hashed RadTx -> ApiAction s i ()
-getTransaction txId = node (findTx txId) >>= \case
+getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just (tx, blockchain) -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash =  headerHash . blockHeader . genesis <$> blockchain
-        , txConfirmations = confirmations blockchain
+        , txBlockHash =  bh
+        , txConfirmations = confirmations
         , txPayload = tx
         }
     where
-        bestChain = BlockStore.maximumChainBy $ comparing height
-
-        findTx       id = runMaybeT $ inMempool id <|> inBlockstore id
-        inMempool    id = (, Nothing) <$> MaybeT (Mempool.lookupTx id)
-        inBlockstore id = second Just <$> MaybeT (lookupTx id <$> bestChain)
-
-        confirmations (Just chain) = fromIntegral $ height chain - 1
-        confirmations Nothing      = 0
+        lookupTx id = Mempool.lookupTx id >>= \case
+            Just tx -> pure $ Just (tx, Nothing, 0)
+            Nothing -> do
+                chain <- BlockStore.maximumChainBy (comparing Blockchain.height)
+                pure $ case Blockchain.lookupTx id chain of
+                    Nothing -> Nothing
+                    Just TxLookup{..} -> Just $
+                        (txPayload, Just $ txBlockHash, txConfirmations)
 
 
 submitTransaction :: ApiAction s i a

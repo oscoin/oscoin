@@ -6,7 +6,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), BlockHash, blocks)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), headerHash, blockData)
 import           Oscoin.Test.HTTP.Helpers
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
@@ -98,22 +98,22 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
 getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction codec = do
     chain <- generate $ arbitraryValidBlockchain
-    let (tx, blockchain) = oldestTx chain
+    let (tx, blockHash, confirmations) = oldestTx chain
     let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     httpTest (nodeState mempty chain) $
         getTransactionReturns codec txHash $ GetTxResponse
             { txHash = Crypto.hash tx
-            , txBlockHash = Just $ headerHash $ blockHeader $ last blockchain
-            , txConfirmations = fromIntegral $ length blockchain - 1
+            , txBlockHash = Just $ blockHash
+            , txConfirmations = confirmations
             , txPayload = tx
             }
 
-oldestTx :: Blockchain tx s -> (tx, [Block tx s])
+oldestTx :: Blockchain tx s -> (tx, BlockHash, Word64)
 oldestTx (blocks -> blks) = head $ do
     (i, blk) <- zip [1..] blks
     tx <- toList $ blockData blk
-    pure (tx, take i blks)
+    pure (tx, headerHash $ blockHeader blk, i)
 
 getUnconfirmedTransaction :: Codec -> IO HTTPTest
 getUnconfirmedTransaction codec = do
