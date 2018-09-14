@@ -37,6 +37,12 @@ class Monad m => MonadKeyStore m where
 getConfigPath :: MonadIO m => FilePath -> m FilePath
 getConfigPath path = io $ getXdgDirectory XdgConfig $ "oscoin" </> path
 
+getSecretKeyPath :: IO FilePath
+getSecretKeyPath = getConfigPath "id.key"
+
+getPublicKeyPath :: IO FilePath
+getPublicKeyPath = getConfigPath "id.pub"
+
 ensureConfigDir :: MonadIO m => m ()
 ensureConfigDir = do
     configDir <- getConfigPath ""
@@ -45,15 +51,15 @@ ensureConfigDir = do
 instance MonadKeyStore IO where
     writeKeyPair (pk, sk) =  do
         ensureConfigDir
-        skPath <- getConfigPath "id.key"
+        skPath <- getSecretKeyPath
         io $ LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
-        pkPath <- getConfigPath "id.pub"
+        pkPath <- getPublicKeyPath
         io $ LBS.writeFile pkPath (serialise pk)
 
     readKeyPair = do
-        skPath <- getConfigPath "id.key"
+        skPath <- getSecretKeyPath
         sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> LBS.readFile skPath
-        pkPath <- getConfigPath "id.pub"
+        pkPath <- getPublicKeyPath
         pk <- fromRightThrow =<< deserialiseOrFail <$> LBS.readFile pkPath
         pure (pk, sk)
       where
