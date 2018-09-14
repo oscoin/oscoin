@@ -7,7 +7,6 @@ module Oscoin.Consensus.BlockStore
     , getGenesisBlock
     , insert
     , lookupBlock
-    , lookupTx
     , orphans
     ) where
 
@@ -15,12 +14,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), genesis)
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
-import           Control.Monad (guard)
-import           Data.Maybe (listToMaybe)
-import           Data.List (sortBy)
-import           Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -80,15 +74,6 @@ orphans BlockStore{bsOrphans} =
     let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
         danglingHashes = Set.map blockHash bsOrphans
      in Set.difference parentHashes danglingHashes
-
--- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
--- blocks which lead back to genesis.
-lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe (tx, Blockchain tx s)
-lookupTx h BlockStore{bsChains} = listToMaybe $ sortBy (flip compare `on` (length . snd)) $ do
-    chain <- Map.elems bsChains
-    tx    <- toList $ blockData (tip chain)
-    guard (hash tx == h)
-    pure  (tx, chain)
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.

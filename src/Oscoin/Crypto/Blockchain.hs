@@ -5,6 +5,7 @@ module Oscoin.Crypto.Blockchain
     , genesis
     , blocks
     , height
+    , lookupTx
     , validateBlockchain
     , showBlockDigest
     , showChainDigest
@@ -18,6 +19,8 @@ import           Oscoin.Prelude hiding (toList)
 
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
+import           Data.Maybe (listToMaybe)
+import           Control.Monad (guard)
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Time.Clock (NominalDiffTime)
@@ -56,6 +59,13 @@ genesis = NonEmpty.last . fromBlockchain
 
 height :: Blockchain tx s -> Int
 height = length . fromBlockchain
+
+lookupTx :: forall tx s. Hashable tx => Hashed tx -> Blockchain tx s -> Maybe (tx, Blockchain tx s)
+lookupTx h (blocks -> chain) = listToMaybe $ do
+    (i, block) <- zip [1..] chain
+    tx <- toList $ blockData block
+    guard (hash tx == h)
+    pure  (tx, Blockchain{ fromBlockchain = NonEmpty.fromList $ take i chain })
 
 validateBlockchain :: Hashable s => Blockchain tx s -> Either Error (Blockchain tx s)
 validateBlockchain (Blockchain (blk :| [])) = do
