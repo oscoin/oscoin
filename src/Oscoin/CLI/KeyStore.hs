@@ -14,6 +14,7 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 
 import           Codec.Serialise (serialise, deserialiseOrFail)
 import           Control.Exception.Safe
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           System.Directory
 import           System.FilePath
@@ -52,15 +53,17 @@ instance MonadKeyStore IO where
     writeKeyPair (pk, sk) =  do
         ensureConfigDir
         skPath <- getSecretKeyPath
-        io $ LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
+        LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
         pkPath <- getPublicKeyPath
-        io $ LBS.writeFile pkPath (serialise pk)
+        LBS.writeFile pkPath $ serialise pk
 
     readKeyPair = do
         skPath <- getSecretKeyPath
-        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> LBS.readFile skPath
+        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
         pkPath <- getPublicKeyPath
-        pk <- fromRightThrow =<< deserialiseOrFail <$> LBS.readFile pkPath
+        pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
         pure (pk, sk)
       where
         fromRightThrow = either throwM pure
+        -- Avoiding lazy IO
+        readFileLbs path = LBS.fromStrict <$> BS.readFile path
