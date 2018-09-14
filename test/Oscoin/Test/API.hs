@@ -6,9 +6,12 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
-import           Oscoin.Crypto.Blockchain (Blockchain(..))
-import           Oscoin.Crypto.Blockchain.Block (mkBlock, genesisHeader, headerHash)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), headerHash, blockData)
 import           Oscoin.Test.HTTP.Helpers
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+import           Oscoin.Test.Data.Rad.Arbitrary ()
+import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
@@ -16,6 +19,7 @@ import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 
+import           Test.QuickCheck (generate)
 import           Test.Tasty
 import           Test.Tasty.HUnit (testCase, assertFailure)
 
@@ -93,16 +97,23 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
 
 getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction codec = do
-    (txHash, tx) <- genDummyTx
-    let bh = genesisHeader 0 [tx]
-    let bs = Blockchain $ mkBlock bh [tx] :| []
-    httpTest (nodeState mempty bs) $
+    chain <- generate $ arbitraryValidBlockchain
+    let (tx, blockchain) = oldestTx chain
+    let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+
+    httpTest (nodeState mempty chain) $
         getTransactionReturns codec txHash $ GetTxResponse
             { txHash = Crypto.hash tx
-            , txBlockHash = Just $ headerHash bh
-            , txConfirmations = 1
+            , txBlockHash = Just $ headerHash $ blockHeader $ last blockchain
+            , txConfirmations = fromIntegral $ length blockchain - 1
             , txPayload = tx
             }
+
+oldestTx :: Blockchain tx s -> (tx, [Block tx s])
+oldestTx (blocks -> blks) = head $ do
+    (i, blk) <- zip [1..] blks
+    tx <- toList $ blockData blk
+    pure (tx, take i blks)
 
 getUnconfirmedTransaction :: Codec -> IO HTTPTest
 getUnconfirmedTransaction codec = do

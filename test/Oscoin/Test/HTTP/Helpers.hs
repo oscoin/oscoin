@@ -5,13 +5,12 @@ module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.Evaluator (identityEval)
+import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
-import           Oscoin.Crypto.Blockchain.Block (toOrphan, emptyGenesisBlock)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Environment
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP (api)
@@ -20,7 +19,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Block as Block
 import           Oscoin.Data.Tx (mkTx)
 
 import           Oscoin.Test.Data.Rad.Arbitrary ( )
@@ -34,7 +33,7 @@ import           Crypto.Random.Types (MonadRandom(..))
 import           Text.Nicify (nicify)
 import           Data.Algorithm.Diff (Diff(..), getDiff)
 import           Data.List (lookup)
-import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Map as Map
 import qualified Data.Aeson as Aeson
 import           Data.Aeson (ToJSON, FromJSON)
 import           Codec.Serialise (Serialise)
@@ -90,13 +89,10 @@ makeNode NodeState{..} = do
         Mempool.insertMany mp' mempoolState
         pure $ mp'
 
-    let genesis = NonEmpty.head $ fromBlockchain blockstoreState
-    bs <- atomically $ do
-        bs' <- BlockStore.new $ genesisBlockStore genesis
-        forM_ (blocks blockstoreState) $ \b ->
-            let orphaned = toOrphan identityEval b
-            in BlockStore.put bs' orphaned
-        pure $ bs'
+    bs <- Block.newIO $ BlockStore
+        { bsOrphans = mempty
+        , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
+        }
 
     st <- STree.new
 

@@ -1,5 +1,5 @@
 module Oscoin.Consensus.BlockStore
-    ( BlockStore
+    ( BlockStore(..)
     , genesisBlockStore
     , fromOrphans
 
