@@ -21,17 +21,17 @@ import           System.FilePath
 
 
 class Monad m => MonadKeyStore m where
-    writeKeyPair :: (Crypto.PublicKey, Crypto.PrivateKey) -> m ()
+    writeKeyPair :: Crypto.KeyPair -> m ()
 
     default writeKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => (Crypto.PublicKey, Crypto.PrivateKey) -> m ()
+        => Crypto.KeyPair -> m ()
     writeKeyPair = lift . writeKeyPair
 
-    readKeyPair :: m (Crypto.PublicKey, Crypto.PrivateKey)
+    readKeyPair :: m Crypto.KeyPair
     default readKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => m (Crypto.PublicKey, Crypto.PrivateKey)
+        => m Crypto.KeyPair
     readKeyPair = lift readKeyPair
 
 

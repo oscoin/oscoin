@@ -43,8 +43,8 @@ dispatchCommand RevisionCreate = do
         pure $ mkTx msg pk
 
 dispatchCommand GenerateKeyPair = do
-    (pk, sk) <- io $ Crypto.generateKeyPair
-    writeKeyPair (pk, sk)
+    kp <- io $ Crypto.generateKeyPair
+    writeKeyPair kp
     pure $ ResultOk
 
 dispatchCommand _ = notImplemented
