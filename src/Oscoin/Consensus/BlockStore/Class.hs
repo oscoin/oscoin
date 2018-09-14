@@ -6,6 +6,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan)
+import           Oscoin.Crypto.Hash (Hashed)
 
 class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     -- | Store a block in the block-store.
@@ -17,6 +18,9 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     -- | Get the genesis block.
     getGenesisBlock :: m (Block tx s)
 
+    -- | Lookup a transaction by its hash.
+    lookupTx :: Hashed tx -> m (Maybe tx)
+
     -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
     orphans :: m (Set BlockHash)
 
@@ -24,6 +28,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     maximumChainBy
         :: (Blockchain tx s -> Blockchain tx s -> Ordering)
         -> m (Blockchain tx s)
+
 
     default storeBlock
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
@@ -42,6 +47,12 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
         => m (Block tx s)
     getGenesisBlock = lift getGenesisBlock
     {-# INLINE getGenesisBlock #-}
+
+    default lookupTx
+        :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
+        => Hashed tx -> m (Maybe tx)
+    lookupTx = lift . lookupTx
+    {-# INLINE lookupTx #-}
 
     default orphans
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')

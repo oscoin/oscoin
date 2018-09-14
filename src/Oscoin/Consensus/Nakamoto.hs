@@ -30,7 +30,6 @@ import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
-import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash, zeroHash)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -165,11 +164,11 @@ isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
 isNovelBlock h =
     isNothing <$> BlockStore.lookupBlock h
 
-isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m, Hashable tx) => Hashed tx -> m Bool
+isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
 isNovelTx h = do
+    inBlockStore <- BlockStore.lookupTx h
     inMempool    <- Mempool.lookupTx h
-    inBlockStore <- Blockchain.lookupTx h <$> BlockStore.maximumChainBy (comparing height)
-    pure . isNothing $ (fst <$> inBlockStore) <|> inMempool
+    pure . isNothing $ inBlockStore <|> inMempool
 
 runNakamotoT :: NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())
 runNakamotoT env rng (NakamotoT ma) = runRWST ma env rng
