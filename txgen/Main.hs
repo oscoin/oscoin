@@ -2,10 +2,10 @@ module Main (main) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
+import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Logging (Logger, withStdLogger)
 import qualified Oscoin.Logging as Log
-import           Oscoin.P2P (Endpoints(..), NodeAddr(..), NodeId(..), withP2P)
+import           Oscoin.P2P (Endpoints(..), NodeAddr(..), mkNodeId, withP2P)
 import qualified Oscoin.P2P as P2P
 import           Oscoin.P2P.Discovery (Disco, knownPeers, withDisco)
 import qualified Oscoin.P2P.Discovery.Multicast as MCast
@@ -30,7 +30,7 @@ main = do
     args@Args{..} <- getRecord "oscoin transaction submitter"
     print (args :: Args)
 
-    nid <- NodeId . publicKeyHash . fst <$> generateKeyPair -- TODO: read from disk
+    nid <- mkNodeId . fst <$> generateKeyPair -- TODO: read from disk
     let !ip = read listenIp
 
     withStdLogger Log.defaultConfig                   $ \lgr   ->

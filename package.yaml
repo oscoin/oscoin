@@ -16,12 +16,14 @@ dependencies:
   - base64-bytestring
   - binary
   - bytestring
+  - conduit
   - containers
   - cryptonite
   - data-default
   - data-has
   - dlist
   - fast-logger
+  - focus
   - formatting
   - hashable
   - http-api-data
@@ -31,6 +33,7 @@ dependencies:
   - memory
   - merkle-tree
   - microlens
+  - microlens-mtl
   - mtl
   - network
   - network-multicast
@@ -48,9 +51,11 @@ dependencies:
   - splitmix
   - Spock
   - stm >=2.4.5.0
+  - stm-containers
   - text
   - time
   - transformers
+  - unliftio-core
   - unordered-containers
   - wai
   - wai-extra
@@ -98,6 +103,7 @@ tests:
       - oscoin
       - QuickCheck
       - quickcheck-instances
+      - streaming-commons
       - tasty >=1.0.0.1
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1

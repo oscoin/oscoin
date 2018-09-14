@@ -6,10 +6,9 @@ import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise)
 
-data WireMessage b m =
-      WireBroadcast  b
-    | WireMembership m
+data WireMessage p =
+      WirePayload p
     | WireGoaway (Maybe Text)
     deriving (Generic)
 
-instance (Serialise b, Serialise m) => Serialise (WireMessage b m)
+instance Serialise p => Serialise (WireMessage p)

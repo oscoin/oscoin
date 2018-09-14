@@ -1,19 +1,30 @@
 module Oscoin.P2P.Types
-    ( NodeId (..)
+    ( NodeId
+    , mkNodeId
+
     , Endpoints (..)
     , EndpointMap
     , NodeAddr (..)
     , Seed (..)
+
     , toSockAddr
     , fromSockAddr
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Crypto.Hash (Hashed, fromHashed, toHashed)
+import           Oscoin.Crypto.PubKey (PublicKey, publicKeyHash)
 
+import           Codec.Serialise (Serialise)
+import qualified Codec.Serialise as CBOR
+import qualified Codec.Serialise.Decoding as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
+import           Crypto.Hash (digestFromByteString)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Binary (Binary(..))
+import qualified Data.ByteArray as ByteArray
+import           Data.Hashable (Hashable(..))
 import           Data.IP (IP(..))
 import qualified Data.IP as IP
 import           Data.Yaml (FromJSON, ToJSON, parseJSON, withObject, (.:))
@@ -22,6 +33,31 @@ import           Text.Read (readMaybe)
 
 newtype NodeId = NodeId { fromNodeId :: Hashed ECDSA.PublicKey }
     deriving (Eq, Ord, Show, Binary, FromJSON, ToJSON)
+
+mkNodeId :: PublicKey -> NodeId
+mkNodeId = NodeId . publicKeyHash
+
+instance Hashable NodeId where
+    hashWithSalt salt (NodeId h) =
+        let digest = fromHashed h
+            bytes  = ByteArray.convert digest :: ByteString
+         in hashWithSalt salt bytes
+
+instance Serialise NodeId where
+    encode (NodeId pk) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 0
+        <> CBOR.encodeBytes (ByteArray.convert pk)
+
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (2, 0) -> do
+                bs <- CBOR.decodeBytes
+                maybe (fail "CBOR NodeId: invalid digest") pure $
+                    NodeId . toHashed <$> digestFromByteString bs
+
+            _ -> fail "CBOR NodeId: invalid tag"
 
 data NodeAddr = NodeAddr
     { addrIP   :: IP

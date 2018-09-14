@@ -6,20 +6,20 @@ import           Oscoin.Consensus.BlockStore (genesisBlockStore)
 import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, NakamotoEnv(..), easyDifficulty)
 import           Oscoin.Crypto.Blockchain (Difficulty)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
-import           Oscoin.Crypto.PubKey (generateKeyPair, publicKeyHash)
+import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Testing))
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.API.HTTP (withAPI)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
+import           Oscoin.Node (nodeEval, withNode)
 import qualified Oscoin.Node as Node
-import           Oscoin.Node (withNode, nodeEval)
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (Endpoints(..), NodeAddr(..), NodeId(..), withP2P)
+import           Oscoin.P2P (Endpoints(..), NodeAddr(..), mkNodeId, withP2P)
 import qualified Oscoin.P2P as P2P
-import           Oscoin.P2P.Discovery (withDisco, toKnownPeers)
+import           Oscoin.P2P.Discovery (toKnownPeers, withDisco)
 import qualified Oscoin.P2P.Discovery.Multicast as MCast
 import qualified Oscoin.P2P.Discovery.Static as Static
 import qualified Oscoin.Storage.Block as BlockStore
@@ -50,7 +50,7 @@ main = do
     let dif = maybe easyDifficulty identity difficulty
 
     kp  <- generateKeyPair
-    nid <- pure (NodeId . publicKeyHash . fst $ kp) -- TODO: read from disk
+    nid <- pure (mkNodeId . fst $ kp) -- TODO: read from disk
     rng <- newStdGen
     mem <- Mempool.newIO
     str <- STree.new
