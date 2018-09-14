@@ -33,6 +33,7 @@ import           Oscoin.Node (Receipt(..))
 
 import           Control.Exception.Safe
 import           Control.Monad.State
+import           Crypto.Random.Types (MonadRandom(..))
 import qualified Options.Applicative as Options
 import qualified System.Directory as Dir
 import           System.Environment
@@ -77,6 +78,9 @@ data TestCommandState = TestCommandState
     { submittedTransactions :: [ RadTx ]
     , storedKeyPair :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
     }
+
+instance MonadRandom TestCommandRunner where
+    getRandomBytes = io . getRandomBytes
 
 instance MonadKeyStore TestCommandRunner where
     writeKeyPair kp = modify (\s -> s { storedKeyPair = Just kp  })
