@@ -23,7 +23,10 @@ mainParserInfo =
     $ progDesc "Revision CLI"
 
 mainParser :: Parser Command
-mainParser = subparser $ createRevision
+mainParser =
+    subparser
+     $ createRevision
+    <> generateKeyPair
 
 
 createRevision :: Mod CommandFields Command
@@ -32,3 +35,13 @@ createRevision =
     (info (helper <*> parser) (progDesc "Create a new revision"))
   where
     parser = pure RevisionCreate
+
+
+generateKeyPair :: Mod CommandFields Command
+generateKeyPair =
+    command "generate-keypair"
+    (info (helper <*> parser) $
+        progDesc "Generate keypair to use with the other commands"
+    )
+  where
+    parser = pure GenerateKeyPair
