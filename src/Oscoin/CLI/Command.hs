@@ -14,6 +14,8 @@ import qualified Oscoin.CLI.Radicle as Rad
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
 
+import           Crypto.Random.Types (MonadRandom)
+
 
 data Command =
       RevisionCreate
@@ -23,7 +25,7 @@ data Command =
     deriving (Show)
 
 dispatchCommand
-    :: ( MonadIO m
+    :: ( MonadRandom m
        , API.MonadClient m
        , MonadKeyStore m
        )
@@ -39,12 +41,12 @@ dispatchCommand RevisionCreate = do
         (pk, sk) <- readKeyPair
         let rev = emptyRevision
         let msgContent = Rad.fnApply "create-revision" [Rad.toRadicle rev]
-        msg <- io $ Crypto.sign sk msgContent
+        msg <- Crypto.sign sk msgContent
         pure $ mkTx msg pk
 
 dispatchCommand GenerateKeyPair = do
-    (pk, sk) <- io $ Crypto.generateKeyPair
-    writeKeyPair (pk, sk)
+    kp <- Crypto.generateKeyPair
+    writeKeyPair kp
     pure $ ResultOk
 
 dispatchCommand _ = notImplemented

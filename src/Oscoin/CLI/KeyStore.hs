@@ -14,28 +14,35 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 
 import           Codec.Serialise (serialise, deserialiseOrFail)
 import           Control.Exception.Safe
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           System.Directory
 import           System.FilePath
 
 
 class Monad m => MonadKeyStore m where
-    writeKeyPair :: (Crypto.PublicKey, Crypto.PrivateKey) -> m ()
+    writeKeyPair :: Crypto.KeyPair -> m ()
 
     default writeKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => (Crypto.PublicKey, Crypto.PrivateKey) -> m ()
+        => Crypto.KeyPair -> m ()
     writeKeyPair = lift . writeKeyPair
 
-    readKeyPair :: m (Crypto.PublicKey, Crypto.PrivateKey)
+    readKeyPair :: m Crypto.KeyPair
     default readKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => m (Crypto.PublicKey, Crypto.PrivateKey)
+        => m Crypto.KeyPair
     readKeyPair = lift readKeyPair
 
 
 getConfigPath :: MonadIO m => FilePath -> m FilePath
 getConfigPath path = io $ getXdgDirectory XdgConfig $ "oscoin" </> path
+
+getSecretKeyPath :: IO FilePath
+getSecretKeyPath = getConfigPath "id.key"
+
+getPublicKeyPath :: IO FilePath
+getPublicKeyPath = getConfigPath "id.pub"
 
 ensureConfigDir :: MonadIO m => m ()
 ensureConfigDir = do
@@ -45,16 +52,18 @@ ensureConfigDir = do
 instance MonadKeyStore IO where
     writeKeyPair (pk, sk) =  do
         ensureConfigDir
-        skPath <- getConfigPath "id.key"
-        io $ LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
-        pkPath <- getConfigPath "id.pub"
-        io $ LBS.writeFile pkPath (serialise pk)
+        skPath <- getSecretKeyPath
+        LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
+        pkPath <- getPublicKeyPath
+        LBS.writeFile pkPath $ serialise pk
 
     readKeyPair = do
-        skPath <- getConfigPath "id.key"
-        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> LBS.readFile skPath
-        pkPath <- getConfigPath "id.pub"
-        pk <- fromRightThrow =<< deserialiseOrFail <$> LBS.readFile pkPath
+        skPath <- getSecretKeyPath
+        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
+        pkPath <- getPublicKeyPath
+        pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
         pure (pk, sk)
       where
         fromRightThrow = either throwM pure
+        -- Avoiding lazy IO
+        readFileLbs path = LBS.fromStrict <$> BS.readFile path

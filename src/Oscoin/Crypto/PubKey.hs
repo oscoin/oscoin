@@ -11,6 +11,7 @@ module Oscoin.Crypto.PubKey
     , serialisePrivateKey
     , deserialisePrivateKey
 
+    , KeyPair
     , generateKeyPair
 
     , sign
@@ -174,8 +175,11 @@ instance Pretty msg => Pretty (Signed msg) where
     pretty = pretty . unsign
 
 
+type KeyPair = (PublicKey, PrivateKey)
+
+
 -- | Generate a new random keypair.
-generateKeyPair :: MonadRandom m => m (PublicKey, PrivateKey)
+generateKeyPair :: MonadRandom m => m KeyPair
 generateKeyPair = do
     (pk, sk) <- generate (getCurveByName SEC_p256k1)
     pure (PublicKey pk (Crypto.hash pk), PrivateKey sk)

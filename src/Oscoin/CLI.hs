@@ -17,6 +17,8 @@ import           Oscoin.CLI.User
 import           Oscoin.CLI.Parser (execParser, execParserPure)
 import           Oscoin.CLI.KeyStore
 
+import           Crypto.Random.Types (MonadRandom(..))
+
 type CommandRunner a = CommandRunnerT IO a
 
 runCommand :: Command -> IO (Result Text)
@@ -27,3 +29,6 @@ newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: HttpClientT m
     deriving (Functor, Applicative, Monad, MonadIO, MonadTrans, API.MonadClient)
 
 instance MonadKeyStore m => MonadKeyStore (CommandRunnerT m)
+
+instance MonadRandom m => MonadRandom (CommandRunnerT m) where
+    getRandomBytes = lift . getRandomBytes
