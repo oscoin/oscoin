@@ -14,7 +14,7 @@ extra-deps:
 - half-0.2.2.3
 
 - git: http://git.oscoin.io/radicle
-  commit: 2b9ddab4963bf04f0148ff0974acdb5ebab5834f
+  commit: 3eb11aa4080a9f052e46641cbc4126a298538d73
 
 ghc-options:
   "$locals": -fhide-source-paths
