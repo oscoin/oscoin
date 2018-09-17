@@ -70,7 +70,7 @@ cast :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
 cast nodes (root, bcast) = do
     let (hdl, store) = snd $ Map.elemAt root nodes
     void $ uncurry (storeInsert store) bcast
-    out <- runPlumtree hdl $ uncurry broadcast bcast
+    out <- runPlumtreeT hdl $ uncurry broadcast bcast
     settle nodes out
 
 genBroadcasts :: MonadGen m => Contacts -> m [(Int, (MessageId, ByteString))]
@@ -96,15 +96,15 @@ settle nodes outs = loop $ pure outs
     dispatch (After t k ma)   = pure $ Just [After (t - 1000000) k ma]
     dispatch _                = pure mempty
 
-    onNode :: NodeId -> Plumtree NodeId a -> IO (Maybe a)
-    onNode n ma = for (Map.lookup n nodes) $ \(hdl,_) -> runPlumtree hdl ma
+    onNode n ma = for (Map.lookup n nodes) $ \(hdl,_) -> runPlumtreeT hdl ma
 
 initNodes :: Contacts -> IO Nodes
 initNodes net = do
     nodes <-
         for net $ \(self, peers) -> do
             store <- newIORef mempty
-            hdl   <- new self (Set.fromList peers) (simpleCallbacks store)
+            hdl   <- new self (simpleCallbacks store)
+            runPlumtreeT hdl $ resetPeers (Set.fromList peers)
             pure (self, (hdl, store))
     pure $ Map.fromList nodes
 
@@ -130,14 +130,14 @@ eagerTopo :: Nodes -> IO (AdjacencyMap NodeId)
 eagerTopo nodes = do
     adj <-
         for nodes $ \(hdl,_) ->
-            runPlumtree hdl $ Set.toList <$> eagerPushPeers
+            runPlumtreeT hdl $ Set.toList <$> eagerPushPeers
     pure . Alga.fromAdjacencyList . Map.toList $ adj
 
 lazyTopo :: Nodes -> IO (AdjacencyMap NodeId)
 lazyTopo nodes = do
     adj <-
         for nodes $ \(hdl,_) ->
-            runPlumtree hdl $ Set.toList <$> lazyPushPeers
+            runPlumtreeT hdl $ Set.toList <$> lazyPushPeers
     pure . Alga.fromAdjacencyList . Map.toList $ adj
 
 renderTopo :: (IsString s, Monoid s, Eq s) => AdjacencyMap NodeId -> s

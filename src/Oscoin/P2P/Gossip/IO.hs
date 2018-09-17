@@ -3,7 +3,6 @@
 
 module Oscoin.P2P.Gossip.IO
     ( Callbacks (..)
-    , HasCallbacks (..)
 
     , Handle
     , HasHandle (..)
@@ -36,7 +35,7 @@ import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Concurrent (forkFinally)
-import           Control.Exception.Safe (Exception, MonadMask, MonadThrow)
+import           Control.Exception.Safe (Exception)
 import qualified Control.Exception.Safe as E
 import           Control.Monad (unless)
 import           Control.Monad.IO.Unlift
@@ -54,18 +53,12 @@ data Callbacks p = Callbacks
     , connectionLost :: Peer -> IO ()
     }
 
-class HasCallbacks a p | a -> p where
-    callbacks :: Lens' a (Callbacks p)
-
-instance HasCallbacks (Callbacks p) p where
-    callbacks = identity
-    {-# INLINE callbacks #-}
-
 data Handle e p = Handle
     { hLogger    :: Logger
     , hKeys      :: (PublicKey, PrivateKey)
     , hConns     :: Active p
     , hHandshake :: Handshake e p
+    , hCallbacks :: Callbacks p
     }
 
 class HasHandle a e p | a -> e, a -> p where
@@ -174,13 +167,17 @@ instance Hashable Peer where
 
         hashPortNum = hashUsing fromEnum
 
-type NetworkT r m = ReaderT r m
+type NetworkT r = ReaderT r IO
 
-runNetworkT :: r -> NetworkT r m a -> m a
+runNetworkT :: r -> NetworkT r a -> IO a
 runNetworkT = flip runReaderT
 
-new :: Logger -> (PublicKey, PrivateKey) -> Handshake e p -> IO (Handle e p)
-new hLogger hKeys hHandshake = do
+new :: Logger
+    -> (PublicKey, PrivateKey)
+    -> Handshake e p
+    -> Callbacks p
+    -> IO (Handle e p)
+new hLogger hKeys hHandshake hCallbacks = do
     hConns <- atomically activeNew
     pure Handle{..}
 
@@ -196,17 +193,13 @@ knownPeer nid host port = Peer nid <$> resolve
         pure $ addrAddress addr
 
 listen
-    :: ( MonadIO            m
-       , MonadUnliftIO      m
-       , MonadMask          m
-       , Exception      e
+    :: ( Exception      e
        , HasHandle    r e p
-       , HasCallbacks r   p
        , Has Logger   r
        )
     => Sock.HostName
     -> Sock.PortNumber
-    -> NetworkT r m ()
+    -> NetworkT r ()
 listen host port = do
     addr <- io $ resolve host port
     E.bracket (io $ open addr) (io . Sock.close) accept
@@ -243,13 +236,10 @@ listen host port = do
                         Right c -> run $ recvAll c
 
 -- TODO(kim): do we need to mutex send?
-send :: ( MonadIO    m
-        , MonadThrow m
-        , HasHandle  r e p
-        )
+send :: HasHandle  r e p
      => Peer
      -> WireMessage p
-     -> NetworkT r m ()
+     -> NetworkT r ()
 send Peer{peerNodeId} msg = do
     Handle{hConns} <- view handle
     conn <- io . atomically $ Conn.activeGet hConns peerNodeId
@@ -257,17 +247,7 @@ send Peer{peerNodeId} msg = do
         Just c  -> io $ connSendWire c msg
         Nothing -> E.throwM Gone
 
-connect
-    :: ( MonadIO            m
-       , MonadUnliftIO      m
-       , MonadMask          m
-       , Exception      e
-       , HasHandle    r e p
-       , HasCallbacks r   p
-       , Has Logger   r
-       )
-    => Peer
-    -> NetworkT r m ()
+connect :: (Exception e, HasHandle r e p, Has Logger r) => Peer -> NetworkT r ()
 connect peer@Peer{peerNodeId, peerAddr} = do
     Handle{hLogger, hKeys, hConns, hHandshake} <- view handle
 
@@ -298,7 +278,7 @@ connect peer@Peer{peerNodeId, peerAddr} = do
     --family Sock.SockAddrCan{}   = Sock.AF_CAN
     family _                    = canNotSupported
 
-disconnect :: (MonadIO m, HasHandle r e p) => Peer -> NetworkT r m ()
+disconnect :: HasHandle r e p => Peer -> NetworkT r ()
 disconnect Peer{peerNodeId} = do
     Handle{hConns} <- view handle
     io $ do
@@ -307,18 +287,11 @@ disconnect Peer{peerNodeId} = do
 
 --------------------------------------------------------------------------------
 
-recvAll
-    :: ( MonadIO    m
-       , MonadMask  m
-       , HasHandle    r e p
-       , HasCallbacks r   p
-       , Has Logger   r
-       )
-    => Connection p
-    -> NetworkT r m ()
+recvAll :: (HasHandle r e p, Has Logger r) => Connection p -> NetworkT r ()
 recvAll conn = do
-    Handle{hConns} <- view handle
-    Callbacks{..}  <- view callbacks
+    Handle { hConns
+           , hCallbacks = Callbacks {connectionLost, recvPayload}
+           } <- view handle
 
     ok <- io . atomically $ Conn.activeAdd hConns conn
     if ok then

@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase    #-}
+{-# LANGUAGE TupleSections #-}
+
 -- | Implementation of the \"Epidemic Broadcast Trees\" (aka \"Plumtree\")
 -- gossip broadcast protocol.
 --
@@ -12,17 +15,26 @@ module Oscoin.P2P.Gossip.Broadcast
     , Message (..)
     , Outgoing (..)
     , ApplyResult (..)
+
     , Callbacks (..)
 
     , Handle
+    , HasHandle (..)
     , hSelf
     , new
 
-    , Plumtree
-    , runPlumtree
+    , PlumtreeT
+    , runPlumtreeT
+
+    , Schedule
+    , newSchedule
+    , destroySchedule
+    , withSchedule
+    , schedule
 
     , eagerPushPeers
     , lazyPushPeers
+    , resetPeers
 
     , broadcast
     , receive
@@ -32,14 +44,23 @@ module Oscoin.P2P.Gossip.Broadcast
 
 import           Oscoin.Prelude
 
+import           Codec.Serialise (Serialise)
+import           Control.Concurrent (threadDelay)
+import           Control.Concurrent.Async (Async, async)
+import qualified Control.Concurrent.Async as Async
 import           Control.Concurrent.STM
+import           Control.Exception.Safe (bracket)
 import           Data.Hashable (Hashable)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
+import           Data.Time.Clock (NominalDiffTime)
+import qualified Focus
 import           Lens.Micro (Lens', lens, over, set)
-import           Lens.Micro.Extras (view)
+import           Lens.Micro.Mtl (view)
+import qualified ListT
+import qualified STMContainers.Map as STMMap
 
 type MessageId = ByteString
 type Round     = Word
@@ -48,21 +69,34 @@ data Meta n = Meta
     { metaMessageId :: MessageId
     , metaRound     :: Round
     , metaSender    :: n
-    } deriving (Eq, Ord)
+    } deriving (Eq, Generic)
+
+instance Serialise n => Serialise (Meta n)
+instance Hashable  n => Hashable  (Meta n)
 
 data IHave n = IHave (Meta n)
-    deriving (Eq, Ord)
+    deriving (Eq, Generic)
+
+instance Serialise n => Serialise (IHave n)
+instance Hashable  n => Hashable  (IHave n)
 
 data Gossip n = Gossip
     { gPayload :: ByteString
     , gMeta    :: Meta n
-    }
+    } deriving (Eq, Generic)
+
+instance Serialise n => Serialise (Gossip n)
+instance Hashable  n => Hashable  (Gossip n)
 
 data Message n =
       GossipM (Gossip n)
     | IHaveM  (IHave n)
     | Prune   n
     | Graft   (Meta n)
+    deriving (Eq, Generic)
+
+instance Serialise n => Serialise (Message n)
+instance Hashable  n => Hashable  (Message n)
 
 data Outgoing n =
       Eager  n   (Message n)
@@ -107,26 +141,131 @@ data Handle n = Handle
     , hMissing        :: TVar (HashMap MessageId (IHave n))
     -- ^ Received 'IHave's for which we haven't requested the value yet.
     , hCallbacks      :: Callbacks
-    -- ^ 'Callbacks' interface.
+    -- ^ 'Callbacks' interface
     }
 
-new :: (Eq n, Hashable n) => n -> HashSet n -> Callbacks -> IO (Handle n)
-new self peers callbacks =
-    Handle self <$> newTVarIO (Set.delete self peers)
+class HasHandle a n | a -> n where
+    handle :: Lens' a (Handle n)
+
+instance HasHandle (Handle n) n where
+    handle = identity
+    {-# INLINE handle #-}
+
+hSelfL :: HasHandle a n => Lens' a n
+hSelfL = handle . lens hSelf (\s a -> s { hSelf = a })
+{-# INLINE hSelfL #-}
+
+hEagerPushPeersL :: HasHandle a n => Lens' a (TVar (HashSet n))
+hEagerPushPeersL = handle . lens hEagerPushPeers (\s a -> s { hEagerPushPeers = a })
+{-# INLINE hEagerPushPeersL #-}
+
+hLazyPushPeersL :: HasHandle a n => Lens' a (TVar (HashSet n))
+hLazyPushPeersL = handle . lens hLazyPushPeers (\s a -> s { hLazyPushPeers = a })
+{-# INLINE hLazyPushPeersL #-}
+
+new :: (Eq n, Hashable n) => n -> Callbacks -> IO (Handle n)
+new self cbs =
+    Handle self <$> newTVarIO mempty
                 <*> newTVarIO mempty
                 <*> newTVarIO mempty
-                <*> pure callbacks
+                <*> pure cbs
 
-type Plumtree n = ReaderT (Handle n) IO
+type PlumtreeT n r a = ReaderT r IO a
 
-runPlumtree :: Handle n -> Plumtree n a -> IO a
-runPlumtree r s = runReaderT s r
+runPlumtreeT :: r -> PlumtreeT n r a -> IO a
+runPlumtreeT = flip runReaderT
 
-eagerPushPeers :: Plumtree n (HashSet n)
-eagerPushPeers = asks hEagerPushPeers >>= io . readTVarIO
+data Schedule n = Schedule
+    { schedLazyQueue  :: STMMap.Map n (HashSet (IHave n))
+    , schedLazyThread :: Async ()
+    , schedDeferred   :: STMMap.Map MessageId [Async ()]
+    -- TODO(kim): batch 'Message'
+    , schedSend       :: n -> Message n -> IO ()
+    }
 
-lazyPushPeers :: Plumtree n (HashSet n)
-lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
+newSchedule
+    :: (Eq n, Hashable n)
+    => NominalDiffTime
+    -> (n -> Message n -> IO ())
+    -> IO (Schedule n)
+newSchedule interval schedSend = do
+    schedLazyQueue  <- STMMap.newIO
+    schedDeferred   <- STMMap.newIO
+    schedLazyThread <-
+        async . forever $ do
+            threadDelay $ toSeconds interval * 1000000
+            ihaves <-
+                atomically $ do
+                    ihaves <- ListT.toList $ STMMap.stream schedLazyQueue
+                    STMMap.deleteAll schedLazyQueue
+                    pure ihaves
+            for_ (map (second (Set.map IHaveM)) ihaves) $ \(rcpt, ms) ->
+                traverse_ (schedSend rcpt) ms
+
+    pure Schedule{..}
+
+destroySchedule :: Schedule n -> IO ()
+destroySchedule Schedule{schedDeferred, schedLazyThread} = do
+    deferreds <-
+        atomically
+            . ListT.fold (\xs -> pure . (xs <>) . snd) []
+            $ STMMap.stream schedDeferred
+    traverse_ Async.uninterruptibleCancel deferreds
+    Async.uninterruptibleCancel schedLazyThread
+
+withSchedule
+    :: (Eq n, Hashable n)
+    => NominalDiffTime
+    -> (n -> Message n -> IO ())
+    -> (Schedule n -> IO a)
+    -> IO a
+withSchedule interval send k =
+    bracket (newSchedule interval send) destroySchedule k
+
+schedule :: (Eq n, Hashable n) => Schedule n -> Outgoing n -> IO ()
+schedule sched@Schedule{..} = \case
+    Eager r m -> schedSend r m
+    Lazy  r i ->
+        atomically $
+            let update = pure . Just . maybe (Set.singleton i) (Set.insert i)
+             in STMMap.focus (Focus.alterM update) r schedLazyQueue
+
+    Cancel id -> do
+        deferreds <-
+            atomically $
+                STMMap.focus (pure . (,Focus.Remove)) id schedDeferred
+        (traverse_ . traverse_) Async.cancel deferreds
+
+    After t id ma -> do
+        ma' <-
+            async $ do
+                threadDelay (t * 1000000)
+                ma >>= traverse_ (schedule sched)
+        atomically $
+            let update = pure . Just . maybe [ma'] (ma':)
+             in STMMap.focus (Focus.alterM update) id schedDeferred
+
+eagerPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
+eagerPushPeers = view hEagerPushPeersL >>= io . readTVarIO
+
+lazyPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
+lazyPushPeers = view hLazyPushPeersL >>= io . readTVarIO
+
+resetPeers
+    :: ( HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
+    => HashSet n
+    -> PlumtreeT n r ()
+resetPeers peers = do
+    Handle { hSelf           = self
+           , hEagerPushPeers = eagers
+           , hLazyPushPeers  = lazies
+           } <- view handle
+    io . atomically $ do
+        modifyTVar' eagers $ const (Set.delete self peers)
+        modifyTVar' lazies $ const mempty
 
 -- | Broadcast some arbitrary data to the network.
 --
@@ -134,9 +273,13 @@ lazyPushPeers = asks hLazyPushPeers >>= io . readTVarIO
 -- that subsequent 'lookupMessage' calls would return 'Just' the 'ByteString'
 -- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
 -- 'Stale' (or 'ApplyError').
-broadcast :: (Eq n, Hashable n) => MessageId -> ByteString -> Plumtree n [Outgoing n]
+broadcast
+    :: (HasHandle r n, Eq n, Hashable n)
+    => MessageId
+    -> ByteString
+    -> PlumtreeT n r [Outgoing n]
 broadcast mid msg = do
-    self <- asks hSelf
+    self <- view hSelfL
     push Gossip
         { gPayload = msg
         , gMeta    = Meta
@@ -147,12 +290,12 @@ broadcast mid msg = do
         }
 
 -- | Receive and handle some 'Message' from the network.
-receive :: (Eq n, Hashable n) => Message n -> Plumtree n [Outgoing n]
+receive :: (Eq n, Hashable n, HasHandle r n) => Message n -> PlumtreeT n r [Outgoing n]
 receive (GossipM g) = do
-    Handle { hSelf      = self
-           , hMissing   = missing
+    Handle { hSelf = self
+           , hMissing = missing
            , hCallbacks = Callbacks{applyMessage}
-           } <- ask
+           } <- view handle
 
     let sender = view (gMetaL . metaSenderL)    g
     let mid    = view (gMetaL . metaMessageIdL) g
@@ -203,7 +346,7 @@ receive (GossipM g) = do
 receive (IHaveM ihave@(IHave Meta{metaMessageId = mid})) = do
     Handle { hMissing   = missing
            , hCallbacks = Callbacks{lookupMessage}
-           } <- ask
+           } <- view handle
 
     msg <- io $ lookupMessage mid
     case msg of
@@ -216,9 +359,7 @@ receive (Prune sender) =
     moveToLazy sender $> mempty
 
 receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
-    Handle { hSelf      = self
-           , hCallbacks = Callbacks{lookupMessage}
-           } <- ask
+    Handle{hSelf = self, hCallbacks = Callbacks{lookupMessage}} <- view handle
 
     moveToEager sender
 
@@ -239,9 +380,12 @@ receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
 -- \"When a new member is detected, it is simply added to the set of
 -- eagerPushPeers, i.e. it is considered as a candidate to become part of the
 -- tree.\".
-neighborUp :: (Eq n, Hashable n) => n -> Plumtree n ()
+neighborUp
+    :: (HasHandle r n, Eq n, Hashable n)
+    => n
+    -> PlumtreeT n r ()
 neighborUp n = do
-    eagers <- asks hEagerPushPeers
+    eagers <- view hEagerPushPeersL
     io . atomically . modifyTVar' eagers $ Set.insert n
 
 -- | Peer sampling service callback when a peer leaves the overlay.
@@ -251,12 +395,15 @@ neighborUp n = do
 -- \"When a neighbor is detected to leave the overlay, it is simple[sic!]
 -- removed from the membership. Furthermore, the record of 'IHave' messages sent
 -- from failed members is deleted from the missing history.\"
-neighborDown :: (Eq n, Hashable n) => n -> Plumtree n ()
+neighborDown
+    :: (HasHandle r n, Eq n, Hashable n)
+    => n
+    -> PlumtreeT n r ()
 neighborDown n = do
     Handle { hEagerPushPeers = eagers
            , hLazyPushPeers  = lazies
            , hMissing        = missing
-           } <- ask
+           } <- view handle
 
     io . atomically $ do
         modifyTVar' eagers  $ Set.delete n
@@ -265,9 +412,12 @@ neighborDown n = do
 
 -- Internal --------------------------------------------------------------------
 
-scheduleGraft :: (Eq n, Hashable n) => MessageId -> Plumtree n [Outgoing n]
+scheduleGraft
+    :: (HasHandle r n, Eq n, Hashable n)
+    => MessageId
+    -> PlumtreeT n r [Outgoing n]
 scheduleGraft mid = do
-    hdl <- ask
+    hdl <- view handle
     pure [timer hdl timeout1 $ Just (timer hdl timeout2 Nothing)]
   where
     timeout1 = 5 * 1000000
@@ -286,14 +436,16 @@ scheduleGraft mid = do
                 for ann $ \(IHave meta) ->
                     let sender = metaSender meta
                         graft  = Graft meta { metaSender = self }
-                     in runPlumtree hdl (moveToEager sender)
+                     in runPlumtreeT hdl (moveToEager sender)
                      $> Eager sender graft
 
             pure $ catMaybes [grf, k]
 
-push :: (Eq n, Hashable n) => Gossip n -> Plumtree n [Outgoing n]
+push :: (HasHandle r n, Eq n, Hashable n)
+     => Gossip n
+     -> PlumtreeT n r [Outgoing n]
 push g = do
-    hdl <- ask
+    hdl <- view handle
     liftA2 (<>) (eagerPush hdl) (lazyPush hdl)
   where
     sender = view (gMetaL . metaSenderL) g
@@ -308,14 +460,14 @@ push g = do
 
 -- Helpers ---------------------------------------------------------------------
 
-moveToLazy :: (Eq n, Hashable n) => n -> Plumtree n ()
+moveToLazy :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
 moveToLazy peer = do
-    hdl <- ask
+    hdl <- view handle
     io $ updatePeers hdl Set.delete Set.insert peer
 
-moveToEager :: (Eq n, Hashable n) => n -> Plumtree n ()
+moveToEager :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
 moveToEager peer = do
-    hdl <- ask
+    hdl <- view handle
     io $ updatePeers hdl Set.insert Set.delete peer
 
 updatePeers
