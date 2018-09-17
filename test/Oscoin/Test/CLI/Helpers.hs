@@ -10,9 +10,14 @@ module Oscoin.Test.CLI.Helpers
     , runCLIWithState
     , TestCommandState(..)
 
+    -- * Sandbox
+    , withSandboxHome
+
     -- * Assertions
     , assertResultOk
     , assertResultValue
+    , assertFileExists
+    , assertFileNotExists
     ) where
 
 import           Oscoin.Prelude
@@ -26,8 +31,12 @@ import           Oscoin.Crypto.Hash (hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Node (Receipt(..))
 
+import           Control.Exception.Safe
 import           Control.Monad.State
 import qualified Options.Applicative as Options
+import qualified System.Directory as Dir
+import           System.Environment
+import           System.IO.Temp (withSystemTempDirectory)
 
 import           Test.Tasty.HUnit
 
@@ -90,6 +99,34 @@ instance MonadClient TestCommandRunner where
 
 ----------------------------------------------------
 
+-- | Create a temporary directory, unset all environment variables and
+-- set the @HOME@ environment variables to the temporary directory.
+-- Passes the temporary home to the given action.
+withSandboxHome :: (FilePath -> IO a) -> IO a
+withSandboxHome run =
+    withSystemTempDirectory "oscoin-cli-test" $ \tmpdir ->
+        withEnv [("HOME", tmpdir)] (run tmpdir)
+
+-- | Runs the given action with only the given environment varibles
+-- set. Restores the previous environment when the action is done.
+withEnv :: [(String, String)] -> IO a -> IO a
+withEnv newEnv run =
+    bracket prepareEnv restoreEnv $ const run
+  where
+    prepareEnv = do
+        currentEnv <- getEnvironment
+        forM_ currentEnv $ \(key, _) -> unsetEnv key
+        forM_ newEnv $ uncurry setEnv
+        pure $ currentEnv
+    restoreEnv envBefore = do
+        forM_ envBefore $ uncurry setEnv
+        forM_ newEnv $ \(key, _) ->
+            case lookup key envBefore of
+                Just v -> setEnv key v
+                Nothing -> unsetEnv key
+
+----------------------------------------------------
+
 assertResultValue :: (Show a) => Result a -> Assertion
 assertResultValue (ResultValue _) = pure ()
 assertResultValue result = assertFailure $ "Expected ResultValue, got " <> show result
@@ -97,3 +134,12 @@ assertResultValue result = assertFailure $ "Expected ResultValue, got " <> show 
 assertResultOk :: (Show a) => Result a -> Assertion
 assertResultOk ResultOk = pure ()
 assertResultOk result = assertFailure $ "Expected ResultOk, got " <> show result
+
+assertFileExists :: FilePath -> IO ()
+assertFileExists path =
+    Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
+
+assertFileNotExists :: FilePath -> IO ()
+assertFileNotExists path =
+    not <$> Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
+
