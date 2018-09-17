@@ -17,7 +17,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import           Data.List (lookup)
 import qualified Data.Text as T
 import qualified Network.HTTP.Media as HTTP
-import           Network.HTTP.Media (Quality, matchQuality, parseAccept, parseQuality, (//))
+import           Network.HTTP.Media (Quality, mapQuality, parseAccept, parseQuality, (//))
 import qualified Network.HTTP.Types.Status as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.Wai as Wai
@@ -90,10 +90,9 @@ negotiateContentType :: ApiAction s i MediaType
 negotiateContentType = do
     accepted <- getAccepted
     let supported = NonEmpty.toList supportedMediaTypes
-    let offered = fst <$> supported
-    case matchQuality offered accepted of
+    case mapQuality supported accepted of
         Nothing -> respond HTTP.notAcceptable406 noBody
-        Just ct -> pure $ fromJust $ lookup ct supported
+        Just ct -> pure ct
 
 getState :: ApiAction s i State
 getState = Spock.getState
