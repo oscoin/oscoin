@@ -82,7 +82,7 @@ getAccepted :: ApiAction s i [Quality HTTP.MediaType]
 getAccepted = do
     accept <- maybe "application/json" identity <$> getHeader "Accept"
     case parseQuality accept of
-       Nothing -> respond HTTP.notAcceptable406 noBody
+       Nothing -> respond HTTP.badRequest400 $ Just ("Accept header malformed" :: Text)
        Just accepted -> pure accepted
 
 -- | Negotiates the best response content type from the request's accept header.
