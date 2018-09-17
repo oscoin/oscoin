@@ -7,9 +7,9 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                  - stack-work-v2-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
+                  - stack-work-v3-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                   # If an exact match is unavailable, use the most recent one
-                  - stack-work-v2-
+                  - stack-work-v3-
                 paths:
                     - ~/.stack
             - run: stack install hlint
@@ -27,6 +27,6 @@ jobs:
                 # These files are large (~600MB) and are not needed
                 command: rm ~/.stack/indices/Hackage/00-index.tar* || true
             - save_cache:
-                key: stack-work-v2-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
+                key: stack-work-v3-{{ checksum "stack.yaml" }}-{{ checksum "package.yaml" }}
                 paths:
                     - ~/.stack

@@ -7,7 +7,6 @@ extra-deps:
 - algebraic-graphs-0.1.1.1
 - cborg-0.2.0.0
 - merkle-tree-0.1.0
-- base58-bytestring-0.1.0
 - reroute-0.5.0.0
 - Spock-0.13.0.0
 - Spock-core-0.13.0.0
