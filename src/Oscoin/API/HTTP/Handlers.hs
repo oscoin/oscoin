@@ -36,12 +36,12 @@ getTransaction txId = node (lookupTx txId) >>= \case
         , txPayload = tx
         }
     where
-        fromBlockchain TxLookup{..} = (txPayload, Just txBlockHash, txConfirmations)
+        fromTxLookup TxLookup{..} = (txPayload, Just txBlockHash, txConfirmations)
         lookupTx id = Mempool.lookupTx id >>= \case
             Just tx -> pure $ Just (tx, Nothing, 0)
             Nothing -> do
                 chain <- BlockStore.maximumChainBy (comparing Blockchain.height)
-                pure $ fromBlockchain <$> Blockchain.lookupTx id chain
+                pure $ fromTxLookup <$> Blockchain.lookupTx id chain
 
 
 submitTransaction :: ApiAction s i a
