@@ -13,11 +13,14 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.API.Types as API
-import           Oscoin.API.HTTP.Internal (ContentType(..))
+import           Oscoin.API.HTTP.Internal (fromMediaType, MediaType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
+
+import qualified Data.Text as T
 
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
+import           Network.HTTP.Media ((//))
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
@@ -42,9 +45,10 @@ tests =
     ]
   where
     test name mkTest = testGroup name $ do
-        let ctypes = [ JSON, CBOR ]
-        codec <- [ Codec content accept | content <- ctypes, accept <- ctypes ]
-        [testCase (show codec) $ mkTest codec >>=
+        let ctypes  = fromMediaType <$> [ JSON, CBOR ]
+        let accepts = ("*" // "*") : ctypes
+        codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
+        [testCase (T.unpack $ prettyCodec codec) $ mkTest codec >>=
             \HTTPTest{..} -> makeNode testState >>= runSession testSession]
 
 data HTTPTest = HTTPTest

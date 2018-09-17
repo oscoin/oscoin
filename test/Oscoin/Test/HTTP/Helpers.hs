@@ -14,7 +14,7 @@ import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Environment
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP (api)
-import           Oscoin.API.HTTP.Internal (mkMiddleware, decode, encode, parseContentType, ContentType(..))
+import           Oscoin.API.HTTP.Internal (mkMiddleware, decode, encode, parseMediaType, MediaType(..))
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
@@ -38,8 +38,10 @@ import qualified Data.Aeson as Aeson
 import           Data.Aeson (ToJSON, FromJSON)
 import           Codec.Serialise (Serialise)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
 
+import qualified Network.HTTP.Media as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
 import qualified Network.HTTP.Types.Method as HTTP
@@ -195,25 +197,39 @@ mkRequest method path headers = Wai.setPath req path where
 -- | @Codec@ represents the @ContentType@ of sent HTTP request bodies and
 -- the accepted (i.e. desired) @ContentType@ of the correspondent HTTP response
 -- bodies.
-data Codec = Codec ContentType ContentType
+data Codec = Codec
+    { codecAccept      :: HTTP.MediaType
+    , codecContentType :: HTTP.MediaType
+    } deriving (Show)
 
-instance Show Codec where
-    show (Codec content accept') =
-        "(Accept: " ++ show accept' ++ ", Content-Type: " ++ show content ++ ")"
+prettyCodec :: Codec -> Text
+prettyCodec Codec{..} =
+    "(Accept: " ++ tshow codecAccept ++
+    ", Content-Type: " ++ tshow codecContentType ++ ")"
+
+newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
+newCodec accept ctype = Codec
+    { codecAccept = accept
+    , codecContentType = ctype
+    }
 
 codecHeaders :: Codec -> [HTTP.Header]
-codecHeaders (Codec content accept) = [contentTypeHeader content, acceptHeader accept]
+codecHeaders Codec{..} =
+    [ contentTypeHeader codecContentType
+    , acceptHeader      codecAccept
+    ]
 
-contentTypeHeader, acceptHeader :: ContentType -> HTTP.Header
-contentTypeHeader JSON = (HTTP.hContentType, "application/json")
-contentTypeHeader CBOR = (HTTP.hContentType, "application/cbor")
-acceptHeader      JSON = (HTTP.hAccept,      "application/json")
-acceptHeader      CBOR = (HTTP.hAccept,      "application/cbor")
+contentTypeHeader, acceptHeader :: HTTP.MediaType -> HTTP.Header
+contentTypeHeader = (HTTP.hContentType, ) . mediaTypeBytes
+acceptHeader      = (HTTP.hAccept, )      . mediaTypeBytes
 
-supportedContentType :: [HTTP.Header] -> Either Text ContentType
+mediaTypeBytes :: HTTP.MediaType -> BS.ByteString
+mediaTypeBytes = encodeUtf8 . T.pack . show
+
+supportedContentType :: [HTTP.Header] -> Either Text MediaType
 supportedContentType headers = case lookup HTTP.hContentType headers of
     Nothing -> Left $ "No Content-Type found in headers"
-    Just ct -> parseContentType $ decodeUtf8 ct
+    Just ct -> parseMediaType ct
 
 responseBody :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
 responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
@@ -229,8 +245,8 @@ post
 post = withBody POST
 
 withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Wai.Session Wai.SResponse
-withoutBody method (Codec _ acceptCt) path =
-    request method path [acceptHeader acceptCt] noBody
+withoutBody method Codec{..} path =
+    request method path [acceptHeader codecAccept] noBody
 
 withBody
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)

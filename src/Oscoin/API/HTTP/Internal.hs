@@ -11,16 +11,16 @@ import qualified Codec.Serialise as Serialise
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.Maybe (listToMaybe)
-import           Data.List (intersect, lookup)
-import           Data.Text.Encoding (decodeUtf8')
+import           Data.List (lookup)
 import qualified Data.Text as T
+import qualified Network.HTTP.Media as HTTP
+import           Network.HTTP.Media (Quality, mapQuality, parseAccept, parseQuality, (//))
 import qualified Network.HTTP.Types.Status as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.Wai as Wai
-import qualified Network.Wai.Parse as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 import           Web.HttpApiData (FromHttpApiData)
 import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
@@ -47,12 +47,10 @@ type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx s i)
 mkState :: State
 mkState = State ()
 
-getHeader :: HeaderName -> ApiAction s i (Maybe Text)
-getHeader name = do
-    header <- Spock.rawHeader name
-    pure $ header >>= (rightToMaybe . decodeUtf8')
+getHeader :: HeaderName -> ApiAction s i (Maybe BS.ByteString)
+getHeader = Spock.rawHeader
 
-getHeader' :: HeaderName -> ApiAction s i Text
+getHeader' :: HeaderName -> ApiAction s i BS.ByteString
 getHeader' name = do
     header <- getHeader name
     case header of
@@ -62,50 +60,39 @@ getHeader' name = do
 getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
--- | A sum type of supported content types.
-data ContentType = JSON | CBOR deriving (Ord, Eq, Show)
+-- | A sum type of supported media types.
+data MediaType = JSON | CBOR deriving (Ord, Eq, Show)
 
-fromContentType :: ContentType -> Text
-fromContentType JSON = "application/json"
-fromContentType CBOR = "application/cbor"
+fromMediaType :: MediaType -> HTTP.MediaType
+fromMediaType JSON = "application" // "json"
+fromMediaType CBOR = "application" // "cbor"
 
-parseContentType :: Text -> Either Text ContentType
-parseContentType t = case decodeUtf8' $ fst $ Wai.parseContentType $ encodeUtf8 t of
-    Left  e  -> Left $ T.pack $ show e
-    Right ctype -> case lookup ctype $ NonEmpty.toList supportedContentTypes of
-        Nothing -> Left $ "Content-Type '" ++ ctype ++ "' not supported."
-        Just ct -> Right $ ct
+parseMediaType :: BS.ByteString -> Either Text MediaType
+parseMediaType t = toEither $ do
+    accepted <- parseAccept t
+    lookup accepted $ NonEmpty.toList supportedMediaTypes
+    where toEither = maybe (Left err) Right
+          err = "Content-Type '" ++ T.pack (show t) ++ "' not supported."
 
-supportedContentTypes :: NonEmpty (Text, ContentType)
-supportedContentTypes = NonEmpty.fromList $ [(fromContentType ct, ct) | ct <- [JSON, CBOR]]
-
--- | Gets the Accept header, defaulting to application/json if not present.
-getAccept :: ApiAction s i Text
-getAccept = maybe ((fst . NonEmpty.head) supportedContentTypes) identity <$> getHeader "Accept"
+supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
+supportedMediaTypes = NonEmpty.fromList $ [(fromMediaType ct, ct) | ct <- [JSON, CBOR]]
 
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
-getAccepted :: ApiAction s i [Text]
+getAccepted :: ApiAction s i [Quality HTTP.MediaType]
 getAccepted = do
-    accept <- getAccept
-    let accepted = decodeUtf8' <$> Wai.parseHttpAccept (encodeUtf8 accept)
-    case lefts accepted of
-        [] -> pure $ rights $ accepted
-        _  -> respond HTTP.badRequest400 noBody
-
--- | Returns Just the first `accepted` content type also present in `offered`
--- or Nothing if no offers match the accepted types.
-bestContentType :: [Text] -> [Text] -> Maybe Text
-bestContentType accepted offered = listToMaybe $ accepted `intersect` offered
+    accept <- maybe "*/*" identity <$> getHeader "Accept"
+    case parseQuality accept of
+       Nothing -> respond HTTP.badRequest400 $ Just ("Accept header malformed" :: Text)
+       Just accepted -> pure accepted
 
 -- | Negotiates the best response content type from the request's accept header.
-negotiateContentType :: ApiAction s i ContentType
+negotiateContentType :: ApiAction s i MediaType
 negotiateContentType = do
     accepted <- getAccepted
-    let supported = NonEmpty.toList supportedContentTypes
-    let offered = fst <$> supported
-    case bestContentType accepted offered of
+    let supported = NonEmpty.toList supportedMediaTypes
+    case mapQuality supported accepted of
         Nothing -> respond HTTP.notAcceptable406 noBody
-        Just ct -> pure $ fromJust $ lookup ct supported
+        Just ct -> pure ct
 
 getState :: ApiAction s i State
 getState = Spock.getState
@@ -123,11 +110,11 @@ body = Just
 noBody :: Maybe ()
 noBody = Nothing
 
-encode :: (Serialise a, ToJSON a) => ContentType -> a -> LBS.ByteString
+encode :: (Serialise a, ToJSON a) => MediaType -> a -> LBS.ByteString
 encode JSON = Aeson.encode
 encode CBOR = Serialise.serialise
 
-decode :: (Serialise a, FromJSON a) => ContentType -> LBS.ByteString -> Either Text a
+decode :: (Serialise a, FromJSON a) => MediaType -> LBS.ByteString -> Either Text a
 decode JSON bs = first T.pack          (Aeson.eitherDecode' bs)
 decode CBOR bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
 
@@ -139,26 +126,16 @@ respond status Nothing = do
     Spock.setStatus status
     Spock.lazyBytes ""
 
-respondBytes :: HTTP.Status -> ContentType -> LBS.ByteString -> ApiAction s i b
+respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction s i b
 respondBytes status ct bdy = do
     Spock.setStatus status
-    Spock.setHeader "Content-Type" $ fromContentType ct
+    Spock.setHeader "Content-Type" $ T.pack $ show $ fromMediaType ct
     Spock.lazyBytes bdy
 
-getContentType :: ApiAction s i Text
-getContentType = do
-    ctype <- getHeader' "Content-Type"
-    case decodeUtf8' $ fst $ Wai.parseContentType $ encodeUtf8 ctype of
-        Left  _  -> respond HTTP.unsupportedMediaType415 noBody
-        Right ct -> pure ct
-
-getSupportedContentType :: ApiAction s i ContentType
-getSupportedContentType = do
-    ct <- getContentType
-    let supported = NonEmpty.toList supportedContentTypes
-    case lookup ct supported of
-        Nothing  -> respond HTTP.unsupportedMediaType415 noBody
-        Just sct -> pure sct
+getSupportedContentType :: ApiAction s i MediaType
+getSupportedContentType = (parseMediaType <$> getHeader' "Content-Type") >>= \case
+    Left _   -> respond HTTP.unsupportedMediaType415 noBody
+    Right mt -> pure mt
 
 getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
