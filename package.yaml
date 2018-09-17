@@ -12,7 +12,6 @@ dependencies:
   - aeson
   - async
   - base16-bytestring
-  - base58-bytestring
   - base64-bytestring
   - binary
   - bytestring
@@ -42,12 +41,10 @@ dependencies:
   - network
   - network-multicast
   - optparse-applicative
-  - primitive
   - prettyprinter
   - radicle
   - random
   - random-shuffle
-  - recursion-schemes
   - safe-exceptions
   - scientific
   - serialise
@@ -64,7 +61,6 @@ dependencies:
   - unordered-containers
   - wai
   - wai-extra
-  - wai-middleware-static
   - writer-cps-mtl
   - yaml
 
