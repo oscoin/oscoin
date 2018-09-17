@@ -12,7 +12,7 @@ import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, showChainDigest)
-import           Oscoin.Crypto.Blockchain.Block (BlockHeader, blockData, blockHeader)
+import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..), blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Logging as Log
 import           Oscoin.P2P (Msg(..))
@@ -20,7 +20,7 @@ import           Oscoin.P2P (Msg(..))
 import qualified Data.Hashable as Hashable
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           System.Random (StdGen, mkStdGen, split)
+import           System.Random
 import           System.Random.Shuffle (shuffle')
 
 -- TestableNode ----------------------------------------------------------------
@@ -85,8 +85,18 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
             $ runNakamotoT env nakStdGen ma
     env = NakamotoEnv { nakEval = identityEval
                       , nakDifficulty = Nakamoto.minDifficulty
-                      , nakMiner = Nakamoto.mineBlockRandom
+                      , nakMiner = mineBlock
                       , nakLogger = Log.noLogger }
+
+-- | Mine a block header in 10% of the cases. The forged header does
+-- not have a valid proof of work.
+mineBlock :: StdGen -> BlockHeader a -> Maybe (BlockHeader a)
+mineBlock stdGen bh@BlockHeader{..} =
+    let r = fst $ randomR (0, 1) stdGen
+        p = 0.1 :: Float
+     in if r < p
+           then Just bh
+           else Nothing
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =

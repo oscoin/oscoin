@@ -20,7 +20,6 @@ module Oscoin.Consensus.Nakamoto
     , chainDifficulty
 
     , mineBlock
-    , mineBlockRandom
     ) where
 
 import           Oscoin.Prelude
@@ -43,7 +42,7 @@ import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Maybe (maybeToList, catMaybes)
 import           Data.Traversable (for)
-import           System.Random (StdGen, randomR, split)
+import           System.Random (StdGen, split)
 
 epochLength :: Tick
 epochLength = 1
@@ -52,14 +51,7 @@ type NakamotoEval tx s = Evaluator s tx ()
 
 -- | A Nakamoto mining function. Tries all nonces and returns 'Nothing' if
 -- no block satisfying the difficulty was found.
-type NakamotoMiner tx s =
-       Tick              -- ^ Current time
-    -> StdGen            -- ^ A random number generator
-    -> NakamotoEval tx s -- ^ An evaluation function for expressions
-    -> Difficulty        -- ^ Target difficulty
-    -> [tx]              -- ^ Expressions to include in the block
-    -> Block tx s        -- ^ Parent block to build upon
-    -> Maybe (Block tx s)
+type NakamotoMiner = forall a. StdGen -> BlockHeader a -> Maybe (BlockHeader a)
 
 -- | Read-only environment for the Nakamoto consensus protocol.
 data NakamotoEnv tx s = NakamotoEnv
@@ -67,7 +59,7 @@ data NakamotoEnv tx s = NakamotoEnv
     -- ^ Evaluation function to use for expressions
     , nakDifficulty :: Difficulty
     -- ^ Target difficulty (Nb. this is fixed for now and does not adjust)
-    , nakMiner      :: NakamotoMiner tx s
+    , nakMiner      :: NakamotoMiner
     -- ^ Mining function to use
     , nakLogger     :: Log.Logger
     }
@@ -76,7 +68,7 @@ instance Has Log.Logger (NakamotoEnv tx s) where
     getter         = nakLogger
     modifier f env = env { nakLogger = f (nakLogger env) }
 
-defaultNakamotoEnv :: Serialise tx => NakamotoEnv tx s
+defaultNakamotoEnv :: NakamotoEnv tx s
 defaultNakamotoEnv = NakamotoEnv
     { nakEval = identityEval
     , nakDifficulty = easyDifficulty
@@ -104,6 +96,7 @@ score = comparing height
 instance ( MonadMempool    tx   m
          , MonadBlockStore tx s m
          , Hashable        tx
+         , Serialise       tx
          ) => MonadProtocol tx (NakamotoT tx s m)
   where
     stepM _ = \case
@@ -130,13 +123,25 @@ instance ( MonadMempool    tx   m
 
     tickM t = do
         NakamotoEnv{..} <- ask
-        r :: StdGen     <- state split
         txs             <- map snd <$> getTxs
         parent          <- tip <$> BlockStore.maximumChainBy (comparing height)
+        let (results, newState) = applyValidExprs txs (blockState . blockHeader $ parent) nakEval
+            validTxs = map fst (rights results)
+            headerWithoutPoW = BlockHeader
+                { blockPrevHash     = blockHash parent
+                , blockDataHash     = hashTxs validTxs
+                , blockState        = newState
+                , blockStateHash    = zeroHash
+                , blockDifficulty   = nakDifficulty
+                , blockTimestamp    = fromIntegral $ fromEnum t
+                , blockNonce        = 0
+                }
 
-        case nakMiner t r nakEval nakDifficulty txs parent of
-            Just blk -> do
-                delTxs (blockData blk)
+        minerStdGen <- state split
+        case nakMiner minerStdGen headerWithoutPoW of
+            Just header -> do
+                delTxs txs
+                let blk = mkBlock header txs
                 -- When mining a block, we've already computed the final state
                 -- of that block, but when storing a block received from the
                 -- network, we havent't, we just have `s -> Maybe s`.
@@ -176,24 +181,25 @@ runNakamotoT env rng (NakamotoT ma) = runRWST ma env rng
 evalNakamotoT :: Monad m => NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, ())
 evalNakamotoT env rng (NakamotoT ma) = evalRWST ma env rng
 
--- | Attempt to mine a 'Block'. Returns 'Nothing' if all nonces were tried
--- unsuccessfully.
-mineBlock :: Serialise tx => NakamotoMiner tx s
-mineBlock tick _ evalFn d txs parent = do
-    let (results, s') = applyValidExprs txs (blockState . blockHeader $ parent) evalFn
-        validTxs      = map fst (rights results)
+-- | Try different nonces until we find a block header that has a valid
+-- proof of work. See 'hasPow'
+mineBlock :: StdGen -> BlockHeader a -> Maybe (BlockHeader a)
+mineBlock stdGen bh@BlockHeader { blockNonce }
+    | hasPoW bh =
+        Just bh
+    | blockNonce < maxBound =
+        mineBlock stdGen bh { blockNonce = blockNonce + 1 }
+    | otherwise =
+        Nothing
 
-    findBlock tick (blockHash parent) s' d validTxs
+-- | Return whether or not a block header has a valid proof of work. A
+-- block header has a valid proof of work if the 'blockNonce' is chosen
+-- such that the block header hash is smaller than its
+-- 'blockDifficulty'
+hasPoW :: BlockHeader s -> Bool
+hasPoW header =
+    difficulty header < blockDifficulty header
 
--- | Like 'mineBlock', but attempts to mine a block only 10% of the time it
--- is called. Useful for test environments with very low difficulty.
-mineBlockRandom :: Serialise tx => NakamotoMiner tx s
-mineBlockRandom t rng evalFn d txs parent =
-    let (r, rng') = randomR (0, 1) rng
-        p = 0.1 :: Float
-     in if r < p
-           then mineBlock t rng' evalFn d txs parent
-           else Nothing
 
 -- | Calculate block difficulty.
 difficulty :: BlockHeader s -> Difficulty
@@ -215,11 +221,6 @@ defaultGenesisDifficulty =
     0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     -- This is the original difficulty of Bitcoin at genesis.
 
--- | Return whether or not a block has a valid difficulty.
-hasPoW :: BlockHeader s -> Bool
-hasPoW header =
-    difficulty header < blockDifficulty header
-
 -- | Calculate the difficulty of a blockchain.
 chainDifficulty :: Blockchain tx s -> Difficulty
 chainDifficulty (Blockchain blks) =
@@ -239,36 +240,3 @@ chainDifficulty (Blockchain blks) =
     blockTimeSeconds  = blockTimeMinutes * 60
     currentDifficulty = blockDifficulty rangeEnd
     genesisDifficulty = blockDifficulty . blockHeader $ NonEmpty.last blks
-
-findPoW :: BlockHeader () -> Maybe (BlockHeader ())
-findPoW bh@BlockHeader { blockNonce }
-    | hasPoW bh =
-        Just bh
-    | blockNonce < (maxBound :: Word32) =
-        findPoW bh { blockNonce = blockNonce + 1 }
-    | otherwise =
-        Nothing
-
-findBlock
-    :: (Foldable t, Serialise tx)
-    => Tick
-    -> BlockHash
-    -> s
-    -> Difficulty
-    -> t tx
-    -> Maybe (Block tx s)
-findBlock t parent st target txs = do
-    header <- headerWithPoW
-    pure (st <$ mkBlock header txs)
-  where
-    headerWithPoW    = findPoW headerWithoutPoW
-    headerWithoutPoW = BlockHeader
-        { blockPrevHash     = parent
-        , blockDataHash     = hashTxs txs
-        , blockState        = ()
-        , blockStateHash    = zeroHash
-        , blockDifficulty   = target
-        , blockTimestamp    = toSecs t
-        , blockNonce        = 0
-        }
-    toSecs = fromIntegral . fromEnum
