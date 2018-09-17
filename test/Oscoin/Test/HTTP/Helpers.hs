@@ -200,12 +200,12 @@ mkRequest method path headers = Wai.setPath req path where
 data Codec = Codec
     { codecAccept      :: HTTP.MediaType
     , codecContentType :: HTTP.MediaType
-    }
+    } deriving (Show)
 
-instance Show Codec where
-    show Codec{..} =
-        "(Accept: " ++ show codecAccept ++
-        ", Content-Type: " ++ show codecContentType ++ ")"
+prettyCodec :: Codec -> Text
+prettyCodec Codec{..} =
+    "(Accept: " ++ tshow codecAccept ++
+    ", Content-Type: " ++ tshow codecContentType ++ ")"
 
 newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
 newCodec accept ctype = Codec

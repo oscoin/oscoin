@@ -16,6 +16,8 @@ import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (fromMediaType, MediaType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 
+import qualified Data.Text as T
+
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 import           Network.HTTP.Media ((//))
@@ -46,7 +48,7 @@ tests =
         let ctypes  = fromMediaType <$> [ JSON, CBOR ]
         let accepts = ("*" // "*") : ctypes
         codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
-        [testCase (show codec) $ mkTest codec >>=
+        [testCase (T.unpack $ prettyCodec codec) $ mkTest codec >>=
             \HTTPTest{..} -> makeNode testState >>= runSession testSession]
 
 data HTTPTest = HTTPTest
