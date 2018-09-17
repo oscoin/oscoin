@@ -245,8 +245,8 @@ post
 post = withBody POST
 
 withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Wai.Session Wai.SResponse
-withoutBody method (Codec _ acceptCt) path =
-    request method path [acceptHeader acceptCt] noBody
+withoutBody method Codec{..} path =
+    request method path [acceptHeader codecAccept] noBody
 
 withBody
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
