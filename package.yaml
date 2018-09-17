@@ -101,9 +101,11 @@ tests:
       - -O
     dependencies:
       - algebraic-graphs
+      - Diff
       - hedgehog
       - microlens
       - microlens-aeson
+      - nicify-lib
       - oscoin
       - QuickCheck
       - quickcheck-instances
@@ -146,6 +148,7 @@ default-extensions:
   - TypeFamilies
   - TypeOperators
   - TypeSynonymInstances
+  - TupleSections
   - ViewPatterns
 
 ghc-options:

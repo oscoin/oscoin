@@ -6,15 +6,21 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), BlockHash, blocks)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), headerHash, blockData)
 import           Oscoin.Test.HTTP.Helpers
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+import           Oscoin.Test.Data.Rad.Arbitrary ()
+import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (ContentType(..))
 import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 
 import           Network.HTTP.Types.Status
+import qualified Network.Wai.Test as Wai
 
+import           Test.QuickCheck (generate)
 import           Test.Tasty
-import           Test.Tasty.ExpectedFailure (expectFail)
 import           Test.Tasty.HUnit (testCase, assertFailure)
 
 tests :: [TestTree]
@@ -24,9 +30,9 @@ tests =
         [ testGroup "404 Not Found"
             [ test "Missing transaction" getMissingTransaction ]
 
-        , expectFail $ testGroup "200 OK"
+        , testGroup "200 OK"
             [ test "Unconfirmed transaction" getUnconfirmedTransaction
-            , test "Confirmed transaction"   getConfirmedTransaction
+            , test "Confirmed transaction" getConfirmedTransaction
             ]
         ]
     , testGroup "POST /transactions"
@@ -71,21 +77,14 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
     -- Submit the transaction to the mempool.
     post codec "/transactions" tx >>=
         assertStatus accepted202 <>
-        assertResultOK (Node.Receipt {fromReceipt = Crypto.hash tx})
+        assertResultOK Node.Receipt {fromReceipt = Crypto.hash tx}
 
     -- Get the mempool once again, make sure the transaction is in there.
     get codec "/transactions" >>=
         assertStatus ok200 <>
         assertResultOK [tx]
 
-    get codec ("/transactions/" <> txHash) >>=
-        assertStatus ok200 <>
-        assertResultOK GetTxResponse
-            { txHash = Crypto.hash tx
-            , txBlockHash = Nothing
-            , txConfirmations = 0
-            , txPayload = tx
-            }
+    getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
 
 getMissingTransaction :: Codec -> IO HTTPTest
 getMissingTransaction codec = httpTest emptyNodeState $ do
@@ -97,10 +96,44 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
     get codec ("/transactions/" <> missing) >>= assertStatus notFound404
 
 getConfirmedTransaction :: Codec -> IO HTTPTest
-getConfirmedTransaction _ = notTested
+getConfirmedTransaction codec = do
+    chain <- generate $ arbitraryValidBlockchain
+    let (tx, blockHash, confirmations) = oldestTx chain
+    let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+
+    httpTest (nodeState mempty chain) $
+        getTransactionReturns codec txHash $ GetTxResponse
+            { txHash = Crypto.hash tx
+            , txBlockHash = Just $ blockHash
+            , txConfirmations = confirmations
+            , txPayload = tx
+            }
+
+oldestTx :: Blockchain tx s -> (tx, BlockHash, Word64)
+oldestTx (blocks -> blks) = head $ do
+    (i, blk) <- zip [1..] blks
+    tx <- toList $ blockData blk
+    pure (tx, headerHash $ blockHeader blk, i)
 
 getUnconfirmedTransaction :: Codec -> IO HTTPTest
-getUnconfirmedTransaction _ = notTested
+getUnconfirmedTransaction codec = do
+    (txHash, tx) <- genDummyTx
+    httpTest (nodeState [tx] emptyBlockstore) $
+        getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
+
+unconfirmedGetTxResponse :: API.RadTx -> GetTxResponse
+unconfirmedGetTxResponse tx = GetTxResponse
+    { txHash = Crypto.hash tx
+    , txBlockHash = Nothing
+    , txConfirmations = 0
+    , txPayload = tx
+    }
+
+getTransactionReturns :: Codec -> Text -> GetTxResponse -> Wai.Session ()
+getTransactionReturns codec txHash expected =
+    get codec ("/transactions/" <> txHash) >>=
+    assertStatus ok200 <>
+    assertResultOK expected
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"

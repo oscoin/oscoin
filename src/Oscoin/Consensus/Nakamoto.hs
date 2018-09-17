@@ -33,6 +33,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash, zeroHash)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.P2P as P2P
 
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
@@ -166,7 +167,7 @@ isNovelBlock h =
 isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
 isNovelTx h = do
     inBlockStore <- BlockStore.lookupTx h
-    inMempool    <- lookupTx h
+    inMempool    <- Mempool.lookupTx h
     pure . isNothing $ inBlockStore <|> inMempool
 
 runNakamotoT :: NakamotoEnv tx s -> StdGen -> NakamotoT tx s m a -> m (a, StdGen, ())

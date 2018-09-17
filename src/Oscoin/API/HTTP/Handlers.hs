@@ -3,6 +3,8 @@ module Oscoin.API.HTTP.Handlers where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Blockchain (TxLookup(..))
+import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
@@ -12,8 +14,6 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
-
-import           Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
 import           Network.HTTP.Types.Status
 import           Codec.Serialise (Serialise, serialise)
@@ -29,17 +29,22 @@ getAllTransactions = do
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just tx -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok GetTxResponse
         { txHash = hash tx
-        , txBlockHash = Nothing
-        , txConfirmations = confirmations tx
+        , txBlockHash =  bh
+        , txConfirmations = confirmations
         , txPayload = tx
         }
     where
-        confirmations _ = 0 -- FIXME(tsenart)
-        lookupTx id = runMaybeT
-             $  MaybeT (Mempool.lookupTx id)
-            <|> MaybeT (BlockStore.lookupTx id)
+        lookupTx id = Mempool.lookupTx id >>= \case
+            Just tx -> pure $ Just (tx, Nothing, 0)
+            Nothing -> do
+                chain <- BlockStore.maximumChainBy (comparing Blockchain.height)
+                pure $ case Blockchain.lookupTx id chain of
+                    Nothing -> Nothing
+                    Just TxLookup{..} -> Just $
+                        (txPayload, Just $ txBlockHash, txConfirmations)
+
 
 submitTransaction :: ApiAction s i a
 submitTransaction = do

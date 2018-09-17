@@ -1,10 +1,12 @@
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
+    , TxLookup(..)
     , (|>)
     , tip
     , genesis
     , blocks
     , height
+    , lookupTx
     , validateBlockchain
     , showBlockDigest
     , showChainDigest
@@ -18,11 +20,14 @@ import           Oscoin.Prelude hiding (toList)
 
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
+import           Data.Maybe (listToMaybe)
+import           Control.Monad (guard)
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Time.Clock (NominalDiffTime)
 import           Text.Printf
 import           GHC.Exts (IsList(toList))
+
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
     deriving (Show, Functor, Traversable, Foldable)
@@ -56,6 +61,19 @@ genesis = NonEmpty.last . fromBlockchain
 
 height :: Blockchain tx s -> Int
 height = length . fromBlockchain
+
+data TxLookup tx = TxLookup
+    { txPayload       :: tx
+    , txBlockHash     :: BlockHash
+    , txConfirmations :: Word64
+    }
+
+lookupTx :: forall tx s. Hashable tx => Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
+lookupTx h (blocks -> chain) = listToMaybe $ do
+    (i, block) <- zip [1..] chain
+    tx <- toList $ blockData block
+    guard (hash tx == h)
+    pure $ TxLookup tx (headerHash $ blockHeader block) i
 
 validateBlockchain :: Hashable s => Blockchain tx s -> Either Error (Blockchain tx s)
 validateBlockchain (Blockchain (blk :| [])) = do
