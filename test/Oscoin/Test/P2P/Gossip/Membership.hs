@@ -104,7 +104,7 @@ settle nodes rpcs = loop $ pure rpcs
 initNodes :: SplitMixSeed -> Callbacks NodeId -> [NodeId] -> IO [(NodeId, Node)]
 initNodes seed cbs ns = do
     let prng = seedSMGen' seed
-    traverse (\n -> (n,) <$> new n defaultConfig prng cbs) ns
+    for ns $ \n -> (n,) <$> new n defaultConfig prng cbs
 
 noopCallbacks :: Callbacks n
 noopCallbacks = Callbacks
