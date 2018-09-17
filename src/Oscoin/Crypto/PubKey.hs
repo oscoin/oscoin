@@ -141,11 +141,8 @@ instance Serialise Signature where
     decode = do
         pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
         case pre of
-            (3, 0) -> do
-                ecdsa <-
-                    liftA2 ECDSA.Signature CBOR.decodeInteger CBOR.decodeInteger
-                pure $ Signature ecdsa
-
+            (3, 0) -> Signature <$>
+                liftA2 ECDSA.Signature CBOR.decodeInteger CBOR.decodeInteger
             _ -> fail "CBOR Signature: invalid ECDSA signature"
 
 -- | A signed message.
