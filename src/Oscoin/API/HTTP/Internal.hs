@@ -68,10 +68,9 @@ fromMediaType JSON = "application" // "json"
 fromMediaType CBOR = "application" // "cbor"
 
 parseMediaType :: BS.ByteString -> Either Text MediaType
-parseMediaType t = toEither (parseAccept t) >>=
-    toEither . (`lookup` NonEmpty.toList supportedMediaTypes)
-    where toEither :: Maybe a -> Either Text a
-          toEither = maybe (Left err) Right
+parseMediaType t = toEither $ parseAccept t >>=
+    (`lookup` NonEmpty.toList supportedMediaTypes)
+    where toEither = maybe (Left err) Right
           err = "Content-Type '" ++ T.pack (show t) ++ "' not supported."
 
 supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
