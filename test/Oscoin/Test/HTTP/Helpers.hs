@@ -203,8 +203,9 @@ data Codec = Codec
     }
 
 instance Show Codec where
-    show (Codec content accept') =
-        "(Accept: " ++ show accept' ++ ", Content-Type: " ++ show content ++ ")"
+    show Codec{..} =
+        "(Accept: " ++ show codecAccept ++
+        ", Content-Type: " ++ show codecContentType ++ ")"
 
 newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
 newCodec accept ctype = Codec
