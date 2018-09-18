@@ -21,13 +21,13 @@ instance ToRadicle Text where
     toRadicle = Rad.String
 
 instance ToRadicle () where
-    toRadicle _ = Rad.List []
+    toRadicle _ = list $ []
 
 instance ToRadicle a => ToRadicle (Set a) where
-    toRadicle = Rad.List . map toRadicle . Set.toList
+    toRadicle = list . map toRadicle . Set.toList
 
 instance ToRadicle a => ToRadicle [a] where
-    toRadicle = Rad.List . map toRadicle
+    toRadicle = list . map toRadicle
 
 --------------------------------------------------------------------------------
 
@@ -37,6 +37,13 @@ class FromRadicle a where
 instance FromRadicle Text where
     fromRadicle x = T.pack (show x)
 
+-- | Return a Radicle value that evaluates to the given list of Radicle
+-- values.
+-- @
+--      Rad.eval (list vals) = pure vals
+-- @
+list :: [Rad.Value] -> Rad.Value
+list vals = Rad.List $ Rad.Primop (Rad.Ident "list"):vals
 
 -- | Return a Radicle expression that applies @args@ to the function
 -- named @fnName@.
