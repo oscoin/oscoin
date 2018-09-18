@@ -47,9 +47,15 @@ resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
 data TxLookupResponse = TxLookupResponse
+    -- The hash of the transaction.
     { txHash          :: Hashed RadTx
-    , txBlockHash     :: Maybe BlockHash
+    -- @BlockHash@ of the @Block@ in which the transaction was included.
+    , txBlockHash     :: Maybe BlockHash -- Hash of the block
+    -- Count of @Blocks@ that build on top of the @Block@ in which
+    -- the transaction was included, plus one, which accounts for
+    -- the including @Block@ itself.
     , txConfirmations :: Word64
+    -- The transaction itself.
     , txPayload       :: RadTx
     } deriving (Show, Eq, Generic)
 
