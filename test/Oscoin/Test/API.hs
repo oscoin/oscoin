@@ -14,7 +14,6 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.API.Types as API
 import           Oscoin.API.HTTP.Internal (fromMediaType, MediaType(..))
-import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 
 import qualified Data.Text as T
 
@@ -88,7 +87,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
         assertStatus ok200 <>
         assertResultOK [tx]
 
-    getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
+    getTransactionReturns codec txHash $ unconfirmedTx tx
 
 getMissingTransaction :: Codec -> IO HTTPTest
 getMissingTransaction codec = httpTest emptyNodeState $ do
@@ -106,7 +105,7 @@ getConfirmedTransaction codec = do
     let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     httpTest (nodeState mempty chain) $
-        getTransactionReturns codec txHash $ GetTxResponse
+        getTransactionReturns codec txHash $ API.TxLookupResponse
             { txHash = Crypto.hash tx
             , txBlockHash = Just $ blockHash
             , txConfirmations = confirmations
@@ -123,17 +122,17 @@ getUnconfirmedTransaction :: Codec -> IO HTTPTest
 getUnconfirmedTransaction codec = do
     (txHash, tx) <- genDummyTx
     httpTest (nodeState [tx] emptyBlockstore) $
-        getTransactionReturns codec txHash $ unconfirmedGetTxResponse tx
+        getTransactionReturns codec txHash $ unconfirmedTx tx
 
-unconfirmedGetTxResponse :: API.RadTx -> GetTxResponse
-unconfirmedGetTxResponse tx = GetTxResponse
+unconfirmedTx :: API.RadTx -> API.TxLookupResponse
+unconfirmedTx tx = API.TxLookupResponse
     { txHash = Crypto.hash tx
     , txBlockHash = Nothing
     , txConfirmations = 0
     , txPayload = tx
     }
 
-getTransactionReturns :: Codec -> Text -> GetTxResponse -> Wai.Session ()
+getTransactionReturns :: Codec -> Text -> API.TxLookupResponse -> Wai.Session ()
 getTransactionReturns codec txHash expected =
     get codec ("/transactions/" <> txHash) >>=
     assertStatus ok200 <>
