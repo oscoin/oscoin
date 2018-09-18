@@ -47,16 +47,16 @@ resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
 data TxLookupResponse = TxLookupResponse
-    -- The hash of the transaction.
-    { txHash          :: Hashed RadTx
-    -- @BlockHash@ of the @Block@ in which the transaction was included.
-    , txBlockHash     :: Maybe BlockHash -- Hash of the block
-    -- Count of @Blocks@ that build on top of the @Block@ in which
-    -- the transaction was included, plus one, which accounts for
-    -- the including @Block@ itself.
+    { txHash :: Hashed RadTx
+    -- ^ Hash of the transaction.
+    , txBlockHash :: Maybe BlockHash
+    -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
     , txConfirmations :: Word64
-    -- The transaction itself.
-    , txPayload       :: RadTx
+    -- ^ Block depth of the 'Block' in which the transaction was included,
+    -- which is the number of blocks from the tip up until, and including,
+    -- the 'Block' referenced by 'txBlockHash'.
+    , txPayload :: RadTx
+    -- ^ The transaction itself.
     } deriving (Show, Eq, Generic)
 
 instance Aeson.ToJSON TxLookupResponse
