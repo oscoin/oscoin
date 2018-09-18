@@ -8,7 +8,6 @@ import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
-import           Oscoin.API.HTTP.Response (GetTxResponse(..))
 import           Oscoin.API.Types
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -29,7 +28,7 @@ getAllTransactions = do
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
     Nothing -> respond notFound404 noBody
-    Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok GetTxResponse
+    Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok TxLookupResponse
         { txHash = hash tx
         , txBlockHash =  bh
         , txConfirmations = confirmations
