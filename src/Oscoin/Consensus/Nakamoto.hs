@@ -163,6 +163,7 @@ instance ( MonadMempool    tx   m
 instance P2P.MonadNetwork tx   m => P2P.MonadNetwork tx   (NakamotoT tx s m)
 instance MonadMempool     tx   m => MonadMempool     tx   (NakamotoT tx s m)
 instance MonadBlockStore  tx s m => MonadBlockStore  tx s (NakamotoT tx s m)
+instance MonadUpdate         s m => MonadUpdate         s (NakamotoT tx s m)
 
 isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
 isNovelBlock h =

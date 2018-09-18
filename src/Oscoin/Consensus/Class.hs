@@ -3,7 +3,7 @@
 module Oscoin.Consensus.Class
     ( Score
     , MonadQuery (..)
-    , MonadModify (..)
+    , MonadUpdate (..)
     , MonadProtocol (..)
 
     -- * Re-exports
@@ -29,21 +29,14 @@ class Monad m => MonadQuery m where
     queryM = lift . queryM
     {-# INLINE queryM #-}
 
-class MonadQuery m => MonadModify m where
-    setM :: Key m -> Val m -> m ()
-    delM :: Key m -> m ()
+class Monad m => MonadUpdate s m | m -> s where
+    updateM :: s -> m ()
 
-    default setM
-        :: (MonadModify m', MonadTrans t, m ~ t m', Val m' ~ Val (t m'), Key m' ~ Key (t m'))
-        => Key m -> Val m -> m ()
-    setM k = lift . setM k
-    {-# INLINE setM #-}
-
-    default delM
-        :: (MonadModify m', MonadTrans t, m ~ t m', Key m' ~ Key (t m'))
-        => Key m -> m ()
-    delM = lift . delM
-    {-# INLINE delM #-}
+    default updateM
+        :: (MonadUpdate s m', MonadTrans t, m ~ t m')
+        => s -> m ()
+    updateM s = lift $ updateM s
+    {-# INLINE updateM #-}
 
 class Monad m => MonadProtocol tx m | m -> tx where
     stepM :: Tick -> P2P.Msg tx -> m [P2P.Msg tx]

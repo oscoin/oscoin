@@ -27,7 +27,11 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
                  (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class
-                 (MonadClock(..), MonadProtocol(..), MonadQuery(..))
+                 ( MonadClock(..)
+                 , MonadProtocol(..)
+                 , MonadQuery(..)
+                 , MonadUpdate(..)
+                 )
 import           Oscoin.Consensus.Evaluator (EvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Blockchain
@@ -112,8 +116,8 @@ tick :: ( MonadNetwork     tx   m
         , MonadProtocol    tx   m
         , MonadBlockStore  tx s m
         , MonadClock            m
+        , MonadUpdate         s m
         , Log.MonadLogger  r    m
-        , Has (STree.Handle s)  r
         , Hashable         tx
         , Pretty           tx
         )
@@ -123,23 +127,12 @@ tick = do
     forM_ msgs logMsg
     sendM msgs
 
-    unless (null msgs) updateState
+    unless (null msgs) $
+        updateM =<< latestState
 
 latestState :: MonadBlockStore tx s m => m s
 latestState =
     blockState . blockHeader . tip <$> maximumChainBy (comparing height)
-
-updateState
-    :: ( MonadNetwork     tx   m
-       , MonadBlockStore  tx s m
-       , Log.MonadLogger  r    m
-       , Has (STree.Handle s) r
-       )
-    => m ()
-updateState = do
-    st  <- latestState
-    hst <- asks getter
-    io . atomically $ STree.updateTree hst st
 
 logMsg :: forall r tx m.
     ( Hashable tx, Pretty tx, Log.MonadLogger r m )
@@ -156,14 +149,13 @@ step :: ( MonadNetwork      tx   m
         , MonadProtocol     tx   m
         , MonadBlockStore   tx s m
         , MonadClock             m
-        , Log.MonadLogger r      m
-        , Has (STree.Handle s) r
+        , MonadUpdate          s m
         )
      => m ()
 step = do
     t <- currentTick
-    sendM =<< stepM t =<< recvM
-    updateState
+    sendM   =<< stepM t =<< recvM
+    updateM =<< latestState
 
 nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
 nodeEval tx st = Eval.radicleEval (toProgram tx) st
@@ -229,6 +221,11 @@ instance (Monad m, MonadIO m, Query s) => MonadQuery (NodeT tx s i m) where
         st <- asks hStateTree
         lift $ STree.getPath st k
     {-# INLINE queryM #-}
+
+instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
+    updateM s = do
+        st <- asks hStateTree
+        io . atomically $ STree.updateTree st s
 
 instance MonadClock m => MonadClock (NodeT tx s i m)
 
