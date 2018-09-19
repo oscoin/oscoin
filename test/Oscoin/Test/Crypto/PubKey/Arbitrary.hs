@@ -2,15 +2,16 @@
 
 module Oscoin.Test.Crypto.PubKey.Arbitrary where
 
-import Oscoin.Prelude
-import Oscoin.Crypto.PubKey (Signed, PublicKey, PrivateKey, Signed, sign, generateKeyPair)
+import           Oscoin.Crypto.PubKey
+                 (PrivateKey, PublicKey, Signed, generateKeyPair, sign)
+import           Oscoin.Prelude
 
-import Crypto.Random.Types (MonadRandom(..))
-import Data.ByteArray (convert)
-import Codec.Serialise (Serialise)
+import           Codec.Serialise (Serialise)
+import           Crypto.Random.Types (MonadRandom(..))
+import           Data.ByteArray (convert)
 
-import Test.QuickCheck
-import Test.QuickCheck.Instances ()
+import           Test.QuickCheck
+import           Test.QuickCheck.Instances ()
 
 instance MonadRandom Gen where
     getRandomBytes n =

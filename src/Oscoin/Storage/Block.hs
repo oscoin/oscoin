@@ -12,7 +12,8 @@ import           Oscoin.Consensus.BlockStore (BlockStore)
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Crypto.Blockchain.Block (Block, Orphan)
 
-import           Control.Concurrent.STM (TVar, modifyTVar', newTVar, newTVarIO, readTVar)
+import           Control.Concurrent.STM
+                 (TVar, modifyTVar', newTVar, newTVarIO, readTVar)
 
 newtype Handle tx s = Handle (TVar (BlockStore tx s))
 

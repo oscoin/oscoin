@@ -25,8 +25,8 @@ import           Oscoin.Prelude
 import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
-import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Command.Result
+import           Oscoin.CLI.KeyStore
 import           Oscoin.Crypto.Hash (hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Node (Receipt(..))
@@ -76,7 +76,7 @@ newtype TestCommandRunner a = TestCommandRunner { fromTestCommandRunner :: State
 
 data TestCommandState = TestCommandState
     { submittedTransactions :: [ RadTx ]
-    , storedKeyPair :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
+    , storedKeyPair         :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
     }
 
 instance MonadRandom TestCommandRunner where
@@ -126,18 +126,18 @@ withEnv newEnv run =
         forM_ envBefore $ uncurry setEnv
         forM_ newEnv $ \(key, _) ->
             case lookup key envBefore of
-                Just v -> setEnv key v
+                Just v  -> setEnv key v
                 Nothing -> unsetEnv key
 
 ----------------------------------------------------
 
 assertResultValue :: (Show a) => Result a -> Assertion
 assertResultValue (ResultValue _) = pure ()
-assertResultValue result = assertFailure $ "Expected ResultValue, got " <> show result
+assertResultValue result          = assertFailure $ "Expected ResultValue, got " <> show result
 
 assertResultOk :: (Show a) => Result a -> Assertion
 assertResultOk ResultOk = pure ()
-assertResultOk result = assertFailure $ "Expected ResultOk, got " <> show result
+assertResultOk result   = assertFailure $ "Expected ResultOk, got " <> show result
 
 assertFileExists :: FilePath -> IO ()
 assertFileExists path =

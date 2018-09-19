@@ -4,8 +4,8 @@ module Oscoin.Test.Consensus.View
     , runDummyView
     ) where
 
-import           Oscoin.Prelude
 import           Oscoin.Consensus.Class
+import           Oscoin.Prelude
 
 import           Control.Monad.State (State)
 import qualified Control.Monad.State as State

@@ -1,7 +1,7 @@
 module Oscoin.P2P.Discovery.Internal (Disco (..)) where
 
-import Oscoin.Prelude
-import Oscoin.P2P.Types
+import           Oscoin.P2P.Types
+import           Oscoin.Prelude
 
 -- | Peer discovery interface
 data Disco m = Disco

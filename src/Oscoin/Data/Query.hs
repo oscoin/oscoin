@@ -1,6 +1,6 @@
 module Oscoin.Data.Query where
 
-import Oscoin.Prelude
+import           Oscoin.Prelude
 
 class Query a where
     type QueryVal a :: *

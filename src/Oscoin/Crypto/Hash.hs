@@ -20,25 +20,25 @@ module Oscoin.Crypto.Hash
 
 import           Oscoin.Prelude
 
-import           Crypto.Hash (Digest, Blake2b_256(..))
-import qualified Crypto.Hash as Crypto
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import           Crypto.PubKey.ECC.ECDSA.Extended ()
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serial
 import qualified Codec.Serialise.Decoding as Serial
 import qualified Codec.Serialise.Encoding as Serial
-import qualified Data.Binary as Binary
-import qualified Data.Binary.Put as Binary
-import qualified Data.Binary.Get as Binary
+import           Crypto.Hash (Blake2b_256(..), Digest)
+import qualified Crypto.Hash as Crypto
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import           Crypto.PubKey.ECC.ECDSA.Extended ()
+import           Data.Aeson (FromJSON(..), ToJSON(..), Value(String), withText)
 import           Data.Binary (Binary)
+import qualified Data.Binary as Binary
+import qualified Data.Binary.Get as Binary
+import qualified Data.Binary.Put as Binary
 import           Data.ByteArray (convert, zero)
 import qualified Data.ByteArray as ByteArray
-import qualified Data.ByteString.Base16 as Base16
-import           Data.Maybe (fromJust)
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
-import           Data.Aeson (FromJSON(..), ToJSON(..), Value(String), withText)
+import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Lazy as LBS
+import           Data.Maybe (fromJust)
 import qualified Data.Text as T
 import           Web.HttpApiData (FromHttpApiData(..))
 

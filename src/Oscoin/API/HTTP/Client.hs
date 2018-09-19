@@ -12,10 +12,10 @@ module Oscoin.API.HTTP.Client
     , runHttpClientT
     ) where
 
-import           Oscoin.Prelude
 import           Oscoin.API.Client
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Hash (toHexText)
+import           Oscoin.Prelude
 
 import           Codec.Serialise
 import qualified Data.ByteString.Lazy as LBS
@@ -27,7 +27,7 @@ import           Network.HTTP.Types.Method
 
 data HttpClient = HttpClient
     { httpClientBaseRequest :: Request
-    , httpClientManager :: Manager
+    , httpClientManager     :: Manager
     }
 
 
@@ -88,5 +88,5 @@ post reqPath reqBody =
 deserialiseResponse :: (Serialise a) => Response LBS.ByteString -> Result a
 deserialiseResponse response =
     case deserialiseOrFail $ responseBody response of
-        Left _ -> Err "Failed to deserialise response"
+        Left _    -> Err "Failed to deserialise response"
         Right val -> val

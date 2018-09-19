@@ -11,14 +11,14 @@ module Data.ByteString.Base64.Extended
 
 import           Prelude
 
+import           Data.Aeson hiding (decode, encode)
+import           Data.Binary (Binary)
+import qualified Data.Binary as Binary
 import           Data.ByteString
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Aeson hiding (encode, decode)
-import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import           Data.Text (Text)
-import qualified Data.Binary as Binary
-import           Data.Binary (Binary)
+import           Data.Text.Encoding (decodeUtf8, encodeUtf8)
 
 newtype Base64 a = Base64 ByteString
     deriving (Show, Eq, Ord)

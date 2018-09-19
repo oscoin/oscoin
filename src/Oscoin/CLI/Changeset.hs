@@ -1,7 +1,7 @@
 module Oscoin.CLI.Changeset where
 
-import           Oscoin.Prelude
 import           Oscoin.CLI.Radicle
+import           Oscoin.Prelude
 
 type Commit = ()
 

@@ -12,7 +12,7 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Crypto.PubKey as Crypto
 
-import           Codec.Serialise (serialise, deserialiseOrFail)
+import           Codec.Serialise (deserialiseOrFail, serialise)
 import           Control.Exception.Safe
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS

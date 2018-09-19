@@ -2,28 +2,29 @@ module Oscoin.Test.API where
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Node as Node
+import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
+import qualified Oscoin.API.Types as API
+import           Oscoin.Crypto.Blockchain (BlockHash, Blockchain(..), blocks)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block(..), blockData, headerHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), BlockHash, blocks)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), headerHash, blockData)
-import           Oscoin.Test.HTTP.Helpers
+import qualified Oscoin.Node as Node
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import qualified Oscoin.API.Types as API
-import           Oscoin.API.HTTP.Internal (fromMediaType, MediaType(..))
+import           Oscoin.Test.HTTP.Helpers
 
 import qualified Data.Text as T
 
+import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
-import           Network.HTTP.Media ((//))
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
-import           Test.Tasty.HUnit (testCase, assertFailure)
+import           Test.Tasty.HUnit (assertFailure, testCase)
 
 tests :: [TestTree]
 tests =
@@ -51,7 +52,7 @@ tests =
             \HTTPTest{..} -> makeNode testState >>= runSession testSession]
 
 data HTTPTest = HTTPTest
-    { testState :: NodeState
+    { testState   :: NodeState
     , testSession :: Session ()
     }
 

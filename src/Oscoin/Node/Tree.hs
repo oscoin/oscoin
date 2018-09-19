@@ -7,9 +7,9 @@ module Oscoin.Node.Tree
     , updateTree
     ) where
 
+import           Oscoin.Data.Query
 import           Oscoin.Prelude
 import           Oscoin.State.Tree (Path)
-import           Oscoin.Data.Query
 
 import           Control.Concurrent.STM.TVar
 

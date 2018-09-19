@@ -2,15 +2,20 @@ module Main (main) where
 
 import           Oscoin.Prelude
 
+import           Oscoin.API.HTTP (withAPI)
+import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.Nakamoto (evalNakamotoT, defaultNakamotoEnv, NakamotoEnv(..), easyDifficulty)
+import           Oscoin.Consensus.Nakamoto
+                 ( NakamotoEnv(..)
+                 , defaultNakamotoEnv
+                 , easyDifficulty
+                 , evalNakamotoT
+                 )
 import           Oscoin.Crypto.Blockchain (Difficulty)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
 import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Testing))
-import qualified Oscoin.API.HTTP as HTTP
-import           Oscoin.API.HTTP (withAPI)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node (nodeEval, withNode)
@@ -27,18 +32,18 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 
 import qualified Control.Concurrent.Async as Async
+import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
 import           System.Random (newStdGen)
-import qualified Data.Text as T
 
 import           Options.Generic
 
 data Args = Args
-    { listen        :: Text
-    , seed          :: [FilePath]
-    , prelude       :: FilePath
-    , difficulty    :: Maybe Difficulty
+    { listen     :: Text
+    , seed       :: [FilePath]
+    , prelude    :: FilePath
+    , difficulty :: Maybe Difficulty
     } deriving (Generic, Show)
 
 instance ParseRecord Args

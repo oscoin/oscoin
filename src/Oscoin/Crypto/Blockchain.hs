@@ -18,15 +18,15 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude hiding (toList)
 
+import           Control.Monad (guard)
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
-import           Data.Maybe (listToMaybe)
-import           Control.Monad (guard)
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
+import           Data.Maybe (listToMaybe)
 import           Data.Time.Clock (NominalDiffTime)
-import           Text.Printf
 import           GHC.Exts (IsList(toList))
+import           Text.Printf
 
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }

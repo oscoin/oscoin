@@ -25,7 +25,8 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.PubKey (PrivateKey, PublicKey)
 import           Oscoin.Logging (Logger, withExceptionLogged)
 import qualified Oscoin.Logging as Log
-import           Oscoin.P2P.Gossip.Connection (Active, Connection(..), activeNew)
+import           Oscoin.P2P.Gossip.Connection
+                 (Active, Connection(..), activeNew)
 import qualified Oscoin.P2P.Gossip.Connection as Conn
 import           Oscoin.P2P.Gossip.Handshake (Handshake(..))
 import           Oscoin.P2P.Gossip.Wire (WireMessage(..))

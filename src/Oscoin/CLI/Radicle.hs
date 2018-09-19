@@ -6,10 +6,10 @@ module Oscoin.CLI.Radicle
 
 import           Oscoin.Prelude
 
-import qualified Radicle as Rad
-import qualified Data.Set as Set
 import           Data.Scientific (scientific)
+import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Radicle as Rad
 
 class ToRadicle a where
     toRadicle :: a -> Rad.Value

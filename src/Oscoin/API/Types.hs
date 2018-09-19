@@ -10,17 +10,17 @@ module Oscoin.API.Types
     , Query(..)
     ) where
 
-import           Oscoin.Prelude
-import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Data.Query (Query(..))
 import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Node (Receipt)
+import           Oscoin.Prelude
 import           Oscoin.State.Tree (Key)
 import qualified Radicle as Rad
 
-import qualified Data.Aeson as Aeson
 import qualified Codec.Serialise as Serial
+import qualified Data.Aeson as Aeson
 
 -- | The type of a block transaction in the API.
 type RadTx = Tx Rad.Value
@@ -47,15 +47,15 @@ resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
 data TxLookupResponse = TxLookupResponse
-    { txHash :: Hashed RadTx
+    { txHash          :: Hashed RadTx
     -- ^ Hash of the transaction.
-    , txBlockHash :: Maybe BlockHash
+    , txBlockHash     :: Maybe BlockHash
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
     , txConfirmations :: Word64
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
     -- the 'Block' referenced by 'txBlockHash'.
-    , txPayload :: RadTx
+    , txPayload       :: RadTx
     -- ^ The transaction itself.
     } deriving (Show, Eq, Generic)
 

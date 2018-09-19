@@ -14,12 +14,12 @@ module Oscoin.Node.Mempool.Internal
 import           Oscoin.Prelude hiding (lookup, toList)
 import qualified Oscoin.Prelude as Prelude
 
-import           Oscoin.Crypto.Hash (Hashed, Hashable, hash)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
+import           Codec.Serialise (Serialise(..))
+import qualified Data.Aeson as Aeson
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Aeson as Aeson
-import           Codec.Serialise (Serialise(..))
 
 -- Mempool --------------------------------------------------------------------
 

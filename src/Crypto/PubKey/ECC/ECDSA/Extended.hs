@@ -4,9 +4,10 @@ module Crypto.PubKey.ECC.ECDSA.Extended where
 import           Prelude
 
 import           Crypto.PubKey.ECC.ECDSA
-import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), Point(..), getCurveByName)
-import qualified Data.Binary as Binary
+import           Crypto.PubKey.ECC.Types
+                 (CurveName(SEC_p256k1), Point(..), getCurveByName)
 import           Data.Binary (Binary)
+import qualified Data.Binary as Binary
 
 instance Binary PublicKey where
     put (PublicKey curve (Point x y)) | curve == getCurveByName SEC_p256k1 =

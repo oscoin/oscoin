@@ -2,10 +2,10 @@ module Oscoin.Data.Tx where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.PubKey
-import           Oscoin.Crypto.Hash
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.PubKey
 
 import           Codec.Serialise
 import           Crypto.Random.Types (MonadRandom(..))

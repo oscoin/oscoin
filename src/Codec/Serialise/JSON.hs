@@ -41,7 +41,7 @@ deserialiseParseJSON val = do
     base64 <- Aeson.parseJSON val
     bs <- case Base64.decodeOrFail base64 of
         Left err -> fail $ "Failed to decode base64 string: " <> err
-        Right a -> pure a
+        Right a  -> pure a
     case deserialiseOrFail $ LBS.fromStrict bs of
         Left err -> fail $ show err
-        Right a -> pure a
+        Right a  -> pure a

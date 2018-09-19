@@ -6,13 +6,16 @@ import           Oscoin.Test.Consensus.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Class
-import           Oscoin.Consensus.Nakamoto (NakamotoT, NakamotoEnv(..), runNakamotoT)
+import           Oscoin.Consensus.Evaluator (identityEval)
+import           Oscoin.Consensus.Nakamoto
+                 (NakamotoEnv(..), NakamotoT, runNakamotoT)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Consensus.Evaluator (identityEval)
-import           Oscoin.Crypto.Blockchain (Blockchain, fromBlockchain, showChainDigest)
-import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..), blockData, blockHeader)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain, fromBlockchain, showChainDigest)
+import           Oscoin.Crypto.Blockchain.Block
+                 (BlockHeader(..), blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Logging as Log
 import           Oscoin.P2P (Msg(..))
@@ -250,8 +253,8 @@ scheduleMessages t from msgs tn@TestNetwork{tnNodes, tnMsgs, tnPartitions, tnLog
     -- flood the network with redundant messages. Another way to solve this would be
     -- for the consensus protocol to be able to respond with a 'Gossip a' message which
     -- indicates that 'a' should not be sent to the sender, but only to other nodes.
-    sample []  = []
-    sample xs  = take 3 $ shuffle' xs (length xs) rng
+    sample [] = []
+    sample xs = take 3 $ shuffle' xs (length xs) rng
 
     unreachables = Map.lookup from tnPartitions
 
