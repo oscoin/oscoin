@@ -1,5 +1,6 @@
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
+    , ScoringFunction
     , TxLookup(..)
     , (|>)
     , tip
@@ -65,6 +66,9 @@ genesis = NonEmpty.last . fromBlockchain
 
 height :: Blockchain tx s -> Int
 height = length . fromBlockchain
+
+-- | Scoring function for blockchains.
+type ScoringFunction tx s = Blockchain tx s -> Blockchain tx s -> Ordering
 
 data TxLookup tx = TxLookup
     { txPayload       :: tx

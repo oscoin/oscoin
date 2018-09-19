@@ -4,8 +4,8 @@ module Oscoin.Consensus.BlockStore.Class where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan)
+import           Oscoin.Crypto.Blockchain (Blockchain, ScoringFunction, tip)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan, blockHeader, blockState)
 import           Oscoin.Crypto.Hash (Hashed)
 
 class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
@@ -62,7 +62,12 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
 
     default maximumChainBy
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => (Blockchain tx s -> Blockchain tx s -> Ordering)
+        => ScoringFunction tx s
         -> m (Blockchain tx s)
     maximumChainBy = lift . maximumChainBy
     {-# INLINE maximumChainBy #-}
+
+-- | The state @s@ of the best chain according to the supplied scoring function.
+chainState :: ScoringFunction tx s -> MonadBlockStore tx s m => m s
+chainState sf =
+    blockState . blockHeader . tip <$> maximumChainBy sf

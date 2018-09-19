@@ -25,7 +25,7 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
-                 (MonadBlockStore(..), maximumChainBy)
+                 (MonadBlockStore(..), maximumChainBy, chainState)
 import           Oscoin.Consensus.Class
                  ( MonadClock(..)
                  , MonadProtocol(..)
@@ -34,8 +34,7 @@ import           Oscoin.Consensus.Class
                  )
 import           Oscoin.Consensus.Evaluator (EvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain, blockHeader, blockState, height, tip)
+import           Oscoin.Crypto.Blockchain (Blockchain, height)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Data.Query
@@ -128,11 +127,7 @@ tick = do
     sendM msgs
 
     unless (null msgs) $
-        updateM =<< latestState
-
-latestState :: MonadBlockStore tx s m => m s
-latestState =
-    blockState . blockHeader . tip <$> maximumChainBy (comparing height)
+        updateM =<< chainState (comparing height)
 
 logMsg :: forall r tx m.
     ( Hashable tx, Pretty tx, Log.MonadLogger r m )
@@ -155,7 +150,7 @@ step :: ( MonadNetwork      tx   m
 step = do
     t <- currentTick
     sendM   =<< stepM t =<< recvM
-    updateM =<< latestState
+    updateM =<< chainState (comparing height)
 
 nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
 nodeEval tx st = Eval.radicleEval (toProgram tx) st
