@@ -1,7 +1,7 @@
 module Oscoin.CLI.Command.Result where
 
-import           Oscoin.Prelude
 import           Oscoin.CLI.Radicle
+import           Oscoin.Prelude
 
 import qualified Radicle as Rad
 

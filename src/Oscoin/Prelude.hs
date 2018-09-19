@@ -67,52 +67,85 @@ module Oscoin.Prelude
     , fromRight
     ) where
 
-import           Prelude hiding ( fail, read, readIO, readFile
-                                , (++), concat, sum, product, id, map )
-import qualified Prelude
-import           Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import           Data.Text.Encoding.Error (lenientDecode)
-import           Data.ByteString (ByteString)
-import           Data.Map (Map)
-import           Data.Set (Set)
-import           Data.Semigroup (Semigroup, (<>))
-import           Data.IORef (IORef)
-import           Data.Traversable (Traversable(..), sequence, traverse, for)
-import           Data.Foldable (for_, traverse_, Foldable, toList, null, foldr, foldl', maximumBy, minimumBy)
-import           Data.Bitraversable (Bitraversable, bitraverse)
+import           Control.Applicative (liftA2, (<|>))
+import           Control.Concurrent.STM (STM, atomically)
+import           Control.Monad (forM, forM_, forever, mapM)
+import           Control.Monad.Fail (MonadFail, fail)
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+                 ( MonadReader
+                 , Reader
+                 , ReaderT(..)
+                 , ask
+                 , asks
+                 , join
+                 , local
+                 , reader
+                 , runReaderT
+                 )
+import           Control.Monad.State
+                 (MonadState, evalStateT, execStateT, runState, runStateT)
+import           Control.Monad.Trans.Class (MonadTrans, lift)
+import           Control.Monad.Writer.CPS
+                 (MonadWriter, execWriter, runWriter, runWriterT, tell)
 import           Data.Bifoldable (Bifoldable, bifold, bifoldMap)
 import           Data.Bifunctor (first, second)
-import           Data.Ord (comparing)
-import           Data.Sequence (Seq)
-import           Data.List.NonEmpty (NonEmpty(..))
-import           Data.List (intersperse)
-import           Data.Has
-import           Data.Either (isRight, isLeft, rights, lefts)
-import           Data.Default (def, Default)
+import           Data.Bitraversable (Bitraversable, bitraverse)
 import           Data.ByteArray (ByteArrayAccess)
+import           Data.ByteString (ByteString)
+import           Data.Default (Default, def)
+import           Data.Either (isLeft, isRight, lefts, rights)
+import           Data.Foldable
+                 ( Foldable
+                 , foldl'
+                 , foldr
+                 , for_
+                 , maximumBy
+                 , minimumBy
+                 , null
+                 , toList
+                 , traverse_
+                 )
 import           Data.Function ((&))
 import           Data.Functor (void, ($>))
 import           Data.Functor.Identity (Identity(..), runIdentity)
-import           Data.Maybe (fromJust, isJust, isNothing, mapMaybe, fromMaybe, catMaybes)
+import           Data.Has
+import           Data.IORef (IORef)
+import           Data.List (intersperse)
+import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Map (Map)
+import           Data.Maybe
+                 (catMaybes, fromJust, fromMaybe, isJust, isNothing, mapMaybe)
+import           Data.Ord (comparing)
+import           Data.Semigroup (Semigroup, (<>))
+import           Data.Sequence (Seq)
+import           Data.Set (Set)
 import           Data.String (IsString, fromString)
+import           Data.Text (Text)
+import qualified Data.Text as T
+import           Data.Text.Encoding (decodeUtf8With, encodeUtf8)
+import           Data.Text.Encoding.Error (lenientDecode)
+import qualified Data.Text.IO as T
 import           Data.Time.Clock (NominalDiffTime)
+import           Data.Traversable (Traversable(..), for, sequence, traverse)
 import           Data.Word
-import           Control.Applicative (liftA2, (<|>))
-import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Class (MonadTrans, lift)
-import           Control.Monad.Reader (Reader, MonadReader, ReaderT(..), runReaderT, ask, asks, local, reader, join)
-import           Control.Monad.State (MonadState, runState, runStateT, execStateT, evalStateT)
-import           Control.Monad.Writer.CPS (MonadWriter, runWriter, runWriterT, execWriter, tell)
-import           Control.Monad (forM, forM_, mapM, forever)
-import           Control.Concurrent.STM (STM, atomically)
-import           Control.Monad.Fail (MonadFail, fail)
-import           GHC.Stack (HasCallStack)
+import           Debug.Trace (trace, traceM, traceShow, traceShowId, traceShowM)
+import           GHC.Exts (IsList(Item, fromList))
 import           GHC.Generics (Generic)
-import           GHC.Exts (IsList(fromList, Item))
-import           Debug.Trace (trace, traceShow, traceM, traceShowM, traceShowId)
+import           GHC.Stack (HasCallStack)
+import           Prelude hiding
+                 ( concat
+                 , fail
+                 , id
+                 , map
+                 , product
+                 , read
+                 , readFile
+                 , readIO
+                 , sum
+                 , (++)
+                 )
+import qualified Prelude
 
 newtype Error = Error { fromError :: Text }
     deriving (Show, Eq, IsString)

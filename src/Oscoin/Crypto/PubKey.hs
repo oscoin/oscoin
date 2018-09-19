@@ -32,14 +32,15 @@ import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.Random.Types (MonadRandom)
 
-import qualified Codec.CBOR.Write as CBOR (toLazyByteString)
 import qualified Codec.CBOR.Read as CBOR (deserialiseFromBytes)
+import qualified Codec.CBOR.Write as CBOR (toLazyByteString)
 import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
-import           Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+import           Data.Aeson
+                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Base64.Extended as Base64
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc

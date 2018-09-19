@@ -2,7 +2,16 @@ module Crypto.Data.Auth.Tree.Internal where
 
 import           Prelude
 
-import           Crypto.Hash (HashAlgorithm, Digest, hashUpdate, hashFinalize, hashInit, hashUpdates, digestFromByteString, hashDigestSize)
+import           Crypto.Hash
+                 ( Digest
+                 , HashAlgorithm
+                 , digestFromByteString
+                 , hashDigestSize
+                 , hashFinalize
+                 , hashInit
+                 , hashUpdate
+                 , hashUpdates
+                 )
 import           Data.ByteArray (ByteArrayAccess, zero)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS

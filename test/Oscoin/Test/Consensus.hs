@@ -6,14 +6,27 @@ import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary
 import           Oscoin.Test.Consensus.Node (DummyTx)
 
-import           Oscoin.Consensus.BlockStore (genesisBlockStore, insert, maximumChainBy, orphans)
-import           Oscoin.Consensus.Evaluator (identityEval, applyValidExprs, rejectEverythingEval)
-import           Oscoin.Consensus.Evaluator.Radicle (Env(..), radicleEval, fromSource)
+import           Oscoin.Consensus.BlockStore
+                 (genesisBlockStore, insert, maximumChainBy, orphans)
+import           Oscoin.Consensus.Evaluator
+                 (applyValidExprs, identityEval, rejectEverythingEval)
+import           Oscoin.Consensus.Evaluator.Radicle
+                 (Env(..), fromSource, radicleEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, blockPrevHash, blockState, blockHeader, blockTimestamp, emptyHeader, genesisBlock, emptyGenesisBlock, mkBlock)
+                 ( Block
+                 , BlockHash
+                 , blockHeader
+                 , blockPrevHash
+                 , blockState
+                 , blockTimestamp
+                 , emptyGenesisBlock
+                 , emptyHeader
+                 , genesisBlock
+                 , mkBlock
+                 )
 
 import qualified Radicle as Rad
 
@@ -23,7 +36,7 @@ import qualified Data.Map as Map
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit (testCase, (@?=), assertFailure)
+import           Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]

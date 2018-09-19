@@ -23,18 +23,20 @@ module Oscoin.Node
 import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..), maximumChainBy)
-import           Oscoin.Consensus.Class (MonadClock(..), MonadProtocol(..), MonadQuery(..))
-import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
+import           Oscoin.Consensus.BlockStore.Class
+                 (MonadBlockStore(..), maximumChainBy)
+import           Oscoin.Consensus.Class
+                 (MonadClock(..), MonadProtocol(..), MonadQuery(..))
 import           Oscoin.Consensus.Evaluator (EvalError)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
-import           Oscoin.Crypto.Blockchain (tip, height, blockState, blockHeader)
+import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
+import           Oscoin.Crypto.Blockchain (blockHeader, blockState, height, tip)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
-import           Oscoin.Data.Tx (Tx, toProgram)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Data.Query
+import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
-import qualified Oscoin.Logging as Log
 import           Oscoin.Logging ((%))
+import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -48,15 +50,24 @@ import qualified Radicle as Rad
 import           Codec.Serialise
 import           Control.Exception.Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, toJSON, object, (.=), (.:))
+import           Data.Aeson
+                 ( FromJSON
+                 , ToJSON
+                 , object
+                 , parseJSON
+                 , toJSON
+                 , withObject
+                 , (.:)
+                 , (.=)
+                 )
 import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
 
 -- | Node static config.
 data Config = Config
-    { cfgEnv         :: Environment
-    , cfgLogger      :: Log.Logger
+    { cfgEnv    :: Environment
+    , cfgLogger :: Log.Logger
     }
 
 -- | Node handle.

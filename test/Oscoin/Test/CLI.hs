@@ -5,8 +5,8 @@ module Oscoin.Test.CLI
 import           Oscoin.Prelude
 
 import           Oscoin.CLI
-import qualified Oscoin.CLI.Radicle as Rad
 import           Oscoin.CLI.KeyStore
+import qualified Oscoin.CLI.Radicle as Rad
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txMessageContent)
 

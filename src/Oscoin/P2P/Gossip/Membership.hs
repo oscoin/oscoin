@@ -47,7 +47,8 @@ import           Oscoin.P2P.Gossip.Membership.Internal
 
 import           Codec.Serialise (Serialise)
 import           Control.Concurrent.STM.TVar
-import           Control.Exception.Safe (SomeException, handleAny, throwM, tryAny)
+import           Control.Exception.Safe
+                 (SomeException, handleAny, throwM, tryAny)
 import           Control.Monad (when)
 import           Data.Bool (bool)
 import           Data.Foldable (foldlM)

@@ -2,8 +2,8 @@ module Oscoin.State.Tree where
 
 import           Oscoin.Prelude
 
-import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Map as Map
 import qualified Data.Text as T
 
 type Key = Text

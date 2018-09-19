@@ -2,30 +2,37 @@ module Oscoin.API.HTTP.Internal where
 
 import           Oscoin.Prelude
 
+import           Oscoin.API.Types
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
-import           Oscoin.API.Types
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import           Data.List (lookup)
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.List (lookup)
 import qualified Data.Text as T
+import           Network.HTTP.Media
+                 (Quality, mapQuality, parseAccept, parseQuality, (//))
 import qualified Network.HTTP.Media as HTTP
-import           Network.HTTP.Media (Quality, mapQuality, parseAccept, parseQuality, (//))
-import qualified Network.HTTP.Types.Status as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
+import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
 import           Web.HttpApiData (FromHttpApiData)
-import           Web.Spock (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
+import           Web.Spock
+                 (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
 import qualified Web.Spock as Spock
-import           Web.Spock.Config (ConnBuilder(..), PoolCfg(..), PoolOrConn(..), defaultSpockCfg)
+import           Web.Spock.Config
+                 ( ConnBuilder(..)
+                 , PoolCfg(..)
+                 , PoolOrConn(..)
+                 , defaultSpockCfg
+                 )
 
 -- | The global server state.
 data State = State ()
@@ -167,6 +174,6 @@ mkMiddleware app hdl = do
     state       = mkState
 
 loggingMiddleware :: Environment -> Wai.Middleware
-loggingMiddleware Production = Wai.logStdout
+loggingMiddleware Production  = Wai.logStdout
 loggingMiddleware Development = Wai.logStdoutDev
-loggingMiddleware Testing = identity
+loggingMiddleware Testing     = identity

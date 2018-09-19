@@ -24,13 +24,21 @@ import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), mkBlock, emptyHeader, validateBlock, toOrphan, hashTxs)
+import           Oscoin.Crypto.Blockchain.Block
+                 ( Block(..)
+                 , BlockHeader(..)
+                 , emptyHeader
+                 , hashTxs
+                 , mkBlock
+                 , toOrphan
+                 , validateBlock
+                 )
 import           Oscoin.Crypto.Hash
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
-import           Control.Monad.State
 import           Codec.Serialise (Serialise)
+import           Control.Monad.State
 import           Data.Bool (bool)
 import           Data.Functor (($>))
 import           Data.Maybe (maybeToList)

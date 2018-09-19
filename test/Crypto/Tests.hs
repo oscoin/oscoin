@@ -5,24 +5,24 @@ module Crypto.Tests where
 import           Prelude hiding (length)
 import qualified Prelude
 
-import           Data.List (sort)
-import qualified Data.Set as Set
-import           Data.Set (Set)
-import           Data.Word
+import           Control.Monad.Fail
 import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString as BS
-import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Either (isLeft, isRight)
+import           Data.List (sort)
+import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Maybe (isNothing)
-import           Control.Monad.Fail
-import           Test.Tasty
-import           Test.Tasty.QuickCheck
-import           Test.Tasty.HUnit
+import           Data.Set (Set)
+import qualified Data.Set as Set
+import           Data.Word
 import           Test.QuickCheck.Instances ()
+import           Test.Tasty
+import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck
 
+import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as Tree
 import qualified Crypto.Data.Auth.Tree.Proof as Tree
-import           Crypto.Data.Auth.Tree (Tree)
 import           Crypto.Hash (SHA256)
 
 type Key = Word8

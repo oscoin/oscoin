@@ -1,12 +1,12 @@
 module Crypto.Data.Auth.Tree.Proof where
 
-import           Prelude hiding (pred, succ)
 import           Crypto.Data.Auth.Tree
 import           Crypto.Data.Auth.Tree.Internal
-import           Crypto.Hash (HashAlgorithm, Digest)
+import           Crypto.Hash (Digest, HashAlgorithm)
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.List (intercalate)
 import qualified Data.List as List
+import           Prelude hiding (pred, succ)
 
 type Error = String
 

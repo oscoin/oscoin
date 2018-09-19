@@ -21,17 +21,16 @@ module Oscoin.Crypto.Blockchain.Block
     , prettyBlock
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import           Oscoin.Crypto.Hash
-import           Oscoin.Consensus.Evaluator (Evaluator, EvalError, evals)
+import           Oscoin.Prelude
 
-import qualified Prelude
-import           Data.Bifunctor (Bifunctor(..))
-import qualified Codec.Serialise as Serialise
 import           Codec.Serialise (Serialise)
+import qualified Codec.Serialise as Serialise
 import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
+import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.ByteString.Lazy (toStrict)
 import qualified Data.Sequence as Seq
@@ -41,6 +40,7 @@ import           Data.Text.Prettyprint.Doc.Render.Text
 import           Formatting ((%), (%.))
 import qualified Formatting as Fmt
 import           GHC.Generics (Generic)
+import qualified Prelude
 
 -- | Block difficulty.
 type Difficulty = Integer

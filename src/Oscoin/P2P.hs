@@ -34,9 +34,9 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.P2P.Discovery (Disco(..))
 import           Oscoin.P2P.Types
 
-import           Control.Exception.Safe
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
+import           Control.Exception.Safe
 import           Data.ByteString.Lazy (fromStrict, toChunks)
 import           Data.IP (IP)
 import qualified Network.Socket as Net

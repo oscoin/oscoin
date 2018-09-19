@@ -2,9 +2,9 @@ module Oscoin.API.Client
     ( MonadClient(..)
     ) where
 
-import           Oscoin.Prelude
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Prelude
 import qualified Radicle as Rad
 
 class Monad m => MonadClient m where

@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.Consensus.Nakamoto
@@ -35,12 +35,12 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.P2P as P2P
 
+import           Codec.Serialise (Serialise)
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
 import           Crypto.Number.Serialize (os2ip)
-import           Codec.Serialise (Serialise)
 import           Data.Functor (($>))
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.Maybe (maybeToList, catMaybes)
+import           Data.Maybe (catMaybes, maybeToList)
 import           Data.Traversable (for)
 import           System.Random (StdGen, split)
 

@@ -8,7 +8,7 @@ module Oscoin.P2P.Discovery.Pure
 import           Oscoin.Prelude
 
 import           Oscoin.P2P.Discovery.Internal (Disco(..))
-import           Oscoin.P2P.Types (Endpoints, EndpointMap, NodeId)
+import           Oscoin.P2P.Types (EndpointMap, Endpoints, NodeId)
 
 import           Control.Monad.State (MonadState, gets, modify')
 import qualified Data.Map as Map

@@ -21,9 +21,9 @@ data RevisionStatus =
 
 instance ToRadicle RevisionStatus where
     toRadicle rs = case rs of
-        RevisionOpen     -> key "open"
-        RevisionClosed   -> key "closed"
-        RevisionMerged   -> key "merged"
+        RevisionOpen   -> key "open"
+        RevisionClosed -> key "closed"
+        RevisionMerged -> key "merged"
       where
         key = Rad.Keyword . fromJust . Rad.mkIdent
 

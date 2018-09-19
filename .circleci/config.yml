@@ -12,7 +12,10 @@ jobs:
                   - stack-work-v3-
                 paths:
                     - ~/.stack
-            - run: stack install hlint
+            - run: stack install hlint stylish-haskell
+            - run:
+                name: Formatting
+                command: ./.circleci/check-fmt.sh
             - run:
                 name: Lint
                 command: git ls-files | grep '\.l\?hs$' | xargs stack exec -- hlint "$@"

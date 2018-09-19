@@ -5,12 +5,12 @@ module Oscoin.CLI.Command
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.API.Types as API
 import qualified Oscoin.API.Client as API
+import qualified Oscoin.API.Types as API
 import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.KeyStore
-import           Oscoin.CLI.Revision
 import qualified Oscoin.CLI.Radicle as Rad
+import           Oscoin.CLI.Revision
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
 

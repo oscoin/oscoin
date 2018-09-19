@@ -9,16 +9,16 @@ module Oscoin.Consensus.Evaluator.Radicle
     , Rad.Value
     ) where
 
-import           Oscoin.Prelude
 import           Oscoin.Consensus.Evaluator (Evaluator, evalError)
-import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Data.Query
+import           Oscoin.Prelude
 
-import qualified Radicle as Rad
 import           Codec.Serialise (Serialise)
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import qualified Radicle as Rad
 
 newtype Env = Env { fromEnv :: Rad.Bindings Identity }
 

@@ -5,41 +5,42 @@ module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude
 
+import           Oscoin.API.HTTP (api)
+import           Oscoin.API.HTTP.Internal
+                 (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
+import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
-import qualified Oscoin.API.Types as API
-import           Oscoin.API.HTTP (api)
-import           Oscoin.API.HTTP.Internal (mkMiddleware, decode, encode, parseMediaType, MediaType(..))
-import qualified Oscoin.Node as Node
 import qualified Oscoin.Logging as Log
+import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as Block
-import           Oscoin.Data.Tx (mkTx)
 
-import           Oscoin.Test.Data.Rad.Arbitrary ( )
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
+import           Oscoin.Test.Data.Rad.Arbitrary ()
 
-import           Test.QuickCheck (generate, arbitrary)
+import           Test.QuickCheck (arbitrary, generate)
 import           Test.Tasty.HUnit (Assertion, AssertionPredicable)
 import qualified Test.Tasty.HUnit as Tasty
 
+import           Codec.Serialise (Serialise)
 import           Crypto.Random.Types (MonadRandom(..))
-import           Text.Nicify (nicify)
+import           Data.Aeson (FromJSON, ToJSON)
+import qualified Data.Aeson as Aeson
 import           Data.Algorithm.Diff (Diff(..), getDiff)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import           Data.List (lookup)
 import qualified Data.Map as Map
-import qualified Data.Aeson as Aeson
-import           Data.Aeson (ToJSON, FromJSON)
-import           Codec.Serialise (Serialise)
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString as BS
 import qualified Data.Text as T
+import           Text.Nicify (nicify)
 
 import qualified Network.HTTP.Media as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
@@ -168,7 +169,7 @@ assertResponseBody
 assertResponseBody response =
     case responseBody response of
         Left err -> io $ Tasty.assertFailure $ show err
-        Right a -> pure $ a
+        Right a  -> pure $ a
 
 
 -- | Low-level HTTP request helper.

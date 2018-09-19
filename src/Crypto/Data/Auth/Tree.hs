@@ -35,14 +35,13 @@ module Crypto.Data.Auth.Tree
 
 import           Crypto.Data.Auth.Tree.Internal
 
-import           Crypto.Hash (HashAlgorithm, Digest)
+import           Crypto.Hash (Digest, HashAlgorithm)
 import           Data.Binary (Binary)
 import           Data.ByteArray (ByteArrayAccess)
 
-import qualified Prelude
-import           Prelude hiding (lookup, null, map, pred, succ)
 import qualified Data.List as List
 import           GHC.Generics
+import           Prelude hiding (lookup, map, null, pred, succ)
 
 -- | An AVL+ tree.
 --
@@ -164,14 +163,14 @@ bounds tree = do
 
 -- | Lookup the minimum value of a tree, or 'Nothing' if it's empty.
 lookupMin :: Tree k v -> Maybe (k, v)
-lookupMin Empty = Nothing
-lookupMin (Leaf k v) = Just (k, v)
+lookupMin Empty        = Nothing
+lookupMin (Leaf k v)   = Just (k, v)
 lookupMin (Node _ l _) = lookupMin l
 
 -- | Lookup the maximum value of a tree, or 'Nothing' if it's empty.
 lookupMax :: Tree k v -> Maybe (k, v)
-lookupMax Empty = Nothing
-lookupMax (Leaf k v) = Just (k, v)
+lookupMax Empty        = Nothing
+lookupMax (Leaf k v)   = Just (k, v)
 lookupMax (Node _ _ r) = lookupMax r
 
 -- | Find the maximum value of a tree. Calls 'error' if the tree is empty.
@@ -213,8 +212,8 @@ delete k tree =
 
 -- | Convert a tree into a list of @(k, v)@ pairs.
 toList :: Tree k v -> [(k, v)]
-toList Empty = []
-toList (Leaf k v) = [(k, v)]
+toList Empty        = []
+toList (Leaf k v)   = [(k, v)]
 toList (Node _ l r) = toList l ++ toList r
 
 -- | Create a tree from a list of key/value pairs.
@@ -322,7 +321,7 @@ rotL, rotR, rotLR, rotRL :: Tree k v -> Tree k v
 --      b    c     a    b
 --
 rotL (Node k l (Node rk rl rr)) = Node rk (Node k l rl) rr
-rotL t = t
+rotL t                          = t
 
 -- | Simple right rotation.
 --
@@ -333,15 +332,15 @@ rotL t = t
 --  a    b           b    c
 --
 rotR (Node k (Node lk ll lr) r) = Node lk ll (Node k lr r)
-rotR t = t
+rotR t                          = t
 
 -- | Left-right rotation.
 rotLR (Node k (Node lk ll (Node lrk lrl lrr)) r) = Node lrk (Node lk ll lrl) (Node k lrr r)
-rotLR t = t
+rotLR t                                          = t
 
 -- | Right-left rotation.
 rotRL (Node k l (Node rk (Node rlk rll rlr) rr)) = Node rlk (Node k l rll) (Node rk rlr rr)
-rotRL t = t
+rotRL t                                          = t
 
 -------------------------------------------------------------------------------
 

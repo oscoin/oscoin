@@ -42,7 +42,7 @@ import qualified Data.ByteString.Lazy.Internal as LBS
 import           Data.Conduit (ConduitT, await, awaitForever, yield, (.|))
 import           Data.Int (Int64)
 import qualified Focus
-import           Network.Socket (Socket, SockAddr)
+import           Network.Socket (SockAddr, Socket)
 import qualified Network.Socket.ByteString as SockBS
 import qualified Network.Socket.ByteString.Lazy as SockLBS
 import qualified STMContainers.Map as STMMap

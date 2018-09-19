@@ -15,7 +15,7 @@ import qualified Oscoin.API.HTTP.Handlers as Handlers
 import           Oscoin.API.HTTP.Internal
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
-import           Web.Spock (get, middleware, post, root, var, (<//>), wildcard)
+import           Web.Spock (get, middleware, post, root, var, wildcard, (<//>))
 
 withAPI :: Environment -> (Api Rad.Env i () -> m a) -> m a
 withAPI env f = f (api env)

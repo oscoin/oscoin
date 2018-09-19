@@ -5,24 +5,36 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip, validateBlockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..), blockHeader, toOrphan, validateBlock)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain(..), genesis, height, tip, validateBlockchain)
+import           Oscoin.Crypto.Blockchain.Block
+                 ( Block(..)
+                 , BlockHeader(..)
+                 , blockHeader
+                 , toOrphan
+                 , validateBlock
+                 )
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
+import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryGenesisWith, arbitraryValidBlockWith, arbitraryValidBlockchain)
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+                 ( arbitraryGenesisWith
+                 , arbitraryValidBlockWith
+                 , arbitraryValidBlockchain
+                 )
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
-import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySignedWith, arbitrarySigned)
-import           Oscoin.Test.Data.Tx.Arbitrary ()
+import           Oscoin.Test.Crypto.PubKey.Arbitrary
+                 (arbitrarySigned, arbitrarySignedWith)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
+import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
-import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.P2P as P2P
 
 import           Test.QuickCheck.Instances ()

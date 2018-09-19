@@ -87,7 +87,7 @@ module Oscoin.Logging
 import           Oscoin.Prelude hiding (io)
 
 import           Control.Concurrent (ThreadId)
-import           Control.Exception.Safe (MonadMask, Exception, SomeException)
+import           Control.Exception.Safe (Exception, MonadMask, SomeException)
 import qualified Control.Exception.Safe as Safe
 import           Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Aeson.Encoding as Enc

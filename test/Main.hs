@@ -1,8 +1,8 @@
 module Main (main) where
 
+import qualified Crypto.Tests as Crypto
 import           Oscoin.Prelude
 import qualified Oscoin.Tests as Oscoin
-import qualified Crypto.Tests as Crypto
 import           Test.Tasty
 
 main :: IO ()

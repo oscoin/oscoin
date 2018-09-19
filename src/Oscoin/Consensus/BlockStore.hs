@@ -13,7 +13,8 @@ module Oscoin.Consensus.BlockStore
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, (|>), blocks, genesis)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain(..), blockHash, blocks, genesis, tip, (|>))
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 

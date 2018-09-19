@@ -2,20 +2,19 @@ module Oscoin.API.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Hash (Hashed, hash)
-import           Oscoin.Crypto.Blockchain (TxLookup(..))
-import qualified Oscoin.Crypto.Blockchain as Blockchain
-import           Oscoin.Data.Query
-import           Oscoin.Data.Tx (verifyTx)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
+import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
+import           Oscoin.Crypto.Blockchain (TxLookup(..))
+import qualified Oscoin.Crypto.Blockchain as Blockchain
+import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.State.Tree (Key, keyToPath)
 
-import           Network.HTTP.Types.Status
 import           Codec.Serialise (Serialise, serialise)
+import           Network.HTTP.Types.Status
 
 root :: ApiAction s i ()
 root = respond ok200 noBody

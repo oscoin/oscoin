@@ -6,19 +6,19 @@ import           Oscoin.Prelude
 
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 
+import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash
-import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 
 import qualified Crypto.Hash as Crypto
 
+import           Codec.Serialise (Serialise)
+import           Control.Monad (replicateM)
+import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty((:|)), (<|))
 import           Data.Maybe (fromJust)
-import qualified Data.ByteString as BS
 import qualified Data.Sequence as Seq
-import           Codec.Serialise (Serialise)
 import           Data.Word (Word8)
-import           Control.Monad (replicateM)
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()

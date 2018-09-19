@@ -4,12 +4,12 @@ module Oscoin.Test.Data.Rad.Arbitrary where
 import           Oscoin.Prelude
 
 import           Data.Functor.Identity (Identity(..))
-import           Text.Read (readMaybe)
 import qualified Data.Map as Map
-import           Data.Text (pack, unpack)
 import           Data.Scientific (Scientific)
+import           Data.Text (pack, unpack)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
+import           Text.Read (readMaybe)
 
 import           Radicle
 import           Radicle.Internal.Parse (isValidIdentFirst, isValidIdentRest)

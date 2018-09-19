@@ -1,7 +1,7 @@
 module Oscoin.Test.Helpers where
 
-import           Oscoin.Prelude
 import qualified Data.Text as T
+import           Oscoin.Prelude
 
 import           Test.Tasty.HUnit
 
