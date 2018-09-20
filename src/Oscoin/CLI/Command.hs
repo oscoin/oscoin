@@ -28,8 +28,9 @@ type CommandContext m = (MonadRandom m , API.MonadClient m , MonadKeyStore m)
 
 dispatchCommand :: CommandContext m => Command -> m (Result Text)
 dispatchCommand RevisionCreate = submitTransaction createRevision
-    where createRevision = Rad.fnApply "create-revision"
-            [Rad.toRadicle emptyRevision]
+    where
+        createRevision =
+            Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
