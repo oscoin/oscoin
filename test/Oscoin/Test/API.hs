@@ -148,10 +148,8 @@ getTransactionReturns codec txHash expected =
 
 getMissingBlock :: Codec -> IO HTTPTest
 getMissingBlock codec = httpTest emptyNodeState $ do
-    -- Malformed transaction hash returns a 404
     get codec "/blocks/not-a-hash" >>= assertStatus notFound404
 
-    -- Well formed but missing transaction hash returns a 404
     let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
     get codec ("/blocks/" <> missing) >>= assertStatus notFound404
 
