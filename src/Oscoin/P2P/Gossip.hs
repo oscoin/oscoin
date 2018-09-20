@@ -1,6 +1,10 @@
 module Oscoin.P2P.Gossip
     ( Gossip
+    , Handle
     , Wire
+
+    , Peer
+    , knownPeer
 
     , withGossip
 
@@ -14,6 +18,7 @@ import           Oscoin.Crypto.PubKey (PrivateKey, PublicKey)
 import           Oscoin.Logging (Logger)
 import qualified Oscoin.P2P.Gossip.Broadcast as Plum
 import qualified Oscoin.P2P.Gossip.Handshake as Handshake
+import           Oscoin.P2P.Gossip.IO (Peer, knownPeer)
 import qualified Oscoin.P2P.Gossip.IO as IO
 import qualified Oscoin.P2P.Gossip.Membership as Hypa
 import           Oscoin.P2P.Gossip.Wire
@@ -29,6 +34,7 @@ import           Control.Monad.Fix (mfix)
 import           Control.Monad.IO.Unlift (withRunInIO)
 import           Data.Hashable (Hashable)
 import           Data.Time.Clock (NominalDiffTime)
+import           Data.Void
 import           Lens.Micro (lens)
 import           Network.Socket (HostName, PortNumber)
 import qualified System.Random.SplitMix as SplitMix
@@ -76,7 +82,7 @@ withGossip
     -> Plum.Callbacks
     -> Handshake.Handshake e (ProtocolMessage IO.Peer)
     -> Hypa.Config
-    -> Gossip e a
+    -> (Handle e IO.Peer -> IO a)
     -> IO a
 withGossip lgr keys self sinterval storage handshake cfg k = do
     hdl <-
@@ -120,11 +126,11 @@ withGossip lgr keys self sinterval storage handshake cfg k = do
                     flip runReaderT hdl $
                         Hypa.promoteRandom >>= traverse_ sendRPC)
 
-    runReaderT k hdl
+    k hdl
         `E.finally` Plum.destroySchedule (hSchedule hdl)
         `E.finally` Async.uninterruptibleCancel periodic
 
-listen :: Exception e => HostName -> PortNumber -> [IO.Peer] -> Gossip e ()
+listen :: Exception e => HostName -> PortNumber -> [Peer] -> Gossip e Void
 listen host port contacts = withRunInIO $ \runIO ->
     Async.withAsync (runIO ioListen) $ \lisn -> do
         runIO bootstrap
@@ -135,8 +141,8 @@ listen host port contacts = withRunInIO $ \runIO ->
         Hypa.joinAny contacts >>= traverse_ sendRPC
         Hypa.getPeers         >>= Plum.resetPeers
 
-broadcast :: Plum.MessageId -> ByteString -> Gossip e ()
-broadcast mid msg = Plum.broadcast mid msg >>= traverse_ send'
+broadcast :: Handle e Peer -> Plum.MessageId -> ByteString -> IO ()
+broadcast handle mid msg = runReaderT (Plum.broadcast mid msg >>= traverse_ send') handle
   where
     send' out = asks hSchedule >>= io . flip Plum.schedule out
 
