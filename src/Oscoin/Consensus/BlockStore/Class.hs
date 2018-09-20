@@ -5,7 +5,8 @@ module Oscoin.Consensus.BlockStore.Class where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain, ScoringFunction, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Orphan, blockHeader, blockState)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, BlockHash, Orphan, blockHeader, blockState)
 import           Oscoin.Crypto.Hash (Hashed)
 
 class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where

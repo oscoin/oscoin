@@ -25,7 +25,7 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
-                 (MonadBlockStore(..), maximumChainBy, chainState)
+                 (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
                  ( MonadClock(..)
                  , MonadProtocol(..)

@@ -12,7 +12,8 @@ import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain(..), blockHash, height, tip)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
