@@ -27,14 +27,8 @@ data Command =
 type CommandContext m = (MonadRandom m , API.MonadClient m , MonadKeyStore m)
 
 dispatchCommand :: CommandContext m => Command -> m (Result Text)
-dispatchCommand RevisionCreate = do
-    tx <- signedTx createRevision
-    result <- API.submitTransaction tx
-    pure $ case result of
-        API.Ok v    -> ResultValue (tshow v)
-        API.Err err -> ResultError err
-    where
-        createRevision = Rad.fnApply "create-revision"
+dispatchCommand RevisionCreate = submitTransaction createRevision
+    where createRevision = Rad.fnApply "create-revision"
             [Rad.toRadicle emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
@@ -44,8 +38,16 @@ dispatchCommand GenerateKeyPair = do
 
 dispatchCommand _ = notImplemented
 
-signedTx :: CommandContext m => Rad.Value -> m API.RadTx
-signedTx v = do
+submitTransaction :: CommandContext m => Rad.Value -> m (Result Text)
+submitTransaction rval = do
+    tx <- signedTransaction rval
+    result <- API.submitTransaction tx
+    pure $ case result of
+        API.Ok v    -> ResultValue (tshow v)
+        API.Err err -> ResultError err
+
+signedTransaction :: CommandContext m => Rad.Value -> m API.RadTx
+signedTransaction v = do
     (pk, sk) <- readKeyPair
     msg <- Crypto.sign sk v
     pure $ mkTx msg pk
