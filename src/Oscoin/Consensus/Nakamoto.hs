@@ -29,7 +29,7 @@ import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash, zeroHash)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -131,7 +131,6 @@ instance ( MonadMempool    tx   m
                 { blockPrevHash     = blockHash parent
                 , blockDataHash     = hashTxs validTxs
                 , blockState        = newState
-                , blockStateHash    = zeroHash
                 , blockDifficulty   = nakDifficulty
                 , blockTimestamp    = fromIntegral $ fromEnum t
                 , blockNonce        = 0
