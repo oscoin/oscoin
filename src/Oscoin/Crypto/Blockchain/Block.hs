@@ -52,7 +52,6 @@ type Height = Integer
 data BlockHeader s = BlockHeader
     { blockPrevHash   :: Hashed (BlockHeader ())
     , blockDataHash   :: Hash
-    , blockStateHash  :: Hash
     , blockState      :: s
     , blockTimestamp  :: Timestamp
     , blockDifficulty :: Difficulty
@@ -75,7 +74,6 @@ emptyHeader :: BlockHeader ()
 emptyHeader = BlockHeader
     { blockPrevHash = toHashed zeroHash
     , blockDataHash = zeroHash
-    , blockStateHash = zeroHash
     , blockState = ()
     , blockTimestamp = 0
     , blockDifficulty = 0
@@ -146,7 +144,6 @@ genesisHeader :: (Foldable t, Serialise tx, Default s) => Timestamp -> t tx -> B
 genesisHeader t txs = emptyHeader
     { blockDataHash  = hashTxs txs
     , blockTimestamp = t
-    , blockStateHash = zeroHash
     , blockState     = def
     }
 
@@ -216,7 +213,6 @@ prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
     tell $ formatHeaderWith (Fmt.string % "━━ " % formatHex % " ") height (headerHash bh)
     tell $ fencedLineFormat ("prevHash:   " % formatHex) blockPrevHash
     tell $ fencedLineFormat ("timestamp:  " % Fmt.right 64 ' ') blockTimestamp
-    tell $ fencedLineFormat ("rootHash:   " % formatHex) blockStateHash
     tell $ "├" <> Prelude.replicate 78 '─' <> "┤\n"
 
     for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do

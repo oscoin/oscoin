@@ -11,7 +11,6 @@ import           Oscoin.Consensus.Types
 
 import           Oscoin.Clock (Tick)
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
-import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
@@ -37,7 +36,6 @@ mineBlock Consensus{..} eval tick = do
             { blockPrevHash     = blockHash parent
             , blockDataHash     = hashTxs validTxs
             , blockState        = newState
-            , blockStateHash    = Crypto.zeroHash
             , blockDifficulty   = 0
             , blockTimestamp    = fromIntegral $ fromEnum tick
             , blockNonce        = 0

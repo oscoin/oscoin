@@ -48,7 +48,6 @@ arbitraryValidBlockWith prevHeader txs = do
                { blockPrevHash   = hash prevHeader
                , blockDataHash   = hashTxs txs
                , blockState      = def
-               , blockStateHash  = zeroHash
                , blockTimestamp  = blockTimestamp prevHeader + elapsed
                , blockDifficulty = 0
                }
