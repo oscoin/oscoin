@@ -7,6 +7,7 @@ import           Oscoin.API.Types
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import qualified Oscoin.Crypto.Blockchain as Blockchain
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
@@ -56,6 +57,21 @@ submitTransaction = do
         if verifyTx tx
         then pure tx
         else respond badRequest400 $ body $ Err @() "Invalid transaction signature"
+
+getBestChain :: ApiAction s i a
+getBestChain = do
+    n    <- fromMaybe 3 <$> param "depth"
+    blks <- node $ Blockchain.takeBlocks n <$> Node.getBestChain
+    respond ok200 (body $ map void blks)
+
+getBlock :: BlockHash -> ApiAction s i a
+getBlock h = do
+    result <- node $ BlockStore.lookupBlock h
+    case result of
+        Just blk ->
+            respond ok200 (body $ void blk)
+        Nothing ->
+            respond notFound404 noBody
 
 getStatePath
     :: (Serialise (QueryVal s), Query s)
