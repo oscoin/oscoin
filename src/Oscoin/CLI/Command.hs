@@ -24,25 +24,18 @@ data Command =
     | GenerateKeyPair
     deriving (Show)
 
-dispatchCommand
-    :: ( MonadRandom m
-       , API.MonadClient m
-       , MonadKeyStore m
-       )
-    => Command -> m (Result Text)
+type CommandContext m = (MonadRandom m , API.MonadClient m , MonadKeyStore m)
+
+dispatchCommand :: CommandContext m => Command -> m (Result Text)
 dispatchCommand RevisionCreate = do
-    tx <- createTransaction
+    tx <- signedTx createRevision
     result <- API.submitTransaction tx
     pure $ case result of
         API.Ok v    -> ResultValue (tshow v)
         API.Err err -> ResultError err
-  where
-    createTransaction = do
-        (pk, sk) <- readKeyPair
-        let rev = emptyRevision
-        let msgContent = Rad.fnApply "create-revision" [Rad.toRadicle rev]
-        msg <- Crypto.sign sk msgContent
-        pure $ mkTx msg pk
+    where
+        createRevision = Rad.fnApply "create-revision"
+            [Rad.toRadicle emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
@@ -50,3 +43,9 @@ dispatchCommand GenerateKeyPair = do
     pure $ ResultOk
 
 dispatchCommand _ = notImplemented
+
+signedTx :: CommandContext m => Rad.Value -> m API.RadTx
+signedTx v = do
+    (pk, sk) <- readKeyPair
+    msg <- Crypto.sign sk v
+    pure $ mkTx msg pk
