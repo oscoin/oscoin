@@ -62,7 +62,7 @@ getBestChain :: ApiAction s i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
     blks <- node $ Blockchain.takeBlocks n <$> Node.getBestChain
-    respond ok200 (body $ map void blks)
+    respond ok200 (body $ Ok $ map void blks)
 
 getBlock :: BlockHash -> ApiAction s i a
 getBlock h = do
