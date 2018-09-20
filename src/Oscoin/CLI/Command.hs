@@ -20,29 +20,17 @@ import           Crypto.Random.Types (MonadRandom)
 data Command =
       RevisionCreate
     | RevisionList
-    | RevisionStatus
+    | RevisionMerge RevisionId
     | GenerateKeyPair
     deriving (Show)
 
-dispatchCommand
-    :: ( MonadRandom m
-       , API.MonadClient m
-       , MonadKeyStore m
-       )
-    => Command -> m (Result Text)
-dispatchCommand RevisionCreate = do
-    tx <- createTransaction
-    result <- API.submitTransaction tx
-    pure $ case result of
-        API.Ok v    -> ResultValue (tshow v)
-        API.Err err -> ResultError err
-  where
-    createTransaction = do
-        (pk, sk) <- readKeyPair
-        let rev = emptyRevision
-        let msgContent = Rad.fnApply "create-revision" [Rad.toRadicle rev]
-        msg <- Crypto.sign sk msgContent
-        pure $ mkTx msg pk
+type CommandContext m = (MonadRandom m , API.MonadClient m , MonadKeyStore m)
+
+dispatchCommand :: CommandContext m => Command -> m (Result Text)
+dispatchCommand RevisionCreate = submitTransaction createRevision
+    where
+        createRevision =
+            Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
@@ -50,3 +38,17 @@ dispatchCommand GenerateKeyPair = do
     pure $ ResultOk
 
 dispatchCommand _ = notImplemented
+
+submitTransaction :: CommandContext m => Rad.Value -> m (Result Text)
+submitTransaction rval = do
+    tx <- signTransaction rval
+    result <- API.submitTransaction tx
+    pure $ case result of
+        API.Ok v    -> ResultValue (tshow v)
+        API.Err err -> ResultError err
+
+signTransaction :: CommandContext m => Rad.Value -> m API.RadTx
+signTransaction v = do
+    (pk, sk) <- readKeyPair
+    msg <- Crypto.sign sk v
+    pure $ mkTx msg pk

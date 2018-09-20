@@ -20,28 +20,29 @@ execParserPure = Options.execParserPure defaultPrefs mainParserInfo
 mainParserInfo :: ParserInfo Command
 mainParserInfo =
     info (helper <*> mainParser)
-    $ progDesc "Revision CLI"
+    $ progDesc "Oscoin CLI"
 
 mainParser :: Parser Command
-mainParser =
-    subparser
-     $ createRevision
-    <> generateKeyPair
+mainParser = subparser
+    $  command "revision" (revisionParser `withInfo` "Revision commands")
+    <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
 
-
-createRevision :: Mod CommandFields Command
-createRevision =
-    command "create"
-    (info (helper <*> parser) (progDesc "Create a new revision"))
+revisionParser :: Parser Command
+revisionParser = subparser
+    $  command "create" (revisionCreate `withInfo` "Create a revision")
+    <> command "list"   (revisionList   `withInfo` "List revisions")
+    <> command "merge"  (revisionMerge  `withInfo` "Merge a revision")
   where
-    parser = pure RevisionCreate
+    revisionCreate = pure RevisionCreate
+    revisionList   = pure RevisionList
+    revisionMerge  = RevisionMerge <$> argument auto (metavar "REV-ID")
 
-
-generateKeyPair :: Mod CommandFields Command
-generateKeyPair =
-    command "generate-keypair"
-    (info (helper <*> parser) $
-        progDesc "Generate keypair to use with the other commands"
-    )
+keyPairParser :: Parser Command
+keyPairParser = subparser $
+    command "generate" $ keyPairGenerate `withInfo`
+        "Generate keypair to use with the other commands"
   where
-    parser = pure GenerateKeyPair
+    keyPairGenerate = pure GenerateKeyPair
+
+withInfo :: Parser a -> String -> ParserInfo a
+withInfo opts desc = info (helper <*> opts) $ progDesc desc
