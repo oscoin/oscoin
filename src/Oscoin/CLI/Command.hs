@@ -20,7 +20,7 @@ import           Crypto.Random.Types (MonadRandom)
 data Command =
       RevisionCreate
     | RevisionList
-    | RevisionStatus
+    | RevisionMerge RevisionId
     | GenerateKeyPair
     deriving (Show)
 
