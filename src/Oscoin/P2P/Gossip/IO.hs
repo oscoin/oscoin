@@ -43,6 +43,7 @@ import           Control.Monad.IO.Unlift
 import           Data.Conduit (runConduit, transPipe, (.|))
 import qualified Data.Conduit.Combinators as Conduit
 import           Data.Hashable
+import           Data.Void
 import           Formatting (mapf, (%))
 import           Lens.Micro (Lens', lens)
 import           Lens.Micro.Mtl (view)
@@ -200,7 +201,7 @@ listen
        )
     => Sock.HostName
     -> Sock.PortNumber
-    -> NetworkT r ()
+    -> NetworkT r Void
 listen host port = do
     addr <- io $ resolve host port
     E.bracket (io $ open addr) (io . Sock.close) accept
