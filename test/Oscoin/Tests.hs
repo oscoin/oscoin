@@ -3,6 +3,7 @@ module Oscoin.Tests where
 import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
+import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
 import           Oscoin.Crypto.Blockchain
@@ -10,6 +11,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHeader(..)
+                 , blockHash
                  , blockHeader
                  , toOrphan
                  , validateBlock
@@ -45,6 +47,7 @@ import           Test.Tasty.QuickCheck
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary as Binary
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Map as Map
 
 tests :: TestTree
 tests = testGroup "Oscoin"
@@ -53,6 +56,7 @@ tests = testGroup "Oscoin"
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
+    , testCase       "BlockStore lookup block"        testBlockStoreLookupBlock
     , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
@@ -120,6 +124,14 @@ testOscoinBlockchain = do
     block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
 
     assertNoError $ validateBlockchain $ Blockchain (block :| [gblock])
+
+testBlockStoreLookupBlock :: Assertion
+testBlockStoreLookupBlock = do
+    blks <- generate $ arbitraryValidBlockchain @() @()
+    let g  = genesis blks
+    let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
+                        , bsOrphans = mempty }
+    BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore
     :: Gen (Blockchain (Seq Word8) (Seq Word8))

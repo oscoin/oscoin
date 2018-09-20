@@ -69,8 +69,13 @@ fromOrphans :: (Ord tx, Foldable t) => t (Block tx (Orphan s)) -> Block tx s -> 
 fromOrphans (toList -> blks) gen =
     linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
 
+-- | /O(n)/. Lookup a block in all chains.
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
-lookupBlock hdr = map tip . Map.lookup hdr . bsChains
+lookupBlock h BlockStore{bsChains} =
+    lookup h blks
+  where
+    blks   = [(blockHash b, b) | b <- foldMap blocks chains]
+    chains = Map.elems bsChains
 
 orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =

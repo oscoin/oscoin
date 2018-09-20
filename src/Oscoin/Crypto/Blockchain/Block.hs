@@ -32,7 +32,8 @@ import qualified Codec.Serialise as Serialise
 import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
-import           Data.Aeson (ToJSON(..), object, (.=))
+import           Data.Aeson
+                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.ByteString.Lazy (toStrict)
@@ -73,12 +74,23 @@ instance Hashable (BlockHeader ()) where
 
 instance ToJSON (BlockHeader s) where
     toJSON BlockHeader{..} = object
-        [ "parent"     .= blockPrevHash
+        [ "parentHash" .= blockPrevHash
         , "timestamp"  .= blockTimestamp
         , "dataHash"   .= blockDataHash
         , "nonce"      .= blockNonce
         , "difficulty" .= blockDifficulty
         ]
+
+instance FromJSON (BlockHeader ()) where
+  parseJSON = withObject "BlockHeader" $ \o -> do
+        blockPrevHash   <- o .: "parentHash"
+        blockTimestamp  <- o .: "timestamp"
+        blockDataHash   <- o .: "dataHash"
+        blockNonce      <- o .: "nonce"
+        blockDifficulty <- o .: "difficulty"
+        blockState      <- pure ()
+
+        pure BlockHeader{..}
 
 -- | Create an empty block header.
 emptyHeader :: BlockHeader ()
@@ -146,6 +158,13 @@ instance ToJSON tx => ToJSON (Block tx s) where
         , "header" .= blockHeader
         , "data"   .= blockData
         ]
+
+instance FromJSON tx => FromJSON (Block tx ()) where
+  parseJSON = withObject "Block" $ \o -> do
+        blockHeader <- o .: "header"
+        blockData   <- o .: "data"
+
+        pure Block{..}
 
 validateBlock :: Block tx s -> Either Error (Block tx s)
 validateBlock = Right
