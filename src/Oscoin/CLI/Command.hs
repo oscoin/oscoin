@@ -40,14 +40,14 @@ dispatchCommand _ = notImplemented
 
 submitTransaction :: CommandContext m => Rad.Value -> m (Result Text)
 submitTransaction rval = do
-    tx <- signedTransaction rval
+    tx <- signTransaction rval
     result <- API.submitTransaction tx
     pure $ case result of
         API.Ok v    -> ResultValue (tshow v)
         API.Err err -> ResultError err
 
-signedTransaction :: CommandContext m => Rad.Value -> m API.RadTx
-signedTransaction v = do
+signTransaction :: CommandContext m => Rad.Value -> m API.RadTx
+signTransaction v = do
     (pk, sk) <- readKeyPair
     msg <- Crypto.sign sk v
     pure $ mkTx msg pk
