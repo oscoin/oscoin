@@ -58,7 +58,7 @@ main = do
     nid <- pure (mkNodeId . fst $ kp) -- TODO: read from disk
     rng <- newStdGen
     mem <- Mempool.newIO
-    str <- STree.new
+    str <- STree.new def
     gen <- genesisFromPath prelude kp
     blk <- BlockStore.newIO $ genesisBlockStore gen
     sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]

@@ -46,6 +46,6 @@ api env = do
 
     get ("transactions" <//> var) Handlers.getTransaction
 
-    -- /state/:key ------------------------------------------------------------
+    -- /state/:chain ----------------------------------------------------------
 
     get ("state" <//> wildcard) Handlers.getStatePath

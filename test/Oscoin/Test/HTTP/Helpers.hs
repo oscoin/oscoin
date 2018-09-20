@@ -10,8 +10,9 @@ import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
 import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
+import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), blockHash, tip, height)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -51,6 +52,8 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 import           Web.Spock (spockAsApp)
 
+import qualified Radicle
+
 
 -- | Like "Assertion" but bound to a user session (cookies etc.)
 type Session = Wai.Session
@@ -87,19 +90,20 @@ makeNode :: NodeState -> IO NodeHandle
 makeNode NodeState{..} = do
     let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger }
 
-    mp <- atomically $ do
-        mp' <- Mempool.new
-        Mempool.insertMany mp' mempoolState
-        pure $ mp'
+    mph <- atomically $ do
+        mp <- Mempool.new
+        Mempool.insertMany mp mempoolState
+        pure mp
 
-    bs <- Block.newIO $ BlockStore
-        { bsOrphans = mempty
-        , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
-        }
+    let bs = BlockStore
+             { bsOrphans = mempty
+             , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
+             }
 
-    st <- STree.new
+    bsh <- Block.newIO bs
+    sth <- STree.new (BlockStore.chainState (comparing height) bs)
 
-    Node.open cfg 42 mp st bs
+    Node.open cfg 42 mph sth bsh
 
 genDummyTx :: IO (Text, API.RadTx)
 genDummyTx = do
@@ -110,7 +114,15 @@ genDummyTx = do
     let tx :: API.RadTx = mkTx signed pubKey
     let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
-    pure $ (txHash, tx)
+    pure (txHash, tx)
+
+dummyRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
+dummyRadicleEnv kvs =
+    Rad.Env $ env { Radicle.bindingsEnv = Radicle.Env bindings }
+  where
+    env      = Radicle.pureEnv
+    kvs'     = [(fromJust id, v) | (k, v) <- kvs, let id = Radicle.mkIdent k]
+    bindings = Map.fromList kvs' <> Radicle.fromEnv (Radicle.bindingsEnv env)
 
 -- | Turn a "Session" into an "Assertion".
 runSession :: Session () -> NodeHandle -> Assertion

@@ -9,13 +9,12 @@ module Oscoin.Consensus.BlockStore
     , lookupBlock
     , lookupTx
     , orphans
+    , chainState
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blockHash, blocks, genesis, tip, (|>))
-import           Oscoin.Crypto.Blockchain.Block
+import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
 import qualified Data.Map as Map
@@ -93,6 +92,11 @@ lookupTx h BlockStore{bsChains} =
     let txs  = [(hash tx, tx) | tx <- concatMap (toList . blockData) blks]
         blks = concatMap blocks (Map.elems bsChains)
      in lookup h txs
+
+-- | The state @s@ of the best chain according to the supplied scoring function.
+chainState :: ScoringFunction tx s -> BlockStore tx s -> s
+chainState sf =
+    blockState . blockHeader . tip . maximumChainBy sf
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.

@@ -22,9 +22,9 @@ data Handle s = Handle
     , hConn :: Connection        -- ^ Connection to database.
     }
 
-new :: (MonadIO m, Default s) => m (Handle s)
-new = do
-    ref <- io $ newTVarIO def
+new :: MonadIO m => s -> m (Handle s)
+new s = do
+    ref <- io $ newTVarIO s
     pure Handle
         { hTree = ref
         , hConn = ()

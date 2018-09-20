@@ -4,10 +4,10 @@ import           Oscoin.Prelude
 
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
+import           Oscoin.Consensus.Evaluator (constEval)
 import           Oscoin.Crypto.Blockchain
                  (BlockHash, Blockchain(..), blocks, genesis, takeBlocks)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), blockData, blockHash, headerHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
@@ -22,6 +22,8 @@ import qualified Data.Text as T
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
+
+import qualified Radicle as Rad
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
@@ -49,6 +51,10 @@ tests =
         ]
     , testGroup "GET /blockchain/best"
         [ test "No depth specified" getBestChain ]
+    , testGroup "GET /state"
+        [ test "Missing key" getMissingStateKey
+        , test "Existing key" getExistingStateKey
+        ]
     ]
   where
     test name mkTest = testGroup name $ do
@@ -175,6 +181,23 @@ getBestChain codec = do
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
             assertResultOK (map void $ takeBlocks 3 chain)
+
+getMissingStateKey :: Codec -> IO HTTPTest
+getMissingStateKey codec = httpTest emptyNodeState $
+    get codec "/state?q=[not,found]" >>= assertStatus notFound404
+
+getExistingStateKey :: Codec -> IO HTTPTest
+getExistingStateKey codec = do
+    let st = dummyRadicleEnv [("my/key/path", Rad.String "hooray!")]
+
+    (_, tx) <- genDummyTx
+    gen     <- generate $ arbitraryGenesisWith (constEval st) [tx]
+
+    httpTest (nodeState mempty (Blockchain (gen :| []))) $
+        get codec "/state?q=[my,key,path]" >>=
+            assertStatus ok200 <>
+            assertResultOK (Rad.String "hooray!")
+
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
