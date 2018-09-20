@@ -25,11 +25,14 @@ import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude
 
+import qualified Prelude
+
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
 import           Crypto.Hash (hashlazy)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.Hash.MerkleTree as Merkle
+import           Data.Aeson (ToJSON(..), object, (.=))
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.ByteString.Lazy (toStrict)
@@ -40,7 +43,6 @@ import           Data.Text.Prettyprint.Doc.Render.Text
 import           Formatting ((%), (%.))
 import qualified Formatting as Fmt
 import           GHC.Generics (Generic)
-import qualified Prelude
 
 -- | Block difficulty.
 type Difficulty = Integer
@@ -68,6 +70,15 @@ instance Serialise (BlockHeader ())
 
 instance Hashable (BlockHeader ()) where
     hash = hashSerial
+
+instance ToJSON (BlockHeader s) where
+    toJSON BlockHeader{..} = object
+        [ "parent"     .= blockPrevHash
+        , "timestamp"  .= blockTimestamp
+        , "dataHash"   .= blockDataHash
+        , "nonce"      .= blockNonce
+        , "difficulty" .= blockDifficulty
+        ]
 
 -- | Create an empty block header.
 emptyHeader :: BlockHeader ()
@@ -128,6 +139,13 @@ instance Bifoldable Block where
       where
         a = blockData blk
         b = blockState (blockHeader blk)
+
+instance ToJSON tx => ToJSON (Block tx s) where
+    toJSON b@Block{..} = object
+        [ "hash"   .= blockHash (void b)
+        , "header" .= blockHeader
+        , "data"   .= blockData
+        ]
 
 validateBlock :: Block tx s -> Either Error (Block tx s)
 validateBlock = Right
