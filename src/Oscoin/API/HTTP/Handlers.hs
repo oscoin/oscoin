@@ -69,7 +69,7 @@ getBlock h = do
     result <- node $ BlockStore.lookupBlock h
     case result of
         Just blk ->
-            respond ok200 (body $ void blk)
+            respond ok200 (body . Ok $ void blk)
         Nothing ->
             respond notFound404 noBody
 

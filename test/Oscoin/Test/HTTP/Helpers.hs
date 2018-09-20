@@ -133,9 +133,9 @@ prettyDiff :: Show a => a -> a -> String
 prettyDiff have want = unlines $ addSign <$> getDiff (pp have) (pp want)
     where
         pp = lines . nicify . show
-        addSign (Both _ s) = "       " ++ s
-        addSign (First  s) = "have ->" ++ s
-        addSign (Second s) = "want ->" ++ s
+        addSign (Both _ s) = "        " ++ s
+        addSign (First  s) = "have -> " ++ s
+        addSign (Second s) = "want -> " ++ s
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()

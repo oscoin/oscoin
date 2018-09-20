@@ -124,6 +124,12 @@ instance ToJSON (Digest HashAlgorithm) where
     toJSON =
         String . decodeUtf8 . toHex . LBS.toStrict . Binary.encode
 
+instance FromJSON (Digest HashAlgorithm) where
+    parseJSON = withText "Hash" $ \t ->
+        case fromHex (encodeUtf8 t) of
+            Right bs -> pure $ Binary.decode (LBS.fromStrict bs)
+            Left err -> fail (T.unpack $ fromError err)
+
 -- | The maximum hash value.
 maxHash :: forall a. Crypto.HashAlgorithm a => Digest a
 maxHash = fromJust $

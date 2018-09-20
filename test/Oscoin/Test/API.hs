@@ -4,9 +4,10 @@ import           Oscoin.Prelude
 
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Crypto.Blockchain (BlockHash, Blockchain(..), blocks)
+import           Oscoin.Crypto.Blockchain
+                 (BlockHash, Blockchain(..), blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), blockData, headerHash)
+                 (Block(..), blockData, blockHash, headerHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
@@ -42,6 +43,12 @@ tests =
         [ testGroup "400 Bad Request"
             [ test "Invalid signature" postTransactionWithInvalidSignature]
         ]
+    , testGroup "GET /blocks/:hash"
+        [ test "Missing block" getMissingBlock
+        , test "Existing block" getExistingBlock
+        ]
+    , testGroup "GET /blockchain/best"
+        [ test "No depth specified" getBestChain ]
     ]
   where
     test name mkTest = testGroup name $ do
@@ -102,13 +109,13 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
 getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction codec = do
     chain <- generate $ arbitraryValidBlockchain
-    let (tx, blockHash, confirmations) = oldestTx chain
+    let (tx, bh, confirmations) = oldestTx chain
     let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
     httpTest (nodeState mempty chain) $
         getTransactionReturns codec txHash $ API.TxLookupResponse
             { txHash = Crypto.hash tx
-            , txBlockHash = Just $ blockHash
+            , txBlockHash = Just bh
             , txConfirmations = confirmations
             , txPayload = tx
             }
@@ -138,6 +145,28 @@ getTransactionReturns codec txHash expected =
     get codec ("/transactions/" <> txHash) >>=
     assertStatus ok200 <>
     assertResultOK expected
+
+getMissingBlock :: Codec -> IO HTTPTest
+getMissingBlock codec = httpTest emptyNodeState $ do
+    -- Malformed transaction hash returns a 404
+    get codec "/blocks/not-a-hash" >>= assertStatus notFound404
+
+    -- Well formed but missing transaction hash returns a 404
+    let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
+    get codec ("/blocks/" <> missing) >>= assertStatus notFound404
+
+getExistingBlock :: Codec -> IO HTTPTest
+getExistingBlock codec = do
+    chain <- generate $ arbitraryValidBlockchain
+    let g = void $ genesis chain
+
+    httpTest (nodeState mempty chain) $
+        get codec ("/blocks/" <> decodeUtf8 (Crypto.toHex (blockHash g))) >>=
+            assertStatus ok200 <>
+            assertResultOK g
+
+getBestChain :: Codec -> IO HTTPTest
+getBestChain _codec = notTested
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
