@@ -107,6 +107,9 @@ getState = Spock.getState
 param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
+param :: (FromHttpApiData p) => Text -> ApiAction s i (Maybe p)
+param = Spock.param
+
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery

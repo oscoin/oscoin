@@ -29,6 +29,14 @@ api env = do
 
     get root Handlers.root
 
+    -- /blocks/:id ------------------------------------------------------------
+
+    get ("blocks" <//> var) Handlers.getBlock
+
+    -- /blockchain/best -------------------------------------------------------
+
+    get ("blockchain" <//> "best") Handlers.getBestChain
+
     -- /transactions ----------------------------------------------------------
 
     get  "transactions" Handlers.getAllTransactions
@@ -38,6 +46,6 @@ api env = do
 
     get ("transactions" <//> var) Handlers.getTransaction
 
-    -- /state/:key -------------------------------------------------------
+    -- /state/:key ------------------------------------------------------------
 
     get ("state" <//> wildcard) Handlers.getStatePath

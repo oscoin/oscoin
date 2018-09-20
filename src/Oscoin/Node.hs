@@ -16,6 +16,7 @@ module Oscoin.Node
 
     , getMempool
     , getPath
+    , getBestChain
 
     , Receipt(..)
     ) where
@@ -29,7 +30,8 @@ import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadProtocol(..), MonadQuery(..))
 import           Oscoin.Consensus.Evaluator (EvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
-import           Oscoin.Crypto.Blockchain (blockHeader, blockState, height, tip)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain, blockHeader, blockState, height, tip)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Data.Query
@@ -253,6 +255,9 @@ getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
 -- | Get a state value at the given path.
 getPath :: (Query s, MonadIO m) => STree.Path -> NodeT tx s i m (Maybe (QueryVal s))
 getPath = queryM
+
+getBestChain :: (Hashable tx, Ord tx, MonadIO m) => NodeT tx s i m (Blockchain tx s)
+getBestChain = maximumChainBy (comparing height)
 
 -- | A transaction receipt. Contains the hashed transaction.
 newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
