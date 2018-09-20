@@ -5,7 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain
-                 (BlockHash, Blockchain(..), blocks, genesis)
+                 (BlockHash, Blockchain(..), blocks, genesis, takeBlocks)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), blockData, blockHash, headerHash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -166,7 +166,17 @@ getExistingBlock codec = do
             assertResultOK g
 
 getBestChain :: Codec -> IO HTTPTest
-getBestChain _codec = notTested
+getBestChain codec = do
+    chain <- generate $ arbitraryValidBlockchain
+
+    httpTest (nodeState mempty chain) $ do
+        get codec "/blockchain/best?depth=1" >>=
+            assertStatus ok200 <>
+            assertResultOK (map void $ takeBlocks 1 chain)
+
+        get codec "/blockchain/best" >>=
+            assertStatus ok200 <>
+            assertResultOK (map void $ takeBlocks 3 chain)
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
