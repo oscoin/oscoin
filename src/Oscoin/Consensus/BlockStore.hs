@@ -18,6 +18,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
+import           Data.List (find)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -71,11 +72,8 @@ fromOrphans (toList -> blks) gen =
 
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
-lookupBlock h BlockStore{bsChains} =
-    lookup h blks
-  where
-    blks   = [(blockHash b, b) | b <- foldMap blocks chains]
-    chains = Map.elems bsChains
+lookupBlock h (Map.elems . bsChains -> chains) =
+    find ((== h) . blockHash) (foldMap blocks chains)
 
 orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
