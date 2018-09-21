@@ -23,17 +23,11 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
 import           Oscoin.Consensus.Evaluator
+import           Oscoin.Consensus.Shared (mineBlock)
+import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHeader(..)
-                 , emptyHeader
-                 , hashTxs
-                 , mkBlock
-                 , toOrphan
-                 , validateBlock
-                 )
-import           Oscoin.Crypto.Hash
+                 (Block(..), BlockHeader(..), toOrphan, validateBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P as P2P
 
@@ -90,30 +84,15 @@ instance ( MonadMempool    tx    m
             map P2P.BlockMsg . maybeToList <$> lookupBlock blk
 
     tickM tick = do
-        blks <-
-            shouldCutBlockM tick >>= bool (pure mempty) (do
-                txs   <- map snd <$> getTxs
-                chain <- maximumChainBy (comparing chainScore)
-
-                let prevHash  = hash . blockHeader $ tip chain
-                    timestamp = fromIntegral (fromEnum tick)
-                    blk       = mkBlock header txs
-                    header    = emptyHeader { blockTimestamp = timestamp
-                                            , blockPrevHash  = prevHash
-                                            , blockDataHash  = hashTxs txs }
-
-                storeBlock $ toOrphan identityEval blk
-                delTxs (blockData blk)
-                modify' (\s -> s { ltLastBlk = tick })
-
-                pure [P2P.BlockMsg blk])
+        blk <- mineBlock simpleConsensus identityEval tick
+        let blkMsg = P2P.BlockMsg <$> maybeToList blk
 
         reqs <-
             shouldReconcileM tick >>= bool (pure mempty) (do
                 modify' (\s -> s { ltLastAsk = tick })
                 map P2P.ReqBlockMsg . toList <$> orphans)
 
-        pure $ blks <> reqs
+        pure $ blkMsg <> reqs
 
     {-# INLINE stepM #-}
     {-# INLINE tickM #-}
@@ -121,6 +100,23 @@ instance ( MonadMempool    tx    m
 instance P2P.MonadNetwork tx    m => P2P.MonadNetwork tx    (SimpleT tx i m)
 instance MonadMempool     tx    m => MonadMempool     tx    (SimpleT tx i m)
 instance MonadBlockStore  tx () m => MonadBlockStore  tx () (SimpleT tx i m)
+
+simpleConsensus :: (Ord i, Monad m) => Consensus ts s (SimpleT tx i m)
+simpleConsensus =
+    Consensus { cScore = comparing chainScore
+              , cMiner = mineSimple
+              }
+
+mineSimple :: (Ord i, Monad m) => Miner (SimpleT tx i m)
+mineSimple bh@BlockHeader{blockTimestamp} = do
+    let blockHeaderTick = fromInteger $ toInteger blockTimestamp
+    cut <- shouldCutBlockM blockHeaderTick
+    if cut
+    then do
+        modify' (\s -> s { ltLastBlk = blockHeaderTick })
+        pure $ Just bh
+    else
+        pure $ Nothing
 
 mkEnv :: i -> Set i -> Env i
 mkEnv = Env

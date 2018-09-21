@@ -19,6 +19,10 @@ module Oscoin.P2P
     , send
     , receive
 
+    -- * New Gossip
+    , runGossip
+    , broadcast
+
     -- * Re-exports
     , module Oscoin.P2P.Types
     ) where
@@ -28,14 +32,21 @@ import           Oscoin.Prelude
 import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Environment
 import           Oscoin.Logging (Logger, shown, withExceptionLogged, (%))
 import qualified Oscoin.Logging as Log
 import           Oscoin.P2P.Discovery (Disco(..))
+import qualified Oscoin.P2P.Gossip as Gossip
+import           Oscoin.P2P.Gossip.Broadcast (broadcast)
+import qualified Oscoin.P2P.Gossip.Broadcast as Bcast
+import qualified Oscoin.P2P.Gossip.Handshake as Handshake
+import qualified Oscoin.P2P.Gossip.Membership as Membership
 import           Oscoin.P2P.Types
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
+import qualified Control.Concurrent.Async as Async
 import           Control.Exception.Safe
 import           Data.ByteString.Lazy (fromStrict, toChunks)
 import           Data.IP (IP)
@@ -115,6 +126,42 @@ defaultConfig = Config
 
 withP2P :: Config -> Logger -> Disco IO -> (Handle -> IO a) -> IO a
 withP2P cfg lgr disco = bracket (open cfg lgr disco) close
+
+type GossipHandle = Gossip.Handle Handshake.HandshakeError Gossip.Peer
+
+-- | Start listening to gossip and pass the gossip handle to the
+-- runner. If the runner returns we stop listening and return the
+-- runner result.
+runGossip
+    :: Logger
+    -> Crypto.KeyPair
+    -> NodeId
+    -> Net.HostName
+    -- ^ Host to bind to
+    -> Net.PortNumber
+    -- ^ Port to bind to
+    -> [Gossip.Peer]
+    -- ^ Initial peers to connect to
+    -> Bcast.Callbacks
+    -> (GossipHandle -> IO a)
+    -> IO a
+runGossip logger keypair nodeId host port initialPeers broadcastCallbacks run = do
+    self :: Gossip.Peer <- Gossip.knownPeer nodeId host port
+    Gossip.withGossip
+        logger
+        keypair
+        self
+        scheduleInterval
+        broadcastCallbacks
+        Handshake.simple
+        Membership.defaultConfig
+        listenAndRun
+  where
+    listen = runReaderT $ Gossip.listen host port initialPeers
+    listenAndRun gossipHandle =
+        Async.withAsync (listen gossipHandle) (\_ -> run gossipHandle)
+    scheduleInterval = 10
+
 
 open :: Config -> Logger -> Disco IO -> IO Handle
 open Config{..} hLogger hDiscovery = do

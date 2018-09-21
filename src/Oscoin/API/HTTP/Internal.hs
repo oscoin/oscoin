@@ -107,7 +107,6 @@ getState = Spock.getState
 param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
-
 param :: (FromHttpApiData p) => Text -> ApiAction s i (Maybe p)
 param = Spock.param
 

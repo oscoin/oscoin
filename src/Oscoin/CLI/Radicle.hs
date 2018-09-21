@@ -2,6 +2,7 @@ module Oscoin.CLI.Radicle
     ( ToRadicle(..)
     , FromRadicle(..)
     , fnApply
+    , Rad.Value(..)
     ) where
 
 import           Oscoin.Prelude

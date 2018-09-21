@@ -6,7 +6,7 @@ import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.Evaluator (constEval)
 import           Oscoin.Crypto.Blockchain
-                 (BlockHash, Blockchain(..), blocks, genesis, takeBlocks)
+                 (BlockHash, Blockchain(..), blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -50,7 +50,8 @@ tests =
         , test "Existing block" getExistingBlock
         ]
     , testGroup "GET /blockchain/best"
-        [ test "No depth specified" getBestChain ]
+        [ test "No depth specified" getBestChain
+        ]
     , testGroup "GET /state"
         [ test "Missing key" getMissingStateKey
         , test "Existing key" getExistingStateKey
@@ -169,6 +170,10 @@ getExistingBlock codec = do
             assertStatus ok200 <>
             assertResultOK g
 
+getMissingStateKey :: Codec -> IO HTTPTest
+getMissingStateKey codec = httpTest emptyNodeState $
+    get codec "/state?q=[not,found]" >>= assertStatus notFound404
+
 getBestChain :: Codec -> IO HTTPTest
 getBestChain codec = do
     chain <- generate $ arbitraryValidBlockchain
@@ -176,15 +181,11 @@ getBestChain codec = do
     httpTest (nodeState mempty chain) $ do
         get codec "/blockchain/best?depth=1" >>=
             assertStatus ok200 <>
-            assertResultOK (map void $ takeBlocks 1 chain)
+            assertResultOK (map void $ take 1 $ blocks chain)
 
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
-            assertResultOK (map void $ takeBlocks 3 chain)
-
-getMissingStateKey :: Codec -> IO HTTPTest
-getMissingStateKey codec = httpTest emptyNodeState $
-    get codec "/state?q=[not,found]" >>= assertStatus notFound404
+            assertResultOK (map void $ take 3 $ blocks chain)
 
 getExistingStateKey :: Codec -> IO HTTPTest
 getExistingStateKey codec = do
@@ -197,7 +198,6 @@ getExistingStateKey codec = do
         get codec "/state?q=[my,key,path]" >>=
             assertStatus ok200 <>
             assertResultOK (Rad.String "hooray!")
-
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
