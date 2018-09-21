@@ -29,20 +29,18 @@ tests =
 
 testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
-    (result, TestCommandState{..}) <- runCLI ["revision", "create"]
-    let submittedMsg = txMessageContent <$> head submittedTransactions
+    cliState  <- runCLI ["revision", "create"]
+    let submittedMsg = txMessageContent <$> head (submittedTransactions cliState)
     let expectedMessage = Rad.fnApply "create-revision" [toRadicle emptyRevision]
     assertEqual "Expected message to be an empty revision"
                 (Just expectedMessage)
                 submittedMsg
-    assertResultValue result
 
 testGenerateKeyPair :: TestTree
 testGenerateKeyPair = testCase "keypair generate" $ do
     let setNoKeyPair s = s { storedKeyPair = Nothing }
-    (result, TestCommandState{..}) <- runCLIWithState ["keypair", "generate"] setNoKeyPair
+    TestCommandState{..} <- runCLIWithState ["keypair", "generate"] setNoKeyPair
     assertBool "No keypair was stored" $ isJust storedKeyPair
-    assertResultOk result
 
 testKeyStore :: TestTree
 testKeyStore = testCase "file keystore read/write" $

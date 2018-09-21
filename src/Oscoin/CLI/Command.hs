@@ -1,5 +1,7 @@
 module Oscoin.CLI.Command
     ( Command(..)
+    , Result(..)
+    , MonadCLI(..)
     , dispatchCommand
     ) where
 
@@ -7,7 +9,6 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.API.Client as API
 import qualified Oscoin.API.Types as API
-import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Revision
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -19,6 +20,16 @@ import           Radicle.Conversion
 import qualified Radicle.Extended as Rad
 
 
+class (MonadRandom m, API.MonadClient m, MonadKeyStore m) => MonadCLI m where
+    -- | Sleep for given number of milliseconds
+    sleep :: Int -> m ()
+    -- | Print text to stdout and add a newline
+    putLine :: Text -> m ()
+
+data Result
+    = ResultOk
+    | ResultError Text
+
 data Command =
       RevisionCreate
     | RevisionList
@@ -26,9 +37,7 @@ data Command =
     | GenerateKeyPair
     deriving (Show)
 
-type CommandContext m = (MonadRandom m , API.MonadClient m , MonadKeyStore m)
-
-dispatchCommand :: CommandContext m => Command -> m (Result Text)
+dispatchCommand :: MonadCLI m => Command -> m Result
 dispatchCommand RevisionCreate = submitTransaction createRevision
     where
         createRevision =
@@ -42,15 +51,16 @@ dispatchCommand GenerateKeyPair = do
 dispatchCommand cmd = pure $
     ResultError $ "Command `" <> show cmd <> "` not yet implemented"
 
-submitTransaction :: CommandContext m => Rad.Value -> m (Result Text)
+submitTransaction :: MonadCLI m => Rad.Value -> m Result
 submitTransaction rval = do
     tx <- signTransaction rval
     result <- API.submitTransaction tx
-    pure $ case result of
-        API.Ok v    -> ResultValue (show v)
-        API.Err err -> ResultError err
+    case result of
+        API.Ok v    -> do putLine (show v)
+                          pure $ ResultOk
+        API.Err err -> pure $ ResultError err
 
-signTransaction :: CommandContext m => Rad.Value -> m API.RadTx
+signTransaction :: MonadCLI m => Rad.Value -> m API.RadTx
 signTransaction v = do
     (pk, sk) <- readKeyPair
     msg <- Crypto.sign sk v
