@@ -5,7 +5,6 @@ module Oscoin.Crypto.Blockchain
     , tip
     , genesis
     , blocks
-    , takeBlocks
     , height
     , lookupTx
     , validateBlockchain
@@ -53,9 +52,6 @@ infixr 5 |>
 
 blocks :: Blockchain tx s -> [Block tx s]
 blocks = NonEmpty.toList . fromBlockchain
-
-takeBlocks :: Int -> Blockchain tx s -> [Block tx s]
-takeBlocks n = NonEmpty.take n . fromBlockchain
 
 tip :: Blockchain tx s -> Block tx s
 tip (Blockchain blks) = NonEmpty.head blks
