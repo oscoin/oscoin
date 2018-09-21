@@ -13,8 +13,9 @@ import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blockHash, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+                 (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
+import           Oscoin.Crypto.Blockchain.Block
+                 (blockState, emptyGenesisBlock, emptyHeader)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
@@ -55,7 +56,7 @@ import           Web.Spock (spockAsApp)
 
 import qualified Radicle
 -- FIXME(kim): should use unsafeToIdent, cf. radicle#105
-import qualified Radicle.Internal.Core as Radicle (toIdent)
+import qualified Radicle.Internal.Core as Radicle
 
 
 -- | Like "Assertion" but bound to a user session (cookies etc.)
@@ -119,13 +120,28 @@ genDummyTx = do
 
     pure (txHash, tx)
 
-dummyRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
-dummyRadicleEnv kvs =
-    Rad.Env $ env { Radicle.bindingsEnv = Radicle.Env bindings }
+-- | Creates a new Radicle blockchain with no transactions and the given state.
+blockchainFromEnv :: Rad.Env -> Blockchain API.RadTx Rad.Env
+blockchainFromEnv env = fromGenesis genesis
   where
-    env      = Radicle.pureEnv
-    kvs'     = map (first Radicle.toIdent) kvs
-    bindings = Map.fromList kvs' <> Radicle.fromEnv (Radicle.bindingsEnv env)
+    genesis = mkBlock (emptyHeader { blockState = env }) []
+
+-- | Create a Radicle environment with the given bindings
+initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
+initRadicleEnv bindings =
+    Rad.Env $ foldl' addBinding Radicle.pureEnv bindings
+  where
+    addBinding env (id, value) = Radicle.addBinding (Radicle.toIdent id) value env
+
+-- | Adds a reference holding @value@ and binds @name@ to the reference
+addRadicleRef :: Text -> Radicle.Value -> Rad.Env -> Rad.Env
+addRadicleRef name value (Rad.Env env) =
+    Rad.Env env'
+  where
+    env' = snd $ runIdentity $ Radicle.runLang env $ do
+        ref <- Radicle.newRef value
+        Radicle.defineAtom (Radicle.toIdent name) ref
+
 
 -- | Turn a "Session" into an "Assertion".
 runSession :: Session () -> NodeHandle -> Assertion

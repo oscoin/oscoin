@@ -9,14 +9,16 @@ module Oscoin.Consensus.Evaluator.Radicle
     , Rad.Value
     ) where
 
+import           Oscoin.Prelude
+
 import           Oscoin.Consensus.Evaluator (Evaluator, evalError)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Data.Query
-import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise)
 import           Data.Default (Default(..))
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Radicle as Rad
@@ -29,12 +31,12 @@ instance Default Env where
 instance Query Env where
     type QueryVal Env = Rad.Value
 
-    query path (Env bindings) =
-        case Rad.mkIdent (T.intercalate "/" path) of
-            Just ident ->
-                Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
-            Nothing ->
-                Nothing
+    query path (Env bindings) = do
+        ident <- Rad.mkIdent (T.intercalate "/" path)
+        val <- Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
+        case val of
+            Rad.Ref ref -> lookupReference ref bindings
+            _           -> pure $ val
 
 data Program = Program
     { progValue   :: Rad.Value
@@ -68,3 +70,6 @@ radicleEval Program{..} (Env st) =
         (Left err, _) -> Left [evalError (show err)]
         (Right _, s)  -> Right ((), Env s)
 
+lookupReference :: Rad.Reference -> Rad.Bindings m -> Maybe Rad.Value
+lookupReference (Rad.Reference r) Rad.Bindings{..} =
+    IntMap.lookup r bindingsRefs
