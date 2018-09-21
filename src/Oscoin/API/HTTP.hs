@@ -14,6 +14,9 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.API.HTTP.Handlers as Handlers
 import           Oscoin.API.HTTP.Internal
 
+import           Network.Wai.Middleware.Static ((>->))
+import qualified Network.Wai.Middleware.Static as Wai
+
 -- TODO: Don't import this here? Create a HTTP.Routing module?
 import qualified Network.Wai as Wai
 import           Web.Spock
@@ -28,6 +31,7 @@ app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 api :: Environment -> Api Rad.Env i ()
 api env = do
     middleware $ loggingMiddleware env
+               . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")
 
     -- / ----------------------------------------------------------------------
 
