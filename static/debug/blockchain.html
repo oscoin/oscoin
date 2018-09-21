@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="/debug/blockchain.css">
+    <title>debug/blockchain</title>
+  </head>
+  <body>
+    <header>
+    </header>
+    <main><!-- Blockchain goes here --></main>
+    <footer>
+    </footer>
+    <table id="block-template" class="block" style="display: none">
+      <tr><td class="field">hash</td><td class="block-hash"><!-- --></td></tr>
+      <tr><td class="field">parent</td><td class="block-parent"><!-- --></td></tr>
+      <tr><td class="field">nonce</td><td class="block-nonce"><!-- --></td></tr>
+      <tr><td class="field">timestamp</td><td class="block-timestamp"><!-- --></td></tr>
+      <tr><td class="field">difficulty</td><td class="block-difficulty"><!-- --></td></tr>
+      <tr><td colspan="2" class="block-data"></td></tr>
+    </table>
+    <script src="/debug/blockchain.js"></script>
+  </body>
+</html>

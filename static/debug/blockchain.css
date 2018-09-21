@@ -1,0 +1,26 @@
+* { margin: 0; padding: 0 }
+
+body {
+	font-family: "Inconsolata", "Consolas", courier, monospace;
+	padding: 60px;
+}
+
+.block {
+	border: 1px solid grey;
+	border-top-width: 2px;
+	margin: 15px 0;
+	width: 700px;
+	padding: 10px;
+}
+
+.block .field {
+	font-weight: bold;
+}
+
+.block td {
+	padding: 3px 6px;
+}
+
+.block-data-tx {
+	padding: 10px;
+}
