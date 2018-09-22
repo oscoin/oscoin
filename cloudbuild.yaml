@@ -1,3 +1,4 @@
+timeout: 30m # Cache misses are slow to rebuild
 steps:
   - id: "Load cache"
     name: gcr.io/cloud-builders/gsutil
@@ -5,10 +6,8 @@ steps:
     args:
     - '-c'
     - |
-      cache="stack-$$(cat stack.yaml package.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
-      if gsutil -m cp "gs://oscoin-build-cache/$$cache" $$cache; then
-        tar xzf $$cache
-      fi
+      source scripts/ci.sh
+      load-cache
 
   - id: "Build deps"
     name: 'haskell:8.4.3'
@@ -42,8 +41,6 @@ steps:
     args:
     - '-c'
     - |
-      cache="stack-$$(cat stack.yaml package.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
-      gsutil ls "gs://oscoin-build-cache/$$cache" && echo "Cache is up to date" && exit 0
-      rm -rf .stack/indices/Hackage/00-index.tar*
-      tar czf $$cache .stack .stack-work
-      gsutil -m cp $$cache "gs://oscoin-build-cache/$$cache" || true
+      source scripts/ci.sh
+      save-cache
+
