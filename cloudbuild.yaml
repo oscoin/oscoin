@@ -1,0 +1,49 @@
+steps:
+  - id: "Load cache"
+    name: gcr.io/cloud-builders/gsutil
+    entrypoint: 'bash'
+    args:
+    - '-c'
+    - |
+      cache="stack-$$(cat stack.yaml package.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
+      if gsutil -m cp "gs://oscoin-build-cache/$$cache" $$cache; then
+        tar xzf $$cache
+      fi
+
+  - id: "Build deps"
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    entrypoint: 'bash'
+    args:
+    - '-c'
+    - |
+      stack config set system-ghc --global true
+      stack config set install-ghc --global false
+      stack install stylish-haskell hlint
+
+  - id: "Format"
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    args: ['./scripts/check-fmt.sh']
+
+  - id: "Lint"
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    args: ['stack', 'exec', '--', 'hlint', '.']
+
+  - id: "Test & Build"
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    args: ['stack', 'build', '--fast', '--test', '--no-terminal', '--pedantic']
+
+  - id: "Save cache"
+    name: gcr.io/cloud-builders/gsutil
+    entrypoint: 'bash'
+    args:
+    - '-c'
+    - |
+      cache="stack-$$(cat stack.yaml package.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
+      gsutil ls "gs://oscoin-build-cache/$$cache" && echo "Cache is up to date" && exit 0
+      rm -rf .stack/indices/Hackage/00-index.tar*
+      tar czf $$cache .stack .stack-work
+      gsutil -m cp $$cache "gs://oscoin-build-cache/$$cache" || true
