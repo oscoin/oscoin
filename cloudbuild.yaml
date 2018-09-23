@@ -1,4 +1,4 @@
-timeout: 30m # Cache misses are slow to rebuild
+timeout: 1800s # Cache misses are slow to rebuild
 steps:
   - id: "Load cache"
     name: gcr.io/cloud-builders/gsutil
