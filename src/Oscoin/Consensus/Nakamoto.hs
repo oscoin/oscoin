@@ -35,8 +35,10 @@ import qualified Oscoin.P2P as P2P
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.RWS (RWST, evalRWST, runRWST, state)
+import           Control.Monad.Writer.CPS (MonadWriter)
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Functor (($>))
+import           Data.Has (Has(..))
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Maybe (catMaybes, maybeToList)
 import           Data.Traversable (for)
@@ -202,19 +204,25 @@ defaultGenesisDifficulty =
 -- | Calculate the difficulty of a blockchain.
 chainDifficulty :: Blockchain tx s -> Difficulty
 chainDifficulty (Blockchain blks) =
-    if   length range < blocksConsidered
-    then genesisDifficulty
-    else currentDifficulty * targetElapsed `div` toInteger actualElapsed
+    let range = nonEmpty $ NonEmpty.take blocksConsidered blks
+     in maybe genesisDifficulty computedDifficulty range
   where
-    range             = NonEmpty.take blocksConsidered blks
-    rangeStart        = blockHeader $ NonEmpty.last (NonEmpty.head blks :| tail range)
-    rangeEnd          = blockHeader $ NonEmpty.head blks
-    actualElapsed     = blockTimestamp rangeEnd - blockTimestamp rangeStart
-    targetElapsed     = fromIntegral $ blocksConsidered * blockTimeSeconds
     blocksConsidered  = timePeriodMinutes `div` blockTimeMinutes
     timePeriodMinutes = timePeriodDays * 24 * 60
     timePeriodDays    = 2 * 7 -- Two weeks.
     blockTimeMinutes  = 10
     blockTimeSeconds  = blockTimeMinutes * 60
-    currentDifficulty = blockDifficulty rangeEnd
+
     genesisDifficulty = blockDifficulty . blockHeader $ NonEmpty.last blks
+
+    computedDifficulty range
+        | NonEmpty.length range < blocksConsidered = genesisDifficulty
+        | otherwise =
+        let rangeStart        = blockHeader . NonEmpty.last
+                              $ NonEmpty.head blks :| NonEmpty.tail range
+            rangeEnd          = blockHeader $ NonEmpty.head blks
+            actualElapsed     = blockTimestamp rangeEnd - blockTimestamp rangeStart
+            targetElapsed     = fromIntegral $ blocksConsidered * blockTimeSeconds
+            currentDifficulty = blockDifficulty rangeEnd
+         in currentDifficulty * targetElapsed `div` toInteger actualElapsed
+

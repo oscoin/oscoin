@@ -22,9 +22,8 @@ import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
 import           Control.Exception.Safe (Exception, throwM)
 import           Control.Monad (unless)
-import           Control.Monad.Trans.Except
 import           Crypto.Random (getRandomBytes)
-import           Data.Bool (bool)
+import           Data.Bitraversable (bitraverse)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Conduit ((.|))
 import qualified Data.Conduit.Combinators as Conduit
@@ -182,7 +181,7 @@ signE
     :: Crypto.PrivateKey
     -> ByteString
     -> ExceptT HandshakeError IO Crypto.Signature
-signE mySK msg = map Crypto.sigSignature . io $ Crypto.sign mySK msg
+signE mySK msg = map Crypto.sigSignature . liftIO $ Crypto.sign mySK msg
 
 verifyE
     :: Crypto.PublicKey
@@ -194,7 +193,7 @@ verifyE theirPK theirSig myRnd =
         throwE InvalidSignature
 
 randomE :: ExceptT HandshakeError IO ByteString
-randomE = io (getRandomBytes 32)
+randomE = liftIO (getRandomBytes 32)
 
 bai :: Socket -> HandshakeError -> IO ()
 bai sock e = Conn.sockSendFramed sock $ Bai e

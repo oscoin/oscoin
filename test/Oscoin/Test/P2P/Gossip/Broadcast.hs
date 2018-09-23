@@ -6,7 +6,7 @@ module Oscoin.Test.P2P.Gossip.Broadcast
     , genBroadcasts
 
     , initNodes
-    , cast
+    , bcast
     , settle
 
     , bootTopo
@@ -29,6 +29,7 @@ import qualified Algebra.Graph.Export.Dot as Alga (exportViaShow)
 import           Control.Monad ((>=>))
 import qualified Data.HashSet as Set
 import           Data.IORef
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 
 import           Hedgehog
@@ -58,19 +59,19 @@ propAtomicBroadcast
     -> PropertyT IO ()
 propAtomicBroadcast nodes bcasts = do
     stores <- lift $ do
-        traverse_ (cast nodes) bcasts
+        traverse_ (bcast nodes) bcasts
         Map.toList <$> traverse (readIORef . snd) nodes
     annotateShow stores
-    assert $
-        let stores' = map snd stores
-            bcasts' = map snd bcasts
-         in allEqual stores' && head stores' == Map.fromList bcasts'
+    let stores' = nonEmpty $ map snd stores
+    let bcasts' = map snd bcasts
+    Just True === map allEqual stores'
+    map NonEmpty.head stores' === Just (Map.fromList bcasts')
 
-cast :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
-cast nodes (root, bcast) = do
+bcast :: Nodes -> (Int, (MessageId, ByteString)) -> IO ()
+bcast nodes (root, msg) = do
     let (hdl, store) = snd $ Map.elemAt root nodes
-    void $ uncurry (storeInsert store) bcast
-    out <- runPlumtreeT hdl $ uncurry broadcast bcast
+    void $ uncurry (storeInsert store) msg
+    out <- runPlumtreeT hdl $ uncurry broadcast msg
     settle nodes out
 
 genBroadcasts :: MonadGen m => Contacts -> m [(Int, (MessageId, ByteString))]
@@ -92,7 +93,7 @@ settle nodes outs = loop $ pure outs
     dispatch :: Outgoing NodeId -> IO (Maybe [Outgoing NodeId])
     dispatch (Eager to msg)   = onNode to $ receive msg
     dispatch (Lazy  to ihave) = onNode to $ receive (IHaveM ihave)
-    dispatch (After 0 _ ma)   = Just <$> io ma
+    dispatch (After 0 _ ma)   = Just <$> liftIO ma
     dispatch (After t k ma)   = pure $ Just [After (t - 1000000) k ma]
     dispatch _                = pure mempty
 

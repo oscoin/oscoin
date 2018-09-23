@@ -40,7 +40,6 @@ import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
-import           Oscoin.Logging ((%))
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
@@ -53,7 +52,7 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Radicle as Rad
 
 import           Codec.Serialise
-import           Control.Exception.Safe (bracket)
+import qualified Control.Exception.Safe as Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Aeson
                  ( FromJSON
@@ -65,7 +64,6 @@ import           Data.Aeson
                  , (.:)
                  , (.=)
                  )
-import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
 
@@ -93,7 +91,7 @@ withNode
     -> BlockStore.Handle tx s
     -> (Handle tx s i -> IO c)
     -> IO c
-withNode cfg i mem str blk = bracket (open cfg i mem str blk) close
+withNode cfg i mem str blk = Safe.bracket (open cfg i mem str blk) close
 
 open :: (Hashable tx, Pretty tx)
      => Config
@@ -105,7 +103,7 @@ open :: (Hashable tx, Pretty tx)
 open hConfig hNodeId hMempool hStateTree hBlockStore = do
     gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
         BlockStore.getGenesisBlock bs
-    Log.debug (cfgLogger hConfig) ("" % Log.string) (prettyBlock gen (Just 0))
+    Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
     pure Handle{..}
 
 close :: Handle tx s i -> IO ()
@@ -132,11 +130,11 @@ tick = do
 logMsg :: forall r tx m.
     ( Hashable tx, Pretty tx, Log.MonadLogger r m )
     => Msg tx -> m ()
-logMsg msg = Log.debugM Log.string (prettyMsg msg)
+logMsg msg = Log.debugM Log.stext (prettyMsg msg)
   where
-    prettyMsg :: Msg tx -> String
+    prettyMsg :: Msg tx -> Text
     prettyMsg (BlockMsg blk)  = prettyBlock blk Nothing
-    prettyMsg (TxMsg    tx)   = T.unpack . renderStrict . layoutCompact . pretty $ tx
+    prettyMsg (TxMsg    tx)   = renderStrict . layoutCompact . pretty $ tx
     prettyMsg (ReqBlockMsg h) = show h
 
 
@@ -179,12 +177,12 @@ runEffects p2p node evalConsensusT =
     runNetworkT p2p . runNodeT node . evalConsensusT
 
 instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) where
-    addTxs txs = asks hMempool >>= io . atomically . (`Mempool.insertMany` txs)
-    getTxs     = asks hMempool >>= io . atomically . Mempool.toList
-    delTxs txs = asks hMempool >>= io . atomically . (`Mempool.removeMany` txs)
-    numTxs     = asks hMempool >>= io . atomically . Mempool.size
-    lookupTx h = asks hMempool >>= io . atomically . (`Mempool.lookup` h)
-    subscribe  = asks hMempool >>= io . atomically . Mempool.subscribe
+    addTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.insertMany` txs)
+    getTxs     = asks hMempool >>= liftIO . atomically . Mempool.toList
+    delTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.removeMany` txs)
+    numTxs     = asks hMempool >>= liftIO . atomically . Mempool.size
+    lookupTx h = asks hMempool >>= liftIO . atomically . (`Mempool.lookup` h)
+    subscribe  = asks hMempool >>= liftIO . atomically . Mempool.subscribe
 
     {-# INLINE addTxs    #-}
     {-# INLINE getTxs    #-}
@@ -195,7 +193,7 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) w
 instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
-        io . atomically $ BlockStore.put bs blk
+        liftIO . atomically $ BlockStore.put bs blk
 
     lookupBlock     = withBlockStore . BlockStore.lookupBlock
     getGenesisBlock = withBlockStore   BlockStore.getGenesisBlock
@@ -220,7 +218,7 @@ instance (Monad m, MonadIO m, Query s) => MonadQuery (NodeT tx s i m) where
 instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
     updateM s = do
         st <- asks hStateTree
-        io . atomically $ STree.updateTree st s
+        liftIO . atomically $ STree.updateTree st s
 
 instance MonadClock m => MonadClock (NodeT tx s i m)
 
@@ -233,11 +231,11 @@ withBlockStore
     => (BlockStore.BlockStore tx s -> b) -> m b
 withBlockStore f = do
     bs <- asks hBlockStore
-    io . atomically $
+    liftIO . atomically $
         BlockStore.for bs f
 
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
-getMempool = asks hMempool >>= io . atomically . Mempool.snapshot
+getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 
 -- | Get a state value at the given path.
 getPath :: (Query s, MonadIO m) => STree.Path -> NodeT tx s i m (Maybe (QueryVal s))

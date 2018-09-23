@@ -37,14 +37,15 @@ dispatchCommand GenerateKeyPair = do
     writeKeyPair kp
     pure $ ResultOk
 
-dispatchCommand _ = notImplemented
+dispatchCommand cmd = pure $
+    ResultError $ "Command `" <> show cmd <> "` not yet implemented"
 
 submitTransaction :: CommandContext m => Rad.Value -> m (Result Text)
 submitTransaction rval = do
     tx <- signTransaction rval
     result <- API.submitTransaction tx
     pure $ case result of
-        API.Ok v    -> ResultValue (tshow v)
+        API.Ok v    -> ResultValue (show v)
         API.Err err -> ResultError err
 
 signTransaction :: CommandContext m => Rad.Value -> m API.RadTx

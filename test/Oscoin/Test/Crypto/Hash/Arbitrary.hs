@@ -2,8 +2,9 @@
 
 module Oscoin.Test.Crypto.Hash.Arbitrary where
 
-import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude
+
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()

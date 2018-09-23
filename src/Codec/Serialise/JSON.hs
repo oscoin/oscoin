@@ -28,6 +28,7 @@ module Codec.Serialise.JSON
 import           Oscoin.Prelude
 
 import           Codec.Serialise
+import           Control.Monad.Fail (fail)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Base64.Extended as Base64

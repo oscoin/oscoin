@@ -4,7 +4,8 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.Hash (toHashed, zeroHash)
+import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 
 import           Codec.Serialise
@@ -21,8 +22,8 @@ data Tx msg = Tx
     , txContext :: BlockHash
     } deriving (Show, Eq, Ord, Generic, Functor)
 
-instance Serialise msg => Hashable (Tx msg) where
-    hash = hashSerial
+instance Serialise msg => Crypto.Hashable (Tx msg) where
+    hash = Crypto.hashSerial
 
 instance Serialise msg => Serialise (Tx msg)
 
@@ -67,7 +68,7 @@ toProgram :: Tx Rad.Value -> Rad.Program
 toProgram Tx{..} =
     Rad.Program
         { Rad.progValue   = unsign txMessage
-        , Rad.progAuthor  = hash txPubKey
+        , Rad.progAuthor  = Crypto.hash txPubKey
         , Rad.progChainId = txChainId
         , Rad.progNonce   = txNonce
         }

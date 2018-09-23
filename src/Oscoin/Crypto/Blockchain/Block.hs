@@ -4,6 +4,7 @@ module Oscoin.Crypto.Blockchain.Block
     , BlockHeader(..)
     , Difficulty
     , Height
+    , Timestamp
     , Orphan
     , toOrphan
     , mkBlock
@@ -21,22 +22,27 @@ module Oscoin.Crypto.Blockchain.Block
     , prettyBlock
     ) where
 
-import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
-import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude
-
 import qualified Prelude
+
+import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
+import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
+import           Control.Monad.Writer.CPS (execWriter, tell)
 import           Crypto.Hash (hashlazy)
-import qualified Crypto.Hash as Crypto
+import qualified Crypto.Hash as Hash
 import qualified Crypto.Hash.MerkleTree as Merkle
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+import           Data.Bifoldable (Bifoldable(..))
 import           Data.Bifunctor (Bifunctor(..))
+import           Data.Bitraversable (Bitraversable(..))
+import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.ByteString.Char8 as C8
-import           Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Lazy as LBS
+import           Data.Default (Default(def))
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
@@ -51,10 +57,13 @@ type Difficulty = Integer
 -- | Block height.
 type Height = Integer
 
+-- | Unix timestamp.
+type Timestamp = Word64
+
 -- | Block header.
 data BlockHeader s = BlockHeader
-    { blockPrevHash   :: Hashed (BlockHeader ())
-    , blockDataHash   :: Hash
+    { blockPrevHash   :: Crypto.Hashed (BlockHeader ())
+    , blockDataHash   :: Crypto.Hash
     , blockState      :: s
     , blockTimestamp  :: Timestamp
     , blockDifficulty :: Difficulty
@@ -69,8 +78,8 @@ instance {-# OVERLAPPABLE #-} Eq (BlockHeader s) where
 
 instance Serialise (BlockHeader ())
 
-instance Hashable (BlockHeader ()) where
-    hash = hashSerial
+instance Crypto.Hashable (BlockHeader ()) where
+    hash = Crypto.hashSerial
 
 instance ToJSON (BlockHeader s) where
     toJSON BlockHeader{..} = object
@@ -95,17 +104,17 @@ instance FromJSON (BlockHeader ()) where
 -- | Create an empty block header.
 emptyHeader :: BlockHeader ()
 emptyHeader = BlockHeader
-    { blockPrevHash = toHashed zeroHash
-    , blockDataHash = zeroHash
+    { blockPrevHash = Crypto.toHashed Crypto.zeroHash
+    , blockDataHash = Crypto.zeroHash
     , blockState = ()
     , blockTimestamp = 0
     , blockDifficulty = 0
     , blockNonce = 0
     }
 
-headerHash :: BlockHeader s -> Hashed (BlockHeader ())
+headerHash :: BlockHeader s -> Crypto.Hashed (BlockHeader ())
 headerHash =
-    hash . void
+    Crypto.hash . void
 
 -- | Represents an orphan state @s@. Blocks of type @Block tx (Orphan s)@ are
 -- considered orphan blocks. The type @s -> Maybe s@ represents a function from
@@ -115,7 +124,7 @@ headerHash =
 type Orphan s = s -> Maybe s
 
 -- | The hash of a block.
-type BlockHash = Hashed (BlockHeader ())
+type BlockHash = Crypto.Hashed (BlockHeader ())
 
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx s = Block
@@ -166,7 +175,7 @@ instance FromJSON tx => FromJSON (Block tx ()) where
 
         pure Block{..}
 
-validateBlock :: Block tx s -> Either Error (Block tx s)
+validateBlock :: Block tx s -> Either Text (Block tx s)
 validateBlock = Right
 
 mkBlock
@@ -205,7 +214,7 @@ emptyGenesisBlock t =
 
 isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
-    (blockPrevHash . blockHeader) blk == toHashed zeroHash
+    (blockPrevHash . blockHeader) blk == Crypto.toHashed Crypto.zeroHash
 
 -- | Evaluate a block, setting its state @s@. Returns 'Nothing' if evaluation
 -- failed.
@@ -227,43 +236,48 @@ blockHash blk = headerHash (blockHeader blk)
 linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
 linkBlock (blockState . blockHeader -> s) = traverse ($ s)
 
-hashTxs :: (Foldable t, Serialise tx) => t tx -> Hash
+hashTxs :: (Foldable t, Serialise tx) => t tx -> Crypto.Hash
 hashTxs txs
     -- TODO: Get rid of merkle-tree dependency, or create our own that doesn't
     -- depend on protolude.
     -- TODO: Needs to return `Hashed (t tx)` or something.
-    | null txs = zeroHash
+    | null txs = Crypto.zeroHash
     | otherwise =
         -- TODO(alexis): We shouldn't be double hashing here, but 'mtHash'
         -- gives us a SHA256 which we can't use.
-        Crypto.hash
+        Hash.hash
         . Merkle.mtHash
         . Merkle.mkMerkleTree
-        $ map (toStrict . Serialise.serialise) (toList txs)
+        $ map (LBS.toStrict . Serialise.serialise) (toList txs)
 
-hashTx :: Serialise tx => tx -> Hashed tx
+hashTx :: Serialise tx => tx -> Crypto.Hashed tx
 hashTx tx =
-    toHashed (hashlazy (Serialise.serialise tx))
+    Crypto.toHashed (hashlazy (Serialise.serialise tx))
 
-prettyBlock :: (Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> String
+prettyBlock :: (Crypto.Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> Text
 prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
-    tell $ formatHeaderWith (Fmt.string % "━━ " % formatHex % " ") height (headerHash bh)
+    tell $ formatHeaderWith (Fmt.stext % "━━ " % formatHex % " ") height (headerHash bh)
     tell $ fencedLineFormat ("prevHash:   " % formatHex) blockPrevHash
     tell $ fencedLineFormat ("timestamp:  " % Fmt.right 64 ' ') blockTimestamp
-    tell $ "├" <> Prelude.replicate 78 '─' <> "┤\n"
+    tell $ "├" <> dashes 78 <> "┤\n"
 
     for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
-        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % formatHex) n (hash tx)
-        tell $ fencedLineFormat Fmt.string ""
+        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % formatHex) n (Crypto.hash tx)
+        tell $ fencedLineFormat Fmt.stext ""
         let txContent = renderStrict $ layoutSmart layoutOptions $ pretty $ tx
         for_ (T.lines txContent) $ tell . fencedLineFormat Fmt.stext
-        tell $ "├" <> Prelude.replicate 78 '─' <> "┤\n"
+        tell $ "├" <> dashes 78 <> "┤\n"
 
-    tell $ "└" <> Prelude.replicate 78 '─' <> "┘\n"
+    tell $ "└" <> dashes 78 <> "┘\n"
   where
     formatHex :: ByteArrayAccess ba => Fmt.Format r (ba -> r)
-    formatHex = Fmt.mapf (C8.unpack . toHex) $ Fmt.right 64 ' '
-    formatHeaderWith format = Fmt.formatToString $ "┍━" % (Fmt.left  76 '━' %. format) % "━┑\n"
-    fencedLineFormat format = Fmt.formatToString $ "│ " % (Fmt.right 76 ' ' %. format) % " │\n"
-    height = maybe "━━━━━━━" (\x -> " " ++ show x ++ " ") blockHeight
+    formatHex = Fmt.mapf (C8.unpack . Crypto.toHex) $ Fmt.right 64 ' '
+
+    formatHeaderWith format = Fmt.sformat $ "┍━" % (Fmt.left  76 '━' %. format) % "━┑\n"
+    fencedLineFormat format = Fmt.sformat $ "│ " % (Fmt.right 76 ' ' %. format) % " │\n"
+
+    height = maybe "━━━━━━━" (\x -> " " <> show x <> " ") blockHeight
+
+    dashes n = T.pack $ Prelude.replicate n '-'
+
     layoutOptions = LayoutOptions {layoutPageWidth = AvailablePerLine 76 1.0}

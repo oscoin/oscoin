@@ -19,7 +19,6 @@
   - {name: unsafePerformIO, within: []}
 
 - warn: {lhs: fmap, rhs: map}
-- warn: {lhs: mconcat, rhs: concat}
 - warn: {lhs: foldl, rhs: foldl'}
 - warn: {lhs: return, rhs: pure}
 - warn: {lhs: liftM, rhs: map}

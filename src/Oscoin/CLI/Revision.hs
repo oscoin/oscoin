@@ -7,6 +7,8 @@ import           Oscoin.CLI.Radicle
 import           Oscoin.CLI.User
 
 import qualified Radicle as Rad
+-- FIXME(kim): should use unsafeToIdent, cf. radicle#105
+import qualified Radicle.Internal.Core as Rad (toIdent)
 
 import qualified Data.Map as Map
 
@@ -25,7 +27,7 @@ instance ToRadicle RevisionStatus where
         RevisionClosed -> key "closed"
         RevisionMerged -> key "merged"
       where
-        key = Rad.Keyword . fromJust . Rad.mkIdent
+        key = Rad.Keyword . Rad.toIdent
 
 type Ref = Text
 

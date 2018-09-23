@@ -1,6 +1,6 @@
 module Oscoin.Test.API where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (get, state)
 
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
@@ -75,7 +75,7 @@ httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
 
 postTransactionWithInvalidSignature :: Codec -> IO HTTPTest
 postTransactionWithInvalidSignature codec = httpTest emptyNodeState $ do
-    (_, tx) <- io $ genDummyTx
+    (_, tx) <- liftIO $ genDummyTx
     otherPubKey <- fst <$> Crypto.generateKeyPair
     let tx' = tx { txPubKey = otherPubKey }
     post codec "/transactions" tx' >>=
@@ -91,7 +91,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
         assertStatus ok200 <>
         assertResultOK ([] @API.RadTx)
 
-    (txHash, tx) <- io $ genDummyTx
+    (txHash, tx) <- liftIO $ genDummyTx
     -- Submit the transaction to the mempool.
     post codec "/transactions" tx >>=
         assertStatus accepted202 <>
@@ -116,18 +116,20 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
 getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction codec = do
     chain <- generate $ arbitraryValidBlockchain
-    let (tx, bh, confirmations) = oldestTx chain
-    let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+    case oldestTx chain of
+        Nothing -> panic "No oldestTx found in chain"
+        Just (tx, blkHash, confirmations) -> do
+            let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
 
-    httpTest (nodeState mempty chain) $
-        getTransactionReturns codec txHash $ API.TxLookupResponse
-            { txHash = Crypto.hash tx
-            , txBlockHash = Just bh
-            , txConfirmations = confirmations
-            , txPayload = tx
-            }
+            httpTest (nodeState mempty chain) $
+                getTransactionReturns codec txHash $ API.TxLookupResponse
+                    { txHash = Crypto.hash tx
+                    , txBlockHash = Just blkHash
+                    , txConfirmations = confirmations
+                    , txPayload = tx
+                    }
 
-oldestTx :: Blockchain tx s -> (tx, BlockHash, Word64)
+oldestTx :: Blockchain tx s -> Maybe (tx, BlockHash, Word64)
 oldestTx (blocks -> blks) = head $ do
     (i, blk) <- zip [1..] blks
     tx <- toList $ blockData blk
@@ -200,4 +202,4 @@ getExistingStateKey codec = do
             assertResultOK (Rad.String "hooray!")
 
 notTested :: IO HTTPTest
-notTested = httpTest emptyNodeState $ io $ assertFailure "Not tested"
+notTested = httpTest emptyNodeState $ liftIO $ assertFailure "Not tested"

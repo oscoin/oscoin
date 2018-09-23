@@ -8,7 +8,7 @@ module Oscoin.Test.Consensus.Node
     , runTestNodeT
     ) where
 
-import           Oscoin.Prelude hiding (runStateT)
+import           Oscoin.Prelude hiding (StateT, runStateT, show)
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
@@ -24,6 +24,7 @@ import           Control.Monad.State.Strict
 import           Data.Binary (Binary)
 import qualified Data.Hashable as Hashable
 import           Lens.Micro
+import           Text.Show (Show(..))
 
 import           Test.QuickCheck
 
@@ -80,7 +81,7 @@ instance Monad m => MonadMempool DummyTx (TestNodeT m) where
     delTxs txs = modify' (over tnsMempoolL (Mempool.removeTxs txs))
     numTxs     = Mempool.size <$> gets tnsMempool
     lookupTx h = Mempool.lookup h <$> gets tnsMempool
-    subscribe  = error "Oscoin.Consensus.Test.Node: `subscribe` not available for pure mempool"
+    subscribe  = panic "Oscoin.Consensus.Test.Node: `subscribe` not available for pure mempool"
 
     {-# INLINE addTxs #-}
     {-# INLINE getTxs #-}

@@ -16,6 +16,7 @@ import           Oscoin.Data.Query
 import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise)
+import           Data.Default (Default(..))
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Radicle as Rad
@@ -64,6 +65,6 @@ fromSource name src = do
 radicleEval :: Evaluator Env Program ()
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
-        (Left err, _) -> Left [evalError (tshow err)]
+        (Left err, _) -> Left [evalError (show err)]
         (Right _, s)  -> Right ((), Env s)
 

@@ -13,7 +13,6 @@ import           Oscoin.Prelude
 import qualified Oscoin.Crypto.PubKey as Crypto
 
 import           Codec.Serialise (deserialiseOrFail, serialise)
-import           Control.Exception.Safe
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           System.Directory
@@ -36,7 +35,7 @@ class Monad m => MonadKeyStore m where
 
 
 getConfigPath :: MonadIO m => FilePath -> m FilePath
-getConfigPath path = io $ getXdgDirectory XdgConfig $ "oscoin" </> path
+getConfigPath path = liftIO $ getXdgDirectory XdgConfig $ "oscoin" </> path
 
 getSecretKeyPath :: IO FilePath
 getSecretKeyPath = getConfigPath "id.key"
@@ -47,7 +46,7 @@ getPublicKeyPath = getConfigPath "id.pub"
 ensureConfigDir :: MonadIO m => m ()
 ensureConfigDir = do
     configDir <- getConfigPath ""
-    io $ createDirectoryIfMissing True configDir
+    liftIO $ createDirectoryIfMissing True configDir
 
 instance MonadKeyStore IO where
     writeKeyPair (pk, sk) =  do

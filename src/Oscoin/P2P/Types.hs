@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Oscoin.P2P.Types
     ( NodeId
     , mkNodeId
@@ -20,16 +22,18 @@ import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
+import           Control.Monad.Fail (fail)
 import           Crypto.Hash (digestFromByteString)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Binary (Binary(..))
+import qualified Data.Binary as Binary
 import qualified Data.ByteArray as ByteArray
 import           Data.Hashable (Hashable(..))
 import           Data.IP (IP(..))
 import qualified Data.IP as IP
 import           Data.Yaml (FromJSON, ToJSON, parseJSON, withObject, (.:))
 import           Network.Socket (SockAddr(..))
-import           Text.Read (readMaybe)
+import           Text.Read (Read(..), readMaybe)
 
 newtype NodeId = NodeId { fromNodeId :: Hashed ECDSA.PublicKey }
     deriving (Eq, Ord, Show, Binary, FromJSON, ToJSON)
@@ -66,24 +70,25 @@ data NodeAddr = NodeAddr
 
 instance FromJSON NodeAddr where
     parseJSON = withObject "NodeAddr" $ \o -> do
-        addrIP   <- read <$> o .: "ip"
-        addrPort <-          o .: "port"
+        ip       <- o .: "ip"
+        addrIP   <- maybe (fail ("Invalid IP: " <> show ip)) pure $ readMaybe ip
+        addrPort <- o .: "port"
         pure NodeAddr{..}
 
 instance Read NodeAddr where
-    readsPrec _ input =
-        let ip = takeWhile (/= ':') input
-            port = tail $ dropWhile (/= ':') input
-         in [(NodeAddr (readStr ip) (readStr port), "")]
+    readsPrec _ input = maybeToList . map (,"") $ do
+        addrIP   <- readMaybe $ takeWhile (/= ':') input
+        addrPort <- readMaybe . drop 1 . dropWhile (/= ':') $ input
+        pure NodeAddr{..}
 
 instance Binary NodeAddr where
     put NodeAddr{addrIP, addrPort} = do
-        put $ show addrIP
-        put addrPort
+        Binary.put @String $ show addrIP
+        Binary.put addrPort
 
     get = do
-        addrIP   <- get >>= maybe (fail "Oscoin.P2P.Types.NodeAddr: Invalid IP") pure . readMaybe
-        addrPort <- get
+        addrIP   <- Binary.get >>= maybe (fail "Oscoin.P2P.Types.NodeAddr: Invalid IP") pure . readMaybe
+        addrPort <- Binary.get
         pure NodeAddr{..}
 
 toSockAddr :: NodeAddr -> SockAddr

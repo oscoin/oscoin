@@ -4,6 +4,5 @@ module Oscoin.Test.P2P.Gossip.Assert
 
 import           Oscoin.Prelude
 
-allEqual :: Eq a => [a] -> Bool
-allEqual []     = error $ "allEqual: vacuously true (empty list)"
-allEqual (x:xs) = all (== x) xs
+allEqual :: Eq a => NonEmpty a -> Bool
+allEqual (x :| xs) = all (== x) xs

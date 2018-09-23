@@ -39,11 +39,12 @@ import           Control.Concurrent (forkFinally)
 import           Control.Exception.Safe (Exception)
 import qualified Control.Exception.Safe as E
 import           Control.Monad (unless)
+import           Control.Monad.Fail (fail)
 import           Control.Monad.IO.Unlift
 import           Data.Conduit (runConduit, transPipe, (.|))
 import qualified Data.Conduit.Combinators as Conduit
-import           Data.Hashable
-import           Data.Void
+import           Data.Has (Has(..))
+import           Data.Hashable (Hashable(..), hashUsing)
 import           Formatting (mapf, (%))
 import           Lens.Micro (Lens', lens)
 import           Lens.Micro.Mtl (view)
@@ -203,8 +204,8 @@ listen
     -> Sock.PortNumber
     -> NetworkT r Void
 listen host port = do
-    addr <- io $ resolve host port
-    E.bracket (io $ open addr) (io . Sock.close) accept
+    addr <- liftIO $ resolve host port
+    E.bracket (liftIO $ open addr) (liftIO . Sock.close) accept
   where
     resolve h p = do
         let hints = Sock.defaultHints
@@ -244,9 +245,9 @@ send :: HasHandle  r e p
      -> NetworkT r ()
 send Peer{peerNodeId} msg = do
     Handle{hConns} <- view handle
-    conn <- io . atomically $ Conn.activeGet hConns peerNodeId
+    conn <- liftIO . atomically $ Conn.activeGet hConns peerNodeId
     case conn of
-        Just c  -> io $ connSendWire c msg
+        Just c  -> liftIO $ connSendWire c msg
         Nothing -> E.throwM Gone
 
 connect :: (Exception e, HasHandle r e p, Has Logger r) => Peer -> NetworkT r ()
@@ -283,7 +284,7 @@ connect peer@Peer{peerNodeId, peerAddr} = do
 disconnect :: HasHandle r e p => Peer -> NetworkT r ()
 disconnect Peer{peerNodeId} = do
     Handle{hConns} <- view handle
-    io $ do
+    liftIO $ do
         conn <- atomically $ Conn.activeDel hConns peerNodeId
         for_ conn connClose
 
@@ -295,9 +296,9 @@ recvAll conn = do
            , hCallbacks = Callbacks {connectionLost, recvPayload}
            } <- view handle
 
-    ok <- io . atomically $ Conn.activeAdd hConns conn
+    ok <- liftIO . atomically $ Conn.activeAdd hConns conn
     if ok then
-        E.onException (runConduit $ recv conn recvPayload) . io $ do
+        E.onException (runConduit $ recv conn recvPayload) . liftIO $ do
             atomically $ Conn.activeDel_ hConns conn
             connectionLost $ toPeer conn
     else
@@ -305,11 +306,11 @@ recvAll conn = do
   where
     goaway c msg = do
         Log.errM Log.stext msg
-        io $ connSendWire c (WireGoaway (pure msg))
+        liftIO $ connSendWire c (WireGoaway (pure msg))
 
     recv c recvPayload =
-        transPipe io (connRecvWire c) .| Conduit.mapM_ (\case
-            WirePayload p  -> io $ recvPayload (toPeer c) p
+        transPipe liftIO (connRecvWire c) .| Conduit.mapM_ (\case
+            WirePayload p  -> liftIO $ recvPayload (toPeer c) p
             WireGoaway msg -> Log.errM fgoaway "GOAWAY received: " msg
                            *> E.throwM ProtocolError)
 
@@ -321,4 +322,4 @@ forkUltimately_ :: IO () -> IO a -> IO ()
 forkUltimately_ fin work = void $ forkFinally work (const $ fin)
 
 canNotSupported :: HasCallStack => a
-canNotSupported = error "CAN addresses not supported"
+canNotSupported = panic "CAN addresses not supported"

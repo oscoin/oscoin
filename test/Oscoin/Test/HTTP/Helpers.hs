@@ -3,7 +3,7 @@
 -- TODO: Move this module to Network.Wai.Test.Extended
 module Oscoin.Test.HTTP.Helpers where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (First)
 
 import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
@@ -23,7 +23,7 @@ import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import qualified Oscoin.Storage.Block as Block
+import qualified Oscoin.Storage.Block as BlockStore
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
@@ -54,6 +54,8 @@ import qualified Network.Wai.Test as Wai
 import           Web.Spock (spockAsApp)
 
 import qualified Radicle
+-- FIXME(kim): should use unsafeToIdent, cf. radicle#105
+import qualified Radicle.Internal.Core as Radicle (toIdent)
 
 
 -- | Like "Assertion" but bound to a user session (cookies etc.)
@@ -76,7 +78,7 @@ instance (Monoid a, Semigroup a) => Monoid (Session a) where
     mappend = (<>)
 
 instance MonadRandom Session where
-    getRandomBytes = io . getRandomBytes
+    getRandomBytes = liftIO . getRandomBytes
 
 emptyNodeState :: NodeState
 emptyNodeState = NodeState { mempoolState = mempty, blockstoreState = emptyBlockstore }
@@ -101,7 +103,7 @@ makeNode NodeState{..} = do
              , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
              }
 
-    bsh <- Block.newIO bs
+    bsh <- BlockStore.newIO bs
     sth <- STree.new (BlockStore.chainState (comparing height) bs)
 
     Node.open cfg 42 mph sth bsh
@@ -122,7 +124,7 @@ dummyRadicleEnv kvs =
     Rad.Env $ env { Radicle.bindingsEnv = Radicle.Env bindings }
   where
     env      = Radicle.pureEnv
-    kvs'     = [(fromJust id, v) | (k, v) <- kvs, let id = Radicle.mkIdent k]
+    kvs'     = map (first Radicle.toIdent) kvs
     bindings = Map.fromList kvs' <> Radicle.fromEnv (Radicle.bindingsEnv env)
 
 -- | Turn a "Session" into an "Assertion".
@@ -134,21 +136,21 @@ runSession sess nh = do
 infix 1 @?=, @=?, @?
 
 (@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
-(@?) predi msg = io $ (Tasty.@?) predi msg
+(@?) predi msg = liftIO $ (Tasty.@?) predi msg
 
 (@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
-(@?=) have want = have == want @? prettyDiff have want
+(@?=) have want = have == want @? T.unpack (prettyDiff have want)
 
 (@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
 (@=?) = flip (@?=)
 
-prettyDiff :: Show a => a -> a -> String
-prettyDiff have want = unlines $ addSign <$> getDiff (pp have) (pp want)
-    where
-        pp = lines . nicify . show
-        addSign (Both _ s) = "        " ++ s
-        addSign (First  s) = "have -> " ++ s
-        addSign (Second s) = "want -> " ++ s
+prettyDiff :: Show a => a -> a -> Text
+prettyDiff have want = T.unlines $ addSign <$> getDiff (pp have) (pp want)
+  where
+    pp = T.lines . T.pack . nicify . show
+    addSign (Both _ s) = "        " <> s
+    addSign (First  s) = "have -> " <> s
+    addSign (Second s) = "want -> " <> s
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
@@ -162,8 +164,8 @@ assertResultOK
 assertResultOK expected response = do
     result <- assertResponseBody response
     case result of
-        API.Err err -> io $ Tasty.assertFailure $ "Received API error: " <> T.unpack err
-        API.Ok v -> expected @=? v
+        API.Err err -> liftIO $ Tasty.assertFailure $ "Received API error: " <> T.unpack err
+        API.Ok v    -> expected @=? v
 
 -- | Assert that the response can be deserialised to @API.Err actual@
 -- and @actual@ equals @expected@.
@@ -174,14 +176,14 @@ assertResultErr expected response = do
     result <- assertResponseBody @(API.Result ()) response
     case result of
         API.Err err -> expected @=? err
-        API.Ok _ -> io $ Tasty.assertFailure $ "Received unexpected API OK result"
+        API.Ok _ -> liftIO $ Tasty.assertFailure $ "Received unexpected API OK result"
 
 assertResponseBody
     :: (HasCallStack, FromJSON a, Serialise a)
     => Wai.SResponse -> Wai.Session a
 assertResponseBody response =
     case responseBody response of
-        Left err -> io $ Tasty.assertFailure $ show err
+        Left err -> liftIO $ Tasty.assertFailure $ show err
         Right a  -> pure $ a
 
 
@@ -196,7 +198,7 @@ request
 request method (encodeUtf8 -> path) headers mb
     | Nothing <- mb = req LBS.empty
     | Just b  <- mb = case supportedContentType headers of
-        Left err -> io $ Tasty.assertFailure $ show err
+        Left err -> liftIO $ Tasty.assertFailure $ show err
         Right ct -> req $ encode ct b
     where req = Wai.srequest . Wai.SRequest (mkRequest method path headers)
 
@@ -218,8 +220,8 @@ data Codec = Codec
 
 prettyCodec :: Codec -> Text
 prettyCodec Codec{..} =
-    "(Accept: " ++ tshow codecAccept ++
-    ", Content-Type: " ++ tshow codecContentType ++ ")"
+    "(Accept: " <> show codecAccept <>
+    ", Content-Type: " <> show codecContentType <> ")"
 
 newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
 newCodec accept ctype = Codec

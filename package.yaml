@@ -21,6 +21,7 @@ dependencies:
   - cryptonite
   - data-default
   - data-has
+  - deepseq
   - directory
   - dlist
   - fast-logger
@@ -43,6 +44,7 @@ dependencies:
   - network-multicast
   - optparse-applicative
   - prettyprinter
+  - protolude
   - radicle
   - random
   - random-shuffle

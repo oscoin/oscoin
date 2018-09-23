@@ -39,12 +39,12 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
+import           Control.Monad.Fail (fail)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Base64.Extended as Base64
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
-import           Web.HttpApiData
 
 data PublicKey = PublicKey ECDSA.PublicKey (Crypto.Hashed ECDSA.PublicKey)
     deriving (Show, Generic)
@@ -128,9 +128,6 @@ instance ToJSON Signature where
 
 instance FromJSON Signature where
     parseJSON = deserialiseParseJSON
-
-instance FromHttpApiData Signature where
-    parseQueryParam _txt = notImplemented
 
 instance Serialise Signature where
     encode (Signature ecdsa) =

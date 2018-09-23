@@ -17,9 +17,10 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
-import           Data.List (find)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Text.Show (Show(..))
 
 -- | Store of 'Block's and 'Blockchain's.
 data BlockStore tx s = BlockStore
@@ -72,7 +73,7 @@ fromOrphans (toList -> blks) gen =
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock h (Map.elems . bsChains -> chains) =
-    find ((== h) . blockHash) (foldMap blocks chains)
+    List.find ((== h) . blockHash) (foldMap blocks chains)
 
 orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
@@ -89,7 +90,7 @@ lookupTx h BlockStore{bsChains} =
     -- that the transaction we're looking for is near the tip.
     let txs  = [(hash tx, tx) | tx <- concatMap (toList . blockData) blks]
         blks = concatMap blocks (Map.elems bsChains)
-     in lookup h txs
+     in List.lookup h txs
 
 -- | The state @s@ of the best chain according to the supplied scoring function.
 chainState :: ScoringFunction tx s -> BlockStore tx s -> s

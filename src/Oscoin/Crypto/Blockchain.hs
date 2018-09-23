@@ -16,19 +16,22 @@ module Oscoin.Crypto.Blockchain
     , module Oscoin.Crypto.Blockchain.Block
     ) where
 
-import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash
 import           Oscoin.Prelude hiding (toList)
+
+import           Oscoin.Crypto.Blockchain.Block
+import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Control.Monad (guard)
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.Maybe (listToMaybe)
+import qualified Data.Text as T
 import           Data.Time.Clock (NominalDiffTime)
-import           GHC.Exts (IsList(toList))
-import           Text.Printf
+import           Formatting ((%))
+import qualified Formatting as F
+import qualified Formatting.Time as F
+import           GHC.Exts (IsList(..))
 
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
@@ -76,24 +79,24 @@ data TxLookup tx = TxLookup
     , txConfirmations :: Word64
     }
 
-lookupTx :: forall tx s. Hashable tx => Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
+lookupTx :: forall tx s. Crypto.Hashable tx => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
 lookupTx h (blocks -> chain) = listToMaybe $ do
     (i, block) <- zip [1..] chain
     tx <- toList $ blockData block
-    guard (hash tx == h)
+    guard (Crypto.hash tx == h)
     pure $ TxLookup tx (headerHash $ blockHeader block) i
 
-validateBlockchain :: Hashable s => Blockchain tx s -> Either Error (Blockchain tx s)
+validateBlockchain :: Crypto.Hashable s => Blockchain tx s -> Either Text (Blockchain tx s)
 validateBlockchain (Blockchain (blk :| [])) = do
     blk' <- validateBlock blk
     pure $ fromList [blk']
 validateBlockchain (Blockchain (blk :| blk' : blks))
     | blockPrevHash (blockHeader blk) /= headerHash (blockHeader blk') =
-        Left (Error "previous hash does not match")
+        Left "previous hash does not match"
     | t < t' =
-        Left (Error "block timestamp is in the past")
+        Left "block timestamp is in the past"
     | t - t' > 2 * hours =
-        Left (Error "block timestamp should be less than two hours in future")
+        Left "block timestamp should be less than two hours in future"
     | otherwise =
         validateBlock blk *> validateBlockchain (Blockchain (blk' :| blks))
   where
@@ -101,16 +104,18 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     t' = blockTimestamp (blockHeader blk')
     hours = 3600
 
-showChainDigest :: Blockchain tx s -> String
+showChainDigest :: Blockchain tx s -> Text
 showChainDigest =
-    unwords . intersperse "←"
-            . reverse
-            . toList
-            . map showBlockDigest
-            . fromBlockchain
+    T.unwords . intersperse "←"
+              . reverse
+              . toList
+              . map showBlockDigest
+              . fromBlockchain
 
-showBlockDigest :: Block tx s -> String
+showBlockDigest :: Block tx s -> Text
 showBlockDigest b@Block{blockHeader} =
-    printf "%s (%s)" (C8.unpack . shortHash . blockHash $ b) (show time)
+    F.sformat (F.string % "(" % F.seconds 0 % ")")
+              (C8.unpack . Crypto.shortHash . blockHash $ b)
+              time
   where
     time :: NominalDiffTime = toEnum (fromIntegral $ blockTimestamp blockHeader)

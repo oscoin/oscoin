@@ -12,10 +12,11 @@ module Oscoin.API.HTTP.Client
     , runHttpClientT
     ) where
 
+import           Oscoin.Prelude hiding (get)
+
 import           Oscoin.API.Client
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Hash (toHexText)
-import           Oscoin.Prelude
 
 import           Codec.Serialise
 import qualified Data.ByteString.Lazy as LBS
@@ -45,15 +46,16 @@ instance (Monad m, MonadIO m) => MonadClient (HttpClientT m) where
     getState key =
         get $ "/state/" <> key
 
+type Uri = String
 
 -- | @runHttpClientT uri@ throws an exception if @uri@ is not a valid URI.
-runHttpClientT :: (MonadIO m) => String -> HttpClientT m a -> m a
+runHttpClientT :: (MonadIO m) => Uri -> HttpClientT m a -> m a
 runHttpClientT uri (HttpClientT m) = do
-    client <- io $ createHttpClient uri
+    client <- liftIO $ createHttpClient uri
     runReaderT m client
 
 
-createHttpClient :: String -> IO HttpClient
+createHttpClient :: Uri -> IO HttpClient
 createHttpClient uri = do
     manager <- newManager defaultManagerSettings
     baseRequest <- parseRequest uri
@@ -66,7 +68,7 @@ makeRequest :: (MonadIO m, Serialise a) => (Request -> Request) -> HttpClientT m
 makeRequest buildRequest = HttpClientT $ do
     HttpClient{..} <- ask
     let req = buildRequest httpClientBaseRequest
-    deserialiseResponse <$> io (httpLbs req httpClientManager)
+    deserialiseResponse <$> liftIO (httpLbs req httpClientManager)
 
 get :: (MonadIO m, Serialise a) => Text -> HttpClientT m (Result a)
 get reqPath =

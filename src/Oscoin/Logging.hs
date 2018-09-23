@@ -84,14 +84,16 @@ module Oscoin.Logging
     , module Export
     ) where
 
-import           Oscoin.Prelude hiding (io)
+import           Oscoin.Prelude hiding (SrcLoc)
 
 import           Control.Concurrent (ThreadId)
 import           Control.Exception.Safe (Exception, MonadMask, SomeException)
 import qualified Control.Exception.Safe as Safe
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Writer.CPS (MonadWriter, tell)
 import qualified Data.Aeson.Encoding as Enc
 import           Data.DList (DList, singleton)
+import           Data.Has (Has(..))
 import           Data.Int (Int32)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as LTB
@@ -358,11 +360,12 @@ fexception = F.shown
 
 -- | Format a 'CallStack' as a tag @callstack=\"the\\ncall\\nstack\"@
 fcallstack :: Format t (CallStack -> t)
-fcallstack = F.mapf Stack.prettyCallStack (ftag "callstack" % fquoted)
+fcallstack =
+    F.mapf (LT.pack . Stack.prettyCallStack) (ftag "callstack" % fquoted)
 
 -- | Format a 'ThreadId' as a tag @thread=\"ThreadId 42\"@
 fthreadId :: Format t (ThreadId -> t)
-fthreadId = F.mapf show (ftag "thread" % fquoted)
+fthreadId = F.mapf (show :: ThreadId -> Text) (ftag "thread" % fquoted)
 
 -- | Format a 'ProcessID' as a tag @pid=42@
 fprocessId :: Format t (ProcessID -> t)
@@ -381,10 +384,6 @@ instance ToEncoding Text where
 
 instance ToEncoding LT.Text where
     toEncoding = Enc.lazyText
-    {-# INLINE toEncoding #-}
-
-instance ToEncoding String where
-    toEncoding = Enc.string
     {-# INLINE toEncoding #-}
 
 -- | Quote a textual type (one of: 'Text', 'LT.Text', or 'String') via @aeson@'s
@@ -437,6 +436,4 @@ fmsg sev loc ns fmt =
     now' f = F.now . F.bprint f
 
 getLoc :: HasCallStack => Maybe SrcLoc
-getLoc = case Stack.getCallStack Stack.callStack of
-    [] -> Nothing
-    xs -> Just . snd $ last xs
+getLoc = map snd . lastMay $ Stack.getCallStack Stack.callStack

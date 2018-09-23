@@ -1,6 +1,6 @@
 module Oscoin.API.HTTP.Internal where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (State, state)
 
 import           Oscoin.API.Types
 import           Oscoin.Environment
@@ -41,9 +41,6 @@ data State = State ()
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction s i = SpockAction (Node.Handle RadTx s i) () State
 
-instance MonadFail (ApiAction s i) where
-    fail = error "failing!"
-
 -- | The type of our api.
 type Api s i = SpockM (Node.Handle RadTx s i) () State
 
@@ -79,7 +76,7 @@ parseMediaType t = toEither $ do
     accepted <- parseAccept t
     lookup accepted $ NonEmpty.toList supportedMediaTypes
     where toEither = maybe (Left err) Right
-          err = "Content-Type '" ++ T.pack (show t) ++ "' not supported."
+          err = "Content-Type '" <> show t <> "' not supported."
 
 supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
 supportedMediaTypes = NonEmpty.fromList $ [(fromMediaType ct, ct) | ct <- [JSON, CBOR]]
@@ -112,10 +109,10 @@ param = Spock.param
 
 decodeListParam :: FromHttpApiData p => Text -> Either Text [p]
 decodeListParam =
-    traverse parseQueryParam . list . inner
+    traverse parseQueryParam . split . inner
   where
     inner = T.dropWhile (== '[') . T.dropWhileEnd (== ']')
-    list  = T.splitOn ","
+    split = T.splitOn ","
 
 -- | Runs an action by passing it a handle.
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a

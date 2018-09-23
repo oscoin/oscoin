@@ -1,6 +1,6 @@
 module Oscoin.Test.Consensus.Network where
 
-import           Oscoin.Prelude hiding (log)
+import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
@@ -21,10 +21,12 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.P2P (Msg(..))
 
 import qualified Data.Hashable as Hashable
+import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           System.Random
 import           System.Random.Shuffle (shuffle')
+import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
@@ -37,7 +39,7 @@ class MonadProtocol DummyTx (TestableRun a) => TestableNode a where
     testableLongestChain :: a -> [Hashed (BlockHeader ())]
     testableIncludedTxs  :: a -> [DummyTx]
     testableNodeAddr     :: a -> DummyNodeId
-    testableShow         :: a -> String
+    testableShow         :: a -> Text
 
 -- Nakamoto Node ---------------------------------------------------------------
 

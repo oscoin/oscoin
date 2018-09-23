@@ -27,7 +27,7 @@ module Oscoin.P2P
     , module Oscoin.P2P.Types
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (show)
 
 import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
@@ -47,11 +47,13 @@ import           Oscoin.P2P.Types
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
 import qualified Control.Concurrent.Async as Async
-import           Control.Exception.Safe
 import           Data.ByteString.Lazy (fromStrict, toChunks)
 import           Data.IP (IP)
+import           Formatting (formatToString)
+import qualified Formatting as F
 import qualified Network.Socket as Net
 import qualified Network.Socket.ByteString as NetBS
+import           Text.Show (Show(..))
 
 data Config = Config
     { cfgEnvironment :: Environment
@@ -73,7 +75,7 @@ data Msg tx =
     deriving (Eq, Generic)
 
 instance Show tx => Show (Msg tx) where
-    show (BlockMsg  blk) = "BlockMsg " ++ showBlockDigest blk
+    show (BlockMsg  blk) = formatToString (F.stext % " " % F.stext) "BlockMsg" (showBlockDigest blk)
     show (TxMsg     txs) = "TxMsg " ++ show txs
     show (ReqBlockMsg h) = "ReqBlockMsg " ++ show h
 
@@ -107,8 +109,8 @@ newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
 type NetworkIO tx = NetworkT tx IO
 
 instance (Serialise tx, Show tx, MonadIO m) => MonadNetwork tx (NetworkT tx m) where
-    sendM msgs = ask >>= io . (`send` msgs)
-    recvM      = ask >>= io . receive
+    sendM msgs = ask >>= liftIO . (`send` msgs)
+    recvM      = ask >>= liftIO . receive
 
 instance MonadClock m => MonadClock (NetworkT tx m)
 
@@ -120,7 +122,7 @@ runNetworkT h (NetworkT ma) = runReaderT ma h
 defaultConfig :: Config
 defaultConfig = Config
     { cfgEnvironment = Testing
-    , cfgBindIP      = read "127.0.0.1"
+    , cfgBindIP      = "127.0.0.1"
     , cfgBindPort    = 4269
     }
 

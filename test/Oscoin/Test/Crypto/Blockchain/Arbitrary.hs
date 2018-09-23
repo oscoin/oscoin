@@ -8,13 +8,14 @@ import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
 
 import qualified Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad (replicateM)
 import qualified Data.ByteString as BS
+import           Data.Default (Default(def))
 import           Data.List.NonEmpty (NonEmpty((:|)), (<|))
 import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
@@ -64,8 +65,11 @@ arbitraryGenesisWith
      => Evaluator s tx ()
      -> [tx]
      -> Gen (Block tx s)
-arbitraryGenesisWith eval txs =
-    map fromRight $ genesisBlock @[] @tx @s def eval <$> arbitrary <*> pure txs
+arbitraryGenesisWith eval txs = do
+    phil <- genesisBlock @[] @tx @s def eval <$> arbitrary <*> pure txs
+    case phil of
+        Right blk -> pure blk
+        Left  err -> panic $ "Failed to generate genesis: " <> show err
 
 arbitraryEmptyGenesis
     :: forall tx s. (Serialise tx, Default s) => Gen (Block tx s)

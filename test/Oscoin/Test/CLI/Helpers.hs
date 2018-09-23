@@ -31,9 +31,8 @@ import           Oscoin.Crypto.Hash (hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Node (Receipt(..))
 
-import           Control.Exception.Safe
-import           Control.Monad.State
 import           Crypto.Random.Types (MonadRandom(..))
+import qualified Data.List as List
 import qualified Options.Applicative as Options
 import qualified System.Directory as Dir
 import           System.Environment
@@ -80,7 +79,7 @@ data TestCommandState = TestCommandState
     }
 
 instance MonadRandom TestCommandRunner where
-    getRandomBytes = io . getRandomBytes
+    getRandomBytes = liftIO . getRandomBytes
 
 instance MonadKeyStore TestCommandRunner where
     writeKeyPair kp = modify (\s -> s { storedKeyPair = Just kp  })
@@ -88,7 +87,7 @@ instance MonadKeyStore TestCommandRunner where
         TestCommandState{..} <- get
         case storedKeyPair of
             Just kp -> pure $ kp
-            Nothing -> error "No keypair stored"
+            Nothing -> panic "No keypair stored"
 
 instance MonadClient TestCommandRunner where
     submitTransaction tx = do
@@ -125,7 +124,7 @@ withEnv newEnv run =
     restoreEnv envBefore = do
         forM_ envBefore $ uncurry setEnv
         forM_ newEnv $ \(key, _) ->
-            case lookup key envBefore of
+            case List.lookup key envBefore of
                 Just v  -> setEnv key v
                 Nothing -> unsetEnv key
 

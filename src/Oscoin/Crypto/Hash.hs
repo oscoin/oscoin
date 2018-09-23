@@ -5,7 +5,6 @@ module Oscoin.Crypto.Hash
     , Hashable(..)
     , toHashed
     , fromHashed
-    , digestFromByteString
     , hashBinary
     , hashSerial
     , HashAlgorithm
@@ -19,11 +18,13 @@ module Oscoin.Crypto.Hash
     ) where
 
 import           Oscoin.Prelude
+import qualified Prelude
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serial
 import qualified Codec.Serialise.Decoding as Serial
 import qualified Codec.Serialise.Encoding as Serial
+import           Control.Monad.Fail (fail)
 import           Crypto.Hash (Blake2b_256(..), Digest)
 import qualified Crypto.Hash as Crypto
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
@@ -33,13 +34,14 @@ import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary
 import qualified Data.Binary.Put as Binary
-import           Data.ByteArray (convert, zero)
+import           Data.ByteArray (ByteArrayAccess, convert)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Maybe (fromJust)
 import qualified Data.Text as T
+import           Text.Show (Show(..))
 import           Web.HttpApiData (FromHttpApiData(..))
 
 -- | Represents data that has been hashed with 'HashAlgorithm'.
@@ -62,7 +64,7 @@ instance Hashable a => Monoid (Hashed' HashAlgorithm a) where
     mempty = Hashed zeroHash
 
 instance Show (Hashed' algo a) where
-    show = show . fromHashed
+    showsPrec p = showsPrec p . fromHashed
 
 instance ToJSON (Hashed' HashAlgorithm a) where
     toJSON (Hashed digest) = toJSON digest
@@ -71,7 +73,7 @@ instance FromJSON (Hashed' HashAlgorithm a) where
     parseJSON = withText "Hashed' Blake2b_256 a" $ \t ->
         case fromHex (encodeUtf8 t) of
             Right bs -> pure $ Binary.decode (LBS.fromStrict bs)
-            Left err -> fail (T.unpack $ fromError err)
+            Left err -> fail (T.unpack $ fst err)
 
 instance Binary (Hashed' HashAlgorithm a) where
     put = Binary.put <$> fromHashed
@@ -83,7 +85,7 @@ instance Serialise (Hashed' HashAlgorithm a) where
 
 instance FromHttpApiData (Hashed' HashAlgorithm a) where
     parseQueryParam txt = case fromHex $ encodeUtf8 txt of
-        Left err -> Left $ fromError err
+        Left err -> Left $ fst err
         Right h  -> case Binary.decodeOrFail $ LBS.fromStrict h of
             Left  (_, _, err) -> Left $ T.pack err
             Right (_, _, bs)  -> Right $ bs
@@ -91,13 +93,6 @@ instance FromHttpApiData (Hashed' HashAlgorithm a) where
 -- | Wrap a 'Crypto.Digest' 'HashAlgorithm' into a 'Hashed'.
 toHashed :: Crypto.Digest HashAlgorithm -> Hashed a
 toHashed = Hashed
-
--- | Convert a 'ByteString' to a 'Digest'. Throws an error if the input is
--- not a valid digest.
-digestFromByteString :: HasCallStack => ByteString -> Crypto.Digest HashAlgorithm
-digestFromByteString bs =
-    fromMaybe (error "Oscoin.Crypto.Hash: Invalid input")
-              (Crypto.digestFromByteString bs)
 
 -- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
@@ -127,22 +122,22 @@ instance ToJSON (Digest HashAlgorithm) where
 instance FromJSON (Digest HashAlgorithm) where
     parseJSON = withText "Hash" $ \t ->
         case fromHex (encodeUtf8 t) of
-            Right bs -> pure $ Binary.decode (LBS.fromStrict bs)
-            Left err -> fail (T.unpack $ fromError err)
+            Right bs     -> pure $ Binary.decode (LBS.fromStrict bs)
+            Left (err,_) -> fail $ T.unpack err
 
 -- | The maximum hash value.
 maxHash :: forall a. Crypto.HashAlgorithm a => Digest a
 maxHash = fromJust $
     Crypto.digestFromByteString (ByteArray.replicate n maxBound :: ByteString)
   where
-    n = Crypto.hashDigestSize (undefined :: a)
+    n = Crypto.hashDigestSize (Prelude.undefined :: a)
 
 -- | The zero hash. Also the minimum hash value.
 zeroHash :: forall a. Crypto.HashAlgorithm a => Digest a
 zeroHash = fromJust $
-    Crypto.digestFromByteString (zero n :: ByteString)
+    Crypto.digestFromByteString (ByteArray.zero n :: ByteString)
   where
-    n = Crypto.hashDigestSize (undefined :: a)
+    n = Crypto.hashDigestSize (Prelude.undefined :: a)
 
 toHex :: ByteArrayAccess ba => ba -> ByteString
 toHex =
@@ -152,11 +147,11 @@ toHexText :: ByteArrayAccess ba => ba -> Text
 toHexText = decodeUtf8 . toHex
 
 -- TODO: Make result type polymorphic: `Either Error ba`.
-fromHex :: ByteString -> Either Error ByteString
+fromHex :: ByteString -> Either (Text, ByteString) ByteString
 fromHex bs =
     case Base16.decode bs of
         (valid, "")  -> Right valid
-        (_, invalid) -> Left $ Error ("Can't parse " <> tshow invalid)
+        (_, invalid) -> Left ("Can't parse", invalid)
 
 shortHash :: Hashed a -> ByteString
 shortHash =

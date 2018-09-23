@@ -167,3 +167,16 @@ filterNetwork tn@TestNetwork{..} =
     tn { tnMsgs = Set.filter f tnMsgs }
   where
     f msg = all (`Map.member` tnNodes) (scheduledReceivers msg)
+
+--------------------------------------------------------------------------------
+
+toSeconds :: Tick -> Int
+toSeconds = round @Float . realToFrac
+
+-- | Splits a list into length-@n@ pieces. If @n@ is @<= 0@, returns an infinite
+-- list of empty lists.
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n l
+  | n > 0     = take n l : chunksOf n (drop n l)
+  | otherwise = repeat []

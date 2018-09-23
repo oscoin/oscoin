@@ -31,8 +31,9 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Radicle as Rad
 
 import           Data.Function (on)
-import           Data.List (isPrefixOf, sort)
+import           Data.List (foldr1, isPrefixOf, sort, unlines)
 import qualified Data.Map as Map
+import qualified Data.Text as T
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -82,13 +83,14 @@ tests =
 
             case mgen of
                 Right gen ->
-                    let i = fromJust $ Rad.mkIdent "answer"
-                        v = Map.lookup i
-                          . Rad.fromEnv . Rad.bindingsEnv
-                          . fromEnv . blockState . blockHeader
-                          $ gen
+                    let ident  = Rad.mkIdent "answer"
+                        look i = Map.lookup i
+                               . Rad.fromEnv . Rad.bindingsEnv
+                               . fromEnv . blockState . blockHeader
+                               $ gen
+                        value  = ident >>= look
                      in
-                        v @?= Just (Rad.Number (42 + 42))
+                        value @?= Just (Rad.Number (42 + 42))
                 Left errs ->
                     assertFailure $ "Genesis block failed to evaluate:\n" ++ unlines (map show errs)
         ]
@@ -124,7 +126,7 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
 
                 -- Nb.: All nodes have to know all txs, thus the coverage
                 -- condition only needs to check one node.
-                replicatedTxs   = testableIncludedTxs . head . toList $ tnNodes tn'
+                replicatedTxs   = fromMaybe mempty . map testableIncludedTxs . head . toList $ tnNodes tn'
                 nodeCount       = length (tnNodes tn')
                 -- Nb.: The right metric for chain length here is not obvious, but
                 -- it's unlikely that longest/shortest chain works, and also unlikely
@@ -183,14 +185,14 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated =
   where
     prettyLog    = unlines $  " log:" : reverse ["  " ++ show l | l <- reverse $ sort tnLog]
     prettyNodes  = unlines $ [" nodes:", "  " ++ show (length tnNodes)]
-    prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ testableShow n | n <- toList tnNodes]]
+    prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ T.unpack (testableShow n) | n <- toList tnNodes]]
     prettyStats  = unlines $ [" msgs sent: "      ++ show tnMsgCount,
                               " txs replicated: " ++ show (length txsReplicated),
-                              " common prefix: "  ++ show (length $ commonPrefix $ nodePrefixes tn) ]
+                              " common prefix: "  ++ show (length $ longestCommonPrefix $ nodePrefixes tn) ]
 
 nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
 nodePrefixesMatch tn =
-    (>= length (shortestChain tn) - 3) . length . commonPrefix $ nodePrefixes tn
+    (>= length (shortestChain tn) - 3) . length . longestCommonPrefix $ nodePrefixes tn
 
 shortestChain :: TestableNode a => TestNetwork a -> [BlockHash]
 shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
@@ -203,7 +205,7 @@ majorityNodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
 majorityNodePrefixesMatch tn@TestNetwork{..} =
     length ns > length tnNodes - length ns
   where
-    pre = commonPrefix $ nodePrefixes tn
+    pre = longestCommonPrefix $ nodePrefixes tn
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
@@ -219,15 +221,11 @@ nodePrefixes TestNetwork{..} =
     map (reverse . testableLongestChain) (toList tnNodes)
 
 -- | The longest common prefix of a list of lists.
-commonPrefix :: Eq a => [[a]] -> [a]
-commonPrefix [] = []
-commonPrefix xs = go [] xs
-  where
-    go :: Eq a => [a] -> [[a]] -> [a]
-    go common ass
-        | [] `elem` ass = common
-        | equal heads   = head heads : go common tails
-        | otherwise     = common
-      where
-        heads   = map head ass
-        tails   = map tail ass
+longestCommonPrefix :: Eq a => [[a]] -> [a]
+longestCommonPrefix [] = []
+longestCommonPrefix xs = foldr1 commonPrefix xs
+
+commonPrefix :: Eq a => [a] -> [a] -> [a]
+commonPrefix (x:xs) (y:ys)
+    | x == y = x : commonPrefix xs ys
+commonPrefix _ _ = []

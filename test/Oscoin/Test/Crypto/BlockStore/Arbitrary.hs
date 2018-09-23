@@ -8,6 +8,7 @@ import           Oscoin.Consensus.BlockStore
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 
 import           Codec.Serialise (Serialise)
+import           Data.Default (Default)
 
 import           Test.QuickCheck
 

@@ -5,7 +5,7 @@ module Oscoin.API.HTTP
     , withAPI
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Types (RadTx)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad

@@ -6,7 +6,7 @@ module Oscoin.Storage.Block
     , for
     ) where
 
-import           Oscoin.Prelude hiding (for)
+import           Oscoin.Prelude hiding (for, put)
 
 import           Oscoin.Consensus.BlockStore (BlockStore)
 import qualified Oscoin.Consensus.BlockStore as BlockStore

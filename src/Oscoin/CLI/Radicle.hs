@@ -5,7 +5,7 @@ module Oscoin.CLI.Radicle
     , Rad.Value(..)
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (list)
 
 import           Data.Scientific (scientific)
 import qualified Data.Set as Set

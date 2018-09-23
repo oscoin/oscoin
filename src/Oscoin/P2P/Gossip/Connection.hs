@@ -154,7 +154,7 @@ conduitDecodeCBOR = sink =<< newDecoder
 
     newDecoder = lifted CBOR.deserialiseIncremental
 
-    lifted = lift . io . stToIO
+    lifted = lift . liftIO . stToIO
 
 sourceSocketLBS
     :: (MonadIO m, MonadThrow m)
@@ -162,7 +162,7 @@ sourceSocketLBS
     -> ConduitT i LBS.ByteString m ()
 sourceSocketLBS sock = loop
   where
-    loop = lift (io $ recv sock 4096) >>= \case
+    loop = lift (liftIO $ recv sock 4096) >>= \case
         Left  RecvConnReset -> yield mempty
         Left  e             -> throwM e
         Right bs            -> yield bs *> loop
@@ -188,7 +188,7 @@ recvIncr _     (CBOR.Done l _ a) = pure $ Right (a, LBS.fromStrict l)
 recvIncr _     (CBOR.Fail l _ e) = pure $ Left  (RecvGarbage e, LBS.fromStrict l)
 recvIncr recv' part              = recv' >>= \case
     Left  e  -> pure $ Left (e, mempty)
-    Right bs -> io (stToIO $ feed bs part) >>= recvIncr (pure (Right mempty))
+    Right bs -> liftIO (stToIO $ feed bs part) >>= recvIncr (pure (Right mempty))
 
 feed :: LBS.ByteString -> CBOR.IDecode s a -> ST s (CBOR.IDecode s a)
 feed lbs (CBOR.Done l o a) = pure $ CBOR.Done (l <> LBS.toStrict lbs) o a

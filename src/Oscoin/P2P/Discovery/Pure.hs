@@ -11,6 +11,7 @@ import           Oscoin.P2P.Discovery.Internal (Disco(..))
 import           Oscoin.P2P.Types (EndpointMap, Endpoints, NodeId)
 
 import           Control.Monad.State (MonadState, gets, modify')
+import           Data.Has (Has(..))
 import qualified Data.Map as Map
 import           Lens.Micro (over)
 

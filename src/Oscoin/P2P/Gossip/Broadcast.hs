@@ -203,6 +203,9 @@ newSchedule interval schedSend = do
                 traverse_ (schedSend rcpt) ms
 
     pure Schedule{..}
+  where
+    toSeconds :: NominalDiffTime -> Int
+    toSeconds = round @Double . realToFrac
 
 destroySchedule :: Schedule n -> IO ()
 destroySchedule Schedule{schedDeferred, schedLazyThread} = do
@@ -246,10 +249,10 @@ schedule sched@Schedule{..} = \case
              in STMMap.focus (Focus.alterM update) id schedDeferred
 
 eagerPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
-eagerPushPeers = view hEagerPushPeersL >>= io . readTVarIO
+eagerPushPeers = view hEagerPushPeersL >>= liftIO . readTVarIO
 
 lazyPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
-lazyPushPeers = view hLazyPushPeersL >>= io . readTVarIO
+lazyPushPeers = view hLazyPushPeersL >>= liftIO . readTVarIO
 
 resetPeers
     :: ( HasHandle r n
@@ -263,7 +266,7 @@ resetPeers peers = do
            , hEagerPushPeers = eagers
            , hLazyPushPeers  = lazies
            } <- view handle
-    io . atomically $ do
+    liftIO . atomically $ do
         modifyTVar' eagers $ const (Set.delete self peers)
         modifyTVar' lazies $ const mempty
 
@@ -300,11 +303,11 @@ receive (GossipM g) = do
     let sender = view (gMetaL . metaSenderL)    g
     let mid    = view (gMetaL . metaMessageIdL) g
 
-    r <- io $ applyMessage mid (gPayload g)
+    r <- liftIO $ applyMessage mid (gPayload g)
     case r of
         Applied -> do
             -- Cancel any timers for this message.
-            io . atomically . modifyTVar' missing $ Map.delete mid
+            liftIO . atomically . modifyTVar' missing $ Map.delete mid
             out <-
                 map (Cancel mid:) $
                     -- Disseminate gossip.
@@ -336,7 +339,7 @@ receive (GossipM g) = do
 
         Stale -> do
             moveToLazy sender
-            io . atomically . modifyTVar' missing $ Map.delete mid
+            liftIO . atomically . modifyTVar' missing $ Map.delete mid
             pure $ [Eager sender $ Prune self]
 
         ApplyError ->
@@ -348,11 +351,11 @@ receive (IHaveM ihave@(IHave Meta{metaMessageId = mid})) = do
            , hCallbacks = Callbacks{lookupMessage}
            } <- view handle
 
-    msg <- io $ lookupMessage mid
+    msg <- liftIO $ lookupMessage mid
     case msg of
         Just _  -> pure mempty
         Nothing -> do
-            io . atomically . modifyTVar' missing $ Map.insert mid ihave
+            liftIO . atomically . modifyTVar' missing $ Map.insert mid ihave
             scheduleGraft mid
 
 receive (Prune sender) =
@@ -363,7 +366,7 @@ receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
 
     moveToEager sender
 
-    payload <- io $ lookupMessage mid
+    payload <- liftIO $ lookupMessage mid
     pure $ case payload of
         Nothing -> mempty
         Just  p ->
@@ -386,7 +389,7 @@ neighborUp
     -> PlumtreeT n r ()
 neighborUp n = do
     eagers <- view hEagerPushPeersL
-    io . atomically . modifyTVar' eagers $ Set.insert n
+    liftIO . atomically . modifyTVar' eagers $ Set.insert n
 
 -- | Peer sampling service callback when a peer leaves the overlay.
 --
@@ -405,7 +408,7 @@ neighborDown n = do
            , hMissing        = missing
            } <- view handle
 
-    io . atomically $ do
+    liftIO . atomically $ do
         modifyTVar' eagers  $ Set.delete n
         modifyTVar' lazies  $ Set.delete n
         modifyTVar' missing $ Map.filter (\(IHave meta) -> metaSender meta /= n)
@@ -452,23 +455,23 @@ push g = do
 
     eagerPush Handle{hEagerPushPeers = eagers} =
         let out to = Eager to (GossipM g)
-         in map out . Set.toList . Set.delete sender <$> io (readTVarIO eagers)
+         in map out . Set.toList . Set.delete sender <$> liftIO (readTVarIO eagers)
 
     lazyPush Handle{hSelf = self, hLazyPushPeers = lazies} =
         let out to = Lazy to $ IHave (gMeta g) { metaSender = self }
-         in map out . Set.toList . Set.delete sender <$> io (readTVarIO lazies)
+         in map out . Set.toList . Set.delete sender <$> liftIO (readTVarIO lazies)
 
 -- Helpers ---------------------------------------------------------------------
 
 moveToLazy :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
 moveToLazy peer = do
     hdl <- view handle
-    io $ updatePeers hdl Set.delete Set.insert peer
+    liftIO $ updatePeers hdl Set.delete Set.insert peer
 
 moveToEager :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
 moveToEager peer = do
     hdl <- view handle
-    io $ updatePeers hdl Set.insert Set.delete peer
+    liftIO $ updatePeers hdl Set.insert Set.delete peer
 
 updatePeers
     :: Eq n

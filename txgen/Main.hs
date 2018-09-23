@@ -13,13 +13,12 @@ import qualified Oscoin.P2P.Discovery.Multicast as MCast
 import           Control.Concurrent (threadDelay)
 import           Data.List.NonEmpty (nonEmpty)
 import qualified Data.Map as Map
-import           System.Exit (die)
 
 import           Options.Generic
 
 data Args = Args
     { tx         :: Text
-    , listenIp   :: Text
+    , listenIp   :: String
     , listenPort :: Word16
     } deriving (Generic, Show)
 
@@ -31,7 +30,7 @@ main = do
     print (args :: Args)
 
     nid <- mkNodeId . fst <$> generateKeyPair -- TODO: read from disk
-    let !ip = read listenIp
+    ip  <- maybe (die "Invalid IP address") pure $ readMaybe listenIp
 
     withStdLogger Log.defaultConfig                   $ \lgr   ->
         withDisco (mkDisco lgr nid ip listenPort)     $ \disco ->

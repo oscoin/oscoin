@@ -32,9 +32,9 @@ import qualified Control.Exception.Safe as E
 import           Control.Monad (unless, (>=>))
 import           Control.Monad.Fix (mfix)
 import           Control.Monad.IO.Unlift (withRunInIO)
+import           Data.Has (Has(..))
 import           Data.Hashable (Hashable)
 import           Data.Time.Clock (NominalDiffTime)
-import           Data.Void
 import           Lens.Micro (lens)
 import           Network.Socket (HostName, PortNumber)
 import qualified System.Random.SplitMix as SplitMix
@@ -144,7 +144,7 @@ listen host port contacts = withRunInIO $ \runIO ->
 broadcast :: Handle e Peer -> Plum.MessageId -> ByteString -> IO ()
 broadcast handle mid msg = runReaderT (Plum.broadcast mid msg >>= traverse_ send') handle
   where
-    send' out = asks hSchedule >>= io . flip Plum.schedule out
+    send' out = asks hSchedule >>= liftIO . flip Plum.schedule out
 
 --------------------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ dispatch sender pm = do
     case pm of
         ProtocolBroadcast msg -> do
             sched <- asks hSchedule
-            Plum.receive msg >>= traverse_ (io . Plum.schedule sched)
+            Plum.receive msg >>= traverse_ (liftIO . Plum.schedule sched)
         ProtocolMembership rpc ->
             Hypa.receive rpc >>= traverse_ sendRPC
   where

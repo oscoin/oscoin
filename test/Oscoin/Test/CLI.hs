@@ -28,9 +28,11 @@ tests =
 testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
     (result, TestCommandState{..}) <- runCLI ["revision", "create"]
-    let submittedMsg = txMessageContent $ head submittedTransactions
+    let submittedMsg = txMessageContent <$> head submittedTransactions
     let expectedMessage = Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
-    assertEqual "Expected message to be an empty revision" expectedMessage submittedMsg
+    assertEqual "Expected message to be an empty revision"
+                (Just expectedMessage)
+                submittedMsg
     assertResultValue result
 
 testGenerateKeyPair :: TestTree

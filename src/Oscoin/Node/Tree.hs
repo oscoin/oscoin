@@ -24,7 +24,7 @@ data Handle s = Handle
 
 new :: MonadIO m => s -> m (Handle s)
 new s = do
-    ref <- io $ newTVarIO s
+    ref <- liftIO $ newTVarIO s
     pure Handle
         { hTree = ref
         , hConn = ()
@@ -35,7 +35,7 @@ close _ = pass
 
 getPath :: (Query s, MonadIO m) => Handle s -> Path -> m (Maybe (QueryVal s))
 getPath Handle{hTree} k =
-    query k <$> io (readTVarIO hTree)
+    query k <$> liftIO (readTVarIO hTree)
 
 updateTree :: Handle s -> s -> STM ()
 updateTree = writeTVar . hTree

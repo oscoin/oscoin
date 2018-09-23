@@ -17,9 +17,9 @@ module Oscoin.Node.Mempool
     , snapshot
     ) where
 
-import           Oscoin.Prelude hiding (lookup, toList)
+import           Oscoin.Prelude hiding (toList)
 
-import           Oscoin.Crypto.Hash (Hashable, Hashed)
+import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 import           Oscoin.Node.Mempool.Internal (Mempool)
 import qualified Oscoin.Node.Mempool.Internal as Internal
@@ -48,36 +48,36 @@ newIO = do
     hBroadcast <- STM.newBroadcastTChanIO
     pure Handle{..}
 
-insert :: Hashable tx => Handle tx -> tx -> STM ()
+insert :: Crypto.Hashable tx => Handle tx -> tx -> STM ()
 insert Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.insert tx)
     STM.writeTChan hBroadcast (Insert [tx])
 
-insertMany :: (Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+insertMany :: (Crypto.Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
 insertMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.insertMany txs)
     STM.writeTChan hBroadcast (Insert (Fold.toList txs))
 
-remove :: Hashable tx => Handle tx -> tx -> STM ()
+remove :: Crypto.Hashable tx => Handle tx -> tx -> STM ()
 remove Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.removeTxs [tx])
     STM.writeTChan hBroadcast (Remove [tx])
 
-removeMany :: (Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+removeMany :: (Crypto.Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
 removeMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.removeTxs txs)
     STM.writeTChan hBroadcast (Remove (Fold.toList txs))
 
-member :: Handle tx -> Hashed tx -> STM Bool
+member :: Handle tx -> Crypto.Hashed tx -> STM Bool
 member hdl tx = Internal.member tx <$> snapshot hdl
 
-lookup :: Handle tx -> Hashed tx -> STM (Maybe tx)
+lookup :: Handle tx -> Crypto.Hashed tx -> STM (Maybe tx)
 lookup hdl tx = Internal.lookup tx <$> snapshot hdl
 
 size :: Handle tx -> STM Int
 size hdl = Internal.size <$> snapshot hdl
 
-toList :: Handle tx -> STM [(Hashed tx, tx)]
+toList :: Handle tx -> STM [(Crypto.Hashed tx, tx)]
 toList hdl = Internal.toList <$> snapshot hdl
 
 subscribe :: Handle tx -> STM (TChan (Event tx))

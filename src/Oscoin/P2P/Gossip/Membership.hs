@@ -50,7 +50,6 @@ import           Control.Concurrent.STM.TVar
 import           Control.Exception.Safe
                  (SomeException, handleAny, throwM, tryAny)
 import           Control.Monad (when)
-import           Data.Bool (bool)
 import           Data.Foldable (foldlM)
 import           Data.Hashable (Hashable)
 import           Data.HashSet (HashSet)
@@ -226,16 +225,16 @@ getPeers = activeView
 getPeers' :: HasHandle r n => HyParView n r (Peers n)
 getPeers' = do
     Handle{hActive, hPassive} <- view handle
-    io . atomically $
+    liftIO . atomically $
         liftA2 Peers (readTVar hActive) (readTVar hPassive)
 
 -- | Obtain a snapshot of the active view.
 activeView :: HasHandle r n => HyParView n r (HashSet n)
-activeView = view hActiveL >>= io . readTVarIO
+activeView = view hActiveL >>= liftIO . readTVarIO
 
 -- | Obtain a snapshot of the passive view.
 passiveView :: HasHandle r n => HyParView n r (HashSet n)
-passiveView = view hPassiveL >>= io . readTVarIO
+passiveView = view hPassiveL >>= liftIO . readTVarIO
 
 -- | Handle an incoming 'RPC' and return a (possibly empty) list of outgoing
 -- 'RPC's.
@@ -289,7 +288,7 @@ receive RPC{rpcSender, rpcPayload} = case rpcPayload of
                 Nothing -> maybeToList <$> shuffle
 
     Neighbor prio -> do
-        full <- view handle >>= io . atomically . isActiveAtCapacity
+        full <- view handle >>= liftIO . atomically . isActiveAtCapacity
         if prio == High || not full then
             addToActive' rpcSender
         else
@@ -328,7 +327,7 @@ receive RPC{rpcSender, rpcPayload} = case rpcPayload of
         traverse (`send` msg) =<< randomActiveNodeNot (Set.fromList (rpcSender:omit))
 
     broadcast msg = do
-        actv <- view hActiveL >>= io . readTVarIO
+        actv <- view hActiveL >>= liftIO . readTVarIO
         traverse (`send` msg) . Set.toList $ Set.delete rpcSender actv
 
 -- | Eject a node suspected to be faulty from the active view.
@@ -425,7 +424,7 @@ shuffle = do
 randomActiveNode :: HasHandle r n => HyParView n r (Maybe n)
 randomActiveNode = do
     Handle{hPRNG, hActive} <- view handle
-    io $ do
+    liftIO $ do
         actv <- readTVarIO hActive
         prng <- atomicModifyIORef' hPRNG split
         pure . fst $ randomFromSet actv prng
@@ -440,7 +439,7 @@ randomActiveNodeNot
     -> HyParView n r (Maybe n)
 randomActiveNodeNot ns = do
     Handle{hPRNG, hActive} <- view handle
-    io $ do
+    liftIO $ do
         actv <- readTVarIO hActive
         prng <- atomicModifyIORef' hPRNG split
         pure . fst $ randomFromSet (Set.difference actv ns) prng
@@ -461,7 +460,7 @@ randomActiveNodesNot
     -> HyParView n r (HashSet n)
 randomActiveNodesNot ns num = do
     Handle{hConfig, hActive} <- view handle
-    actv <- io $ readTVarIO hActive
+    actv <- liftIO $ readTVarIO hActive
     let min' = min (Set.size actv - Set.size ns) . min num . fromIntegral . cfgMaxActive $ hConfig
     loop min' Set.empty
   where
@@ -482,7 +481,7 @@ randomActiveNodesNot ns num = do
 randomPassiveNode :: HasHandle r n => HyParView n r (Maybe n)
 randomPassiveNode = do
     Handle{hPRNG, hPassive} <- view handle
-    io $ do
+    liftIO $ do
         pasv <- readTVarIO hPassive
         prng <- atomicModifyIORef' hPRNG split
         pure . fst $ randomFromSet pasv prng
@@ -497,7 +496,7 @@ randomPassiveNodeNot
     -> HyParView n r (Maybe n)
 randomPassiveNodeNot n = do
     Handle{hPRNG, hPassive} <- view handle
-    io $ do
+    liftIO $ do
         pasv <- readTVarIO hPassive
         prng <- atomicModifyIORef' hPRNG split
         pure . fst $ randomFromSet (Set.delete n pasv) prng
@@ -517,8 +516,8 @@ randomPassiveNodes
     -> HyParView n r (HashSet n)
 randomPassiveNodes num = do
     Handle{hConfig, hPRNG, hPassive} <- view handle
-    prng <- io $ atomicModifyIORef' hPRNG split
-    io . atomically $ do
+    prng <- liftIO $ atomicModifyIORef' hPRNG split
+    liftIO . atomically $ do
         pasv <- readTVar hPassive
         let min' = min (Set.size pasv)
                  . min num
@@ -557,7 +556,7 @@ addToActive n = view handle >>= go
         case conn of
             Left e   -> throwM e
             Right () -> do
-                removed <- io $ do
+                removed <- liftIO $ do
                     gen <- atomicModifyIORef' hPRNG split
                     atomically $ do
                         (removed,_) <- evictActive hdl gen
@@ -575,7 +574,7 @@ addToActive n = view handle >>= go
 addToPassive :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r ()
 addToPassive n = do
     hdl@Handle{hPRNG} <- view handle
-    io $ do
+    liftIO $ do
         gen <- atomicModifyIORef' hPRNG split
         atomically . void $ addToPassive' hdl gen n
 
@@ -587,7 +586,7 @@ addToPassive n = do
 addAllToPassive :: (Eq n, Hashable n, HasHandle r n) => HashSet n -> HyParView n r ()
 addAllToPassive ns = do
     hdl@Handle{hSelf = self, hPRNG, hActive, hPassive} <- view handle
-    io $ do
+    liftIO $ do
         gen <- atomicModifyIORef' hPRNG split
         atomically $ do
             actv <- readTVar hActive
@@ -597,12 +596,12 @@ addAllToPassive ns = do
 
 removeFromActive :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r (Maybe n)
 removeFromActive n = do
-    prev <- view handle >>= io . atomically . flip removeFromActive' n
+    prev <- view handle >>= liftIO . atomically . flip removeFromActive' n
     traverse_ notifyDown prev
     pure prev
 
 removeFromPassive :: (Eq n, Hashable n , HasHandle r n) => n -> HyParView n r ()
-removeFromPassive n = view handle >>= io . atomically . flip removeFromPassive' n
+removeFromPassive n = view handle >>= liftIO . atomically . flip removeFromPassive' n
 
 -- | Attempt to promote a random passive node to the active view.
 --
@@ -627,22 +626,22 @@ promoteRandom = randomPassiveNode >>= maybe (pure []) promote
 notifyUp :: HasHandle r n => n -> HyParView n r ()
 notifyUp n = do
     up <- neighborUp . hCallbacks <$> view handle
-    io $ up n
+    liftIO $ up n
 
 notifyDown :: HasHandle r n => n -> HyParView n r ()
 notifyDown n = do
     down <- neighborDown . hCallbacks <$> view handle
-    io $ down n
+    liftIO $ down n
 
 openConnection :: HasHandle r n => n -> HyParView n r ()
 openConnection to = do
     open <- connOpen . hCallbacks <$> view handle
-    io $ open to
+    liftIO $ open to
 
 closeConnection :: HasHandle r n => n -> HyParView n r ()
 closeConnection to = do
     close <- connClose . hCallbacks <$> view handle
-    handleAny ignoreException $ io (close to)
+    handleAny ignoreException $ liftIO (close to)
 
 --------------------------------------------------------------------------------
 
@@ -651,7 +650,7 @@ addToActive' n =
     addToActive n >>= map maybeToList . traverse (`send` Disconnect)
 
 numActive :: HasHandle r n => HyParView n r Int
-numActive = view hActiveL >>= map Set.size . io . readTVarIO
+numActive = view hActiveL >>= map Set.size . liftIO . readTVarIO
 
 send :: HasHandle r n => n -> Message n -> HyParView n r (RPC n)
 send to payload = do
@@ -665,7 +664,7 @@ send to payload = do
 neighborPriority :: HasHandle r n => HyParView n r Priority
 neighborPriority = do
     actv <- view hActiveL
-    bool Low High . Set.null <$> io (readTVarIO actv)
+    bool Low High . Set.null <$> liftIO (readTVarIO actv)
 
 --------------------------------------------------------------------------------
 

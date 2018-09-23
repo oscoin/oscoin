@@ -32,6 +32,7 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 
 import qualified Control.Concurrent.Async as Async
+import           Data.Default (def)
 import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
@@ -40,7 +41,7 @@ import           System.Random (newStdGen)
 import           Options.Generic
 
 data Args = Args
-    { listen     :: Text
+    { listen     :: String
     , seed       :: [FilePath]
     , prelude    :: FilePath
     , difficulty :: Maybe Difficulty
@@ -51,7 +52,9 @@ instance ParseRecord Args
 main :: IO ()
 main = do
     Args{..} <- getRecord "oscoin"
-    let P2P.NodeAddr{..} = read listen
+
+    P2P.NodeAddr{..} <- maybe (die "Invalid NodeAddr") pure $ readMaybe listen
+
     let dif = maybe easyDifficulty identity difficulty
 
     kp  <- generateKeyPair
@@ -91,13 +94,14 @@ main = do
     genesisFromPath path kp = do
         result <- Rad.parseValue (T.pack path) <$> readFile path
         case result of
-            Left err -> error $
-                "Main.hs: error reading prelude: " ++ T.unpack err
+            Left err -> die $
+                "Main.hs: error reading prelude: " <> err
             Right val -> do
                 tx <- createTx kp val
                 case genesisBlock def nodeEval 0 [tx] of
-                    Left errs ->
-                        error $ "Main.hs: error evaluating prelude:\n" ++ unlines (map show errs)
+                    Left errs -> die $
+                           "Main.hs: error evaluating prelude:\n"
+                        <> T.unlines (map show errs)
                     Right blk ->
                         pure blk
 

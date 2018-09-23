@@ -18,7 +18,7 @@ module Oscoin.Test.P2P.Gossip.IO
     , connect
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (bracket, try)
 
 import           Oscoin.P2P.Gossip.Connection
 

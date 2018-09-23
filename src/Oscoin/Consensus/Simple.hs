@@ -33,7 +33,6 @@ import qualified Oscoin.P2P as P2P
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.State
-import           Data.Bool (bool)
 import           Data.Functor (($>))
 import           Data.Maybe (maybeToList)
 import qualified Data.Set as Set

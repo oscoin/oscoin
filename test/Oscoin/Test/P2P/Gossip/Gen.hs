@@ -47,21 +47,19 @@ connectedContacts bounds = do
     -- Split network into randomly-sized chunks.
     clusters :: ([NodeId], [Int]) -> [[NodeId]]
     clusters = unfoldr $ \case
-        ([], _)  -> Nothing
-        (ns, ss) -> let (h, t) = splitAt (head ss) ns
-                     in Just (h, (t, tail ss))
+        ([], _)    -> Nothing
+        (ns, [])   -> Just (ns, mempty)
+        (ns, s:ss) -> let (h, t) = splitAt s ns in Just (h, (t, ss))
 
     genTopo = Gen.element
         [ Alga.path
         , Alga.circuit
         , Alga.clique
-        , uncurry Alga.star . uncons'
+        , maybe Alga.empty (uncurry Alga.star) . uncons
         ]
 
     subgraph [node] = pure $ Alga.vertex node
     subgraph nodes  = ($ nodes) <$> genTopo
-
-    uncons' xs = (head xs, tail xs)
 
     -- Ensure the graph is connected: if it has only one component, it is
     -- already connected, otherwise, connect the roots of the forest as a
