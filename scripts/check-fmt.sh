@@ -1,13 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
-stack exec -- stylish-haskell **/**.hs --inplace
-modified=$(git diff --name-only)
-count=$(echo -n "$modified" | wc -l)
+shopt -s globstar
 
-if [[ $count -ne 0 ]]; then
-  printf "Found %d misformatted files:\n%s" $count $modified
-fi
+base=$(mktemp -d "/tmp/oscoin-base.XXXXX")
+for f in **/**.hs; do
+  path=$base/$(dirname $f)
+  mkdir -p $path
+  cp $f $path
+done
 
-exit $count
+formatted=$(mktemp -d "/tmp/oscoin-formatted.XXXXX")
+cp -R $base/* $formatted
+
+stack exec -- stylish-haskell $formatted/**/**.hs --inplace
+
+diff -rq $base $formatted
