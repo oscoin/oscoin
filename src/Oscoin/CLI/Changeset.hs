@@ -1,9 +1,10 @@
 module Oscoin.CLI.Changeset where
 
-import           Oscoin.CLI.Radicle
 import           Oscoin.Prelude
+
+import           Radicle.Conversion
 
 type Commit = ()
 
 newtype Changeset = Changeset [Commit]
-    deriving (Show, ToRadicle, Semigroup, Monoid)
+    deriving (Show, Semigroup, Monoid, ToRadicle, FromRadicle)
