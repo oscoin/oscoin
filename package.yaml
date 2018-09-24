@@ -29,6 +29,8 @@ dependencies:
   - filepath
   - focus
   - formatting
+  - gitlib
+  - gitlib-libgit2
   - hashable
   - http-api-data
   - http-client
