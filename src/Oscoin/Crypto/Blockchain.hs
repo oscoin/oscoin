@@ -5,6 +5,7 @@ module Oscoin.Crypto.Blockchain
     , (|>)
     , tip
     , genesis
+    , fromGenesis
     , blocks
     , takeBlocks
     , height
@@ -66,6 +67,9 @@ tip (Blockchain blks) = NonEmpty.head blks
 
 genesis :: Blockchain tx s -> Block tx s
 genesis = NonEmpty.last . fromBlockchain
+
+fromGenesis :: Block tx s -> Blockchain tx s
+fromGenesis g = Blockchain (g :| [])
 
 height :: Blockchain tx s -> Int
 height = length . fromBlockchain

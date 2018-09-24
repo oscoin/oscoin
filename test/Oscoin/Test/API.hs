@@ -4,7 +4,6 @@ import           Oscoin.Prelude hiding (get, state)
 
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Consensus.Evaluator (constEval)
 import           Oscoin.Crypto.Blockchain
                  (BlockHash, Blockchain(..), blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
@@ -23,7 +22,7 @@ import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 
-import qualified Radicle as Rad
+import qualified Radicle as Rad hiding (Env)
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
@@ -55,6 +54,7 @@ tests =
     , testGroup "GET /state"
         [ test "Missing key" getMissingStateKey
         , test "Existing key" getExistingStateKey
+        , test "Derefernce key" getReference
         ]
     ]
   where
@@ -191,13 +191,19 @@ getBestChain codec = do
 
 getExistingStateKey :: Codec -> IO HTTPTest
 getExistingStateKey codec = do
-    let st = dummyRadicleEnv [("my/key/path", Rad.String "hooray!")]
+    let env = initRadicleEnv [("my/key/path", Rad.String "hooray!")]
 
-    (_, tx) <- genDummyTx
-    gen     <- generate $ arbitraryGenesisWith (constEval st) [tx]
-
-    httpTest (nodeState mempty (Blockchain (gen :| []))) $
+    httpTest (nodeState mempty $ blockchainFromEnv env) $
         get codec "/state?q=[my,key,path]" >>=
+            assertStatus ok200 <>
+            assertResultOK (Rad.String "hooray!")
+
+getReference :: Codec -> IO HTTPTest
+getReference codec = do
+    let env = initRadicleEnv []
+              & addRadicleRef "my-ref" (Rad.String "hooray!")
+    httpTest (nodeState mempty $ blockchainFromEnv env) $
+        get codec "/state?q=[my-ref]" >>=
             assertStatus ok200 <>
             assertResultOK (Rad.String "hooray!")
 
