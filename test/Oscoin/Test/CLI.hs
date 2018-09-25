@@ -6,11 +6,13 @@ import           Oscoin.Prelude
 
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
-import qualified Oscoin.CLI.Radicle as Rad
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txMessageContent)
 
 import           Oscoin.Test.CLI.Helpers
+
+import           Radicle.Conversion
+import qualified Radicle.Extended as Rad
 
 import           System.FilePath ((</>))
 
@@ -29,7 +31,7 @@ testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
     (result, TestCommandState{..}) <- runCLI ["revision", "create"]
     let submittedMsg = txMessageContent <$> head submittedTransactions
-    let expectedMessage = Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
+    let expectedMessage = Rad.fnApply "create-revision" [toRadicle emptyRevision]
     assertEqual "Expected message to be an empty revision"
                 (Just expectedMessage)
                 submittedMsg

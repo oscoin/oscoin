@@ -3,17 +3,15 @@ module Oscoin.CLI.Revision where
 import           Oscoin.Prelude
 
 import           Oscoin.CLI.Changeset
-import           Oscoin.CLI.Radicle
 import           Oscoin.CLI.User
 
-import qualified Radicle as Rad
--- FIXME(kim): should use unsafeToIdent, cf. radicle#105
-import qualified Radicle.Internal.Core as Rad (toIdent)
+import           Radicle.Conversion
+import qualified Radicle.Extended as Rad
 
 import qualified Data.Map as Map
 
 newtype RevisionId = RevisionId { fromRevisionId :: Int }
-    deriving (Show, Num, Eq, Read, ToRadicle)
+    deriving (Show, Num, Eq, Read, ToRadicle, FromRadicle)
 
 data RevisionStatus =
       RevisionOpen
@@ -22,17 +20,23 @@ data RevisionStatus =
     deriving (Show, Eq)
 
 instance ToRadicle RevisionStatus where
-    toRadicle rs = case rs of
-        RevisionOpen   -> key "open"
-        RevisionClosed -> key "closed"
-        RevisionMerged -> key "merged"
-      where
-        key = Rad.Keyword . Rad.toIdent
+    toRadicle RevisionOpen   = Rad.keyword "open"
+    toRadicle RevisionClosed = Rad.keyword "closed"
+    toRadicle RevisionMerged = Rad.keyword "merged"
+
+instance FromRadicle RevisionStatus where
+    parseRadicle val = do
+        kw <- parseRadicleKeyword val
+        case kw of
+            "open"   -> pure $ RevisionOpen
+            "closed" -> pure $ RevisionClosed
+            "merged" -> pure $ RevisionMerged
+            _        -> Left $ "Unmatched revision status \"" <> kw <> "\""
 
 type Ref = Text
 
 newtype RevisionBase = RevisionBase Ref
-    deriving (Show, Eq, IsString, ToRadicle)
+    deriving (Show, Eq, IsString, ToRadicle, FromRadicle)
 
 data Revision = Revision
       { revId          :: RevisionId
@@ -47,7 +51,7 @@ data Revision = Revision
 
 instance ToRadicle Revision where
     toRadicle Revision{..} =
-        Rad.Dict $ Map.fromList $ map (first Rad.String) $
+        Rad.Dict $ Map.fromList $ map (first Rad.keyword) $
             [ ("id",          toRadicle revId)
             , ("title",       toRadicle revTitle)
             , ("description", toRadicle revDescription)
@@ -57,6 +61,18 @@ instance ToRadicle Revision where
             , ("status",      toRadicle revStatus)
             , ("base",        toRadicle revBase)
             ]
+instance FromRadicle Revision where
+    parseRadicle =
+        withKeywordDict "Revision" $ \d ->
+            Revision
+                <$> d .: "id"
+                <*> d .: "title"
+                <*> d .: "description"
+                <*> d .: "changeset"
+                <*> d .: "author"
+                <*> d .: "reviewers"
+                <*> d .: "status"
+                <*> d .: "base"
 
 mkRevision :: RevisionId -> Text -> Text -> Changeset -> User -> RevisionBase -> Revision
 mkRevision id title desc changes author base =

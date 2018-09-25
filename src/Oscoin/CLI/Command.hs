@@ -9,12 +9,14 @@ import qualified Oscoin.API.Client as API
 import qualified Oscoin.API.Types as API
 import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.KeyStore
-import qualified Oscoin.CLI.Radicle as Rad
 import           Oscoin.CLI.Revision
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
 
 import           Crypto.Random.Types (MonadRandom)
+
+import           Radicle.Conversion
+import qualified Radicle.Extended as Rad
 
 
 data Command =
@@ -30,7 +32,7 @@ dispatchCommand :: CommandContext m => Command -> m (Result Text)
 dispatchCommand RevisionCreate = submitTransaction createRevision
     where
         createRevision =
-            Rad.fnApply "create-revision" [Rad.toRadicle emptyRevision]
+            Rad.fnApply "create-revision" [toRadicle emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
