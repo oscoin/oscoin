@@ -2,6 +2,7 @@ module Oscoin.Consensus.Evaluator
     ( Evaluator
     , EvalError
     , evalError
+    , fromEvalError
     , identityEval
     , foldEval
     , constEval

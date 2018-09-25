@@ -1,4 +1,4 @@
-module Oscoin.Consensus.Shared
+module Oscoin.Consensus.Mining
     ( mineBlock
     ) where
 
@@ -23,7 +23,7 @@ mineBlock
        , MonadMempool    tx   m
        , Serialise       tx
        )
-    => Consensus tx s m
+    => Consensus tx m
     -> Evaluator s tx b
     -> Tick
     -> m (Maybe (Block tx s))

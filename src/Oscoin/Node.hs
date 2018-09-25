@@ -9,10 +9,8 @@ module Oscoin.Node
     , nodeEval
 
     , runNodeT
-    , runEffects
 
-    , step
-    , tick
+    , miner
 
     , getMempool
     , getPath
@@ -23,16 +21,14 @@ module Oscoin.Node
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus (Consensus)
+import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
                  (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
-                 ( MonadClock(..)
-                 , MonadProtocol(..)
-                 , MonadQuery(..)
-                 , MonadUpdate(..)
-                 )
-import           Oscoin.Consensus.Evaluator (EvalError)
+                 (MonadClock(..), MonadQuery(..), MonadUpdate(..))
+import           Oscoin.Consensus.Evaluator (EvalError, Evaluator)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
@@ -45,8 +41,8 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (MonadNetwork(..), Msg(..), runNetworkT)
 import qualified Oscoin.P2P as P2P
+import qualified Oscoin.P2P.Gossip as Gossip
 import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Radicle as Rad
@@ -65,7 +61,6 @@ import           Data.Aeson
                  , (.=)
                  )
 import           Data.Text.Prettyprint.Doc
-import           Data.Text.Prettyprint.Doc.Render.Text
 
 -- | Node static config.
 data Config = Config
@@ -109,47 +104,6 @@ open hConfig hNodeId hMempool hStateTree hBlockStore = do
 close :: Handle tx s i -> IO ()
 close = const $ pure ()
 
-tick :: ( MonadNetwork     tx   m
-        , MonadProtocol    tx   m
-        , MonadBlockStore  tx s m
-        , MonadClock            m
-        , MonadUpdate         s m
-        , Log.MonadLogger  r    m
-        , Hashable         tx
-        , Pretty           tx
-        )
-     => m ()
-tick = do
-    msgs <- tickM =<< currentTick
-    forM_ msgs logMsg
-    sendM msgs
-
-    unless (null msgs) $
-        updateM =<< chainState (comparing height)
-
-logMsg :: forall r tx m.
-    ( Hashable tx, Pretty tx, Log.MonadLogger r m )
-    => Msg tx -> m ()
-logMsg msg = Log.debugM Log.stext (prettyMsg msg)
-  where
-    prettyMsg :: Msg tx -> Text
-    prettyMsg (BlockMsg blk)  = prettyBlock blk Nothing
-    prettyMsg (TxMsg    tx)   = renderStrict . layoutCompact . pretty $ tx
-    prettyMsg (ReqBlockMsg h) = show h
-
-
-step :: ( MonadNetwork      tx   m
-        , MonadProtocol     tx   m
-        , MonadBlockStore   tx s m
-        , MonadClock             m
-        , MonadUpdate          s m
-        )
-     => m ()
-step = do
-    t <- currentTick
-    sendM   =<< stepM t =<< recvM
-    updateM =<< chainState (comparing height)
-
 nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
 nodeEval tx st = Eval.radicleEval (toProgram tx) st
 
@@ -166,15 +120,6 @@ newtype NodeT tx s i m a = NodeT (ReaderT (Handle tx s i) m a)
 
 runNodeT :: Handle tx s i -> NodeT tx s i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
-
-runEffects
-    :: P2P.Handle
-    -> Handle tx s i
-    -> (cfg -> NodeT tx s i (P2P.NetworkT tx m) a)
-    -> cfg
-    -> m a
-runEffects p2p node evalConsensusT =
-    runNetworkT p2p . runNodeT node . evalConsensusT
 
 instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) where
     addTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.insertMany` txs)
@@ -222,8 +167,6 @@ instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
 
 instance MonadClock m => MonadClock (NodeT tx s i m)
 
-instance MonadNetwork tx m => MonadNetwork tx (NodeT tx s i m)
-
 -------------------------------------------------------------------------------
 
 withBlockStore
@@ -233,6 +176,24 @@ withBlockStore f = do
     bs <- asks hBlockStore
     liftIO . atomically $
         BlockStore.for bs f
+
+miner
+    :: ( Monad      m
+       , MonadIO    m
+       , MonadClock m
+       , Serialise tx
+       , Hashable  tx
+       , Ord       tx
+       )
+    => Consensus tx (NodeT tx s i m)
+    -> Evaluator s tx a
+    -> Gossip.Handle e Gossip.Peer
+    -> NodeT tx s i m b
+miner consensus eval gossip = forever $ do
+    blk <- Consensus.mineBlock consensus eval =<< lift currentTick
+    for_ blk $ \blk' -> do
+        liftIO $ P2P.broadcast gossip $ P2P.BlockMsg (void blk')
+        updateM =<< chainState (Consensus.cScore consensus)
 
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot

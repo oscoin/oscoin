@@ -1,120 +1,140 @@
 module Main (main) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (option)
 
 import           Oscoin.API.HTTP (withAPI)
 import qualified Oscoin.API.HTTP as HTTP
+import           Oscoin.CLI.KeyStore (readKeyPair)
+import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.Nakamoto
-                 ( NakamotoEnv(..)
-                 , defaultNakamotoEnv
-                 , easyDifficulty
-                 , evalNakamotoT
-                 )
+import           Oscoin.Consensus.BlockStore.Class (chainState)
+import           Oscoin.Consensus.Class (updateM)
+import           Oscoin.Consensus.Evaluator (fromEvalError)
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain (Difficulty)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
-import           Oscoin.Crypto.PubKey (generateKeyPair)
 import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
-import           Oscoin.Node (nodeEval, withNode)
+import           Oscoin.Node (withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (Endpoints(..), NodeAddr(..), mkNodeId, withP2P)
+import           Oscoin.P2P (mkNodeId, runGossip)
 import qualified Oscoin.P2P as P2P
-import           Oscoin.P2P.Discovery (toKnownPeers, withDisco)
-import qualified Oscoin.P2P.Discovery.Multicast as MCast
-import qualified Oscoin.P2P.Discovery.Static as Static
+import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 
 import qualified Control.Concurrent.Async as Async
+import           Control.Monad.Except (ExceptT(..), runExceptT, withExceptT)
 import           Data.Default (def)
 import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
-import           System.Random (newStdGen)
+import           Network.Socket (HostName, PortNumber)
 
-import           Options.Generic
+import           Options.Applicative
 
 data Args = Args
-    { listen     :: String
-    , seed       :: [FilePath]
+    { listenHost :: HostName
+    , listenPort :: PortNumber
+    , seeds      :: FilePath
     , prelude    :: FilePath
     , difficulty :: Maybe Difficulty
     } deriving (Generic, Show)
 
-instance ParseRecord Args
+args :: ParserInfo Args
+args = info (helper <*> parser) $ progDesc "Oscoin Node"
+  where
+    parser = Args
+        <$> option str
+            ( short 'h'
+           <> long "host"
+           <> help "Host name to bind to for gossip"
+           <> value "127.0.0.1"
+           <> showDefault
+            )
+        <*> option auto
+            ( short 'p'
+           <> long "port"
+           <> help "Port number to bind to for gossip"
+           <> value 6942
+           <> showDefault
+            )
+        <*> option str
+            ( long "seeds"
+           <> help "Path to YAML file describing gossip seed nodes"
+            )
+        <*> option str
+            ( long "prelude"
+           <> help "Path to radicle prelude"
+            )
+        <*> optional
+            ( option auto
+              ( long "difficulty"
+             <> help "Mining difficulty"
+              )
+            )
 
 main :: IO ()
 main = do
-    Args{..} <- getRecord "oscoin"
+    Args{..} <- execParser args
 
-    P2P.NodeAddr{..} <- maybe (die "Invalid NodeAddr") pure $ readMaybe listen
+    let consensus  = Consensus.nakamotoConsensus
+                   $ fromMaybe Nakamoto.easyDifficulty difficulty
+    let eval       = Node.nodeEval
 
-    let dif = maybe easyDifficulty identity difficulty
+    kp       <- readKeyPair
+    nid      <- pure (mkNodeId $ fst kp)
+    mem      <- Mempool.newIO
+    stree    <- STree.new def
+    gen      <- either die pure =<< genesisFromPath eval prelude kp
+    blkStore <- BlockStore.newIO $ genesisBlockStore gen
+    seeds'   <- Yaml.decodeFileThrow seeds
 
-    kp  <- generateKeyPair
-    nid <- pure (mkNodeId . fst $ kp) -- TODO: read from disk
-    rng <- newStdGen
-    mem <- Mempool.newIO
-    str <- STree.new def
-    gen <- genesisFromPath prelude kp
-    blk <- BlockStore.newIO $ genesisBlockStore gen
-    sds <- traverse Yaml.decodeFileThrow seed :: IO [P2P.Seed]
-
-    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }        $ \lgr ->
-        withNode  (mkNodeConfig Testing lgr) nid mem str blk            $ \nod ->
-        withAPI   Testing                                               $ \api ->
-        withDisco (mkDisco lgr sds nid addrIP addrPort)                 $ \dis ->
-        withP2P   (mkP2PConfig addrIP addrPort) lgr dis                 $ \p2p ->
-            let run = void . Node.runEffects p2p nod (evalNakamotoT env rng)
-                env = defaultNakamotoEnv
-                    { nakEval = nodeEval
-                    , nakLogger = lgr
-                    , nakDifficulty = dif
-                    }
-             in Async.runConcurrently $
-                     (Async.Concurrently $ HTTP.run api 8080 nod)
-                  <> (Async.Concurrently . run . forever $ Node.step)
-                  <> (Async.Concurrently . run . forever $ Node.tick)
+    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }    $ \lgr ->
+        withNode  (mkNodeConfig Testing lgr) nid mem stree blkStore $ \nod ->
+        withAPI   Testing                                           $ \api ->
+        runGossip lgr kp
+                  P2P.NodeAddr { P2P.nodeId   = nid
+                               , P2P.nodeHost = listenHost
+                               , P2P.nodePort = listenPort
+                               }
+                  seeds'
+                  (storage consensus eval nod)                      $ \gos ->
+            Async.runConcurrently $
+                     Async.Concurrently (HTTP.run api 8080 nod)
+                  <> Async.Concurrently (miner consensus eval gos nod)
   where
     mkNodeConfig env lgr = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
         }
-    mkP2PConfig ip port = P2P.defaultConfig
-        { P2P.cfgBindIP   = ip
-        , P2P.cfgBindPort = port
-        }
 
-    genesisFromPath path kp = do
-        result <- Rad.parseValue (T.pack path) <$> readFile path
-        case result of
-            Left err -> die $
-                "Main.hs: error reading prelude: " <> err
-            Right val -> do
-                tx <- createTx kp val
-                case genesisBlock def nodeEval 0 [tx] of
-                    Left errs -> die $
-                           "Main.hs: error evaluating prelude:\n"
-                        <> T.unlines (map show errs)
-                    Right blk ->
-                        pure blk
+    genesisFromPath eval path kp = runExceptT $ do
+        val <- ExceptT $ Rad.parseValue (T.pack path) <$> readFile path
+        withExceptT (T.unlines . map fromEvalError) . ExceptT $ do
+            tx <- liftIO $ createTx kp val
+            pure $ genesisBlock def eval 0 [tx]
 
-    mkDisco lgr [] nid ip prt = MCast.mkDisco lgr . MCast.mkConfig nid $ endpoints ip prt
-    mkDisco _   ss _   _  _   = pure . Static.mkDisco . toKnownPeers $ ss
+    miner consensus eval gos nod =
+        Node.runNodeT nod $ Node.miner consensus eval gos
 
-    endpoints ip port = Endpoints
-        { apiEndpoint = NodeAddr
-            { addrIP   = ip
-            , addrPort = 8080
-            }
-        , p2pEndpoint = NodeAddr
-            { addrIP   = ip
-            , addrPort = port
-            }
-        }
+    storage consensus eval nod =
+        P2P.storageCallbacks applyBlock applyTx lookupBlock lookupTx
+      where
+        applyBlock =
+            Node.runNodeT nod . (Storage.applyBlock eval >=> updateChainState)
+        applyTx    =
+            Node.runNodeT nod . (Storage.applyTx >=> updateChainState)
+
+        updateChainState applyRes = do
+            when (applyRes == Storage.Applied) $
+                updateM =<< chainState (Consensus.cScore consensus)
+            pure applyRes
+
+        lookupBlock = Node.runNodeT nod . Storage.lookupBlock
+        lookupTx    = Node.runNodeT nod . Storage.lookupTx

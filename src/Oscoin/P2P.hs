@@ -1,27 +1,12 @@
-{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE TupleSections #-}
 
 module Oscoin.P2P
-    ( Config (..)
-    , Handle
-    , Msg (..)
+    ( Msg (..)
 
-    , MonadNetwork (..)
-
-    , NetworkT
-    , NetworkIO
-
-    , runNetworkT
-
-    , defaultConfig
-    , withP2P
-    , open
-    , close
-    , send
-    , receive
-
-    -- * New Gossip
+    -- * Gossip
     , runGossip
     , broadcast
+    , storageCallbacks
 
     -- * Re-exports
     , module Oscoin.P2P.Types
@@ -29,105 +14,36 @@ module Oscoin.P2P
 
 import           Oscoin.Prelude hiding (show)
 
-import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Crypto.Blockchain (showBlockDigest)
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, blockHash)
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Environment
-import           Oscoin.Logging (Logger, shown, withExceptionLogged, (%))
-import qualified Oscoin.Logging as Log
-import           Oscoin.P2P.Discovery (Disco(..))
+import           Oscoin.Logging (Logger)
+import qualified Oscoin.Storage as Storage
+
 import qualified Oscoin.P2P.Gossip as Gossip
-import           Oscoin.P2P.Gossip.Broadcast (broadcast)
 import qualified Oscoin.P2P.Gossip.Broadcast as Bcast
 import qualified Oscoin.P2P.Gossip.Handshake as Handshake
 import qualified Oscoin.P2P.Gossip.Membership as Membership
 import           Oscoin.P2P.Types
 
 import           Codec.Serialise (Serialise)
-import qualified Codec.Serialise as Serialise
+import qualified Codec.Serialise as CBOR
 import qualified Control.Concurrent.Async as Async
-import           Data.ByteString.Lazy (fromStrict, toChunks)
-import           Data.IP (IP)
-import           Formatting (formatToString)
-import qualified Formatting as F
-import qualified Network.Socket as Net
-import qualified Network.Socket.ByteString as NetBS
-import           Text.Show (Show(..))
-
-data Config = Config
-    { cfgEnvironment :: Environment
-    , cfgBindIP      :: IP
-    , cfgBindPort    :: Word16
-    }
-
-data Handle = Handle
-    { hEnvironment :: Environment
-    , hLogger      :: Logger
-    , hDiscovery   :: Disco IO
-    , hSocket      :: Net.Socket
-    }
+import           Data.ByteString.Lazy (fromStrict, toStrict)
 
 data Msg tx =
-      BlockMsg    (Block tx ())
-    | TxMsg       [tx]
-    | ReqBlockMsg BlockHash
+      BlockMsg (Block tx ())
+    | TxMsg    tx
     deriving (Eq, Generic)
-
-instance Show tx => Show (Msg tx) where
-    show (BlockMsg  blk) = formatToString (F.stext % " " % F.stext) "BlockMsg" (showBlockDigest blk)
-    show (TxMsg     txs) = "TxMsg " ++ show txs
-    show (ReqBlockMsg h) = "ReqBlockMsg " ++ show h
 
 instance Serialise tx => Serialise (Msg tx)
 
-class Monad m => MonadNetwork tx m | m -> tx where
-    sendM :: Foldable t => t (Msg tx) -> m ()
-    recvM :: m (Msg tx)
+data MsgId tx =
+      BlockId BlockHash
+    | TxId    (Crypto.Hashed tx)
+    deriving (Eq, Generic)
 
-    default sendM
-        :: (MonadNetwork tx m', MonadTrans t, m ~ t m', Foldable f)
-        => f (Msg tx) -> m ()
-    sendM = lift . sendM
-    {-# INLINE sendM #-}
-
-    default recvM
-        :: (MonadNetwork tx m', MonadTrans t, m ~ t m')
-        => m (Msg tx)
-    recvM = lift recvM
-    {-# INLINE recvM #-}
-
-newtype NetworkT tx m a = NetworkT (ReaderT Handle m a)
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadReader Handle
-             , MonadTrans
-             , MonadIO
-             )
-
-type NetworkIO tx = NetworkT tx IO
-
-instance (Serialise tx, Show tx, MonadIO m) => MonadNetwork tx (NetworkT tx m) where
-    sendM msgs = ask >>= liftIO . (`send` msgs)
-    recvM      = ask >>= liftIO . receive
-
-instance MonadClock m => MonadClock (NetworkT tx m)
-
-runNetworkT :: Handle -> NetworkT tx m a -> m a
-runNetworkT h (NetworkT ma) = runReaderT ma h
-
---------------------------------------------------------------------------------
-
-defaultConfig :: Config
-defaultConfig = Config
-    { cfgEnvironment = Testing
-    , cfgBindIP      = "127.0.0.1"
-    , cfgBindPort    = 4269
-    }
-
-withP2P :: Config -> Logger -> Disco IO -> (Handle -> IO a) -> IO a
-withP2P cfg lgr disco = bracket (open cfg lgr disco) close
+instance Serialise tx => Serialise (MsgId tx)
 
 type GossipHandle = Gossip.Handle Handshake.HandshakeError Gossip.Peer
 
@@ -137,18 +53,16 @@ type GossipHandle = Gossip.Handle Handshake.HandshakeError Gossip.Peer
 runGossip
     :: Logger
     -> Crypto.KeyPair
-    -> NodeId
-    -> Net.HostName
-    -- ^ Host to bind to
-    -> Net.PortNumber
-    -- ^ Port to bind to
-    -> [Gossip.Peer]
+    -> NodeAddr
+    -> [NodeAddr]
     -- ^ Initial peers to connect to
     -> Bcast.Callbacks
     -> (GossipHandle -> IO a)
     -> IO a
-runGossip logger keypair nodeId host port initialPeers broadcastCallbacks run = do
-    self :: Gossip.Peer <- Gossip.knownPeer nodeId host port
+runGossip logger keypair selfAddr peerAddrs broadcastCallbacks run = do
+    (self:peers) <-
+        for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
+            Gossip.knownPeer nodeId nodeHost nodePort
     Gossip.withGossip
         logger
         keypair
@@ -157,54 +71,104 @@ runGossip logger keypair nodeId host port initialPeers broadcastCallbacks run = 
         broadcastCallbacks
         Handshake.simple
         Membership.defaultConfig
-        listenAndRun
+        (listenAndRun peers)
   where
-    listen = runReaderT $ Gossip.listen host port initialPeers
-    listenAndRun gossipHandle =
-        Async.withAsync (listen gossipHandle) (\_ -> run gossipHandle)
+    listenAndRun peers gossipHandle =
+        Async.withAsync (listen peers gossipHandle) $ \_ ->
+            run gossipHandle
+
+    listen peers =
+        runReaderT $ Gossip.listen (nodeHost selfAddr) (nodePort selfAddr) peers
+
     scheduleInterval = 10
 
+broadcast
+    :: (Serialise tx, Crypto.Hashable tx)
+    => Gossip.Handle e Gossip.Peer
+    -> Msg tx
+    -> IO ()
+broadcast hdl msg = uncurry (Gossip.broadcast hdl) $ toGossip msg
 
-open :: Config -> Logger -> Disco IO -> IO Handle
-open Config{..} hLogger hDiscovery = do
-    let hEnvironment = cfgEnvironment
-    hSocket <- mkSocket
-    pure Handle{..}
+storageCallbacks
+    :: ( Serialise       tx
+       , Crypto.Hashable tx
+       )
+    => (Block tx ()      -> IO Storage.ApplyResult)
+    -> (tx               -> IO Storage.ApplyResult)
+    -> (BlockHash        -> IO (Maybe (Block tx ())))
+    -> (Crypto.Hashed tx -> IO (Maybe tx))
+    -> Bcast.Callbacks
+storageCallbacks applyBlock applyTx lookupBlock lookupTx = Bcast.Callbacks
+    { applyMessage  = wrapApply  applyBlock  applyTx
+    , lookupMessage = wrapLookup lookupBlock lookupTx
+    }
+
+--------------------------------------------------------------------------------
+
+wrapApply
+    :: ( Serialise       tx
+       , Crypto.Hashable tx
+       )
+    => (Block tx () -> IO Storage.ApplyResult)
+    -> (tx          -> IO Storage.ApplyResult)
+    -> Bcast.MessageId
+    -> ByteString
+    -> IO Bcast.ApplyResult
+wrapApply applyBlock applyTx mid msg =
+    case fromGossip mid msg of
+        Nothing           -> pure Bcast.Error
+        Just (BlockMsg b) -> convertApplyResult <$> applyBlock b
+        Just (TxMsg b)    -> convertApplyResult <$> applyTx b
   where
-    mkSocket = do
-        let hints = Net.defaultHints { Net.addrSocketType = Net.Datagram }
-        addr:_ <- Net.getAddrInfo (Just hints)
-                                  (Just (show cfgBindIP))
-                                  (Just (show cfgBindPort))
-        sock   <- Net.socket (Net.addrFamily addr)
-                             (Net.addrSocketType addr)
-                             (Net.addrProtocol addr)
-        Net.bind sock (Net.addrAddress addr)
-        pure sock
+    convertApplyResult = \case
+        Storage.Applied -> Bcast.Applied
+        Storage.Stale   -> Bcast.Stale
+        Storage.Error   -> Bcast.Error
 
-close :: Handle -> IO ()
-close Handle{hLogger, hSocket} =
-    withExceptionLogged hLogger (Net.close hSocket)
+wrapLookup
+    :: Serialise tx
+    => (BlockHash -> IO (Maybe (Block tx ())))
+    -> (Crypto.Hashed tx -> IO (Maybe tx))
+    -> Bcast.MessageId
+    -> IO (Maybe ByteString)
+wrapLookup lookupBlock lookupTx mid =
+    case deserialiseMessageId mid of
+        Right (BlockId i) -> map (toStrict . CBOR.serialise) <$> lookupBlock i
+        Right (TxId txId) -> map (toStrict . CBOR.serialise) <$> lookupTx txId
+        Left _ -> pure Nothing
 
-send :: (Serialise tx, Foldable t) => Handle -> t (Msg tx) -> IO ()
-send Handle{hDiscovery, hSocket} msgs = do
-    let payloads = map (toChunks . Serialise.serialise) (toList msgs)
-    peers <- knownPeers hDiscovery
-    for_ peers $ \peer ->
-        for_ payloads $ \payload ->
-            NetBS.sendManyTo hSocket payload (addr peer)
-  where
-    addr = toSockAddr . p2pEndpoint
+fromGossip
+    :: forall tx. (Serialise tx, Crypto.Hashable tx)
+    => Bcast.MessageId
+    -> ByteString
+    -> Maybe (Msg tx)
+fromGossip mid payload =
+    case CBOR.deserialiseOrFail (fromStrict payload) of
+        Left  _   -> Nothing
+        Right msg -> case msg of
+            BlockMsg blk ->
+                case deserialiseMessageId @tx mid of
+                    Right (BlockId hsh) | hsh == blockHash blk -> Just msg
+                    _                                          -> Nothing
+            TxMsg tx ->
+                case deserialiseMessageId mid of
+                    Right (TxId hsh) | hsh == Crypto.hash tx -> Just msg
+                    _                                        -> Nothing
 
-receive :: (Show tx, Serialise tx) => Handle -> IO (Msg tx)
-receive Handle{hLogger, hSocket} = loop
-  where
-    loop = do
-        (pkt,_) <- NetBS.recvFrom hSocket 1024
-        case Serialise.deserialiseOrFail (fromStrict pkt) of
-            Left  _         -> do
-                Log.err hLogger "Dropping invalid packet"
-                loop
-            Right msg -> do
-                Log.info hLogger ("Received: " % shown) msg
-                pure msg
+toGossip
+    :: ( Serialise       tx
+       , Crypto.Hashable tx
+       )
+    => Msg tx
+    -> (Bcast.MessageId, ByteString)
+toGossip msg =
+    bimap toStrict toStrict . (,CBOR.serialise msg) $
+        case msg of
+            BlockMsg blk -> CBOR.serialise $ blockHash blk
+            TxMsg    tx  -> CBOR.serialise $ Crypto.hash tx
+
+deserialiseMessageId
+    :: Serialise tx
+    => Bcast.MessageId
+    -> Either CBOR.DeserialiseFailure (MsgId tx)
+deserialiseMessageId = CBOR.deserialiseOrFail . fromStrict

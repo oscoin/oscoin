@@ -1,130 +1,92 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Oscoin.Consensus.Simple
-    ( Env
-    , LastTime (..)
-    , SimpleT
+    ( HasSelf(..)
+    , HasPeers(..)
+    , MonadLastTime(..)
 
-    , mkEnv
-
-    , runSimpleT
-    , evalSimpleT
+    , simpleConsensus
+    , mineSimple
+    , reconcileSimple
 
     , epochLength
-
     , chainScore
-
     , shouldCutBlock
-    , shouldReconcile
     ) where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Clock (Tick)
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
-import           Oscoin.Consensus.Class (MonadProtocol(..), Tick)
-import           Oscoin.Consensus.Evaluator
-import           Oscoin.Consensus.Shared (mineBlock)
-import           Oscoin.Consensus.Types
+import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHeader(..), toOrphan, validateBlock)
-import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import qualified Oscoin.P2P as P2P
+                 (Block(..), BlockHash, BlockHeader(..))
 
-import           Codec.Serialise (Serialise)
-import           Control.Monad.State
-import           Data.Functor (($>))
-import           Data.Maybe (maybeToList)
 import qualified Data.Set as Set
+import           Lens.Micro (Lens')
+import           Lens.Micro.Mtl (view)
+
+class HasSelf a i | a -> i where
+    self :: Lens' a i
+
+class HasPeers a i | a -> i where
+    peers :: Lens' a (Set i)
+
+class Monad m => MonadLastTime m where
+    getLastBlockTick :: m Tick
+    setLastBlockTick :: Tick -> m ()
+
+    getLastAskTick   :: m Tick
+    setLastAskTick   :: Tick -> m ()
 
 epochLength :: Tick
 epochLength = 1
 
-data Env i = Env
-    { envSelf  :: i
-    , envPeers :: Set i
-    } deriving Show
+simpleConsensus
+    :: ( MonadLastTime m
+       , HasSelf  r i
+       , HasPeers r i
+       , Ord        i
+       )
+    => r
+    -> Consensus tx m
+simpleConsensus r = Consensus
+    { cScore = comparing chainScore
+    , cMiner = mineSimple r
+    }
 
-data LastTime = LastTime
-    { ltLastBlk :: Tick
-    , ltLastAsk :: Tick
-    } deriving Show
-
-newtype SimpleT tx i m a = SimpleT (ReaderT (Env i) (StateT LastTime m) a)
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadReader (Env i)
-             , MonadState  LastTime
-             )
-
-instance MonadTrans (SimpleT tx i) where
-    lift = SimpleT . lift . lift
-    {-# INLINE lift #-}
-
-instance ( MonadMempool    tx    m
-         , MonadBlockStore tx () m
-         , Serialise       tx
-         , Ord i
-         ) => MonadProtocol tx (SimpleT tx i m)
-  where
-    stepM _ = \case
-        P2P.BlockMsg blk -> do
-            for_ (validateBlock blk) $ \blk' -> do
-                storeBlock $ toOrphan identityEval blk
-                delTxs (blockData blk')
-            pure mempty
-
-        -- TODO: Validate tx.
-        P2P.TxMsg txs ->
-            addTxs txs $> mempty
-
-        P2P.ReqBlockMsg blk ->
-            map P2P.BlockMsg . maybeToList <$> lookupBlock blk
-
-    tickM tick = do
-        blk <- mineBlock simpleConsensus identityEval tick
-        let blkMsg = P2P.BlockMsg <$> maybeToList blk
-
-        reqs <-
-            shouldReconcileM tick >>= bool (pure mempty) (do
-                modify' (\s -> s { ltLastAsk = tick })
-                map P2P.ReqBlockMsg . toList <$> orphans)
-
-        pure $ blkMsg <> reqs
-
-    {-# INLINE stepM #-}
-    {-# INLINE tickM #-}
-
-instance P2P.MonadNetwork tx    m => P2P.MonadNetwork tx    (SimpleT tx i m)
-instance MonadMempool     tx    m => MonadMempool     tx    (SimpleT tx i m)
-instance MonadBlockStore  tx () m => MonadBlockStore  tx () (SimpleT tx i m)
-
-simpleConsensus :: (Ord i, Monad m) => Consensus ts s (SimpleT tx i m)
-simpleConsensus =
-    Consensus { cScore = comparing chainScore
-              , cMiner = mineSimple
-              }
-
-mineSimple :: (Ord i, Monad m) => Miner (SimpleT tx i m)
-mineSimple bh@BlockHeader{blockTimestamp} = do
+mineSimple
+    :: ( MonadLastTime m
+       , HasSelf  r i
+       , HasPeers r i
+       , Ord        i
+       )
+    => r
+    -> Miner m
+mineSimple r bh@BlockHeader{blockTimestamp} = do
+    lastBlk <- getLastBlockTick
+    -- FIXME(kim): this seems wrong
     let blockHeaderTick = fromInteger $ toInteger blockTimestamp
-    cut <- shouldCutBlockM blockHeaderTick
-    if cut
+    if shouldCutBlock lastBlk r blockHeaderTick
     then do
-        modify' (\s -> s { ltLastBlk = blockHeaderTick })
+        setLastBlockTick blockHeaderTick
         pure $ Just bh
     else
-        pure $ Nothing
+        pure Nothing
 
-mkEnv :: i -> Set i -> Env i
-mkEnv = Env
-
-runSimpleT :: Env i -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
-runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
-
-evalSimpleT :: Monad m => Env i -> LastTime -> SimpleT tx i m a -> m a
-evalSimpleT env lt (SimpleT ma) = evalStateT (runReaderT ma env) lt
+reconcileSimple
+    :: ( MonadBlockStore tx () m
+       , MonadLastTime         m
+       )
+    => Tick
+    -> m [BlockHash]
+reconcileSimple tick = do
+    lastAsk <- getLastAskTick
+    if shouldReconcile lastAsk tick
+    then do
+        setLastAskTick tick
+        toList <$> orphans
+    else
+        pure []
 
 chainScore :: Blockchain tx s -> Int
 chainScore bc =
@@ -138,33 +100,21 @@ chainScore bc =
     steps          = fromIntegral timestamp `div` e :: Int
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
-shouldReconcileM :: Monad m => Tick -> SimpleT tx i m Bool
-shouldReconcileM at = do
-    lastAsk <- gets ltLastAsk
-    pure $ shouldReconcile lastAsk at
-
 shouldReconcile :: Tick -> Tick -> Bool
 shouldReconcile lastAsk at = time - round lastAsk >= stepTime
   where
     time     = round at :: Int
     stepTime = round epochLength
 
-shouldCutBlockM :: (Monad m, Ord i) => Tick -> SimpleT tx i m Bool
-shouldCutBlockM at = SimpleT $ do
-    lastBlk <- gets ltLastBlk
-    self    <- asks envSelf
-    peers   <- asks envPeers
-    pure $ shouldCutBlock lastBlk self peers at
-
-shouldCutBlock :: Ord i => Tick -> i -> Set i -> Tick -> Bool
-shouldCutBlock lastBlk self peers at = beenAWhile && ourTurn
+shouldCutBlock :: (Ord i, HasSelf r i, HasPeers r i) => Tick -> r -> Tick -> Bool
+shouldCutBlock lastBlk r at = beenAWhile && ourTurn
   where
     time              = round at
     stepTime          = round epochLength
-    nTotalPeers       = 1 + Set.size peers
+    nTotalPeers       = 1 + Set.size (view peers r)
     relativeBlockTime = stepTime * nTotalPeers
     beenAWhile        = time - round lastBlk >= relativeBlockTime
     stepNumber        = time `div` stepTime
-    ourOffset         = Set.size $ Set.filter (< self) peers
+    ourOffset         = Set.size $ Set.filter (< view self r) (view peers r)
     currentOffset     = stepNumber `mod` nTotalPeers
     ourTurn           = currentOffset == ourOffset

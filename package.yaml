@@ -33,7 +33,6 @@ dependencies:
   - http-client
   - http-types
   - http-media
-  - iproute
   - list-t
   - memory
   - merkle-tree
@@ -41,13 +40,11 @@ dependencies:
   - microlens-mtl
   - mtl
   - network
-  - network-multicast
   - optparse-applicative
   - prettyprinter
   - protolude
   - radicle
   - random
-  - random-shuffle
   - safe-exceptions
   - scientific
   - serialise
@@ -57,7 +54,6 @@ dependencies:
   - stm >=2.4.5.0
   - stm-containers
   - text
-  - temporary
   - time
   - transformers
   - unliftio-core
@@ -65,7 +61,6 @@ dependencies:
   - wai
   - wai-extra
   - writer-cps-mtl
-  - yaml
 
 data-files:
   - node/rad/prelude.rad
@@ -77,17 +72,11 @@ executables:
   oscoin:
     main: node/Main.hs
     dependencies:
-      - iproute
-      - optparse-generic >= 1.3.0
       - oscoin
+      - yaml
   oscoin-cli:
     main: cli/Main.hs
     dependencies:
-      - oscoin
-  txgen:
-    main: txgen/Main.hs
-    dependencies:
-      - optparse-generic >= 1.3.0
       - oscoin
 
 tests:
@@ -109,12 +98,14 @@ tests:
       - oscoin
       - QuickCheck
       - quickcheck-instances
+      - random-shuffle
       - streaming-commons
       - tasty >=1.0.0.1
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
       - tasty-expected-failure
+      - temporary
       - vector
 
 default-extensions:

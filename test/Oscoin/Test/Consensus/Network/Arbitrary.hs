@@ -4,9 +4,9 @@ module Oscoin.Test.Consensus.Network.Arbitrary where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Class
-import           Oscoin.P2P (Msg(..))
+import           Oscoin.Clock (Tick)
 
+import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 
@@ -23,7 +23,7 @@ kidSize :: Int
 kidSize = 13
 
 arbitraryTxMsg :: Arbitrary tx => Gen (Msg tx)
-arbitraryTxMsg = TxMsg . (:[]) <$> arbitrary
+arbitraryTxMsg = TxMsg <$> arbitrary
 
 arbitraryNetwork :: Gen (TestNetwork ())
 arbitraryNetwork = arbitrary

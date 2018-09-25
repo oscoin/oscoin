@@ -4,7 +4,6 @@ module Oscoin.Consensus.Class
     ( Score
     , MonadQuery (..)
     , MonadUpdate (..)
-    , MonadProtocol (..)
 
     -- * Re-exports
     , module Oscoin.Clock
@@ -13,7 +12,6 @@ module Oscoin.Consensus.Class
 import           Oscoin.Prelude
 
 import           Oscoin.Clock
-import qualified Oscoin.P2P as P2P
 
 type Score = ByteString
 
@@ -37,19 +35,3 @@ class Monad m => MonadUpdate s m | m -> s where
         => s -> m ()
     updateM s = lift $ updateM s
     {-# INLINE updateM #-}
-
-class Monad m => MonadProtocol tx m | m -> tx where
-    stepM :: Tick -> P2P.Msg tx -> m [P2P.Msg tx]
-    tickM :: Tick -> m [P2P.Msg tx]
-
-    default stepM
-        :: (MonadProtocol tx m', MonadTrans t, m ~ t m')
-        => Tick -> P2P.Msg tx -> m [P2P.Msg tx]
-    stepM t = lift . stepM t
-    {-# INLINE stepM #-}
-
-    default tickM
-        :: (MonadProtocol tx m', MonadTrans t, m ~ t m')
-        => Tick -> m [P2P.Msg tx]
-    tickM = lift . tickM
-    {-# INLINE tickM #-}

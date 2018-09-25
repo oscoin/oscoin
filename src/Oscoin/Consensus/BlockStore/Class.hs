@@ -26,9 +26,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     orphans :: m (Set BlockHash)
 
     -- | Returns the maximum chain, according to the ordering function provided.
-    maximumChainBy
-        :: (Blockchain tx s -> Blockchain tx s -> Ordering)
-        -> m (Blockchain tx s)
+    maximumChainBy :: ScoringFunction tx s -> m (Blockchain tx s)
 
 
     default storeBlock

@@ -119,7 +119,7 @@ data ApplyResult =
     | Stale
     -- ^ The message was either applied before, or a later message rendered it
     -- obsolete.
-    | ApplyError
+    | Error
     -- ^ An error occurred. Perhaps the message was invalid.
 
 data Callbacks = Callbacks
@@ -342,7 +342,7 @@ receive (GossipM g) = do
             liftIO . atomically . modifyTVar' missing $ Map.delete mid
             pure $ [Eager sender $ Prune self]
 
-        ApplyError ->
+        Error ->
             -- TODO(kim): log this
             pure mempty
 

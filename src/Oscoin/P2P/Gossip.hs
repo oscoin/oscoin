@@ -142,7 +142,8 @@ listen host port contacts = withRunInIO $ \runIO ->
         Hypa.getPeers         >>= Plum.resetPeers
 
 broadcast :: Handle e Peer -> Plum.MessageId -> ByteString -> IO ()
-broadcast handle mid msg = runReaderT (Plum.broadcast mid msg >>= traverse_ send') handle
+broadcast handle mid msg =
+    runReaderT (Plum.broadcast mid msg >>= traverse_ send') handle
   where
     send' out = asks hSchedule >>= liftIO . flip Plum.schedule out
 

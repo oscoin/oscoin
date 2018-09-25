@@ -1,9 +1,3 @@
-seedId:
-  65d35d8553ffe8039a1ac32c493af77ca97fa43bf41d8736ac8897a6d440984a
-seedEndpoints:
-  apiEndpoint:
-    ip: 127.0.0.1
-    port: 8080
-  p2pEndpoint:
-    ip: 127.0.0.1
-    port: 9000
+- nodeId: 65d35d8553ffe8039a1ac32c493af77ca97fa43bf41d8736ac8897a6d440984a
+  host:   127.0.0.1
+  port:   6942

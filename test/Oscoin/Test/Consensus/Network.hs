@@ -7,10 +7,7 @@ import           Oscoin.Test.Consensus.Node
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
-import           Oscoin.Consensus.Nakamoto
-                 (NakamotoEnv(..), NakamotoT, runNakamotoT)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, fromBlockchain, showChainDigest)
@@ -18,7 +15,12 @@ import           Oscoin.Crypto.Blockchain.Block
                  (BlockHeader(..), blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Logging as Log
-import           Oscoin.P2P (Msg(..))
+
+import           Oscoin.Test.Consensus.Class
+import           Oscoin.Test.Consensus.Nakamoto
+                 (NakamotoEnv(..), NakamotoT, runNakamotoT)
+import           Oscoin.Test.Consensus.Simple (SimpleT, runSimpleT)
+import qualified Oscoin.Test.Consensus.Simple as Simple
 
 import qualified Data.Hashable as Hashable
 import           Data.List (unlines)
@@ -30,7 +32,7 @@ import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
-class MonadProtocol DummyTx (TestableRun a) => TestableNode a where
+class MonadProtocol DummyTx () (TestableRun a) => TestableNode a where
     type TestableRun a   :: * -> *
 
     testableInit         :: TestNetwork b -> TestNetwork a
@@ -84,14 +86,17 @@ runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
 runNakamotoNode s@NakamotoNodeState{..} ma =
     (a, s { nakStdGen = g, nakNode = tns })
   where
-    ((!a, !g, ()), !tns) =
+    ((a, g, ()), tns) =
         runIdentity
             . runTestNodeT nakNode
             $ runNakamotoT env nakStdGen ma
-    env = NakamotoEnv { nakEval = identityEval
-                      , nakDifficulty = Nakamoto.minDifficulty
-                      , nakMiner = mineBlock
-                      , nakLogger = Log.noLogger }
+
+    env = NakamotoEnv
+        { nakEval       = identityEval
+        , nakDifficulty = Nakamoto.minDifficulty
+        , nakMiner      = mineBlock
+        , nakLogger     = Log.noLogger
+        }
 
 -- | Mine a block header in 10% of the cases. The forged header does
 -- not have a valid proof of work.
@@ -105,7 +110,9 @@ mineBlock stdGen bh@BlockHeader{..} =
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =
-      BlockStore.maximumChainBy Nakamoto.score . tnsBlockstore . nakNode
+      BlockStore.maximumChainBy (comparing Nakamoto.chainScore)
+    . tnsBlockstore
+    . nakNode
 
 -- Simple Node -----------------------------------------------------------------
 
