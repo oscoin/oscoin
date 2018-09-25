@@ -39,8 +39,9 @@ import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Args = Args
-    { listenHost :: HostName
-    , listenPort :: PortNumber
+    { host       :: HostName
+    , gossipPort :: PortNumber
+    , apiPort    :: PortNumber
     , seeds      :: FilePath
     , prelude    :: FilePath
     , difficulty :: Maybe Difficulty
@@ -58,10 +59,15 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> showDefault
             )
         <*> option auto
-            ( short 'p'
-           <> long "port"
+            ( long "gossip-port"
            <> help "Port number to bind to for gossip"
            <> value 6942
+           <> showDefault
+            )
+        <*> option auto
+            ( long "api-port"
+           <> help "Port number to bind to for the HTTP API"
+           <> value 8080
            <> showDefault
             )
         <*> option str
@@ -100,13 +106,13 @@ main = do
         withAPI   Testing                                           $ \api ->
         runGossip lgr kp
                   P2P.NodeAddr { P2P.nodeId   = nid
-                               , P2P.nodeHost = listenHost
-                               , P2P.nodePort = listenPort
+                               , P2P.nodeHost = host
+                               , P2P.nodePort = gossipPort
                                }
                   seeds'
                   (storage consensus eval nod)                      $ \gos ->
             Async.runConcurrently $
-                     Async.Concurrently (HTTP.run api 8080 nod)
+                     Async.Concurrently (HTTP.run api (fromIntegral apiPort) nod)
                   <> Async.Concurrently (miner consensus eval gos nod)
   where
     mkNodeConfig env lgr = Node.Config
