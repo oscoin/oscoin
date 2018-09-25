@@ -10,7 +10,6 @@ module Oscoin.Crypto.Blockchain.Block
     , mkBlock
     , linkBlock
     , genesisBlock
-    , genesisHeader
     , emptyGenesisBlock
     , isGenesisBlock
     , validateBlock
@@ -42,7 +41,6 @@ import           Data.Bitraversable (Bitraversable(..))
 import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Default (Default(def))
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
@@ -186,45 +184,40 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisHeader :: (Foldable t, Serialise tx, Default s) => Timestamp -> t tx -> BlockHeader s
-genesisHeader t txs = emptyHeader
-    { blockDataHash  = hashTxs txs
-    , blockTimestamp = t
-    , blockState     = def
-    }
-
 genesisBlock
-    :: forall t tx s. (Foldable t, Serialise tx)
+    :: (Foldable t, Serialise tx)
     => s
     -> Evaluator s tx ()
     -> Timestamp
     -> t tx
     -> Either [EvalError] (Block tx s)
-genesisBlock s eval t xs =
-    evalBlock s eval blk
-  where
-    blk = mkBlock (genesisHeader t xs) xs :: Block tx ()
+genesisBlock initialState eval timestamp txs = do
+    blockState <- evals txs initialState eval
+    pure $ mkBlock (genesisHeader timestamp blockState txs) txs
 
 emptyGenesisBlock
-    :: forall tx s. (Serialise tx, Default s)
+    :: forall tx s. (Serialise tx)
     => Timestamp
+    -> s
     -> Block tx s
-emptyGenesisBlock t =
-    mkBlock (genesisHeader t ([] :: [tx])) []
+emptyGenesisBlock t blockState =
+    mkBlock (genesisHeader t blockState ([] :: [tx])) []
+
+genesisHeader :: (Foldable t, Serialise tx) => Timestamp -> s -> t tx -> BlockHeader s
+genesisHeader blockTimestamp blockState txs =
+    BlockHeader
+        { blockPrevHash = Crypto.toHashed Crypto.zeroHash
+        , blockDataHash = hashTxs txs
+        , blockState
+        , blockTimestamp
+        , blockDifficulty = 0
+        , blockNonce = 0
+        }
+
 
 isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == Crypto.toHashed Crypto.zeroHash
-
--- | Evaluate a block, setting its state @s@. Returns 'Nothing' if evaluation
--- failed.
-evalBlock
-    :: s                 -- ^ Input state
-    -> Evaluator s tx () -- ^ Evaluator
-    -> Block tx ()       -- ^ Block to evaluate
-    -> Either [EvalError] (Block tx s)
-evalBlock s eval blk =
-    sequence $ blk $> evals (blockData blk) s eval
 
 toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =

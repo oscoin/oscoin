@@ -97,7 +97,7 @@ tests =
 
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = emptyGenesisBlock 0 :: Block () ()
+            let genBlk = emptyGenesisBlock 0 () :: Block () ()
                 nextBlk = mkBlock emptyHeader
                     { blockTimestamp = 1
                     , blockPrevHash = blockHash genBlk

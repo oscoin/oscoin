@@ -40,6 +40,7 @@ import qualified Data.Aeson as Aeson
 import           Data.Algorithm.Diff (Diff(..), getDiff)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import           Data.Default (def)
 import           Data.List (lookup)
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -88,7 +89,7 @@ nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
 nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
 
 emptyBlockstore :: Blockchain API.RadTx Rad.Env
-emptyBlockstore = Blockchain $ emptyGenesisBlock 0 :| []
+emptyBlockstore = Blockchain $ emptyGenesisBlock 0 def :| []
 
 makeNode :: NodeState -> IO NodeHandle
 makeNode NodeState{..} = do

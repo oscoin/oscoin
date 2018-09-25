@@ -3,6 +3,8 @@ module Oscoin.Test.Data.Rad.Arbitrary where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus.Evaluator.Radicle as OscoinRad
+
 import           Data.Functor.Identity (Identity(..))
 import qualified Data.Map as Map
 import           Data.Scientific (Scientific)
@@ -11,15 +13,18 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 import           Text.Read (readMaybe)
 
-import           Radicle
+import           Radicle as Rad
 import           Radicle.Internal.Parse (isValidIdentFirst, isValidIdentRest)
 import           Radicle.Internal.Primops (purePrimops)
 
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
-instance Arbitrary r => Arbitrary (Env r) where
-    arbitrary = Env <$> arbitrary
+instance Arbitrary r => Arbitrary (Rad.Env r) where
+    arbitrary = Rad.Env <$> arbitrary
+
+instance Arbitrary OscoinRad.Env where
+    arbitrary = pure $ OscoinRad.Env pureEnv
 
 instance Arbitrary Value where
     arbitrary =

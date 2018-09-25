@@ -46,6 +46,7 @@ import           Test.Tasty.QuickCheck
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary as Binary
+import           Data.Default (def)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map as Map
 
@@ -57,7 +58,7 @@ tests = testGroup "Oscoin"
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain
     , testCase       "BlockStore lookup block"        testBlockStoreLookupBlock
-    , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
+    , testProperty   "BlockStore"                     (propOscoinBlockStore $ arbitraryValidBlockchain def)
     , testProperty   "Binary instance of Hashed"      propHashedBinary
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
@@ -127,7 +128,7 @@ testOscoinBlockchain = do
 
 testBlockStoreLookupBlock :: Assertion
 testBlockStoreLookupBlock = do
-    blks <- generate $ arbitraryValidBlockchain @() @()
+    blks <- generate $ arbitraryValidBlockchain @() @() def
     let g  = genesis blks
     let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
                         , bsOrphans = mempty }

@@ -16,6 +16,7 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
 
+import           Data.Default (def)
 import qualified Data.Text as T
 
 import           Network.HTTP.Media ((//))
@@ -115,7 +116,7 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
 
 getConfirmedTransaction :: Codec -> IO HTTPTest
 getConfirmedTransaction codec = do
-    chain <- generate $ arbitraryValidBlockchain
+    chain <- generate $ arbitraryValidBlockchain def
     case oldestTx chain of
         Nothing -> panic "No oldestTx found in chain"
         Just (tx, blkHash, confirmations) -> do
@@ -164,7 +165,7 @@ getMissingBlock codec = httpTest emptyNodeState $ do
 
 getExistingBlock :: Codec -> IO HTTPTest
 getExistingBlock codec = do
-    chain <- generate $ arbitraryValidBlockchain
+    chain <- generate $ arbitraryValidBlockchain def
     let g = void $ genesis chain
 
     httpTest (nodeState mempty chain) $
@@ -178,7 +179,7 @@ getMissingStateKey codec = httpTest emptyNodeState $
 
 getBestChain :: Codec -> IO HTTPTest
 getBestChain codec = do
-    chain <- generate $ arbitraryValidBlockchain
+    chain <- generate $ arbitraryValidBlockchain def
 
     httpTest (nodeState mempty chain) $ do
         get codec "/blockchain/best?depth=1" >>=
