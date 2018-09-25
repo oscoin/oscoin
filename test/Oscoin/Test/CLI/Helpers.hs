@@ -14,8 +14,7 @@ module Oscoin.Test.CLI.Helpers
     , withSandboxHome
 
     -- * Assertions
-    , assertResultOk
-    , assertResultValue
+    , assertOutput
     , assertFileExists
     , assertFileNotExists
     ) where
@@ -25,7 +24,6 @@ import           Oscoin.Prelude
 import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
-import           Oscoin.CLI.Command.Result
 import           Oscoin.CLI.KeyStore
 import           Oscoin.Crypto.Hash (hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -43,14 +41,14 @@ import           Test.Tasty.HUnit
 
 -- | Run the CLI in a test environment and print the result and the
 -- final TestCommandState
-runCLI :: [String] -> IO (Result Text, TestCommandState)
+runCLI :: [String] -> IO TestCommandState
 runCLI args = runCLIWithState args identity
 
 -- | Same as @runCLI@ but accepts an additional function that allows
 -- you to modify the initial state of the test environment before
 -- running the command.
 runCLIWithState
-    :: [String] -> (TestCommandState -> TestCommandState) -> IO (Result Text, TestCommandState)
+    :: [String] -> (TestCommandState -> TestCommandState) -> IO TestCommandState
 runCLIWithState args setupState = do
     storedKeyPair <- Crypto.generateKeyPair
     cmd <- case execParserPure args of
@@ -61,10 +59,13 @@ runCLIWithState args setupState = do
             in assertFailure $ "Failed to parse CLI arguments: \n" <> failureMessage
     let initialState = TestCommandState { submittedTransactions = []
                                         , storedKeyPair = Just storedKeyPair
+                                        , commandOutput = ""
                                         }
-    runStateT
+    (result, cliState) <- runStateT
         (modify setupState >> fromTestCommandRunner (dispatchCommand cmd))
         initialState
+    assertResultOk result
+    pure cliState
 
 -- | Monad to run the CLI for testing purposes. It mocks both the API
 -- client and the Key Store by providing `MonadClient` and
@@ -72,11 +73,15 @@ runCLIWithState args setupState = do
 newtype TestCommandRunner a = TestCommandRunner { fromTestCommandRunner :: StateT TestCommandState IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadState TestCommandState)
 
-
 data TestCommandState = TestCommandState
     { submittedTransactions :: [ RadTx ]
     , storedKeyPair         :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
+    , commandOutput         :: Text
     }
+
+instance MonadCLI TestCommandRunner where
+    sleep _ = pure ()
+    putLine t = modify $ \s -> s { commandOutput = commandOutput s <> t <> "\n" }
 
 instance MonadRandom TestCommandRunner where
     getRandomBytes = liftIO . getRandomBytes
@@ -99,6 +104,23 @@ instance MonadClient TestCommandRunner where
 
     getState _key =
         pure $ Err "state not found"
+
+----------------------------------------------------
+
+assertResultOk :: Result -> Assertion
+assertResultOk ResultOk = pure ()
+assertResultOk (ResultError e) = assertFailure $ "Command resulted in error " <> show e
+
+assertOutput :: Text -> TestCommandState -> Assertion
+assertOutput expected TestCommandState{..} = expected @=? commandOutput
+
+assertFileExists :: FilePath -> IO ()
+assertFileExists path =
+    Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
+
+assertFileNotExists :: FilePath -> IO ()
+assertFileNotExists path =
+    not <$> Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
 
 ----------------------------------------------------
 
@@ -127,22 +149,3 @@ withEnv newEnv run =
             case List.lookup key envBefore of
                 Just v  -> setEnv key v
                 Nothing -> unsetEnv key
-
-----------------------------------------------------
-
-assertResultValue :: (Show a) => Result a -> Assertion
-assertResultValue (ResultValue _) = pure ()
-assertResultValue result          = assertFailure $ "Expected ResultValue, got " <> show result
-
-assertResultOk :: (Show a) => Result a -> Assertion
-assertResultOk ResultOk = pure ()
-assertResultOk result   = assertFailure $ "Expected ResultOk, got " <> show result
-
-assertFileExists :: FilePath -> IO ()
-assertFileExists path =
-    Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
-
-assertFileNotExists :: FilePath -> IO ()
-assertFileNotExists path =
-    not <$> Dir.doesFileExist path >>= assertBool ("Expected file " <> path <> " to exist")
-
