@@ -114,11 +114,13 @@ wrapApply
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
-wrapApply applyBlock applyTx mid msg =
-    case fromGossip mid msg of
-        Nothing           -> pure Bcast.Error
-        Just (BlockMsg b) -> convertApplyResult <$> applyBlock b
-        Just (TxMsg b)    -> convertApplyResult <$> applyTx b
+wrapApply applyBlock applyTx mid payload =
+    case fromGossip mid payload of
+        Left  _   -> pure Bcast.Error -- TODO(kim): log error here (can't do anything about it)
+        Right msg -> map convertApplyResult $
+            case msg of
+                BlockMsg blk -> applyBlock blk
+                TxMsg    tx  -> applyTx tx
   where
     convertApplyResult = \case
         Storage.Applied -> Bcast.Applied
@@ -137,23 +139,23 @@ wrapLookup lookupBlock lookupTx mid =
         Right (TxId txId) -> map (toStrict . CBOR.serialise) <$> lookupTx txId
         Left _ -> pure Nothing
 
+data ConversionError =
+      DeserialiseFailure CBOR.DeserialiseFailure
+    | IdPayloadMismatch
+
 fromGossip
-    :: forall tx. (Serialise tx, Crypto.Hashable tx)
+    :: (Serialise tx, Crypto.Hashable tx)
     => Bcast.MessageId
     -> ByteString
-    -> Maybe (Msg tx)
-fromGossip mid payload =
-    case CBOR.deserialiseOrFail (fromStrict payload) of
-        Left  _   -> Nothing
-        Right msg -> case msg of
-            BlockMsg blk ->
-                case deserialiseMessageId @tx mid of
-                    Right (BlockId hsh) | hsh == blockHash blk -> Just msg
-                    _                                          -> Nothing
-            TxMsg tx ->
-                case deserialiseMessageId mid of
-                    Right (TxId hsh) | hsh == Crypto.hash tx -> Just msg
-                    _                                        -> Nothing
+    -> Either ConversionError (Msg tx)
+fromGossip mid payload = do
+    mid' <- first DeserialiseFailure $ deserialiseMessageId mid
+    msg  <- first DeserialiseFailure $ deserialisePayload payload
+
+    case (mid', msg) of
+        (BlockId hsh, BlockMsg blk) | hsh == blockHash  blk -> pure msg
+        (TxId    hsh, TxMsg     tx) | hsh == Crypto.hash tx -> pure msg
+        _ -> Left IdPayloadMismatch
 
 toGossip
     :: ( Serialise       tx
@@ -172,3 +174,9 @@ deserialiseMessageId
     => Bcast.MessageId
     -> Either CBOR.DeserialiseFailure (MsgId tx)
 deserialiseMessageId = CBOR.deserialiseOrFail . fromStrict
+
+deserialisePayload
+    :: Serialise tx
+    => ByteString
+    -> Either CBOR.DeserialiseFailure (Msg tx)
+deserialisePayload = CBOR.deserialiseOrFail . fromStrict
