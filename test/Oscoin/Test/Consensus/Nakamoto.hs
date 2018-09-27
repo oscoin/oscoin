@@ -19,7 +19,6 @@ import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
 
-import           Codec.Serialise (Serialise)
 import qualified Data.Hashable as Hashable
 import qualified Data.Map.Strict as Map
 import           System.Random
@@ -46,15 +45,6 @@ newtype NakamotoT tx s m a =
 
 instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx s m)
 
-instance ( MonadMempool    tx   m
-         , MonadBlockStore tx s m
-         , Serialise       tx
-         ) => MonadProtocol tx s (NakamotoT tx s m)
-  where
-    mineM t = (map . map) void $ mineBlock nakConsensus identityEval t
-
-    reconcileM = const $ pure mempty
-
 instance MonadMempool     tx   m => MonadMempool     tx   (NakamotoT tx s m)
 instance MonadBlockStore  tx s m => MonadBlockStore  tx s (NakamotoT tx s m)
 instance MonadUpdate         s m => MonadUpdate         s (NakamotoT tx s m)
@@ -80,6 +70,9 @@ data NakamotoNodeState = NakamotoNodeState
     } deriving Show
 
 instance TestableNode NakamotoNode NakamotoNodeState where
+    testableTick tick = do
+        blk <- (map . map) void $ mineBlock nakConsensus identityEval tick
+        pure $ maybeToList (BlockMsg <$> blk)
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
 

@@ -4,11 +4,12 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStoreClass
+import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..))
-import           Oscoin.Crypto.Hash (Hashable, Hashed)
+import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
 
 import           Oscoin.Test.Consensus.Class
@@ -22,9 +23,13 @@ import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
-class MonadProtocol DummyTx () m => TestableNode m a | a -> m, m -> a where
+class
+    (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m)
+    => TestableNode m a | a -> m, m -> a
+  where
     testableInit         :: TestNetwork b -> TestNetwork a
 
+    testableTick         :: Tick -> m [Msg DummyTx]
     testableRun          :: a -> m b -> (b, a)
     testableLongestChain :: a -> [Hashed (BlockHeader ())]
     testableIncludedTxs  :: a -> [DummyTx]
@@ -81,7 +86,7 @@ deliver
     -> TestNetwork a
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (tickM tick) applyMessage msg
+        let (outgoing, a) = testableRun node $ maybe (testableTick tick) applyMessage msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -91,18 +96,13 @@ deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
 
     | otherwise = tn
 
-applyMessage
-    :: ( MonadProtocol tx s m
-       , Hashable tx
-       )
-    => Msg tx
-    -> m [Msg tx]
+applyMessage :: (TestableNode m a) => Msg DummyTx -> m [Msg DummyTx]
 applyMessage msg = go msg
   where
     go (TxMsg tx)     = resp <$> Storage.applyTx tx
     go (BlockMsg blk) = resp <$> Storage.applyBlock identityEval blk
     go (ReqBlockMsg blk) = do
-            mblk <- BlockStoreClass.lookupBlock blk
+            mblk <- Storage.lookupBlock blk
             pure . maybeToList . map (BlockMsg . void) $ mblk
 
     resp Storage.Applied = [msg]

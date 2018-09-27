@@ -1,6 +1,7 @@
 module Oscoin.Test.Consensus.Node
     ( DummyNodeId
     , DummyTx(..)
+    , DummyState
 
     , TestNodeState(..)
     , TestNodeT
@@ -30,6 +31,8 @@ import           Test.QuickCheck
 
 newtype DummyTx = DummyTx Word8
     deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary, Serialise)
+
+type DummyState = ()
 
 instance Show DummyTx where
     show (DummyTx x) = show x

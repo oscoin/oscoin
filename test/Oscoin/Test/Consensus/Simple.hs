@@ -16,11 +16,10 @@ import           Oscoin.Crypto.Blockchain.Block (blockData, blockHeader)
 import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 
-import           Oscoin.Test.Consensus.Class (MonadProtocol(..))
+import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
 
-import           Codec.Serialise (Serialise)
 import           Control.Monad.State (modify')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -57,14 +56,6 @@ instance MonadBlockStore tx () m => MonadBlockStore tx () (SimpleT tx i m)
 runSimpleT :: Position -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
 runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
 
-instance ( MonadMempool    tx    m
-         , MonadBlockStore tx () m
-         , Serialise       tx
-         ) => MonadProtocol tx () (SimpleT tx i m)
-  where
-    mineM  tick = ask >>= \pos -> mineBlock (simpleConsensus pos) identityEval tick
-    reconcileM  = reconcileSimple
-
 -- Simple Node -----------------------------------------------------------------
 
 type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT Identity)
@@ -76,6 +67,12 @@ data SimpleNodeState = SimpleNodeState
     } deriving Show
 
 instance TestableNode SimpleNode SimpleNodeState where
+    testableTick tick = do
+        position <- ask
+        blk <- mineBlock (simpleConsensus position) identityEval tick
+        reqs <- reconcileSimple tick
+        pure $ maybeToList (BlockMsg <$> blk) <> (ReqBlockMsg <$> reqs)
+
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
 
@@ -114,7 +111,7 @@ initSimpleNodes tn@TestNetwork{tnNodes} =
 runSimpleNode :: SimpleNodeState -> SimpleNode a -> (a, SimpleNodeState)
 runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
   where
-    ((!a, !lt), !tns) =
+    ((a, lt), tns) =
         runIdentity
             . runTestNodeT snsNode
             $ runSimpleT snsPosition snsLast ma
