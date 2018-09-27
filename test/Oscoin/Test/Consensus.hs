@@ -108,7 +108,7 @@ tests =
     ]
 
 propNetworkNodesConverge
-    :: TestableNode a
+    :: forall a m. TestableNode m a
     => (TestNetwork () -> TestNetwork a) -- ^ Network initialization function
     -> Gen (TestNetwork ())              -- ^ TestNetwork generator
     -> Property
@@ -155,7 +155,7 @@ propNetworkNodesConverge tnInit genNetworks =
               $ propMajorityPrefix
 
 -- | Return a pretty-printed TestNetwork for counter-examples.
-prettyCounterexample :: TestableNode a => TestNetwork a -> [DummyTx] -> String
+prettyCounterexample :: TestableNode m a => TestNetwork a -> [DummyTx] -> String
 prettyCounterexample tn@TestNetwork{..} txsReplicated =
     prettyLog ++ prettyInfo ++ prettyNodes ++ prettyStats
   where
@@ -166,18 +166,18 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated =
                               " txs replicated: " ++ show (length txsReplicated),
                               " common prefix: "  ++ show (length $ longestCommonPrefix $ nodePrefixes tn) ]
 
-nodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
+nodePrefixesMatch :: TestableNode m a => TestNetwork a -> Bool
 nodePrefixesMatch tn =
     (>= length (shortestChain tn) - 3) . length . longestCommonPrefix $ nodePrefixes tn
 
-shortestChain :: TestableNode a => TestNetwork a -> [BlockHash]
+shortestChain :: TestableNode m a => TestNetwork a -> [BlockHash]
 shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
 
-longestChain :: TestableNode a => TestNetwork a -> [BlockHash]
+longestChain :: TestableNode m a => TestNetwork a -> [BlockHash]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | A 50%+ majority of nodes in the network have a common prefix.
-majorityNodePrefixesMatch :: TestableNode a => TestNetwork a -> Bool
+majorityNodePrefixesMatch :: TestableNode m a => TestNetwork a -> Bool
 majorityNodePrefixesMatch tn@TestNetwork{..} =
     length ns > length tnNodes - length ns
   where
@@ -185,12 +185,12 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: TestableNode a => [BlockHash] -> a -> Bool
+nodeHasPrefix :: TestableNode m a => [BlockHash] -> a -> Bool
 nodeHasPrefix p node =
     p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: TestableNode a => TestNetwork a -> [[BlockHash]]
+nodePrefixes :: TestableNode m a => TestNetwork a -> [[BlockHash]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

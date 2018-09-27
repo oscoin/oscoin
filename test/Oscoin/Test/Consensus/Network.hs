@@ -32,12 +32,10 @@ import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
-class MonadProtocol DummyTx () (TestableRun a) => TestableNode a where
-    type TestableRun a   :: * -> *
-
+class MonadProtocol DummyTx () m => TestableNode m a | a -> m, m -> a where
     testableInit         :: TestNetwork b -> TestNetwork a
 
-    testableRun          :: a -> (TestableRun a) b -> (b, a)
+    testableRun          :: a -> m b -> (b, a)
     testableLongestChain :: a -> [Hashed (BlockHeader ())]
     testableIncludedTxs  :: a -> [DummyTx]
     testableNodeAddr     :: a -> DummyNodeId
@@ -52,9 +50,7 @@ data NakamotoNodeState = NakamotoNodeState
     , nakNode   :: TestNodeState
     } deriving Show
 
-instance TestableNode NakamotoNodeState where
-    type TestableRun NakamotoNodeState = NakamotoNode
-
+instance TestableNode NakamotoNode NakamotoNodeState where
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
 
@@ -107,9 +103,7 @@ data SimpleNodeState = SimpleNodeState
     , snsLast     :: Simple.LastTime
     } deriving Show
 
-instance TestableNode SimpleNodeState where
-    type TestableRun SimpleNodeState = SimpleNode
-
+instance TestableNode SimpleNode SimpleNodeState where
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
 
@@ -187,7 +181,7 @@ instance Show (TestNetwork a) where
         scheduled = unlines
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
-runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
+runNetwork :: TestableNode m a => TestNetwork a -> TestNetwork a
 runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | Just (sm, sms)   <- Set.minView tnMsgs
     , scheduledTick sm <= tnLastTick
@@ -201,7 +195,7 @@ runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | otherwise = tn
 
 deliver
-    :: TestableNode a
+    :: TestableNode m a
     => Tick
     -> DummyNodeId
     -> Maybe (Msg DummyTx)
