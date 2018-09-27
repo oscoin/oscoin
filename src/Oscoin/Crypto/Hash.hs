@@ -117,7 +117,7 @@ instance Serialise (Digest HashAlgorithm) where
 
 instance ToJSON (Digest HashAlgorithm) where
     toJSON =
-        String . decodeUtf8 . toHex . LBS.toStrict . Binary.encode
+        String . toHexText . LBS.toStrict . Binary.encode
 
 instance FromJSON (Digest HashAlgorithm) where
     parseJSON = withText "Hash" $ \t ->

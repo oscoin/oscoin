@@ -8,7 +8,7 @@ import           Oscoin.Prelude
 import qualified Radicle as Rad
 
 class Monad m => MonadClient m where
-    submitTransaction :: RadTx -> m (Result (Receipt RadTx))
+    submitTransaction :: RadTx -> m (Result (TxSubmitResponse RadTx))
 
     -- | Returns an error result if a transaction with the given hash
     -- was not found.

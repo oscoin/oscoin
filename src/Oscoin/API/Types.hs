@@ -5,13 +5,13 @@ module Oscoin.API.Types
     , isOk
     , isErr
     , resultToEither
-    , Receipt(..)
+    , TxSubmitResponse(..)
     , Key
     , Query(..)
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
+import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.Data.Query (Query(..))
 import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Prelude
@@ -72,15 +72,15 @@ instance FromJSON TxLookupResponse
 instance Serial.Serialise TxLookupResponse
 
 -- | A transaction receipt. Contains the hashed transaction.
-newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
+newtype TxSubmitResponse tx = TxSubmitResponse (Hashed tx)
     deriving (Show, Eq)
 
-deriving instance Serial.Serialise (Receipt tx)
+deriving instance Serial.Serialise (TxSubmitResponse tx)
 
-instance Hashable tx => ToJSON (Receipt tx) where
-    toJSON (Receipt tx) =
-        object [ "tx" .= decodeUtf8 (toHex tx) ]
+instance Hashable tx => ToJSON (TxSubmitResponse tx) where
+    toJSON (TxSubmitResponse tx) =
+        object [ "tx" .= toJSON tx ]
 
-instance Hashable tx => FromJSON (Receipt tx) where
-    parseJSON = withObject "Receipt" $ \o ->
-        Receipt <$> o .: "tx"
+instance Hashable tx => FromJSON (TxSubmitResponse tx) where
+    parseJSON = withObject "TxSubmitResponse" $ \o ->
+        TxSubmitResponse <$> o .: "tx"

@@ -102,7 +102,7 @@ instance MonadKeyStore TestCommandRunner where
 instance MonadClient TestCommandRunner where
     submitTransaction tx = do
         modify (\s -> s { transactions = Map.insert (hash tx) tx (transactions s) })
-        pure $ Ok $ Receipt $ hash tx
+        pure $ Ok $ TxSubmitResponse $ hash tx
 
     getTransaction _txHash = Map.lookup _txHash <$> gets transactions >>= \case
         Nothing -> pure $ Err "not found"
