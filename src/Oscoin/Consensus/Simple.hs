@@ -1,9 +1,10 @@
+-- | In simple consensus the set of nodes is fixed and each node has a
+-- position in the set of nodes. The nodes take turns mining blocks
+-- according to their position.
 module Oscoin.Consensus.Simple
-    ( HasSelf(..)
-    , HasPeers(..)
-    , MonadLastTime(..)
+    ( simpleConsensus
 
-    , simpleConsensus
+    , MonadLastTime(..)
     , mineSimple
     , reconcileSimple
 
@@ -21,15 +22,10 @@ import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHash, BlockHeader(..))
 
-import qualified Data.Set as Set
-import           Lens.Micro (Lens')
-import           Lens.Micro.Mtl (view)
 
-class HasSelf a i | a -> i where
-    self :: Lens' a i
-
-class HasPeers a i | a -> i where
-    peers :: Lens' a (Set i)
+-- | The position of a node within a set of participating nodes.
+-- @(k, n)@ means that the node has index `k` in a set of `n` nodes.
+type Position = (Int, Int)
 
 class Monad m => MonadLastTime m where
     getLastBlockTick :: m Tick
@@ -42,31 +38,23 @@ epochLength :: Tick
 epochLength = 1
 
 simpleConsensus
-    :: ( MonadLastTime m
-       , HasSelf  r i
-       , HasPeers r i
-       , Ord        i
-       )
-    => r
+    :: (MonadLastTime m)
+    => Position
     -> Consensus tx m
-simpleConsensus r = Consensus
+simpleConsensus position = Consensus
     { cScore = comparing chainScore
-    , cMiner = mineSimple r
+    , cMiner = mineSimple position
     }
 
 mineSimple
-    :: ( MonadLastTime m
-       , HasSelf  r i
-       , HasPeers r i
-       , Ord        i
-       )
-    => r
+    :: (MonadLastTime m)
+    => Position
     -> Miner m
-mineSimple r _chain bh@BlockHeader{blockTimestamp} = do
+mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
     -- FIXME(kim): this seems wrong
     let blockHeaderTick = fromInteger $ toInteger blockTimestamp
-    if shouldCutBlock lastBlk r blockHeaderTick
+    if shouldCutBlock position lastBlk blockHeaderTick
     then do
         setLastBlockTick blockHeaderTick
         pure $ Just bh
@@ -106,15 +94,13 @@ shouldReconcile lastAsk at = time - round lastAsk >= stepTime
     time     = round at :: Int
     stepTime = round epochLength
 
-shouldCutBlock :: (Ord i, HasSelf r i, HasPeers r i) => Tick -> r -> Tick -> Bool
-shouldCutBlock lastBlk r at = beenAWhile && ourTurn
+shouldCutBlock :: Position -> Tick -> Tick -> Bool
+shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
   where
     time              = round at
     stepTime          = round epochLength
-    nTotalPeers       = 1 + Set.size (view peers r)
-    relativeBlockTime = stepTime * nTotalPeers
+    relativeBlockTime = stepTime * total
     beenAWhile        = time - round lastBlk >= relativeBlockTime
     stepNumber        = time `div` stepTime
-    ourOffset         = Set.size $ Set.filter (< view self r) (view peers r)
-    currentOffset     = stepNumber `mod` nTotalPeers
-    ourTurn           = currentOffset == ourOffset
+    currentOffset     = stepNumber `mod` total
+    ourTurn           = currentOffset == outOffset

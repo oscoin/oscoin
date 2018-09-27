@@ -119,9 +119,9 @@ nakamotoLongestChain =
 type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT Identity)
 
 data SimpleNodeState = SimpleNodeState
-    { snsEnv  :: Simple.Env DummyNodeId
-    , snsNode :: TestNodeState
-    , snsLast :: Simple.LastTime
+    { snsPosition :: (Int, Int)
+    , snsNode     :: TestNodeState
+    , snsLast     :: Simple.LastTime
     } deriving Show
 
 instance TestableNode SimpleNodeState where
@@ -146,10 +146,13 @@ instance TestableNode SimpleNodeState where
 
 simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
 simpleNode nid peers = SimpleNodeState
-    { snsEnv  = Simple.mkEnv nid peers
+    { snsPosition = (ourOffset, nTotalPeers)
     , snsNode = emptyTestNodeState nid
     , snsLast = Simple.LastTime 0 0
     }
+  where
+    nTotalPeers = 1 + Set.size peers
+    ourOffset   = Set.size $ Set.filter (< nid) peers
 
 initSimpleNodes :: TestNetwork a -> TestNetwork SimpleNodeState
 initSimpleNodes tn@TestNetwork{tnNodes} =
@@ -165,7 +168,7 @@ runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
     ((!a, !lt), !tns) =
         runIdentity
             . runTestNodeT snsNode
-            $ runSimpleT snsEnv snsLast ma
+            $ runSimpleT snsPosition snsLast ma
 
 simpleBestChain :: SimpleNodeState -> Blockchain DummyTx ()
 simpleBestChain =
