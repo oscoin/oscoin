@@ -15,7 +15,6 @@ import           Oscoin.CLI.Spinner hiding (progress, withSpinner)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
-import           Oscoin.Node (Receipt(..))
 
 
 import           Crypto.Random.Types (MonadRandom)
@@ -79,8 +78,7 @@ submitTransaction rval confirmations = do
     tx <- signTransaction rval
     API.submitTransaction tx >>= \case
         API.Err err -> pure $ ResultError err
-        -- XXX(tsenart): Move Receipt from Node to API.Types
-        API.Ok (Receipt txHash) -> waitConfirmations confirmations 500 txHash
+        API.Ok (API.Receipt txHash) -> waitConfirmations confirmations 500 txHash
 
 signTransaction :: MonadCLI m => Rad.Value -> m API.RadTx
 signTransaction v = do

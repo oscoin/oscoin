@@ -15,8 +15,6 @@ module Oscoin.Node
     , getMempool
     , getPath
     , getBestChain
-
-    , Receipt(..)
     ) where
 
 import           Oscoin.Prelude
@@ -32,7 +30,7 @@ import           Oscoin.Consensus.Evaluator (EvalError, Evaluator)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
+import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
@@ -50,16 +48,6 @@ import qualified Radicle as Rad
 import           Codec.Serialise
 import qualified Control.Exception.Safe as Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Data.Aeson
-                 ( FromJSON
-                 , ToJSON
-                 , object
-                 , parseJSON
-                 , toJSON
-                 , withObject
-                 , (.:)
-                 , (.=)
-                 )
 import           Data.Text.Prettyprint.Doc
 
 -- | Node static config.
@@ -205,16 +193,3 @@ getPath = queryM
 getBestChain :: (Hashable tx, Ord tx, MonadIO m) => NodeT tx s i m (Blockchain tx s)
 getBestChain = maximumChainBy (comparing height)
 
--- | A transaction receipt. Contains the hashed transaction.
-newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
-    deriving (Show, Eq)
-
-deriving instance Serialise (Receipt tx)
-
-instance Hashable tx => ToJSON (Receipt tx) where
-    toJSON (Receipt tx) =
-        object [ "tx" .= decodeUtf8 (toHex tx) ]
-
-instance Hashable tx => FromJSON (Receipt tx) where
-    parseJSON = withObject "Receipt" $ \o ->
-        Receipt <$> o .: "tx"

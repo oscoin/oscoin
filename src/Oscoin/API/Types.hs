@@ -5,22 +5,30 @@ module Oscoin.API.Types
     , isOk
     , isErr
     , resultToEither
-    , Receipt
+    , Receipt(..)
     , Key
     , Query(..)
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, toHex)
 import           Oscoin.Data.Query (Query(..))
 import           Oscoin.Data.Tx (Tx)
-import           Oscoin.Node (Receipt)
 import           Oscoin.Prelude
 import           Oscoin.State.Tree (Key)
 import qualified Radicle as Rad
 
 import qualified Codec.Serialise as Serial
-import qualified Data.Aeson as Aeson
+import           Data.Aeson
+                 ( FromJSON
+                 , ToJSON
+                 , object
+                 , parseJSON
+                 , toJSON
+                 , withObject
+                 , (.:)
+                 , (.=)
+                 )
 
 -- | The type of a block transaction in the API.
 type RadTx = Tx Rad.Value
@@ -30,8 +38,8 @@ data Result a =
     | Err Text
     deriving (Show, Eq, Generic)
 
-instance Aeson.ToJSON a => Aeson.ToJSON (Result a)
-instance Aeson.FromJSON a => Aeson.FromJSON (Result a)
+instance ToJSON a => ToJSON (Result a)
+instance FromJSON a => FromJSON (Result a)
 instance Serial.Serialise a => Serial.Serialise (Result a)
 
 isOk :: Result a -> Bool
@@ -59,6 +67,20 @@ data TxLookupResponse = TxLookupResponse
     -- ^ The transaction itself.
     } deriving (Show, Eq, Generic)
 
-instance Aeson.ToJSON TxLookupResponse
-instance Aeson.FromJSON TxLookupResponse
+instance ToJSON TxLookupResponse
+instance FromJSON TxLookupResponse
 instance Serial.Serialise TxLookupResponse
+
+-- | A transaction receipt. Contains the hashed transaction.
+newtype Receipt tx = Receipt { fromReceipt :: Hashed tx }
+    deriving (Show, Eq)
+
+deriving instance Serial.Serialise (Receipt tx)
+
+instance Hashable tx => ToJSON (Receipt tx) where
+    toJSON (Receipt tx) =
+        object [ "tx" .= decodeUtf8 (toHex tx) ]
+
+instance Hashable tx => FromJSON (Receipt tx) where
+    parseJSON = withObject "Receipt" $ \o ->
+        Receipt <$> o .: "tx"

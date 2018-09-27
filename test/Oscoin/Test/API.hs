@@ -10,7 +10,6 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
-import qualified Oscoin.Node as Node
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
@@ -96,7 +95,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
     -- Submit the transaction to the mempool.
     post codec "/transactions" tx >>=
         assertStatus accepted202 <>
-        assertResultOK Node.Receipt {fromReceipt = Crypto.hash tx}
+        assertResultOK API.Receipt {fromReceipt = Crypto.hash tx}
 
     -- Get the mempool once again, make sure the transaction is in there.
     get codec "/transactions" >>=

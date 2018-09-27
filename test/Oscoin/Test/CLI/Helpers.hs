@@ -28,7 +28,6 @@ import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Spinner (newTestSpinner)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Node (Receipt(..))
 
 import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.List as List
