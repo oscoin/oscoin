@@ -33,7 +33,7 @@ data HttpClient = HttpClient
 
 
 newtype HttpClientT m a = HttpClientT (ReaderT HttpClient m a)
-    deriving (Functor, Applicative, Monad, MonadTrans, MonadIO)
+    deriving (Functor, Applicative, Monad, MonadMask, MonadCatch, MonadThrow, MonadTrans, MonadIO)
 
 
 instance (Monad m, MonadIO m) => MonadClient (HttpClientT m) where

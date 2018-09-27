@@ -25,12 +25,15 @@ import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
-import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.CLI.Spinner (newTestSpinner)
+import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Node (Receipt(..))
 
 import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.List as List
+import qualified Data.Map.Strict as Map
+
 import qualified Options.Applicative as Options
 import qualified System.Directory as Dir
 import           System.Environment
@@ -57,7 +60,7 @@ runCLIWithState args setupState = do
         Options.Failure failure ->
             let failureMessage = fst $ Options.renderFailure failure ""
             in assertFailure $ "Failed to parse CLI arguments: \n" <> failureMessage
-    let initialState = TestCommandState { submittedTransactions = []
+    let initialState = TestCommandState { transactions = mempty
                                         , storedKeyPair = Just storedKeyPair
                                         , commandOutput = ""
                                         }
@@ -74,14 +77,17 @@ newtype TestCommandRunner a = TestCommandRunner { fromTestCommandRunner :: State
     deriving (Functor, Applicative, Monad, MonadIO, MonadState TestCommandState)
 
 data TestCommandState = TestCommandState
-    { submittedTransactions :: [ RadTx ]
-    , storedKeyPair         :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
-    , commandOutput         :: Text
+    { transactions  :: Map.Map (Hashed RadTx) RadTx
+    , storedKeyPair :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
+    , commandOutput :: Text
     }
 
 instance MonadCLI TestCommandRunner where
     sleep _ = pure ()
     putLine t = modify $ \s -> s { commandOutput = commandOutput s <> t <> "\n" }
+    withSpinner _ _ = (newTestSpinner >>=)
+    progress _ _ = pure ()
+
 
 instance MonadRandom TestCommandRunner where
     getRandomBytes = liftIO . getRandomBytes
@@ -96,11 +102,17 @@ instance MonadKeyStore TestCommandRunner where
 
 instance MonadClient TestCommandRunner where
     submitTransaction tx = do
-        modify (\s -> s { submittedTransactions = tx : submittedTransactions s })
+        modify (\s -> s { transactions = Map.insert (hash tx) tx (transactions s) })
         pure $ Ok $ Receipt $ hash tx
 
-    getTransaction _txHash =
-        pure $ Err "transaction not found"
+    getTransaction _txHash = Map.lookup _txHash <$> gets transactions >>= \case
+        Nothing -> pure $ Err "not found"
+        Just tx -> pure $ Ok TxLookupResponse
+            { txHash = _txHash
+            , txBlockHash = Nothing
+            , txConfirmations = 1
+            , txPayload = tx
+            }
 
     getState _key =
         pure $ Err "state not found"

@@ -13,6 +13,7 @@ import           Oscoin.CLI.Command
 import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Parser (execParser, execParserPure)
 import           Oscoin.CLI.Revision
+import qualified Oscoin.CLI.Spinner as Spinner
 import           Oscoin.CLI.User
 import           Oscoin.Prelude
 
@@ -26,13 +27,15 @@ runCommand cmd =
     runHttpClientT "http://127.0.0.1:8080" $ runCommandRunnerT $ dispatchCommand cmd
 
 newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: HttpClientT m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadTrans, API.MonadClient)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadMask, MonadCatch, MonadThrow, MonadTrans, API.MonadClient)
 
 instance MonadKeyStore m => MonadKeyStore (CommandRunnerT m)
 
 instance MonadRandom m => MonadRandom (CommandRunnerT m) where
     getRandomBytes = lift . getRandomBytes
 
-instance (MonadKeyStore m, MonadIO m, MonadRandom m) => MonadCLI (CommandRunnerT m) where
+instance (MonadKeyStore m, MonadIO m, MonadMask m, MonadRandom m) => MonadCLI (CommandRunnerT m) where
     sleep milliseconds = liftIO $ threadDelay (1000 * milliseconds)
     putLine = liftIO . putStrLn
+    withSpinner = Spinner.withSpinner
+    progress = Spinner.progress

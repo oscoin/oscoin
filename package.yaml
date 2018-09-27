@@ -10,6 +10,7 @@ github: oscoin/oscoin
 dependencies:
   - base >=4.11.1.0 && <4.12
   - aeson
+  - ansi-terminal
   - async
   - base16-bytestring
   - base64-bytestring

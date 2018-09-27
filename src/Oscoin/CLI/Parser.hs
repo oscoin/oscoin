@@ -3,7 +3,7 @@ module Oscoin.CLI.Parser
     , execParserPure
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (option)
 
 import           Oscoin.CLI.Command
 
@@ -24,25 +24,35 @@ mainParserInfo =
 
 mainParser :: Parser Command
 mainParser = subparser
-    $  command "revision" (revisionParser `withInfo` "Revision commands")
-    <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
+    (  command "revision" (revisionParser `withInfo` "Revision commands")
+    <> command "keypair"  (keyPairParser `withInfo` "Key pair commands")
+    )
 
 revisionParser :: Parser Command
 revisionParser = subparser
     $  command "create" (revisionCreate `withInfo` "Create a revision")
-    <> command "list"   (revisionList   `withInfo` "List revisions")
-    <> command "merge"  (revisionMerge  `withInfo` "Merge a revision")
-  where
-    revisionCreate = pure RevisionCreate
-    revisionList   = pure RevisionList
-    revisionMerge  = RevisionMerge <$> argument auto (metavar "REV-ID")
+    <> command "list"   (revisionList `withInfo` "List revisions")
+    <> command "merge"  (revisionMerge `withInfo` "Merge a revision")
+    where
+        revisionCreate = RevisionCreate <$> confirmationsOption
+        revisionList  = pure RevisionList
+        revisionMerge = RevisionMerge <$> argument auto (metavar "REV-ID")
+
+confirmationsOption :: Parser Word64
+confirmationsOption = option auto
+    (  long "confirmations"
+    <> help "Number of block confirmations to wait for"
+    <> value (3 :: Word64)
+    <> showDefault
+    <> metavar "N"
+    )
 
 keyPairParser :: Parser Command
-keyPairParser = subparser $
-    command "generate" $ keyPairGenerate `withInfo`
+keyPairParser = subparser
+    $ command "generate" $ keyPairGenerate `withInfo`
         "Generate keypair to use with the other commands"
-  where
-    keyPairGenerate = pure GenerateKeyPair
+    where
+        keyPairGenerate = pure GenerateKeyPair
 
 withInfo :: Parser a -> String -> ParserInfo a
 withInfo opts desc = info (helper <*> opts) $ progDesc desc
