@@ -8,7 +8,7 @@ import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (EvalError, fromEvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+                 (Env, RadTx, pureEnv, txEval)
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, Difficulty, fromGenesis, (|>))
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
@@ -28,6 +28,7 @@ import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Time
 
+import qualified Radicle.Extended as Rad
 
 import qualified Control.Concurrent.Async as Async
 import           Control.Monad.Except
@@ -138,7 +139,7 @@ initialBlockchain
   -> Crypto.KeyPair
   -> IO (Either Text (Blockchain Rad.RadTx Rad.Env))
 initialBlockchain path keypair = runExceptT $ do
-    val <- ExceptT $ Rad.parseValue (T.pack path) <$> readFile path
+    val <- ExceptT $ Rad.parse (T.pack path) <$> readFile path
     tx <- liftIO $ createTx keypair val
     now' <- now
     let genesis = emptyGenesisBlock epoch Rad.pureEnv

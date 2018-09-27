@@ -132,5 +132,5 @@ propHashedJSON bs =
 
 propSignedJSON :: Property
 propSignedJSON =
-    forAll (arbitrarySigned :: Gen (Crypto.Signed ByteString)) $ \msg ->
+    forAll (arbitrarySigned :: Gen (Crypto.Signed Text)) $ \msg ->
         (Aeson.decode . Aeson.encode) msg == Just msg

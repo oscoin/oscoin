@@ -40,8 +40,6 @@ import           Codec.Serialise.Orphans ()
 import           Control.Monad.Fail (fail)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
-import           Data.ByteString.BaseN (Base64, encodeBase64)
-import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
 
@@ -127,7 +125,7 @@ instance Serialise Signature where
 -- | A signed message.
 -- Create these with "sign" and verify them with "verify".
 data Signed msg = Signed { sigMessage :: msg, sigSignature :: Signature }
-    deriving (Show, Eq, Ord, Functor, Generic)
+    deriving (Show, Eq, Ord, Functor, Generic, Foldable, Traversable)
 
 instance Serialise msg => Serialise (Signed msg)
 
@@ -135,21 +133,22 @@ instance Crypto.Hashable msg => Crypto.Hashable (Signed msg) where
     hash :: Signed msg -> Crypto.Hashed (Signed msg)
     hash (Signed msg _) = Crypto.toHashed (Crypto.fromHashed (Crypto.hash msg))
 
-instance ToJSON (Signed ByteString) where
+instance ToJSON a => ToJSON (Signed a) where
     toJSON (Signed msg sig) =
-        object [ "msg" .= toJSON (encodeBase64 msg)
+        object [ "msg" .= toJSON msg
                , "sig" .= toJSON sig
                ]
 
-instance FromJSON (Signed ByteString) where
-    parseJSON = withObject "Signed Tx" $ \o -> do
+instance FromJSON a => FromJSON (Signed a) where
+    parseJSON = withObject "Signed a" $ \o -> do
         msg <- o .: "msg"
         sig <- o .: "sig"
-        pure $ signed sig (BaseN.decode (msg :: Base64))
+        pure $ signed sig msg
 
 instance Pretty msg => Pretty (Signed msg) where
     pretty = pretty . unsign
 
+--------------------------------------------------------------------------------
 
 type KeyPair = (PublicKey, PrivateKey)
 

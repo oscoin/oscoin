@@ -10,8 +10,10 @@ import           Oscoin.Crypto.PubKey
 import           Codec.Serialise
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
-import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
+import           Control.Monad.Fail
+
+import qualified Radicle.Extended as Rad
 
 data Tx msg = Tx
     { txMessage :: Signed msg
@@ -26,25 +28,30 @@ instance Serialise msg => Crypto.Hashable (Tx msg) where
 
 instance Serialise msg => Serialise (Tx msg)
 
-instance Serialise msg => ToJSON (Tx msg) where
+instance ToJSON (Tx Rad.Value) where
     toJSON Tx{..} =
-        object [ "msg"     .= toJSON (LBS.toStrict . serialise <$> txMessage)
+        object [ "msg"     .= toJSON (map Rad.prettyValue txMessage)
                , "pubkey"  .= toJSON txPubKey
                , "chainId" .= toJSON txChainId
                , "nonce"   .= toJSON txNonce
                , "ctx"     .= toJSON txContext
                ]
 
-instance Serialise msg => FromJSON (Tx msg) where
+instance FromJSON (Tx Rad.Value) where
     parseJSON = withObject "Tx" $ \o -> do
-        smsg <- o .: "msg"
-        let txMessage = deserialise . LBS.fromStrict <$> smsg
+        signedMsg :: Signed Text <- o .: "msg"
+
+        txMessage :: Signed Rad.Value <- case parseSigned signedMsg of
+            Left err  -> fail $ "error parsing Value: " <> toS err
+            Right val -> pure val
 
         txPubKey  <- o .: "pubkey"
         txChainId <- o .: "chainId"
         txNonce   <- o .: "nonce"
         txContext <- o .: "ctx"
         pure Tx{..}
+      where
+        parseSigned = traverse (Rad.parse "FromJSON")
 
 instance Pretty msg => Pretty (Tx msg) where
     pretty Tx{txMessage} = pretty txMessage

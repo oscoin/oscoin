@@ -5,8 +5,9 @@ module Oscoin.Test.Data.Rad.Arbitrary
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Evaluator.Radicle as OscoinRad
+import           Oscoin.Consensus.Evaluator.Radicle as Rad
 
+import           Data.Either (fromRight)
 import           Data.Functor.Identity (Identity(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
@@ -24,14 +25,17 @@ import           Radicle
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
-instance Arbitrary OscoinRad.Env where
-    arbitrary = pure $ OscoinRad.pureEnv
+instance Arbitrary Rad.Env where
+    arbitrary = pure Rad.pureEnv
 
-instance Arbitrary r => Arbitrary (Rad.Env r) where
-    arbitrary = Rad.Env <$> arbitrary
+instance Arbitrary r => Arbitrary (Radicle.Env r) where
+    arbitrary = Radicle.Env <$> arbitrary
 
-instance Arbitrary Rad.Value where
-    arbitrary = sized go
+instance Arbitrary Value where
+    arbitrary =
+        fromRight (Rad.List [])
+              . Rad.parse "Arbitray" . Rad.prettyValue
+            <$> sized go
       where
         -- There's no literal syntax for dicts, only the 'dict' primop. If we
         -- generated them directly, we would generate something that can only

@@ -4,7 +4,6 @@ module Oscoin.Consensus.Evaluator.Radicle
     , RadEvaluator
     , txEval
     , pureEnv
-    , parseValue
 
     -- * Re-exports
     , Rad.Value
@@ -24,6 +23,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Radicle.Extended as Rad
+import qualified Radicle
 
 newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
@@ -32,7 +32,7 @@ type RadTx = Tx Rad.Value
 type RadEvaluator = Evaluator Env RadTx Rad.Value
 
 pureEnv :: Env
-pureEnv = Env Rad.pureEnv
+pureEnv = Env Radicle.pureEnv
 
 instance Default Env where
     def = pureEnv
@@ -65,9 +65,6 @@ txToProgram Tx{..} =
         , progChainId = txChainId
         , progNonce   = txNonce
         }
-
-parseValue :: Text -> Text -> Either Text Rad.Value
-parseValue name src = Rad.parse name src
 
 txEval :: Evaluator Env RadTx Rad.Value
 txEval tx st = radicleEval (txToProgram tx) st
