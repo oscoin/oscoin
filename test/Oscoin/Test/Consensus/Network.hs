@@ -15,12 +15,10 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
                  (BlockHeader(..), blockData, blockHeader)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
-import qualified Oscoin.Logging as Log
 import qualified Oscoin.Storage as Storage
 
 import           Oscoin.Test.Consensus.Class
-import           Oscoin.Test.Consensus.Nakamoto
-                 (NakamotoEnv(..), NakamotoT, runNakamotoT)
+import           Oscoin.Test.Consensus.Nakamoto (NakamotoT, runNakamotoT)
 import           Oscoin.Test.Consensus.Simple (SimpleT, runSimpleT)
 import qualified Oscoin.Test.Consensus.Simple as Simple
 
@@ -88,27 +86,10 @@ runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
 runNakamotoNode s@NakamotoNodeState{..} ma =
     (a, s { nakStdGen = g, nakNode = tns })
   where
-    ((a, g, ()), tns) =
+    ((a, g), tns) =
         runIdentity
             . runTestNodeT nakNode
-            $ runNakamotoT env nakStdGen ma
-
-    env = NakamotoEnv
-        { nakEval       = identityEval
-        , nakDifficulty = Nakamoto.minDifficulty
-        , nakMiner      = \gen _chain hdr -> mineBlock gen hdr
-        , nakLogger     = Log.noLogger
-        }
-
--- | Mine a block header in 10% of the cases. The forged header does
--- not have a valid proof of work.
-mineBlock :: StdGen -> BlockHeader a -> Maybe (BlockHeader a)
-mineBlock stdGen bh@BlockHeader{..} =
-    let r = fst $ randomR (0, 1) stdGen
-        p = 0.1 :: Float
-     in if r < p
-           then Just bh
-           else Nothing
+            $ runNakamotoT nakStdGen ma
 
 nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
 nakamotoLongestChain =
