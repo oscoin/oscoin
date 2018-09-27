@@ -31,7 +31,7 @@ app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 api :: Environment -> Api Rad.Env i ()
 api env = do
     middleware $ loggingMiddleware env
-               . Wai.staticPolicy (Wai.noDots >-> Wai.addBase ".")
+               . Wai.staticPolicy (Wai.noDots >-> Wai.addBase "static")
 
     -- / ----------------------------------------------------------------------
 
