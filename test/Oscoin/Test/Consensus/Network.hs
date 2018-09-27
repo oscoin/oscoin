@@ -4,25 +4,15 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStoreClass
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain, fromBlockchain, showChainDigest)
-import           Oscoin.Crypto.Blockchain.Block
-                 (BlockHeader(..), blockData, blockHeader)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..))
+import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import qualified Oscoin.Storage as Storage
 
 import           Oscoin.Test.Consensus.Class
-import           Oscoin.Test.Consensus.Nakamoto (NakamotoT, runNakamotoT)
-import           Oscoin.Test.Consensus.Simple (SimpleT, runSimpleT)
-import qualified Oscoin.Test.Consensus.Simple as Simple
 
-import qualified Data.Hashable as Hashable
 import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -40,118 +30,6 @@ class MonadProtocol DummyTx () m => TestableNode m a | a -> m, m -> a where
     testableIncludedTxs  :: a -> [DummyTx]
     testableNodeAddr     :: a -> DummyNodeId
     testableShow         :: a -> Text
-
--- Nakamoto Node ---------------------------------------------------------------
-
-type NakamotoNode = NakamotoT DummyTx () (TestNodeT Identity)
-
-data NakamotoNodeState = NakamotoNodeState
-    { nakStdGen :: StdGen
-    , nakNode   :: TestNodeState
-    } deriving Show
-
-instance TestableNode NakamotoNode NakamotoNodeState where
-    testableInit = initNakamotoNodes
-    testableRun  = runNakamotoNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableNodeAddr = tnsNodeId . nakNode
-
-    testableShow = showChainDigest . nakamotoLongestChain
-
-nakamotoNode :: DummyNodeId -> NakamotoNodeState
-nakamotoNode nid = NakamotoNodeState
-    { nakStdGen = mkStdGen (Hashable.hash nid)
-    , nakNode   = emptyTestNodeState nid
-    }
-
-initNakamotoNodes :: TestNetwork a -> TestNetwork NakamotoNodeState
-initNakamotoNodes tn@TestNetwork{tnNodes} =
-    tn { tnNodes = Map.mapWithKey (const . nakamotoNode) tnNodes }
-
-runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
-runNakamotoNode s@NakamotoNodeState{..} ma =
-    (a, s { nakStdGen = g, nakNode = tns })
-  where
-    ((a, g), tns) =
-        runIdentity
-            . runTestNodeT nakNode
-            $ runNakamotoT nakStdGen ma
-
-nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
-nakamotoLongestChain =
-      BlockStore.maximumChainBy (comparing Nakamoto.chainScore)
-    . tnsBlockstore
-    . nakNode
-
--- Simple Node -----------------------------------------------------------------
-
-type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT Identity)
-
-data SimpleNodeState = SimpleNodeState
-    { snsPosition :: (Int, Int)
-    , snsNode     :: TestNodeState
-    , snsLast     :: Simple.LastTime
-    } deriving Show
-
-instance TestableNode SimpleNode SimpleNodeState where
-    testableInit = initSimpleNodes
-    testableRun  = runSimpleNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableNodeAddr = tnsNodeId . snsNode
-
-    testableShow = showChainDigest . simpleBestChain
-
-simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
-simpleNode nid peers = SimpleNodeState
-    { snsPosition = (ourOffset, nTotalPeers)
-    , snsNode = emptyTestNodeState nid
-    , snsLast = Simple.LastTime 0 0
-    }
-  where
-    nTotalPeers = 1 + Set.size peers
-    ourOffset   = Set.size $ Set.filter (< nid) peers
-
-initSimpleNodes :: TestNetwork a -> TestNetwork SimpleNodeState
-initSimpleNodes tn@TestNetwork{tnNodes} =
-    let nodes   = Map.keysSet tnNodes
-        !nodes' = Map.fromList
-                . map (\node -> (node, simpleNode node (Set.delete node nodes)))
-                $ toList nodes
-     in tn { tnNodes = nodes' }
-
-runSimpleNode :: SimpleNodeState -> SimpleNode a -> (a, SimpleNodeState)
-runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
-  where
-    ((!a, !lt), !tns) =
-        runIdentity
-            . runTestNodeT snsNode
-            $ runSimpleT snsPosition snsLast ma
-
-simpleBestChain :: SimpleNodeState -> Blockchain DummyTx ()
-simpleBestChain =
-      BlockStore.maximumChainBy (comparing Simple.chainScore)
-    . tnsBlockstore
-    . snsNode
 
 -- TestNetwork -----------------------------------------------------------------
 
