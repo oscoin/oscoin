@@ -42,7 +42,11 @@ type NakamotoEval tx s = Evaluator s tx ()
 
 -- | A Nakamoto mining function. Tries all nonces and returns 'Nothing' if
 -- no block satisfying the difficulty was found.
-type NakamotoMiner = forall a. StdGen -> BlockHeader a -> Maybe (BlockHeader a)
+type NakamotoMiner = forall tx s a.
+       StdGen
+    -> Blockchain tx s
+    -> BlockHeader a
+    -> Maybe (BlockHeader a)
 
 -- | Read-only environment for the Nakamoto consensus protocol.
 data NakamotoEnv tx s = NakamotoEnv
@@ -60,21 +64,20 @@ instance Has Log.Logger (NakamotoEnv tx s) where
     modifier f env = env {nakLogger = f (nakLogger env)}
 
 defaultNakamotoEnv :: NakamotoEnv tx s
-defaultNakamotoEnv = NakamotoEnv
-    { nakEval       = identityEval
-    , nakDifficulty = Nakamoto.easyDifficulty
-    , nakMiner      = const . join $ Nakamoto.mineNakamoto
-    , nakLogger     = Log.noLogger
-    }
+defaultNakamotoEnv = NakamotoEnv{..}
+  where
+    nakEval       = identityEval
+    nakDifficulty = Nakamoto.easyDifficulty
+    nakLogger     = Log.noLogger
+
+    nakMiner _gen chain hdr =
+        join $ Nakamoto.mineNakamoto (const nakDifficulty) chain hdr
+
 
 nakEnvToConsensus :: Monad m => NakamotoEnv tx s -> Consensus tx (NakamotoT tx s m)
-nakEnvToConsensus NakamotoEnv {..} = Consensus
+nakEnvToConsensus NakamotoEnv{..} = Consensus
     { cScore = comparing Nakamoto.chainScore
-    , cMiner =
-          \bh -> do
-              let bh' = bh { blockDifficulty = nakDifficulty }
-              stdGen <- state split
-              pure $ nakMiner stdGen bh'
+    , cMiner = \chain hdr -> (\gen -> nakMiner gen chain hdr) <$> state split
     }
 
 newtype NakamotoT tx s m a =

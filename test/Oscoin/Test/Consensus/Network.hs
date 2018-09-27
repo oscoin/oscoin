@@ -94,7 +94,7 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
     env = NakamotoEnv
         { nakEval       = identityEval
         , nakDifficulty = Nakamoto.minDifficulty
-        , nakMiner      = mineBlock
+        , nakMiner      = \gen _chain hdr -> mineBlock gen hdr
         , nakLogger     = Log.noLogger
         }
 

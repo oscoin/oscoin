@@ -62,7 +62,7 @@ mineSimple
        )
     => r
     -> Miner m
-mineSimple r bh@BlockHeader{blockTimestamp} = do
+mineSimple r _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
     -- FIXME(kim): this seems wrong
     let blockHeaderTick = fromInteger $ toInteger blockTimestamp
