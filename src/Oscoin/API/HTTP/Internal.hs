@@ -12,7 +12,7 @@ import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.List (lookup)
+import           Data.List (lookup, isSuffixOf, init)
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as T
@@ -23,6 +23,7 @@ import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Middleware.RequestLogger as Wai
+import qualified Network.Wai.Middleware.Static as Wai
 import           Web.HttpApiData (FromHttpApiData, parseQueryParam)
 import           Web.Spock
                  (HasSpock, SpockAction, SpockConn, SpockM, runSpock, spock)
@@ -187,3 +188,18 @@ loggingMiddleware :: Environment -> Wai.Middleware
 loggingMiddleware Production  = Wai.logStdout
 loggingMiddleware Development = Wai.logStdoutDev
 loggingMiddleware Testing     = identity
+
+-- | Static Policy to serve index.html files from directories.
+indexPolicy :: String -> Wai.Policy
+indexPolicy path =
+    Wai.policy $ pure . change path (path ++ "/index.html")
+  where
+    change from to = (== from) >>= bool identity (const to)
+
+-- | Static Policy to remove trailing slashes.
+trailingSlashPolicy :: Wai.Policy
+trailingSlashPolicy =
+    Wai.policy f
+  where
+    f s | "/" `isSuffixOf` s = Just (init s)
+        | otherwise          = Just s

@@ -27,11 +27,18 @@ run port env hdl = runApi (api env) port hdl
 app :: Environment -> Node.Handle RadTx Rad.Env i -> IO Wai.Application
 app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 
+-- | Policy for static file serving.
+staticFilePolicy :: Wai.Policy
+staticFilePolicy =
+    Wai.noDots >-> trailingSlashPolicy
+               >-> indexPolicy "debug/blockchain"
+               >-> Wai.addBase "static"
+
 -- | Entry point for API.
 api :: Environment -> Api Rad.Env i ()
 api env = do
     middleware $ loggingMiddleware env
-               . Wai.staticPolicy (Wai.noDots >-> Wai.addBase "static")
+               . Wai.staticPolicy staticFilePolicy
 
     -- / ----------------------------------------------------------------------
 
