@@ -63,7 +63,7 @@ tests =
         let accepts = ("*" // "*") : ctypes
         codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
         [testCase (T.unpack $ prettyCodec codec) $ mkTest codec >>=
-            \HTTPTest{..} -> makeNode testState >>= runSession testSession]
+            \HTTPTest{..} -> withNode testState $ runSession testSession]
 
 data HTTPTest = HTTPTest
     { testState   :: NodeState

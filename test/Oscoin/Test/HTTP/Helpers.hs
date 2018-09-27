@@ -9,9 +9,11 @@ import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
 import qualified Oscoin.API.Types as API
+import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
 import           Oscoin.Crypto.Blockchain.Block
@@ -91,8 +93,8 @@ nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
 emptyBlockstore :: Blockchain API.RadTx Rad.Env
 emptyBlockstore = Blockchain $ emptyGenesisBlock 0 def :| []
 
-makeNode :: NodeState -> IO NodeHandle
-makeNode NodeState{..} = do
+withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
+withNode NodeState{..} k = do
     let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger }
 
     mph <- atomically $ do
@@ -108,7 +110,15 @@ makeNode NodeState{..} = do
     bsh <- BlockStore.newIO bs
     sth <- STree.new (BlockStore.chainState (comparing height) bs)
 
-    Node.open cfg 42 mph sth bsh
+    Node.withNode
+        cfg
+        42
+        mph
+        sth
+        bsh
+        Node.defaultEval
+        (Consensus.nakamotoConsensus (Just Nakamoto.easyDifficulty))
+        k
 
 genDummyTx :: IO (Text, API.RadTx)
 genDummyTx = do

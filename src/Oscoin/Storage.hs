@@ -1,5 +1,8 @@
 module Oscoin.Storage
-    ( ApplyResult(..)
+    ( Storage(..)
+    , hoistStorage
+
+    , ApplyResult(..)
 
     , applyBlock
     , applyTx
@@ -23,6 +26,23 @@ import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
 import           Control.Monad.Trans.Maybe (MaybeT(..))
+
+-- | Package up the storage operations in a dictionary
+data Storage tx f = Storage
+    { storageApplyBlock  :: Block tx () -> f ApplyResult
+    , storageApplyTx     :: tx          -> f ApplyResult
+    , storageLookupBlock :: BlockHash   -> f (Maybe (Block tx ()))
+    , storageLookupTx    :: Hashed tx   -> f (Maybe tx)
+    }
+
+-- | Transform the 'Storage' monad
+hoistStorage :: (forall a. m a -> n a) -> Storage tx m -> Storage tx n
+hoistStorage f s = s
+    { storageApplyBlock  = f . storageApplyBlock  s
+    , storageApplyTx     = f . storageApplyTx     s
+    , storageLookupBlock = f . storageLookupBlock s
+    , storageLookupTx    = f . storageLookupTx    s
+    }
 
 data ApplyResult =
       Applied
@@ -61,8 +81,8 @@ applyTx tx = do
     if | novel     -> Mempool.addTxs [tx] $> Applied
        | otherwise -> pure Stale
 
-lookupBlock :: MonadBlockStore tx s m => BlockHash -> m (Maybe (Block tx ()))
-lookupBlock hsh = (map . map) void $ BlockStore.lookupBlock hsh
+lookupBlock :: MonadBlockStore tx s m => BlockHash -> m (Maybe (Block tx s))
+lookupBlock = BlockStore.lookupBlock
 
 lookupTx
     :: ( MonadBlockStore tx s m
@@ -73,16 +93,12 @@ lookupTx
 lookupTx hsh =
     runMaybeT $
             MaybeT (BlockStore.lookupTx hsh)
-        <|> MaybeT (Mempool.lookupTx hsh)
+        <|> MaybeT (Mempool.lookupTx    hsh)
 
 --------------------------------------------------------------------------------
 
 isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
-isNovelBlock h =
-    isNothing <$> BlockStore.lookupBlock h
+isNovelBlock = map isNothing . lookupBlock
 
 isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
-isNovelTx h = do
-    inBlockStore <- BlockStore.lookupTx h
-    inMempool    <- Mempool.lookupTx h
-    pure . isNothing $ inBlockStore <|> inMempool
+isNovelTx = map isNothing . lookupTx

@@ -4,13 +4,12 @@ module Oscoin.Node
     , NodeT
 
     , withNode
-    , open
-    , close
-    , nodeEval
+    , defaultEval
 
     , runNodeT
 
     , miner
+    , storage
 
     , getMempool
     , getPath
@@ -40,14 +39,15 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
-import qualified Oscoin.P2P.Gossip as Gossip
+import           Oscoin.Storage (Storage(..))
+import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Radicle as Rad
 
 import           Codec.Serialise
-import qualified Control.Exception.Safe as Safe (bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Morph (MFunctor(..))
 import           Data.Text.Prettyprint.Doc
 
 -- | Node static config.
@@ -63,6 +63,8 @@ data Handle tx s i = Handle
     , hStateTree  :: STree.Handle s
     , hBlockStore :: BlockStore.Handle tx s
     , hMempool    :: Mempool.Handle tx
+    , hEval       :: Evaluator s tx ()
+    , hConsensus  :: Consensus tx (NodeT tx s i IO)
     }
 
 withNode
@@ -72,28 +74,23 @@ withNode
     -> Mempool.Handle tx
     -> STree.Handle s
     -> BlockStore.Handle tx s
+    -> Evaluator s tx ()
+    -> Consensus tx (NodeT tx s i IO)
     -> (Handle tx s i -> IO c)
     -> IO c
-withNode cfg i mem str blk = Safe.bracket (open cfg i mem str blk) close
+withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
+    bracket open close
+  where
+    open = do
+        gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
+            BlockStore.getGenesisBlock bs
+        Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
+        pure Handle{..}
 
-open :: (Hashable tx, Pretty tx)
-     => Config
-     -> i
-     -> Mempool.Handle tx
-     -> STree.Handle s
-     -> BlockStore.Handle tx s
-     -> IO (Handle tx s i)
-open hConfig hNodeId hMempool hStateTree hBlockStore = do
-    gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
-        BlockStore.getGenesisBlock bs
-    Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
-    pure Handle{..}
+    close = const $ pure ()
 
-close :: Handle tx s i -> IO ()
-close = const $ pure ()
-
-nodeEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
-nodeEval tx st = Eval.radicleEval (toProgram tx) st
+defaultEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
+defaultEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------
 
@@ -102,8 +99,9 @@ newtype NodeT tx s i m a = NodeT (ReaderT (Handle tx s i) m a)
              , Applicative
              , Monad
              , MonadReader (Handle tx s i)
-             , MonadTrans
              , MonadIO
+             , MonadTrans
+             , MFunctor
              )
 
 runNodeT :: Handle tx s i -> NodeT tx s i m a -> m a
@@ -157,31 +155,46 @@ instance MonadClock m => MonadClock (NodeT tx s i m)
 
 -------------------------------------------------------------------------------
 
-withBlockStore
-    :: (MonadReader (Handle tx s si) m, MonadIO m)
-    => (BlockStore.BlockStore tx s -> b) -> m b
-withBlockStore f = do
-    bs <- asks hBlockStore
-    liftIO . atomically $
-        BlockStore.for bs f
-
 miner
-    :: ( Monad      m
-       , MonadIO    m
-       , MonadClock m
+    :: ( MonadIO            m
+       , P2P.MonadBroadcast m
+       , MonadClock         m
        , Serialise tx
        , Hashable  tx
        , Ord       tx
        )
-    => Consensus tx (NodeT tx s i m)
-    -> Evaluator s tx a
-    -> Gossip.Handle e Gossip.Peer
-    -> NodeT tx s i m b
-miner consensus eval gossip = forever $ do
-    blk <- Consensus.mineBlock consensus eval =<< lift currentTick
-    for_ blk $ \blk' -> do
-        liftIO $ P2P.broadcast gossip $ P2P.BlockMsg (void blk')
-        updateM =<< chainState (Consensus.cScore consensus)
+    => NodeT tx s i m a
+miner = do
+    Handle{hEval, hConsensus} <- ask
+    forever $ do
+        blk <-
+            hoist liftIO
+                . Consensus.mineBlock hConsensus hEval =<< currentTick
+        for_ blk $ \blk' -> do
+            lift . P2P.broadcast $ P2P.BlockMsg (void blk')
+            updateChainState
+
+storage
+    :: ( MonadIO m
+       , Hashable  tx
+       , Ord       tx
+       )
+    => Storage tx (NodeT tx s i m)
+storage = Storage
+    { storageApplyBlock  = applyBlock
+    , storageApplyTx     = applyTx
+    , storageLookupBlock = (map . map) void . Storage.lookupBlock
+    , storageLookupTx    = Storage.lookupTx
+    }
+  where
+    applyBlock blk = do
+        eval <- asks hEval
+        res  <- Storage.applyBlock eval blk
+        res <$ when (res == Storage.Applied) updateChainState
+
+    applyTx tx = do
+        res <- Storage.applyTx tx
+        res <$ when (res == Storage.Applied) updateChainState
 
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
@@ -193,3 +206,16 @@ getPath = queryM
 getBestChain :: (Hashable tx, Ord tx, MonadIO m) => NodeT tx s i m (Blockchain tx s)
 getBestChain = maximumChainBy (comparing height)
 
+-- Internal --------------------------------------------------------------------
+
+withBlockStore
+    :: MonadIO m
+    => (BlockStore.BlockStore tx s -> b)
+    -> NodeT tx s i m b
+withBlockStore f = do
+    bs <- asks hBlockStore
+    liftIO . atomically $
+        BlockStore.for bs f
+
+updateChainState :: (MonadIO m, Hashable tx, Ord tx) => NodeT tx s i m ()
+updateChainState = updateM =<< chainState . Consensus.cScore =<< asks hConsensus

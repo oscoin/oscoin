@@ -239,7 +239,7 @@ listen host port = do
                         Right c -> run $ recvAll c
 
 -- TODO(kim): do we need to mutex send?
-send :: HasHandle  r e p
+send :: HasHandle r e p
      => Peer
      -> WireMessage p
      -> NetworkT r ()

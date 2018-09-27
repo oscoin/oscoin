@@ -7,8 +7,6 @@ import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (genesisBlockStore)
-import           Oscoin.Consensus.BlockStore.Class (chainState)
-import           Oscoin.Consensus.Class (updateM)
 import           Oscoin.Consensus.Evaluator (fromEvalError)
 import           Oscoin.Crypto.Blockchain (Difficulty)
 import           Oscoin.Crypto.Blockchain.Block (genesisBlock)
@@ -16,13 +14,13 @@ import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
-import           Oscoin.Node (withNode)
+import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.P2P (mkNodeId, runGossip)
+import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
-import qualified Oscoin.Storage as Storage
+import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
@@ -89,29 +87,36 @@ main = do
     Args{..} <- execParser args
 
     let consensus = Consensus.nakamotoConsensus difficulty
-    let eval      = Node.nodeEval
+    let eval      = Node.defaultEval
 
-    kp       <- readKeyPair
-    nid      <- pure (mkNodeId $ fst kp)
+    keys     <- readKeyPair
+    nid      <- pure (mkNodeId $ fst keys)
     mem      <- Mempool.newIO
     stree    <- STree.new def
-    gen      <- either die pure =<< genesisFromPath eval prelude kp
+    gen      <- either die pure =<< genesisFromPath eval prelude keys
     blkStore <- BlockStore.newIO $ genesisBlockStore gen
     seeds'   <- Yaml.decodeFileThrow seeds
 
-    withStdLogger Log.defaultConfig { Log.cfgLevel = Log.Debug }    $ \lgr ->
-        withNode  (mkNodeConfig Testing lgr) nid mem stree blkStore $ \nod ->
-        withAPI   Testing                                           $ \api ->
-        runGossip lgr kp
-                  P2P.NodeAddr { P2P.nodeId   = nid
-                               , P2P.nodeHost = host
-                               , P2P.nodePort = gossipPort
-                               }
-                  seeds'
-                  (storage consensus eval nod)                      $ \gos ->
+    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
+        withNode   (mkNodeConfig Testing lgr)
+                   nid
+                   mem
+                   stree
+                   blkStore
+                   eval
+                   consensus                                      $ \nod ->
+        withAPI    Testing                                        $ \api ->
+        withGossip lgr
+                   keys
+                   P2P.NodeAddr { P2P.nodeId   = nid
+                                , P2P.nodeHost = host
+                                , P2P.nodePort = gossipPort
+                                }
+                   seeds'
+                   (storage nod)                                  $ \gos ->
             Async.runConcurrently $
                      Async.Concurrently (HTTP.run api (fromIntegral apiPort) nod)
-                  <> Async.Concurrently (miner consensus eval gos nod)
+                  <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env lgr = Node.Config
         { Node.cfgEnv = env
@@ -124,21 +129,5 @@ main = do
             tx <- liftIO $ createTx kp val
             pure $ genesisBlock def eval 0 [tx]
 
-    miner consensus eval gos nod =
-        Node.runNodeT nod $ Node.miner consensus eval gos
-
-    storage consensus eval nod =
-        P2P.storageCallbacks applyBlock applyTx lookupBlock lookupTx
-      where
-        applyBlock =
-            Node.runNodeT nod . (Storage.applyBlock eval >=> updateChainState)
-        applyTx    =
-            Node.runNodeT nod . (Storage.applyTx >=> updateChainState)
-
-        updateChainState applyRes = do
-            when (applyRes == Storage.Applied) $
-                updateM =<< chainState (Consensus.cScore consensus)
-            pure applyRes
-
-        lookupBlock = Node.runNodeT nod . Storage.lookupBlock
-        lookupTx    = Node.runNodeT nod . Storage.lookupTx
+    miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
+    storage nod   = hoistStorage (runNodeT nod) Node.storage

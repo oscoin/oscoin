@@ -1,14 +1,10 @@
-{-# LANGUAGE TupleSections #-}
-
 module Oscoin.P2P
-    ( Msg (..)
-
-    -- * Gossip
-    , runGossip
-    , broadcast
-    , storageCallbacks
+    (-- * Gossip
+      withGossip
+    , Gossip.runGossipT
 
     -- * Re-exports
+    , module Oscoin.P2P.Class
     , module Oscoin.P2P.Types
     ) where
 
@@ -18,8 +14,10 @@ import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, blockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Logging (Logger)
+import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 
+import           Oscoin.P2P.Class
 import qualified Oscoin.P2P.Gossip as Gossip
 import qualified Oscoin.P2P.Gossip.Broadcast as Bcast
 import qualified Oscoin.P2P.Gossip.Handshake as Handshake
@@ -31,35 +29,25 @@ import qualified Codec.Serialise as CBOR
 import qualified Control.Concurrent.Async as Async
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 
-data Msg tx =
-      BlockMsg (Block tx ())
-    | TxMsg    tx
-    deriving (Eq, Generic)
-
-instance Serialise tx => Serialise (Msg tx)
-
-data MsgId tx =
-      BlockId BlockHash
-    | TxId    (Crypto.Hashed tx)
-    deriving (Eq, Generic)
-
-instance Serialise tx => Serialise (MsgId tx)
-
 type GossipHandle = Gossip.Handle Handshake.HandshakeError Gossip.Peer
 
--- | Start listening to gossip and pass the gossip handle to the
--- runner. If the runner returns we stop listening and return the
--- runner result.
-runGossip
-    :: Logger
+-- | Start listening to gossip and pass the gossip handle to the runner.
+--
+-- When the runner returns we stop listening and return the runner result.
+withGossip
+    :: ( Serialise       tx
+       , Crypto.Hashable tx
+       )
+    => Logger
     -> Crypto.KeyPair
     -> NodeAddr
+    -- ^ Node identity (\"self\")
     -> [NodeAddr]
     -- ^ Initial peers to connect to
-    -> Bcast.Callbacks
+    -> Storage tx IO
     -> (GossipHandle -> IO a)
     -> IO a
-runGossip logger keypair selfAddr peerAddrs broadcastCallbacks run = do
+withGossip logger keypair selfAddr peerAddrs storage run = do
     (self:peers) <-
         for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
             Gossip.knownPeer nodeId nodeHost nodePort
@@ -68,42 +56,31 @@ runGossip logger keypair selfAddr peerAddrs broadcastCallbacks run = do
         keypair
         self
         scheduleInterval
-        broadcastCallbacks
+        (storageAsCallbacks storage)
         Handshake.simple
         Membership.defaultConfig
         (listenAndRun peers)
   where
     listenAndRun peers gossipHandle =
-        Async.withAsync (listen peers gossipHandle) $ \_ ->
-            run gossipHandle
+        Async.withAsync (listen peers gossipHandle) . const $ run gossipHandle
 
-    listen peers =
-        runReaderT $ Gossip.listen (nodeHost selfAddr) (nodePort selfAddr) peers
+    listen peers = flip Gossip.runGossipT $
+        Gossip.listen (nodeHost selfAddr) (nodePort selfAddr) peers
 
     scheduleInterval = 10
 
-broadcast
-    :: (Serialise tx, Crypto.Hashable tx)
-    => Gossip.Handle e Gossip.Peer
-    -> Msg tx
-    -> IO ()
-broadcast hdl msg = uncurry (Gossip.broadcast hdl) $ toGossip msg
+--------------------------------------------------------------------------------
 
-storageCallbacks
+storageAsCallbacks
     :: ( Serialise       tx
        , Crypto.Hashable tx
        )
-    => (Block tx ()      -> IO Storage.ApplyResult)
-    -> (tx               -> IO Storage.ApplyResult)
-    -> (BlockHash        -> IO (Maybe (Block tx ())))
-    -> (Crypto.Hashed tx -> IO (Maybe tx))
+    => Storage tx IO
     -> Bcast.Callbacks
-storageCallbacks applyBlock applyTx lookupBlock lookupTx = Bcast.Callbacks
-    { applyMessage  = wrapApply  applyBlock  applyTx
-    , lookupMessage = wrapLookup lookupBlock lookupTx
+storageAsCallbacks Storage{..} = Bcast.Callbacks
+    { applyMessage  = wrapApply  storageApplyBlock  storageApplyTx
+    , lookupMessage = wrapLookup storageLookupBlock storageLookupTx
     }
-
---------------------------------------------------------------------------------
 
 wrapApply
     :: ( Serialise       tx
@@ -156,18 +133,6 @@ fromGossip mid payload = do
         (BlockId hsh, BlockMsg blk) | hsh == blockHash  blk -> pure msg
         (TxId    hsh, TxMsg     tx) | hsh == Crypto.hash tx -> pure msg
         _ -> Left IdPayloadMismatch
-
-toGossip
-    :: ( Serialise       tx
-       , Crypto.Hashable tx
-       )
-    => Msg tx
-    -> (Bcast.MessageId, ByteString)
-toGossip msg =
-    bimap toStrict toStrict . (,CBOR.serialise msg) $
-        case msg of
-            BlockMsg blk -> CBOR.serialise $ blockHash blk
-            TxMsg    tx  -> CBOR.serialise $ Crypto.hash tx
 
 deserialiseMessageId
     :: Serialise tx

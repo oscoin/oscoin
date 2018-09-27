@@ -39,6 +39,7 @@ dependencies:
   - merkle-tree
   - microlens
   - microlens-mtl
+  - mmorph
   - mtl
   - network
   - optparse-applicative

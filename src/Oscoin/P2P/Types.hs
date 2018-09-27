@@ -3,10 +3,14 @@ module Oscoin.P2P.Types
     , mkNodeId
 
     , NodeAddr(..)
+
+    , Msg(..)
+    , MsgId(..)
     ) where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hashed, fromHashed, toHashed)
 import           Oscoin.Crypto.PubKey (PublicKey, publicKeyHash)
 
@@ -62,3 +66,17 @@ instance FromJSON NodeAddr where
         nodeHost <- o .: "host"
         nodePort <- toEnum <$> o .: "port"
         pure NodeAddr{..}
+
+data Msg tx =
+      BlockMsg (Block tx ())
+    | TxMsg    tx
+    deriving (Eq, Generic)
+
+instance Serialise tx => Serialise (Msg tx)
+
+data MsgId tx =
+      BlockId BlockHash
+    | TxId    (Hashed tx)
+    deriving (Eq, Generic)
+
+instance Serialise tx => Serialise (MsgId tx)

@@ -170,9 +170,9 @@ new self cbs =
                 <*> newTVarIO mempty
                 <*> pure cbs
 
-type PlumtreeT n r a = ReaderT r IO a
+type PlumtreeT n r m a = ReaderT r m a
 
-runPlumtreeT :: r -> PlumtreeT n r a -> IO a
+runPlumtreeT :: r -> PlumtreeT n r m a -> m a
 runPlumtreeT = flip runReaderT
 
 data Schedule n = Schedule
@@ -248,19 +248,20 @@ schedule sched@Schedule{..} = \case
             let update = pure . Just . maybe [ma'] (ma':)
              in STMMap.focus (Focus.alterM update) id schedDeferred
 
-eagerPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
+eagerPushPeers :: (MonadIO m, HasHandle r n) => PlumtreeT n r m (HashSet n)
 eagerPushPeers = view hEagerPushPeersL >>= liftIO . readTVarIO
 
-lazyPushPeers :: HasHandle r n => PlumtreeT n r (HashSet n)
+lazyPushPeers :: (MonadIO m, HasHandle r n) => PlumtreeT n r m (HashSet n)
 lazyPushPeers = view hLazyPushPeersL >>= liftIO . readTVarIO
 
 resetPeers
-    :: ( HasHandle r n
+    :: ( MonadIO m
+       , HasHandle r n
        , Eq          n
        , Hashable    n
        )
     => HashSet n
-    -> PlumtreeT n r ()
+    -> PlumtreeT n r m ()
 resetPeers peers = do
     Handle { hSelf           = self
            , hEagerPushPeers = eagers
@@ -277,10 +278,14 @@ resetPeers peers = do
 -- passed in here. Correspondingly, subsequent 'applyMessage' calls must return
 -- 'Stale' (or 'ApplyError').
 broadcast
-    :: (HasHandle r n, Eq n, Hashable n)
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
     => MessageId
     -> ByteString
-    -> PlumtreeT n r [Outgoing n]
+    -> PlumtreeT n r m [Outgoing n]
 broadcast mid msg = do
     self <- view hSelfL
     push Gossip
@@ -293,7 +298,14 @@ broadcast mid msg = do
         }
 
 -- | Receive and handle some 'Message' from the network.
-receive :: (Eq n, Hashable n, HasHandle r n) => Message n -> PlumtreeT n r [Outgoing n]
+receive
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
+    => Message n
+    -> PlumtreeT n r m [Outgoing n]
 receive (GossipM g) = do
     Handle { hSelf = self
            , hMissing = missing
@@ -384,9 +396,13 @@ receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
 -- eagerPushPeers, i.e. it is considered as a candidate to become part of the
 -- tree.\".
 neighborUp
-    :: (HasHandle r n, Eq n, Hashable n)
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
     => n
-    -> PlumtreeT n r ()
+    -> PlumtreeT n r m ()
 neighborUp n = do
     eagers <- view hEagerPushPeersL
     liftIO . atomically . modifyTVar' eagers $ Set.insert n
@@ -399,9 +415,13 @@ neighborUp n = do
 -- removed from the membership. Furthermore, the record of 'IHave' messages sent
 -- from failed members is deleted from the missing history.\"
 neighborDown
-    :: (HasHandle r n, Eq n, Hashable n)
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
     => n
-    -> PlumtreeT n r ()
+    -> PlumtreeT n r m ()
 neighborDown n = do
     Handle { hEagerPushPeers = eagers
            , hLazyPushPeers  = lazies
@@ -416,9 +436,13 @@ neighborDown n = do
 -- Internal --------------------------------------------------------------------
 
 scheduleGraft
-    :: (HasHandle r n, Eq n, Hashable n)
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
     => MessageId
-    -> PlumtreeT n r [Outgoing n]
+    -> PlumtreeT n r m [Outgoing n]
 scheduleGraft mid = do
     hdl <- view handle
     pure [timer hdl timeout1 $ Just (timer hdl timeout2 Nothing)]
@@ -444,9 +468,14 @@ scheduleGraft mid = do
 
             pure $ catMaybes [grf, k]
 
-push :: (HasHandle r n, Eq n, Hashable n)
-     => Gossip n
-     -> PlumtreeT n r [Outgoing n]
+push
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
+    => Gossip n
+    -> PlumtreeT n r m [Outgoing n]
 push g = do
     hdl <- view handle
     liftA2 (<>) (eagerPush hdl) (lazyPush hdl)
@@ -463,12 +492,26 @@ push g = do
 
 -- Helpers ---------------------------------------------------------------------
 
-moveToLazy :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
+moveToLazy
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
+    => n
+    -> PlumtreeT n r m ()
 moveToLazy peer = do
     hdl <- view handle
     liftIO $ updatePeers hdl Set.delete Set.insert peer
 
-moveToEager :: (HasHandle r n, Eq n, Hashable n) => n -> PlumtreeT n r ()
+moveToEager
+    :: ( MonadIO m
+       , HasHandle r n
+       , Eq          n
+       , Hashable    n
+       )
+    => n
+    -> PlumtreeT n r m ()
 moveToEager peer = do
     hdl <- view handle
     liftIO $ updatePeers hdl Set.insert Set.delete peer
