@@ -13,19 +13,15 @@ import           Oscoin.Prelude
 
 import           Oscoin.Clock (Tick)
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
-import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import qualified Oscoin.Storage as Storage
 
-import           Oscoin.Test.Consensus.Class (MonadProtocol(..), Msg(..))
+import           Oscoin.Test.Consensus.Class (MonadProtocol(..))
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.State (modify')
-import           Data.Maybe (maybeToList)
 
 type Position = (Int, Int)
 
@@ -62,25 +58,7 @@ runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
 instance ( MonadMempool    tx    m
          , MonadBlockStore tx () m
          , Serialise       tx
-         , Hashable        tx
          ) => MonadProtocol tx () (SimpleT tx i m)
   where
-    stepM _ msg = respond identityEval msg
     mineM  tick = ask >>= \pos -> mineBlock (simpleConsensus pos) identityEval tick
     reconcileM  = reconcileSimple
-
-respond
-    :: ( MonadBlockStore tx s m
-       , MonadMempool    tx   m
-       , Hashable tx
-       )
-    => Evaluator s tx ()
-    -> Msg tx
-    -> m [Msg tx]
-respond eval msg = go msg
-  where
-    go (TxMsg tx)        = mempty <$ Storage.applyTx tx
-    go (BlockMsg blk)    = mempty <$ Storage.applyBlock eval blk
-    go (ReqBlockMsg blk) = do
-        mblk <- BlockStore.lookupBlock blk
-        pure . maybeToList . map (BlockMsg . void) $ mblk

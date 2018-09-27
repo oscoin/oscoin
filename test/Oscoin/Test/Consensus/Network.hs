@@ -5,6 +5,7 @@ import           Oscoin.Prelude hiding (log, show)
 import           Oscoin.Test.Consensus.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
+import qualified Oscoin.Consensus.BlockStore.Class as BlockStoreClass
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
@@ -13,8 +14,9 @@ import           Oscoin.Crypto.Blockchain
                  (Blockchain, fromBlockchain, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
                  (BlockHeader(..), blockData, blockHeader)
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 import qualified Oscoin.Logging as Log
+import qualified Oscoin.Storage as Storage
 
 import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Nakamoto
@@ -226,7 +228,7 @@ deliver
     -> TestNetwork a
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (tickM tick) (stepM tick) msg
+        let (outgoing, a) = testableRun node $ maybe (tickM tick) applyMessage msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -235,6 +237,23 @@ deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
          in scheduleMessages tick to outgoing tn'
 
     | otherwise = tn
+
+applyMessage
+    :: ( MonadProtocol tx s m
+       , Hashable tx
+       )
+    => Msg tx
+    -> m [Msg tx]
+applyMessage msg = go msg
+  where
+    go (TxMsg tx)     = resp <$> Storage.applyTx tx
+    go (BlockMsg blk) = resp <$> Storage.applyBlock identityEval blk
+    go (ReqBlockMsg blk) = do
+            mblk <- BlockStoreClass.lookupBlock blk
+            pure . maybeToList . map (BlockMsg . void) $ mblk
+
+    resp Storage.Applied = [msg]
+    resp _               = []
 
 scheduleMessages
     :: Tick
