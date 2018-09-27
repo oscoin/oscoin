@@ -15,7 +15,7 @@ import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.Blockchain.Eval (buildBlockStrict)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (createTx)
-import           Oscoin.Environment (Environment(Testing))
+import           Oscoin.Environment (Environment(Development))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
@@ -103,7 +103,7 @@ main = do
     seeds'   <- Yaml.decodeFileThrow seeds
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig Testing lgr)
+        withNode   (mkNodeConfig Development lgr)
                    nid
                    mem
                    stree
@@ -119,7 +119,7 @@ main = do
                    seeds'
                    (storage nod)                                  $ \gos ->
             Async.runConcurrently $
-                     Async.Concurrently (HTTP.run (fromIntegral apiPort) Testing nod)
+                     Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env lgr = Node.Config
