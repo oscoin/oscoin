@@ -8,8 +8,10 @@ module Oscoin.Test.Consensus.Class
 import           Oscoin.Prelude hiding (show)
 
 import           Oscoin.Clock (MonadClock(..), Tick)
+import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 
 import           Formatting (formatToString, (%))
 import qualified Formatting as F
@@ -26,8 +28,7 @@ instance Show tx => Show (Msg tx) where
     show (TxMsg     txs) = "TxMsg " ++ show txs
     show (ReqBlockMsg h) = "ReqBlockMsg " ++ show h
 
-class Monad m => MonadProtocol tx s m | m -> tx s where
-    stepM      :: Tick -> Msg tx -> m [Msg tx]
+class (MonadMempool tx m, MonadBlockStore tx s m) => MonadProtocol tx s m | m -> tx s where
     mineM      :: Tick -> m (Maybe (Block tx ()))
     reconcileM :: Tick -> m [BlockHash]
 

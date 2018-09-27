@@ -46,19 +46,16 @@ tests =
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     constant
                                      (arbitraryPartitionedNetwork Simple.epochLength)
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     constant
                                      (arbitraryHealthyNetwork Simple.epochLength)
         , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @NakamotoNodeState
                                      testableInit
-                                     constant
                                      (arbitraryHealthyNetwork Nakamoto.epochLength)
         ]
     , testGroup "Evaluator"
@@ -109,20 +106,16 @@ tests =
 
         ]
     ]
-  where
-    constant = identity -- O(1)
 
 propNetworkNodesConverge
     :: TestableNode a
     => (TestNetwork () -> TestNetwork a) -- ^ Network initialization function
-    -> (Int -> Int)                      -- ^ Expected messaging complexity
     -> Gen (TestNetwork ())              -- ^ TestNetwork generator
     -> Property
-propNetworkNodesConverge tnInit msgComplexity genNetworks =
+propNetworkNodesConverge tnInit genNetworks =
     forAllShrink genNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
             let tn'             = runNetwork (tnInit tn)
-                msgsSent        = tnMsgCount tn'
 
                 -- Nb.: All nodes have to know all txs, thus the coverage
                 -- condition only needs to check one node.
@@ -134,17 +127,6 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
                 -- although this can also be solved properly by waiting for networks to
                 -- converge.
                 chainLength     = length (longestChain tn')
-                -- The expected minimum amount of messages sent is the length of the shared
-                -- prefix times the number of nodes. Anything above that is considered
-                -- 'amplification'. The `- 1` is to not consider the genesis block as part
-                -- of the calculation, and the reason we remove `chainLength - 1` messages
-                -- at the end is to take into account that for each replicated block,
-                -- one node is the block proposer and thus doesn't need to receive that block.
-                minMsgs         = (chainLength - 1) * msgComplexity nodeCount
-                                - (chainLength - 1)
-                -- The expected maximum amount of message sent is essentially the minimum *squared*.
-                maxMsgs         = (chainLength - 1) * msgComplexity nodeCount * nodeCount
-                                - (chainLength - 1)
                 -- We therefore expect the messaging complexity to be between O(n) and O(n^2).
 
                 --
@@ -154,11 +136,6 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
                 -- to have agreed on blocks beyond the genesis, which all nodes start
                 -- with.
                 propChainGrowth    = chainLength > 1
-                -- Ensure that nodes are within the communication complexity bounds.
-                -- This checks that nodes are not sending too many messages to reach
-                -- consensus. In Nakamoto consensus, message complexity at the network
-                -- level should be O(n), where `n` is the number of nodes.
-                propMsgComplexity  = msgsSent >= minMsgs && msgsSent <= maxMsgs
                 -- Ensure that most runs end with *all* nodes sharing a common prefix.
                 -- The reason we can't have the stronger guarantee is that with
                 -- network delay, it's possible that a test run involving network partitions
@@ -173,7 +150,6 @@ propNetworkNodesConverge tnInit msgComplexity genNetworks =
 
              in cover propReplication     70 "replicated any data"
               . cover propChainGrowth     75 "have more than one block"
-              . cover propMsgComplexity   70 "are within the communication complexity bounds"
               . cover propUnanimtyPrefix  75 "have a common prefix"
               . counterexample (prettyCounterexample tn' replicatedTxs)
               $ propMajorityPrefix
