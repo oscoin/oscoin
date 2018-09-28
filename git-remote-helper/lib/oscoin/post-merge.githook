@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# TODO: implement actual node verification of incoming commits, etc.,
+#       delegated to oscoin cli.
+if true; then
+    echo "post-merge: everything fine"
+    exit 0
+else
+    echo "post-merge: error"
+    exit 1
+fi
