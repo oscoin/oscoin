@@ -4,10 +4,13 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
+import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
-import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..))
+import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
+import           Oscoin.Crypto.Blockchain.Block
+                 (BlockHeader(..), blockData, blockHash)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
@@ -17,6 +20,7 @@ import           Oscoin.Test.Consensus.Class
 import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import           Lens.Micro ((^.))
 import           System.Random
 import           System.Random.Shuffle (shuffle')
 import           Text.Show (Show(..))
@@ -24,17 +28,40 @@ import           Text.Show (Show(..))
 -- TestableNode ----------------------------------------------------------------
 
 class
-    (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m)
+    (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m, HasTestNodeState a)
     => TestableNode m a | a -> m, m -> a
   where
     testableInit         :: TestNetwork b -> TestNetwork a
 
     testableTick         :: Tick -> m [Msg DummyTx]
     testableRun          :: a -> m b -> (b, a)
-    testableLongestChain :: a -> [Hashed (BlockHeader ())]
-    testableIncludedTxs  :: a -> [DummyTx]
-    testableNodeAddr     :: a -> DummyNodeId
-    testableShow         :: a -> Text
+    testableScore        :: a -> Blockchain DummyTx DummyState -> Int
+
+testableLongestChain :: TestableNode m a => a -> [Hashed (BlockHeader ())]
+testableLongestChain =
+      map blockHash
+    . blocks
+    . testableBestChain
+
+testableNodeAddr :: TestableNode m a => a -> DummyNodeId
+testableNodeAddr nodeState = tnsNodeId $ nodeState ^. testNodeStateL
+
+testableIncludedTxs :: TestableNode m a => a -> [DummyTx]
+testableIncludedTxs =
+      concatMap (toList . blockData)
+    . blocks
+    . testableBestChain
+
+testableShow :: TestableNode m a => a -> Text
+testableShow = showChainDigest . testableBestChain
+
+testableBestChain :: TestableNode m a => a -> Blockchain DummyTx DummyState
+testableBestChain nodeState =
+    let blockStore = nodeState ^. testNodeStateL . tnsBlockstoreL
+        score = comparing $ testableScore nodeState
+    in BlockStore.maximumChainBy score blockStore
+
+
 
 -- TestNetwork -----------------------------------------------------------------
 
