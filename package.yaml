@@ -82,6 +82,10 @@ executables:
     main: cli/Main.hs
     dependencies:
       - oscoin
+  git-remote-oss:
+    main: git-remote-helper/Main.hs
+    dependencies:
+      - oscoin
 
 tests:
   test:
