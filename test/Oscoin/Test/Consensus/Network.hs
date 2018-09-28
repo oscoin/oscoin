@@ -4,25 +4,16 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import qualified Oscoin.Consensus.BlockStore as BlockStore
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStoreClass
+import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain, fromBlockchain, showChainDigest)
-import           Oscoin.Crypto.Blockchain.Block
-                 (BlockHeader(..), blockData, blockHeader)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import           Oscoin.Crypto.Blockchain.Block (BlockHeader(..))
+import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
 
 import           Oscoin.Test.Consensus.Class
-import           Oscoin.Test.Consensus.Nakamoto (NakamotoT, runNakamotoT)
-import           Oscoin.Test.Consensus.Simple (SimpleT, runSimpleT)
-import qualified Oscoin.Test.Consensus.Simple as Simple
 
-import qualified Data.Hashable as Hashable
 import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -32,132 +23,18 @@ import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
-class MonadProtocol DummyTx () (TestableRun a) => TestableNode a where
-    type TestableRun a   :: * -> *
-
+class
+    (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m)
+    => TestableNode m a | a -> m, m -> a
+  where
     testableInit         :: TestNetwork b -> TestNetwork a
 
-    testableRun          :: a -> (TestableRun a) b -> (b, a)
+    testableTick         :: Tick -> m [Msg DummyTx]
+    testableRun          :: a -> m b -> (b, a)
     testableLongestChain :: a -> [Hashed (BlockHeader ())]
     testableIncludedTxs  :: a -> [DummyTx]
     testableNodeAddr     :: a -> DummyNodeId
     testableShow         :: a -> Text
-
--- Nakamoto Node ---------------------------------------------------------------
-
-type NakamotoNode = NakamotoT DummyTx () (TestNodeT Identity)
-
-data NakamotoNodeState = NakamotoNodeState
-    { nakStdGen :: StdGen
-    , nakNode   :: TestNodeState
-    } deriving Show
-
-instance TestableNode NakamotoNodeState where
-    type TestableRun NakamotoNodeState = NakamotoNode
-
-    testableInit = initNakamotoNodes
-    testableRun  = runNakamotoNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableNodeAddr = tnsNodeId . nakNode
-
-    testableShow = showChainDigest . nakamotoLongestChain
-
-nakamotoNode :: DummyNodeId -> NakamotoNodeState
-nakamotoNode nid = NakamotoNodeState
-    { nakStdGen = mkStdGen (Hashable.hash nid)
-    , nakNode   = emptyTestNodeState nid
-    }
-
-initNakamotoNodes :: TestNetwork a -> TestNetwork NakamotoNodeState
-initNakamotoNodes tn@TestNetwork{tnNodes} =
-    tn { tnNodes = Map.mapWithKey (const . nakamotoNode) tnNodes }
-
-runNakamotoNode :: NakamotoNodeState -> NakamotoNode a -> (a, NakamotoNodeState)
-runNakamotoNode s@NakamotoNodeState{..} ma =
-    (a, s { nakStdGen = g, nakNode = tns })
-  where
-    ((a, g), tns) =
-        runIdentity
-            . runTestNodeT nakNode
-            $ runNakamotoT nakStdGen ma
-
-nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
-nakamotoLongestChain =
-      BlockStore.maximumChainBy (comparing Nakamoto.chainScore)
-    . tnsBlockstore
-    . nakNode
-
--- Simple Node -----------------------------------------------------------------
-
-type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT Identity)
-
-data SimpleNodeState = SimpleNodeState
-    { snsPosition :: (Int, Int)
-    , snsNode     :: TestNodeState
-    , snsLast     :: Simple.LastTime
-    } deriving Show
-
-instance TestableNode SimpleNodeState where
-    type TestableRun SimpleNodeState = SimpleNode
-
-    testableInit = initSimpleNodes
-    testableRun  = runSimpleNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableNodeAddr = tnsNodeId . snsNode
-
-    testableShow = showChainDigest . simpleBestChain
-
-simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
-simpleNode nid peers = SimpleNodeState
-    { snsPosition = (ourOffset, nTotalPeers)
-    , snsNode = emptyTestNodeState nid
-    , snsLast = Simple.LastTime 0 0
-    }
-  where
-    nTotalPeers = 1 + Set.size peers
-    ourOffset   = Set.size $ Set.filter (< nid) peers
-
-initSimpleNodes :: TestNetwork a -> TestNetwork SimpleNodeState
-initSimpleNodes tn@TestNetwork{tnNodes} =
-    let nodes   = Map.keysSet tnNodes
-        !nodes' = Map.fromList
-                . map (\node -> (node, simpleNode node (Set.delete node nodes)))
-                $ toList nodes
-     in tn { tnNodes = nodes' }
-
-runSimpleNode :: SimpleNodeState -> SimpleNode a -> (a, SimpleNodeState)
-runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
-  where
-    ((!a, !lt), !tns) =
-        runIdentity
-            . runTestNodeT snsNode
-            $ runSimpleT snsPosition snsLast ma
-
-simpleBestChain :: SimpleNodeState -> Blockchain DummyTx ()
-simpleBestChain =
-      BlockStore.maximumChainBy (comparing Simple.chainScore)
-    . tnsBlockstore
-    . snsNode
 
 -- TestNetwork -----------------------------------------------------------------
 
@@ -187,7 +64,7 @@ instance Show (TestNetwork a) where
         scheduled = unlines
             ["  " ++ show msg | msg <- filter (not . isTick) (toList tnMsgs)]
 
-runNetwork :: TestableNode a => TestNetwork a -> TestNetwork a
+runNetwork :: TestableNode m a => TestNetwork a -> TestNetwork a
 runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | Just (sm, sms)   <- Set.minView tnMsgs
     , scheduledTick sm <= tnLastTick
@@ -201,7 +78,7 @@ runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | otherwise = tn
 
 deliver
-    :: TestableNode a
+    :: TestableNode m a
     => Tick
     -> DummyNodeId
     -> Maybe (Msg DummyTx)
@@ -209,7 +86,7 @@ deliver
     -> TestNetwork a
 deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (tickM tick) applyMessage msg
+        let (outgoing, a) = testableRun node $ maybe (testableTick tick) applyMessage msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -219,18 +96,13 @@ deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
 
     | otherwise = tn
 
-applyMessage
-    :: ( MonadProtocol tx s m
-       , Hashable tx
-       )
-    => Msg tx
-    -> m [Msg tx]
+applyMessage :: (TestableNode m a) => Msg DummyTx -> m [Msg DummyTx]
 applyMessage msg = go msg
   where
     go (TxMsg tx)     = resp <$> Storage.applyTx tx
     go (BlockMsg blk) = resp <$> Storage.applyBlock identityEval blk
     go (ReqBlockMsg blk) = do
-            mblk <- BlockStoreClass.lookupBlock blk
+            mblk <- Storage.lookupBlock blk
             pure . maybeToList . map (BlockMsg . void) $ mblk
 
     resp Storage.Applied = [msg]
