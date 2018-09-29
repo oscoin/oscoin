@@ -65,6 +65,7 @@ dependencies:
   - wai
   - wai-extra
   - writer-cps-mtl
+  - process
 
 data-files:
   - node/rad/prelude.rad

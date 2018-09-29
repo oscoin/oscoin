@@ -4,11 +4,14 @@ module Oscoin.Git.Remote.Helper
 
 import           Oscoin.Prelude
 
+import           Crypto.Random.Types (MonadRandom(..))
+import qualified Data.List as L
+import           Data.Maybe
+import qualified Data.Text as T
 import qualified Oscoin.API.Client as API
 import           Oscoin.API.HTTP.Client (HttpClientT, runHttpClientT)
 import           Oscoin.CLI.KeyStore (MonadKeyStore)
-
-import           Crypto.Random.Types (MonadRandom(..))
+import           System.Process
 
 -- | The remote helper monad stack.
 newtype HelperT m a = HelperT { runHelperT :: HttpClientT m a }
@@ -22,10 +25,15 @@ instance MonadRandom m => MonadRandom (HelperT m) where
 --------------------------------------------------------------------------------
 
 runRemoteHelper :: IO ()
-runRemoteHelper =
-    runHttpClientT nodeAddr $ runHelperT $ remoteHelper
+runRemoteHelper = do
+    [remoteName, rawUrl] <- getArgs
+    remoteHelper remoteName $ url rawUrl
   where
+    url = fromJust . L.stripPrefix "oss://"
     nodeAddr = "http://127.0.0.1:8080"
 
-remoteHelper :: API.MonadClient m => m ()
-remoteHelper = pure ()
+remoteHelper :: String -> String -> IO ()
+remoteHelper remoteName url = do
+    _ <- createProcess (proc "/usr/lib/git-core/git-remote-https" [remoteName, url])
+      { std_in = Inherit }
+    pure ()
