@@ -39,7 +39,7 @@ runRemoteHelper = do
     -- nodeAddr = "http://127.0.0.1:8080"
 
 remoteHelper :: Text -> Text -> IO ()
-remoteHelper remoteName url = do
+remoteHelper remoteName url =
     -- TODO: map protocol to git-remote-<PROTOCOL-HANDLER>
     -- TODO: wait for process, once we do concurrent node ops
     createProcess (proc "/usr/lib/git-core/git-remote-https"
