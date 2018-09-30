@@ -28,16 +28,17 @@ instance MonadRandom m => MonadRandom (HelperT m) where
 
 runRemoteHelper :: IO ()
 runRemoteHelper = do
-    [remoteName, rawUrl] <- getArgs
+    [remoteName, rawUrl] <- map T.pack <$> getArgs
     remoteHelper remoteName $ url rawUrl
   where
-    url = fromJust . L.stripPrefix "oss://"
+    url = T.replace "oss://" ""
     nodeAddr = "http://127.0.0.1:8080"
 
-remoteHelper :: String -> String -> IO ()
+remoteHelper :: Text -> Text -> IO ()
 remoteHelper remoteName url = do
     -- TODO: map protocol to git-remote-<PROTOCOL-HANDLER>
+    -- TODO: wait for process, once we do concurrent node ops
     createProcess (proc "/usr/lib/git-core/git-remote-https"
-                         [remoteName, url])
+                         [T.unpack remoteName, T.unpack url])
          { std_in = Inherit }
       >> pure ()
