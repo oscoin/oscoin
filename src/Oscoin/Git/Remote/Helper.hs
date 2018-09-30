@@ -25,7 +25,10 @@ instance MonadRandom m => MonadRandom (HelperT m) where
 
 --------------------------------------------------------------------------------
 
--- TODO: detect if it's fetch or push and execute appropriate node operations
+-- TODO: detect if it's fetch or push and execute appropriate node
+--       operations, probably by implementing a full proxy that relays the
+--       protocol unmodified to git-remote-<PROTOCOL-HANDLER> while parsing
+--       it here, too, to detect fetch/push.
 
 runRemoteHelper :: IO ()
 runRemoteHelper = do
