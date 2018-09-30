@@ -38,6 +38,6 @@ remoteHelper :: String -> String -> IO ()
 remoteHelper remoteName url = do
     -- TODO: map protocol to git-remote-<PROTOCOL-HANDLER>
     createProcess (proc "/usr/lib/git-core/git-remote-https"
-    _ <- createProcess (proc "/usr/lib/git-core/git-remote-https" [remoteName, url])
-      { std_in = Inherit }
-    pure ()
+                         [remoteName, url])
+         { std_in = Inherit }
+      >> pure ()
