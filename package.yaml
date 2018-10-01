@@ -63,6 +63,7 @@ dependencies:
   - wai
   - wai-extra
   - writer-cps-mtl
+  - process
 
 data-files:
   - node/rad/prelude.rad
@@ -78,6 +79,10 @@ executables:
       - yaml
   oscoin-cli:
     main: cli/Main.hs
+    dependencies:
+      - oscoin
+  git-remote-oss:
+    main: git-remote-helper/Main.hs
     dependencies:
       - oscoin
 
