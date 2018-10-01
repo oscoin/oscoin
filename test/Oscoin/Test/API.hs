@@ -95,7 +95,7 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
     -- Submit the transaction to the mempool.
     post codec "/transactions" tx >>=
         assertStatus accepted202 <>
-        assertResultOK API.Receipt {fromReceipt = Crypto.hash tx}
+        assertResultOK (API.TxSubmitResponse $ Crypto.hash tx)
 
     -- Get the mempool once again, make sure the transaction is in there.
     get codec "/transactions" >>=

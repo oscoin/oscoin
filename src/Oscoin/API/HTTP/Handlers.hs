@@ -48,7 +48,7 @@ submitTransaction = do
     tx <- getVerifiedTxBody
     receipt <- node $ do
         Mempool.addTxs [tx]
-        pure $ Receipt (hash tx)
+        pure $ TxSubmitResponse (hash tx)
 
     respond accepted202 $ body (Ok receipt)
   where

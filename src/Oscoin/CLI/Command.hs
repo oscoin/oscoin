@@ -78,7 +78,7 @@ submitTransaction rval confirmations = do
     tx <- signTransaction rval
     API.submitTransaction tx >>= \case
         API.Err err -> pure $ ResultError err
-        API.Ok (API.Receipt txHash) -> waitConfirmations confirmations 500 txHash
+        API.Ok (API.TxSubmitResponse txHash) -> waitConfirmations confirmations 500 txHash
 
 signTransaction :: MonadCLI m => Rad.Value -> m API.RadTx
 signTransaction v = do

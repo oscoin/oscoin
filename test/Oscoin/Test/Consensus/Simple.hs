@@ -5,15 +5,10 @@ module Oscoin.Test.Consensus.Simple
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (Tick)
-import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain, fromBlockchain, showChainDigest)
-import           Oscoin.Crypto.Blockchain.Block (blockData, blockHeader)
-import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 
 import           Oscoin.Test.Consensus.Class
@@ -23,6 +18,7 @@ import           Oscoin.Test.Consensus.Node
 import           Control.Monad.State (modify')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import           Lens.Micro
 
 type Position = (Int, Int)
 
@@ -66,6 +62,10 @@ data SimpleNodeState = SimpleNodeState
     , snsLast     :: LastTime
     } deriving Show
 
+instance HasTestNodeState SimpleNodeState where
+    testNodeStateL = lens snsNode (\s snsNode -> s { snsNode })
+
+
 instance TestableNode SimpleNode SimpleNodeState where
     testableTick tick = do
         position <- ask
@@ -75,20 +75,7 @@ instance TestableNode SimpleNode SimpleNodeState where
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . simpleBestChain
-
-    testableNodeAddr = tnsNodeId . snsNode
-
-    testableShow = showChainDigest . simpleBestChain
+    testableScore = const chainScore
 
 simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
 simpleNode nid peers = SimpleNodeState
@@ -115,9 +102,3 @@ runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
         runIdentity
             . runTestNodeT snsNode
             $ runSimpleT snsPosition snsLast ma
-
-simpleBestChain :: SimpleNodeState -> Blockchain DummyTx ()
-simpleBestChain =
-      BlockStore.maximumChainBy (comparing chainScore)
-    . tnsBlockstore
-    . snsNode
