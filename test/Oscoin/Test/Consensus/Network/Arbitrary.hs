@@ -45,11 +45,11 @@ arbitrarySynchronousNetwork e = do
     let lastTick = max ((length addrs * 3) * toSeconds e) (toSeconds 30) :: Int
 
     smsgs <- listOf1 $ do
-        msg   <- liftA2 (,) arbitrary arbitraryTxMsg
+        (sender, msg) <- liftA2 (,) arbitrary arbitraryTxMsg
         dests <- sublistOf (toList addrs) :: Gen [DummyNodeId]
         for dests $ \d -> do
             at <- choose (0, lastTick `div` 2) :: Gen Int
-            pure $ ScheduledMessage (fromIntegral at) d msg
+            pure $ ScheduledMessage (fromIntegral at) d sender msg
 
     let ticks = foreach nodes $ \(addr, _) ->
          [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
