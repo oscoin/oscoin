@@ -4,24 +4,8 @@ module Oscoin.Git.Remote.Helper
 
 import           Oscoin.Prelude
 
--- import           Crypto.Random.Types (MonadRandom(..))
--- import           Data.Maybe
 import qualified Data.Text as T
--- import qualified Oscoin.API.Client as API
--- import           Oscoin.API.HTTP.Client (HttpClientT, runHttpClientT)
--- import           Oscoin.CLI.KeyStore (MonadKeyStore)
 import           System.Process
-
-{-
--- | The remote helper monad stack.
-newtype HelperT m a = HelperT { runHelperT :: HttpClientT m a }
-    deriving (Functor, Applicative, Monad, MonadTrans, API.MonadClient)
-
-instance MonadKeyStore m => MonadKeyStore (HelperT m)
-
-instance MonadRandom m => MonadRandom (HelperT m) where
-    getRandomBytes = lift . getRandomBytes
--}
 
 --------------------------------------------------------------------------------
 
@@ -36,7 +20,6 @@ runRemoteHelper = do
     remoteHelper remoteName $ url rawUrl
   where
     url = T.replace "oss://" ""
-    -- nodeAddr = "http://127.0.0.1:8080"
 
 remoteHelper :: Text -> Text -> IO ()
 remoteHelper remoteName url =
