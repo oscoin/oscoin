@@ -63,7 +63,7 @@ data Handle tx s i = Handle
     , hStateTree  :: STree.Handle s
     , hBlockStore :: BlockStore.Handle tx s
     , hMempool    :: Mempool.Handle tx
-    , hEval       :: Evaluator s tx ()
+    , hEval       :: Evaluator s tx Rad.Value
     , hConsensus  :: Consensus tx (NodeT tx s i IO)
     }
 
@@ -74,7 +74,7 @@ withNode
     -> Mempool.Handle tx
     -> STree.Handle s
     -> BlockStore.Handle tx s
-    -> Evaluator s tx ()
+    -> Evaluator s tx Rad.Value
     -> Consensus tx (NodeT tx s i IO)
     -> (Handle tx s i -> IO c)
     -> IO c
@@ -89,7 +89,7 @@ withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
 
     close = const $ pure ()
 
-defaultEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] ((), Eval.Env)
+defaultEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] (Rad.Value, Eval.Env)
 defaultEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------

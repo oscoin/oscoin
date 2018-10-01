@@ -64,11 +64,11 @@ fromSource name src = do
         }
 
 -- | A radicle evaluator.
-radicleEval :: Evaluator Env Program ()
+radicleEval :: Evaluator Env Program Rad.Value
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
-        (Left err, _) -> Left [evalError (show err)]
-        (Right _, s)  -> Right ((), Env s)
+        (Left err, _)           -> Left [evalError (show err)]
+        (Right value, newState) -> Right (value, Env newState)
 
 lookupReference :: Rad.Reference -> Rad.Bindings m -> Maybe Rad.Value
 lookupReference (Rad.Reference r) Rad.Bindings{..} =
