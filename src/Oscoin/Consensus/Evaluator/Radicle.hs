@@ -11,7 +11,7 @@ module Oscoin.Consensus.Evaluator.Radicle
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Evaluator (Evaluator, evalError)
+import           Oscoin.Consensus.Evaluator (EvalError(..), Evaluator)
 import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Data.Query
@@ -64,7 +64,7 @@ fromSource name src = do
 radicleEval :: Evaluator Env Program Rad.Value
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
-        (Left err, _)           -> Left [evalError (show err)]
+        (Left err, _)           -> Left [EvalError (show err)]
         (Right value, newState) -> Right (value, Env newState)
 
 lookupReference :: Rad.Reference -> Rad.Bindings m -> Maybe Rad.Value

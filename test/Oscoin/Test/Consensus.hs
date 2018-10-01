@@ -11,36 +11,26 @@ import           Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Consensus.BlockStore
                  (genesisBlockStore, insert, maximumChainBy, orphans)
-import           Oscoin.Consensus.Evaluator
-                 (applyValidExprs, identityEval, rejectEverythingEval)
-import           Oscoin.Consensus.Evaluator.Radicle
-                 (Env(..), fromSource, radicleEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block
                  , BlockHash
-                 , blockHeader
                  , blockPrevHash
-                 , blockState
                  , blockTimestamp
                  , emptyGenesisBlock
                  , emptyHeader
-                 , genesisBlock
                  , mkBlock
                  )
 
-import qualified Radicle as Rad
-
 import           Data.Function (on)
 import           Data.List (foldr1, isPrefixOf, sort, unlines)
-import qualified Data.Map as Map
 import qualified Data.Text as T
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -61,40 +51,6 @@ tests =
                                      testableInit
                                      (arbitraryHealthyNetwork Nakamoto.blockTime)
         ]
-    , testGroup "Evaluator"
-        [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
-            let (res, _) = applyValidExprs xs () identityEval
-             in if | any isLeft res ->
-                       counterexample ("Expected no Lefts, got: " ++ show res) False
-                   | length (rights res) /= length xs ->
-                       counterexample ("Expected " ++ show (length xs) ++ " Rights, got: " ++ show res) False
-                   | otherwise ->
-                       let expected = [Right (x, ()) | x <- xs]
-                           info = "Expected: " <> show expected <> "\nGot: " <> show res
-                        in counterexample info $ res == expected
-
-        , testProperty "applyvalidexprs does not accept invalid expressions" $ \(xs :: [Int]) ->
-            let (res, _) = applyValidExprs xs () rejectEverythingEval
-             in if | any isRight res -> counterexample ("expected only lefts, got: " ++ show (map (map fst) res)) False
-                   | otherwise -> property $ length res == length xs
-        , testCase "block data evaluates to block state" $ do
-            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval epoch txs
-                txs   = rights $ map (fromSource "test") ["(def x 42)", "(def answer (+ x x))"]
-
-            case mgen of
-                Right gen ->
-                    let ident  = Rad.mkIdent "answer"
-                        look i = Map.lookup i
-                               . Rad.fromEnv . Rad.bindingsEnv
-                               . fromEnv . blockState . blockHeader
-                               $ gen
-                        value  = ident >>= look
-                     in
-                        value @?= Just (Rad.Number (42 + 42))
-                Left errs ->
-                    assertFailure $ "Genesis block failed to evaluate:\n" ++ unlines (map show errs)
-        ]
-
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
             let genBlk = emptyGenesisBlock epoch () :: Block () ()

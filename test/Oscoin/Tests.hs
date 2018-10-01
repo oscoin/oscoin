@@ -25,6 +25,7 @@ import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Clock as Clock
 import qualified Oscoin.Test.Consensus as Consensus
+import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
                  ( arbitraryGenesisWith
                  , arbitraryValidBlockWith
@@ -67,6 +68,7 @@ tests = testGroup "Oscoin"
     , testProperty   "Hexadecimal encoding"           propHexEncoding
     , testGroup      "Consensus"                      Consensus.tests
     , testGroup      "P2P"                            P2P.tests
+    , testBlockchain
     ]
 
 testOscoinCrypto :: Assertion
