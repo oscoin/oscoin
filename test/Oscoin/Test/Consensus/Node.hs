@@ -5,6 +5,8 @@ module Oscoin.Test.Consensus.Node
 
     , TestNodeState(..)
     , TestNodeT
+    , HasTestNodeState(..)
+    , tnsBlockstoreL
     , emptyTestNodeState
     , runTestNodeT
     ) where
@@ -55,6 +57,9 @@ data TestNodeState = TestNodeState
     , tnsBlockstore :: BlockStore.BlockStore DummyTx ()
     , tnsNodeId     :: DummyNodeId
     } deriving (Show)
+
+class HasTestNodeState a where
+    testNodeStateL :: Lens' a TestNodeState
 
 tnsMempoolL :: Lens' TestNodeState (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })

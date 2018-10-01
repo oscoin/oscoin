@@ -4,7 +4,6 @@ module Oscoin.Test.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore (maximumChainBy)
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import           Oscoin.Consensus.Class (MonadUpdate)
 import           Oscoin.Consensus.Evaluator (identityEval)
@@ -12,7 +11,6 @@ import           Oscoin.Consensus.Mining (mineBlock)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 
 import           Oscoin.Test.Consensus.Class
@@ -21,6 +19,7 @@ import           Oscoin.Test.Consensus.Node
 
 import qualified Data.Hashable as Hashable
 import qualified Data.Map.Strict as Map
+import           Lens.Micro
 import           System.Random
 
 
@@ -69,26 +68,16 @@ data NakamotoNodeState = NakamotoNodeState
     , nakNode   :: TestNodeState
     } deriving Show
 
+instance HasTestNodeState NakamotoNodeState where
+    testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
+
 instance TestableNode NakamotoNode NakamotoNodeState where
     testableTick tick = do
         blk <- (map . map) void $ mineBlock nakConsensus identityEval tick
         pure $ maybeToList (BlockMsg <$> blk)
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
-
-    testableLongestChain =
-          map (hash . blockHeader)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableIncludedTxs =
-          concatMap (toList . blockData)
-        . toList . fromBlockchain
-        . nakamotoLongestChain
-
-    testableNodeAddr = tnsNodeId . nakNode
-
-    testableShow = showChainDigest . nakamotoLongestChain
+    testableScore = const Nakamoto.chainScore
 
 nakamotoNode :: DummyNodeId -> NakamotoNodeState
 nakamotoNode nid = NakamotoNodeState
@@ -108,9 +97,3 @@ runNakamotoNode s@NakamotoNodeState{..} ma =
         runIdentity
             . runTestNodeT nakNode
             $ runNakamotoT nakStdGen ma
-
-nakamotoLongestChain :: NakamotoNodeState -> Blockchain DummyTx ()
-nakamotoLongestChain =
-      maximumChainBy (comparing Nakamoto.chainScore)
-    . tnsBlockstore
-    . nakNode
