@@ -9,6 +9,7 @@ import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.Storage.Receipt
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Class
@@ -48,6 +49,7 @@ instance Monad m => MonadLastTime (SimpleT tx i m) where
 
 instance MonadMempool    tx    m => MonadMempool    tx    (SimpleT tx i m)
 instance MonadBlockStore tx () m => MonadBlockStore tx () (SimpleT tx i m)
+instance MonadReceiptStore tx () m => MonadReceiptStore tx () (SimpleT tx s m)
 
 runSimpleT :: Position -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
 runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt

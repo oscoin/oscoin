@@ -39,6 +39,7 @@ import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Storage.Receipt
 
 import qualified Radicle.Extended as Rad
 
@@ -46,6 +47,7 @@ import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 import           Data.Text.Prettyprint.Doc
+import           Lens.Micro
 
 -- | Node static config.
 data Config = Config
@@ -55,14 +57,19 @@ data Config = Config
 
 -- | Node handle.
 data Handle tx s i = Handle
-    { hConfig     :: Config
-    , hNodeId     :: i
-    , hStateTree  :: STree.Handle s
-    , hBlockStore :: BlockStore.Handle tx s
-    , hMempool    :: Mempool.Handle tx
-    , hEval       :: Evaluator s tx Rad.Value
-    , hConsensus  :: Consensus tx (NodeT tx s i IO)
+    { hConfig       :: Config
+    , hNodeId       :: i
+    , hStateTree    :: STree.Handle s
+    , hBlockStore   :: BlockStore.Handle tx s
+    , hMempool      :: Mempool.Handle tx
+    , hEval         :: Evaluator s tx Rad.Value
+    , hConsensus    :: Consensus tx (NodeT tx s i IO)
+    , hReceiptStore :: ReceiptStoreHandle tx Rad.Value
     }
+
+instance HasReceiptStoreHandle tx Rad.Value (Handle tx s i) where
+    receiptStoreHandleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
+
 
 withNode
     :: (Hashable tx, Pretty tx)
@@ -79,6 +86,7 @@ withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
     bracket open close
   where
     open = do
+        hReceiptStore <- newReceiptHandle
         gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
             BlockStore.getGenesisBlock bs
         Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
@@ -146,6 +154,10 @@ instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
         liftIO . atomically $ STree.updateTree st s
 
 instance MonadClock m => MonadClock (NodeT tx s i m)
+
+instance (MonadIO m) => MonadReceiptStore tx Rad.Value (NodeT tx s i m) where
+    addReceipt = addReceiptHandle
+    lookupReceipt = lookupReceiptHandle
 
 -------------------------------------------------------------------------------
 

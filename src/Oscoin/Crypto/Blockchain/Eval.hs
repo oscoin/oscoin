@@ -22,7 +22,7 @@ data Receipt tx o = Receipt
     , receiptTxOutput :: Either EvalError o
     , receiptTxBlock  :: BlockHash
     -- ^ Identifies the block the output was generated in
-    } deriving (Show, Eq, Generic)
+    } deriving (Show, Eq, Generic, Functor)
 
 mkReceipt :: (Crypto.Hashable tx) => Block tx s -> tx -> Either EvalError o -> Receipt tx o
 mkReceipt block tx result = Receipt (Crypto.hash tx) result (blockHash block)

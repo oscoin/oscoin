@@ -13,6 +13,7 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.Storage.Receipt
 
 import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
@@ -48,6 +49,7 @@ instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx s m)
 instance MonadMempool     tx   m => MonadMempool     tx   (NakamotoT tx s m)
 instance MonadBlockStore  tx s m => MonadBlockStore  tx s (NakamotoT tx s m)
 instance MonadUpdate         s m => MonadUpdate         s (NakamotoT tx s m)
+instance MonadReceiptStore tx () m => MonadReceiptStore tx () (NakamotoT tx s m)
 
 runNakamotoT :: StdGen -> NakamotoT tx s m a -> m (a, StdGen)
 runNakamotoT rng (NakamotoT ma) = runStateT ma rng
