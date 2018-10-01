@@ -61,7 +61,6 @@ library:
     - network
     - optparse-applicative
     - prettyprinter
-    - process
     - protolude
     - radicle
     - random
@@ -75,6 +74,7 @@ library:
     - text
     - time
     - transformers
+    - typed-process
     - unliftio-core
     - unordered-containers
     - wai
