@@ -29,6 +29,7 @@ import           Data.Aeson
                  , (.:)
                  , (.=)
                  )
+import           Numeric.Natural
 
 -- | The type of a block transaction in the API.
 type RadTx = Tx Rad.Value

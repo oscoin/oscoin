@@ -18,6 +18,7 @@ import           Oscoin.Data.Tx (mkTx)
 
 
 import           Crypto.Random.Types (MonadRandom)
+import           Numeric.Natural
 
 import           Radicle.Conversion
 import qualified Radicle.Extended as Rad

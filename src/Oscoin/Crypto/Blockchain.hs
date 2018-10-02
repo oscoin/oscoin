@@ -33,6 +33,7 @@ import           Formatting ((%))
 import qualified Formatting as F
 import qualified Formatting.Time as F
 import           GHC.Exts (IsList(..))
+import           Numeric.Natural
 
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }

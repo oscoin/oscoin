@@ -256,8 +256,6 @@ import           Data.Word as X
                  , byteSwap64
                  )
 
-import           Numeric.Natural as X (Natural)
-
 import           Data.Either as X
                  ( Either(..)
                  , either
