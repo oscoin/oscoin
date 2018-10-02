@@ -1,5 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-
 module Oscoin.Consensus.Class
     ( Score
     , MonadQuery (..)

@@ -1,5 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-
 module Oscoin.Node.Mempool.Class
     ( MonadMempool (..)
 

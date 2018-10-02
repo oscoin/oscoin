@@ -1,5 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-
 module Oscoin.Consensus.BlockStore.Class where
 
 import           Oscoin.Prelude

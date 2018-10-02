@@ -1,4 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
 -- | The 'MonadKeyStore' type class provides an interface to store and
 -- retrieve a key pair. The instance for IO which is used by the CLI
 -- uses the file system for persistence and stores the keys in
