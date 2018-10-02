@@ -22,7 +22,7 @@ import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 
-import qualified Radicle as Rad hiding (Env)
+import qualified Radicle.Extended as Rad hiding (Env)
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
@@ -196,7 +196,7 @@ getExistingStateKey codec = do
     httpTest (nodeState mempty $ blockchainFromEnv env) $
         get codec "/state?q=[my,key,path]" >>=
             assertStatus ok200 <>
-            assertResultOK (Rad.String "hooray!")
+            assertResultOK (Rad.toRad ("hooray!" :: Text))
 
 getReference :: Codec -> IO HTTPTest
 getReference codec = do
@@ -205,7 +205,7 @@ getReference codec = do
     httpTest (nodeState mempty $ blockchainFromEnv env) $
         get codec "/state?q=[my-ref]" >>=
             assertStatus ok200 <>
-            assertResultOK (Rad.String "hooray!")
+            assertResultOK (Rad.toRad ("hooray!" :: Text))
 
 notTested :: IO HTTPTest
 notTested = httpTest emptyNodeState $ liftIO $ assertFailure "Not tested"

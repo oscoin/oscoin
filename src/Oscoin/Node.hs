@@ -43,7 +43,7 @@ import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
 
-import qualified Radicle as Rad
+import qualified Radicle.Extended as Rad
 
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))

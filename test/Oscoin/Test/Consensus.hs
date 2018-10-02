@@ -78,7 +78,7 @@ tests =
                    | otherwise -> property $ length res == length xs
         , testCase "block data evaluates to block state" $ do
             let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval 0 txs
-                txs   = rights $ map (fromSource "test") ["(define x 42)", "(define answer (+ x x))"]
+                txs   = rights $ map (fromSource "test") ["(def x 42)", "(def answer (+ x x))"]
 
             case mgen of
                 Right gen ->

@@ -46,7 +46,7 @@ data Command =
 dispatchCommand :: MonadCLI m => Command -> m Result
 dispatchCommand (RevisionCreate confirmations) =
     submitTransaction createRevision confirmations
-    where createRevision = Rad.fnApply "create-revision" [toRadicle emptyRevision]
+    where createRevision = Rad.fnApply "create-revision" [toRad emptyRevision]
 
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
