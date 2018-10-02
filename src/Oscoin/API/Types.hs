@@ -59,7 +59,7 @@ data TxLookupResponse = TxLookupResponse
     -- ^ Hash of the transaction.
     , txBlockHash     :: Maybe BlockHash
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
-    , txConfirmations :: Word64
+    , txConfirmations :: Natural
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
     -- the 'Block' referenced by 'txBlockHash'.

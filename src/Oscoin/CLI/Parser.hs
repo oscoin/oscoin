@@ -38,11 +38,11 @@ revisionParser = subparser
         revisionList  = pure RevisionList
         revisionMerge = RevisionMerge <$> argument auto (metavar "REV-ID")
 
-confirmationsOption :: Parser Word64
+confirmationsOption :: Parser Natural
 confirmationsOption = option auto
     (  long "confirmations"
     <> help "Number of block confirmations to wait for"
-    <> value (3 :: Word64)
+    <> value (3 :: Natural)
     <> showDefault
     <> metavar "N"
     )
