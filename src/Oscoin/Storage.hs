@@ -54,7 +54,7 @@ applyBlock
     :: ( MonadBlockStore tx s m
        , MonadMempool    tx   m
        )
-    => Evaluator s tx ()
+    => Evaluator s tx a
     -> Block       tx ()
     -> m ApplyResult
 applyBlock eval blk = do

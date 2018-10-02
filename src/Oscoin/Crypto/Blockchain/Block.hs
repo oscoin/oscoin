@@ -187,7 +187,7 @@ mkBlock header txs =
 genesisBlock
     :: (Foldable t, Serialise tx)
     => s
-    -> Evaluator s tx ()
+    -> Evaluator s tx a
     -> Timestamp
     -> t tx
     -> Either [EvalError] (Block tx s)
@@ -219,7 +219,7 @@ isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock blk =
     (blockPrevHash . blockHeader) blk == Crypto.toHashed Crypto.zeroHash
 
-toOrphan :: Evaluator s tx () -> Block tx s' -> Block tx (Orphan s)
+toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
     blk $> \s -> rightToMaybe (evals (blockData blk) s eval)
 
