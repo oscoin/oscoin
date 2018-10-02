@@ -118,6 +118,7 @@ tests:
 default-extensions:
   - BangPatterns
   - ConstraintKinds
+  - DefaultSignatures
   - DeriveFoldable
   - DeriveFunctor
   - DeriveGeneric

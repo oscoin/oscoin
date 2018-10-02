@@ -1,5 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-
 module Oscoin.Clock
     ( Tick
     , MonadClock (..)
