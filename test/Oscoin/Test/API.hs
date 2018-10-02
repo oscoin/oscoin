@@ -129,7 +129,7 @@ getConfirmedTransaction codec = do
                     , txPayload = tx
                     }
 
-oldestTx :: Blockchain tx s -> Maybe (tx, BlockHash, Word64)
+oldestTx :: Blockchain tx s -> Maybe (tx, BlockHash, Natural)
 oldestTx (blocks -> blks) = head $ do
     (i, blk) <- zip [1..] blks
     tx <- toList $ blockData blk

@@ -80,7 +80,7 @@ type ScoringFunction tx s = Blockchain tx s -> Blockchain tx s -> Ordering
 data TxLookup tx = TxLookup
     { txPayload       :: tx
     , txBlockHash     :: BlockHash
-    , txConfirmations :: Word64
+    , txConfirmations :: Natural
     }
 
 lookupTx :: forall tx s. Crypto.Hashable tx => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)

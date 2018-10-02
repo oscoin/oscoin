@@ -37,7 +37,7 @@ data Result
     | ResultError Text
 
 data Command =
-      RevisionCreate Word64
+      RevisionCreate Natural
     | RevisionList
     | RevisionMerge RevisionId
     | GenerateKeyPair
@@ -59,7 +59,7 @@ dispatchCommand cmd = pure $
 -- | Waits until 'n' number of confirmations are reached for the given tx.
 waitConfirmations
     :: MonadCLI m
-    => Word64 -- ^ Number of confirmations to wait for.
+    => Natural -- ^ Number of confirmations to wait for.
     -> Int -- ^ Number of milliseconds to sleep between tx lookups.
     -> Hashed API.RadTx -- ^ Transaction hash to lookup.
     -> m Result
@@ -73,7 +73,7 @@ waitConfirmations n delay txHash = withSpinner (msg 0) 100 go where
         other -> pure $ ResultError $ "Unexpected response: " <> show other
 
 -- | Submits a Radicle value to the API as signed transaction.
-submitTransaction :: MonadCLI m=> Rad.Value -> Word64 -> m Result
+submitTransaction :: MonadCLI m => Rad.Value -> Natural -> m Result
 submitTransaction rval confirmations = do
     tx <- signTransaction rval
     API.submitTransaction tx >>= \case
