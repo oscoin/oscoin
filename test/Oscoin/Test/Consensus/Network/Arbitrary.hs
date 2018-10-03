@@ -72,9 +72,9 @@ arbitraryPartitionedNetwork e = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork e
     partition           <- arbitraryPartition (Map.keys tnNodes)
     partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 4) :: Gen Tick
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) `div` 4) :: Gen Tick
     healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) / 3) :: Gen Tick
+                                             , fromEnum $ scheduledTick (maximum tnMsgs) `div` 3) :: Gen Tick
 
     let partheal = Set.fromList [Partition partitionAt partition, Heal healAt]
     pure net { tnMsgs = tnMsgs <> partheal }

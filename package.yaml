@@ -17,6 +17,7 @@ dependencies:
   - binary
   - bytestring
   - cborg
+  - clock
   - conduit
   - containers
   - cryptonite

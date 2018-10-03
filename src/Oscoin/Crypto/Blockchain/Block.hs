@@ -24,6 +24,7 @@ module Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Prelude
 import qualified Prelude
 
+import           Oscoin.Clock (Timestamp)
 import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import qualified Oscoin.Crypto.Hash as Crypto
 
@@ -54,9 +55,6 @@ type Difficulty = Integer
 
 -- | Block height.
 type Height = Integer
-
--- | Unix timestamp.
-type Timestamp = Word64
 
 -- | Block header.
 data BlockHeader s = BlockHeader

@@ -23,6 +23,7 @@ import qualified Oscoin.Node.Mempool.Event as Mempool
 
 import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.CLI as CLI
+import qualified Oscoin.Test.Clock as Clock
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
                  ( arbitraryGenesisWith
@@ -54,6 +55,7 @@ tests :: TestTree
 tests = testGroup "Oscoin"
     [ testGroup      "API"                            API.tests
     , testGroup      "CLI"                            CLI.tests
+    , testGroup      "Clock"                          Clock.tests
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "Blockchain"                     testOscoinBlockchain

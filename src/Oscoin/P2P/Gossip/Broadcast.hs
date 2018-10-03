@@ -55,11 +55,11 @@ import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
-import           Data.Time.Clock (NominalDiffTime)
 import qualified Focus
 import           Lens.Micro (Lens', lens, over, set)
 import           Lens.Micro.Mtl (view)
 import qualified ListT
+import           Oscoin.Clock
 import qualified STMContainers.Map as STMMap
 
 type MessageId = ByteString
@@ -185,7 +185,7 @@ data Schedule n = Schedule
 
 newSchedule
     :: (Eq n, Hashable n)
-    => NominalDiffTime
+    => Duration
     -> (n -> Message n -> IO ())
     -> IO (Schedule n)
 newSchedule interval schedSend = do
@@ -193,7 +193,7 @@ newSchedule interval schedSend = do
     schedDeferred   <- STMMap.newIO
     schedLazyThread <-
         async . forever $ do
-            threadDelay $ toSeconds interval * 1000000
+            threadDelay $ round (interval `as` microseconds)
             ihaves <-
                 atomically $ do
                     ihaves <- ListT.toList $ STMMap.stream schedLazyQueue
@@ -203,9 +203,6 @@ newSchedule interval schedSend = do
                 traverse_ (schedSend rcpt) ms
 
     pure Schedule{..}
-  where
-    toSeconds :: NominalDiffTime -> Int
-    toSeconds = round @Double . realToFrac
 
 destroySchedule :: Schedule n -> IO ()
 destroySchedule Schedule{schedDeferred, schedLazyThread} = do
@@ -218,7 +215,7 @@ destroySchedule Schedule{schedDeferred, schedLazyThread} = do
 
 withSchedule
     :: (Eq n, Hashable n)
-    => NominalDiffTime
+    => Duration
     -> (n -> Message n -> IO ())
     -> (Schedule n -> IO a)
     -> IO a

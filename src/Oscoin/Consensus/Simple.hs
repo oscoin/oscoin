@@ -82,25 +82,21 @@ chainScore bc =
   where
     h              = height bc
     lastBlock      = tip bc
-    timestampNs    = blockTimestamp $ blockHeader lastBlock
-    timestamp      = timestampNs `div` 1000000000000
-    e              = round epochLength
-    steps          = fromIntegral timestamp `div` e :: Int
+    timestamp      = blockTimestamp $ blockHeader lastBlock
+    steps          = fromIntegral $ timestamp `div` epochLength
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
 shouldReconcile :: Tick -> Tick -> Bool
-shouldReconcile lastAsk at = time - round lastAsk >= stepTime
-  where
-    time     = round at :: Int
-    stepTime = round epochLength
+shouldReconcile lastAsk at = at - lastAsk >= epochLength
 
 shouldCutBlock :: Position -> Tick -> Tick -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
   where
-    time              = round at
-    stepTime          = round epochLength
-    relativeBlockTime = stepTime * total
-    beenAWhile        = time - round lastBlk >= relativeBlockTime
+    time              = at
+    stepTime          = epochLength
+    relativeBlockTime = stepTime * total'
+    beenAWhile        = time - lastBlk >= relativeBlockTime
     stepNumber        = time `div` stepTime
-    currentOffset     = stepNumber `mod` total
-    ourTurn           = currentOffset == outOffset
+    currentOffset     = stepNumber `mod` total'
+    ourTurn           = currentOffset == fromIntegral outOffset
+    total'            = fromIntegral total

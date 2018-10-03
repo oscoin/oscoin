@@ -6,6 +6,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 
+import           Oscoin.Clock (Timestamp(..), seconds)
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
@@ -20,6 +21,7 @@ import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
 import           Data.Word (Word8)
 
+import           Oscoin.Test.Clock ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
@@ -43,13 +45,13 @@ arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
 
 arbitraryValidBlockWith :: (Serialise tx, Arbitrary s) => BlockHeader () -> [tx] -> Gen (Block tx s)
 arbitraryValidBlockWith prevHeader txs = do
-    elapsed <- choose (2750, 3250)
+    elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockState <- arbitrary
     let header = emptyHeader
                { blockPrevHash   = hash prevHeader
                , blockDataHash   = hashTxs txs
                , blockState
-               , blockTimestamp  = blockTimestamp prevHeader + elapsed
+               , blockTimestamp  = blockTimestamp prevHeader + Timestamp elapsed
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)

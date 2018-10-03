@@ -16,7 +16,7 @@ module Oscoin.P2P.Gossip
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (MonadClock)
+import           Oscoin.Clock
 import           Oscoin.Crypto.PubKey (PrivateKey, PublicKey)
 import           Oscoin.Logging (Logger)
 
@@ -38,7 +38,6 @@ import           Control.Monad.Fix (mfix)
 import           Control.Monad.IO.Unlift (MonadUnliftIO(..), wrappedWithRunInIO)
 import           Data.Has (Has(..))
 import           Data.Hashable (Hashable)
-import           Data.Time.Clock (NominalDiffTime)
 import           Lens.Micro (lens)
 import           Network.Socket (HostName, PortNumber)
 import qualified System.Random.SplitMix as SplitMix
@@ -104,7 +103,7 @@ withGossip
     => Logger
     -> (PublicKey, PrivateKey)
     -> IO.Peer
-    -> NominalDiffTime
+    -> Duration
     -> Plum.Callbacks
     -> Handshake.Handshake e (ProtocolMessage IO.Peer)
     -> Hypa.Config

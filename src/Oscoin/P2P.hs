@@ -10,6 +10,7 @@ module Oscoin.P2P
 
 import           Oscoin.Prelude hiding (show)
 
+import           Oscoin.Clock (seconds)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, blockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -67,7 +68,7 @@ withGossip logger keypair selfAddr peerAddrs storage run = do
     listen peers = flip Gossip.runGossipT $
         Gossip.listen (nodeHost selfAddr) (nodePort selfAddr) peers
 
-    scheduleInterval = 10
+    scheduleInterval = 10 * seconds
 
 --------------------------------------------------------------------------------
 
