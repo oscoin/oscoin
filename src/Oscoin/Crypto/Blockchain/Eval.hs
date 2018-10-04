@@ -1,6 +1,7 @@
 module Oscoin.Crypto.Blockchain.Eval
     ( Receipt(..)
     , buildBlock
+    , toOrphan
     ) where
 
 import           Oscoin.Prelude
@@ -47,6 +48,16 @@ buildBlock eval tick txs parent =
         newBlock = mkUnsealedBlock parent tick validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
     in (newBlock, receipts)
+
+
+toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
+toOrphan eval blk =
+    blk $> \s -> foldlM step s (blockData blk)
+  where
+    step s tx =
+        case eval tx s of
+            Left _        -> Nothing
+            Right (_, s') -> Just s'
 
 -- Internal ------------------------------------------------------
 

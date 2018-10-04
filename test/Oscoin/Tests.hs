@@ -13,9 +13,9 @@ import           Oscoin.Crypto.Blockchain.Block
                  , BlockHeader(..)
                  , blockHash
                  , blockHeader
-                 , toOrphan
                  , validateBlock
                  )
+import           Oscoin.Crypto.Blockchain.Eval (toOrphan)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool

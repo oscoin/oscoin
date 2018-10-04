@@ -6,7 +6,6 @@ module Oscoin.Crypto.Blockchain.Block
     , Height
     , Timestamp
     , Orphan
-    , toOrphan
     , mkBlock
     , linkBlock
     , genesisBlock
@@ -205,10 +204,6 @@ genesisHeader blockTimestamp blockState txs =
         , blockDifficulty = 0
         , blockNonce = 0
         }
-
-toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
-toOrphan eval blk =
-    blk $> \s -> rightToMaybe (evals (blockData blk) s eval)
 
 blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
