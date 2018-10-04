@@ -9,6 +9,7 @@ import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
 import qualified Oscoin.API.Types as API
+import           Oscoin.Clock
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
@@ -91,7 +92,7 @@ nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
 nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
 
 emptyBlockstore :: Blockchain API.RadTx Rad.Env
-emptyBlockstore = Blockchain $ emptyGenesisBlock 0 def :| []
+emptyBlockstore = Blockchain $ emptyGenesisBlock epoch def :| []
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do

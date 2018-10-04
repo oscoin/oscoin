@@ -13,6 +13,7 @@ module Oscoin.Test.Consensus.Node
 
 import           Oscoin.Prelude hiding (StateT, runStateT, show)
 
+import           Oscoin.Clock
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
@@ -71,7 +72,7 @@ emptyTestNodeState :: DummyNodeId -> TestNodeState
 emptyTestNodeState nid = TestNodeState
     { tnsStateTree  = mempty
     , tnsMempool    = mempty
-    , tnsBlockstore = BlockStore.genesisBlockStore $ Block.emptyGenesisBlock 0 ()
+    , tnsBlockstore = BlockStore.genesisBlockStore $ Block.emptyGenesisBlock epoch ()
     , tnsNodeId     = nid
     }
 

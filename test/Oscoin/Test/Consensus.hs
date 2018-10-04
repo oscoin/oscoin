@@ -2,6 +2,7 @@ module Oscoin.Test.Consensus where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Clock
 import           Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary
@@ -48,17 +49,17 @@ tests =
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     (arbitraryPartitionedNetwork Simple.epochLength)
+                                     (arbitraryPartitionedNetwork Simple.blockTime)
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     (arbitraryHealthyNetwork Simple.epochLength)
+                                     (arbitraryHealthyNetwork Simple.blockTime)
         , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @NakamotoNodeState
                                      testableInit
-                                     (arbitraryHealthyNetwork Nakamoto.epochLength)
+                                     (arbitraryHealthyNetwork Nakamoto.blockTime)
         ]
     , testGroup "Evaluator"
         [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
@@ -77,7 +78,7 @@ tests =
              in if | any isRight res -> counterexample ("expected only lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
         , testCase "block data evaluates to block state" $ do
-            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval 0 txs
+            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval epoch txs
                 txs   = rights $ map (fromSource "test") ["(def x 42)", "(def answer (+ x x))"]
 
             case mgen of
@@ -96,9 +97,9 @@ tests =
 
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = emptyGenesisBlock 0 () :: Block () ()
+            let genBlk = emptyGenesisBlock epoch () :: Block () ()
                 nextBlk = mkBlock emptyHeader
-                    { blockTimestamp = 1
+                    { blockTimestamp = fromEpoch (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
                 blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk

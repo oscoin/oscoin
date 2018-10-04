@@ -4,7 +4,7 @@ module Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
+import           Oscoin.Clock
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
@@ -23,8 +23,8 @@ import           Lens.Micro
 type Position = (Int, Int)
 
 data LastTime = LastTime
-    { ltLastBlk :: Tick
-    , ltLastAsk :: Tick
+    { ltLastBlk :: Timestamp
+    , ltLastAsk :: Timestamp
     } deriving Show
 
 newtype SimpleT tx i m a = SimpleT (ReaderT Position (StateT LastTime m) a)
@@ -81,7 +81,7 @@ simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
 simpleNode nid peers = SimpleNodeState
     { snsPosition = (ourOffset, nTotalPeers)
     , snsNode = emptyTestNodeState nid
-    , snsLast = LastTime 0 0
+    , snsLast = LastTime epoch epoch
     }
   where
     nTotalPeers = 1 + Set.size peers

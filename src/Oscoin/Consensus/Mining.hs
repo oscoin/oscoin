@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Evaluator (Evaluator, applyValidExprs)
 import           Oscoin.Consensus.Types
 
-import           Oscoin.Clock (Tick)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -25,9 +24,9 @@ mineBlock
        )
     => Consensus tx m
     -> Evaluator s tx b
-    -> Tick
+    -> Timestamp
     -> m (Maybe (Block tx s))
-mineBlock Consensus{cScore, cMiner} eval tick = do
+mineBlock Consensus{cScore, cMiner} eval time = do
     txs   <- (map . map) snd Mempool.getTxs
     chain <- BlockStore.maximumChainBy cScore
 
@@ -50,6 +49,6 @@ mineBlock Consensus{cScore, cMiner} eval tick = do
             , blockDataHash     = hashTxs validTxs
             , blockState        = newState
             , blockDifficulty   = 0
-            , blockTimestamp    = fromIntegral $ fromEnum tick
+            , blockTimestamp    = time
             , blockNonce        = 0
             }
