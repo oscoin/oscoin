@@ -6,10 +6,10 @@ import           Oscoin.Prelude
 
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 
-import           Oscoin.Time
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
+import           Oscoin.Time
 
 import qualified Crypto.Hash as Crypto
 

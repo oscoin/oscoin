@@ -4,12 +4,12 @@ module Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Time
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network

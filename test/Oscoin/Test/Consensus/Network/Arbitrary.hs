@@ -5,10 +5,10 @@ module Oscoin.Test.Consensus.Network.Arbitrary where
 import           Oscoin.Prelude
 
 
-import           Oscoin.Time
 import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
+import           Oscoin.Time
 
 import           Data.List (nub, permutations)
 import qualified Data.Map.Strict as Map

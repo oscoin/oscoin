@@ -9,7 +9,6 @@ import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Time
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
@@ -28,6 +27,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
