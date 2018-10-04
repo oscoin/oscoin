@@ -1,14 +1,12 @@
 module Oscoin.Time
     ( Timestamp
     , Duration
-    , Unit(..)
     , sinceEpoch
     , fromEpoch
     , timeAdd
     , timeDiff
     , epoch
     , now
-    , as
     , nanoseconds
     , microseconds
     , milliseconds
@@ -24,15 +22,6 @@ import           Data.Aeson (FromJSON, ToJSON)
 import qualified Formatting as Fmt
 import           System.Clock (Clock(Realtime), getTime, toNanoSecs)
 import           System.Random (Random)
-
--- | A sum type of common Duration units. There is no definition for units
--- of Day or larger to avoid confusion across daylight savings time zone transitions.
-data Unit = Nanoseconds
-          | Microseconds
-          | Milliseconds
-          | Seconds
-          | Minutes
-          | Hours
 
 -- | A Duration represents the elapsed time between two instants
 -- as an Int64 nanosecond count. The representation limits the
@@ -77,20 +66,3 @@ milliseconds = 1000 * microseconds
 seconds      = 1000 * milliseconds
 minutes      = 60   * seconds
 hours        = 60   * minutes
-
--- | Converts a Unit into its respective Duration in nanoseconds
-unit :: Unit -> Duration
-unit Nanoseconds  = nanoseconds
-unit Microseconds = microseconds
-unit Milliseconds = milliseconds
-unit Seconds      = seconds
-unit Minutes      = minutes
-unit Hours        = hours
-
--- | converts a 'Duration' to another 'Unit'
-as :: Duration -> Unit -> Double
-from `as` to = unit' + nsec / fromIntegral to' where
-    unit' = fromIntegral $ from `div` to'
-    nsec  = fromIntegral $ from `mod` to'
-    to'   = unit to
-

@@ -21,7 +21,7 @@ import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
 import           Data.Word (Word8)
 
-import           Oscoin.Test.Clock ()
+import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
