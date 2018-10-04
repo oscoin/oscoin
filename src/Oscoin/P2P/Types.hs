@@ -11,7 +11,7 @@ module Oscoin.P2P.Types
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
-import           Oscoin.Crypto.Hash (Hashed, fromHashed, toHashed)
+import           Oscoin.Crypto.Hash (Hashed, fromHashed)
 import           Oscoin.Crypto.PubKey (PublicKey, publicKeyHash)
 
 import           Codec.Serialise (Serialise)
@@ -19,7 +19,6 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
-import           Crypto.Hash (digestFromByteString)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, (.:))
 import qualified Data.ByteArray as ByteArray
@@ -47,12 +46,8 @@ instance Serialise NodeId where
     decode = do
         pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
         case pre of
-            (2, 0) -> do
-                bs <- CBOR.decodeBytes
-                maybe (fail "CBOR NodeId: invalid digest") pure $
-                    NodeId . toHashed <$> digestFromByteString bs
-
-            _ -> fail "CBOR NodeId: invalid tag"
+            (2, 0) -> NodeId <$> CBOR.decode
+            _      -> fail "CBOR NodeId: invalid tag"
 
 data NodeAddr = NodeAddr
     { nodeId   :: NodeId

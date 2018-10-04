@@ -15,7 +15,6 @@ module Oscoin.Crypto.Blockchain.Block
     , headerHash
     , blockHash
     , emptyHeader
-    , hashTx
     , hashTxs
     , prettyBlock
     ) where
@@ -30,16 +29,12 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
 import           Control.Monad.Writer.CPS (execWriter, tell)
-import           Crypto.Hash (hashlazy)
-import qualified Crypto.Hash as Hash
 import qualified Crypto.Hash.MerkleTree as Merkle
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import           Data.Bifoldable (Bifoldable(..))
 import           Data.Bifunctor (Bifunctor(..))
 import           Data.Bitraversable (Bitraversable(..))
-import           Data.ByteArray (ByteArrayAccess)
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
@@ -230,24 +225,21 @@ hashTxs txs
     | otherwise =
         -- TODO(alexis): We shouldn't be double hashing here, but 'mtHash'
         -- gives us a SHA256 which we can't use.
-        Hash.hash
+        Crypto.fromHashed
+        . Crypto.hash
         . Merkle.mtHash
         . Merkle.mkMerkleTree
         $ map (LBS.toStrict . Serialise.serialise) (toList txs)
 
-hashTx :: Serialise tx => tx -> Crypto.Hashed tx
-hashTx tx =
-    Crypto.toHashed (hashlazy (Serialise.serialise tx))
-
 prettyBlock :: (Crypto.Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> Text
 prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
-    tell $ formatHeaderWith (Fmt.stext % "━━ " % formatHex % " ") height (headerHash bh)
-    tell $ fencedLineFormat ("prevHash:   " % formatHex) blockPrevHash
+    tell $ formatHeaderWith (Fmt.stext % "━━ " % formatHashed % " ") height (headerHash bh)
+    tell $ fencedLineFormat ("prevHash:   " % formatHashed) blockPrevHash
     tell $ fencedLineFormat ("timestamp:  " % Fmt.right 64 ' ') blockTimestamp
     tell $ "├" <> dashes 78 <> "┤\n"
 
     for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
-        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % formatHex) n (Crypto.hash tx)
+        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % Crypto.formatHashed) n (Crypto.hash tx)
         tell $ fencedLineFormat Fmt.stext ""
         let txContent = renderStrict $ layoutSmart layoutOptions $ pretty $ tx
         for_ (T.lines txContent) $ tell . fencedLineFormat Fmt.stext
@@ -255,8 +247,7 @@ prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
 
     tell $ "└" <> dashes 78 <> "┘\n"
   where
-    formatHex :: ByteArrayAccess ba => Fmt.Format r (ba -> r)
-    formatHex = Fmt.mapf (C8.unpack . Crypto.toHex) $ Fmt.right 64 ' '
+    formatHashed = Fmt.right 64 ' ' %. Crypto.formatHashed
 
     formatHeaderWith format = Fmt.sformat $ "┍━" % (Fmt.left  76 '━' %. format) % "━┑\n"
     fencedLineFormat format = Fmt.sformat $ "│ " % (Fmt.right 76 ' ' %. format) % " │\n"

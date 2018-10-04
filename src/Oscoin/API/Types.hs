@@ -80,7 +80,7 @@ deriving instance Serial.Serialise (TxSubmitResponse tx)
 
 instance Hashable tx => ToJSON (TxSubmitResponse tx) where
     toJSON (TxSubmitResponse tx) =
-        object [ "tx" .= toJSON tx ]
+        object [ "tx" .= tx ]
 
 instance Hashable tx => FromJSON (TxSubmitResponse tx) where
     parseJSON = withObject "TxSubmitResponse" $ \o ->

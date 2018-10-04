@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 module Oscoin.Crypto.PubKey
     ( Signed
     , sigMessage
@@ -29,7 +27,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
-import qualified Crypto.PubKey.ECC.Types as ECC
 import           Crypto.Random.Types (MonadRandom)
 
 import qualified Codec.CBOR.Read as CBOR (deserialiseFromBytes)
@@ -39,10 +36,12 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
+import           Codec.Serialise.Orphans ()
 import           Control.Monad.Fail (fail)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
-import qualified Data.ByteString.Base64.Extended as Base64
+import           Data.ByteString.BaseN (Base64, encodeBase64)
+import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Text.Prettyprint.Doc
 
@@ -64,24 +63,6 @@ instance FromJSON PublicKey where
 
 instance Crypto.Hashable PublicKey where
     hash (PublicKey _ h) = Crypto.toHashed (Crypto.fromHashed h)
-
-deriving instance Generic ECDSA.PublicKey
-instance Serialise ECDSA.PublicKey
-
-deriving instance Generic ECC.Curve
-instance Serialise ECC.Curve
-
-deriving instance Generic ECC.Point
-instance Serialise ECC.Point
-
-deriving instance Generic ECC.CurveBinary
-instance Serialise ECC.CurveBinary
-
-deriving instance Generic ECC.CurvePrime
-instance Serialise ECC.CurvePrime
-
-deriving instance Generic ECC.CurveCommon
-instance Serialise ECC.CurveCommon
 
 instance Eq PublicKey where
     (==) (PublicKey _ h) (PublicKey _ h') = h == h'
@@ -156,7 +137,7 @@ instance Crypto.Hashable msg => Crypto.Hashable (Signed msg) where
 
 instance ToJSON (Signed ByteString) where
     toJSON (Signed msg sig) =
-        object [ "msg" .= toJSON (Base64.encode msg)
+        object [ "msg" .= toJSON (encodeBase64 msg)
                , "sig" .= toJSON sig
                ]
 
@@ -164,7 +145,7 @@ instance FromJSON (Signed ByteString) where
     parseJSON = withObject "Signed Tx" $ \o -> do
         msg <- o .: "msg"
         sig <- o .: "sig"
-        pure $ signed sig (Base64.decode msg)
+        pure $ signed sig (BaseN.decode (msg :: Base64))
 
 instance Pretty msg => Pretty (Signed msg) where
     pretty = pretty . unsign

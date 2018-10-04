@@ -7,6 +7,7 @@ import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain
                  (BlockHash, Blockchain(..), blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
+import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey)
@@ -22,6 +23,7 @@ import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
 import           Numeric.Natural
+import           Web.HttpApiData (toUrlPiece)
 
 import qualified Radicle.Extended as Rad hiding (Env)
 
@@ -111,7 +113,7 @@ getMissingTransaction codec = httpTest emptyNodeState $ do
     get codec "/transactions/not-a-hash" >>= assertStatus notFound404
 
     -- Well formed but missing transaction hash returns a 404
-    let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
+    let missing = toUrlPiece (Crypto.zeroHash :: Crypto.Hash)
     get codec ("/transactions/" <> missing) >>= assertStatus notFound404
 
 getConfirmedTransaction :: Codec -> IO HTTPTest
@@ -120,7 +122,7 @@ getConfirmedTransaction codec = do
     case oldestTx chain of
         Nothing -> panic "No oldestTx found in chain"
         Just (tx, blkHash, confirmations) -> do
-            let txHash = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+            let txHash = Crypto.hash tx
 
             httpTest (nodeState mempty chain) $
                 getTransactionReturns codec txHash $ API.TxLookupResponse
@@ -150,9 +152,9 @@ unconfirmedTx tx = API.TxLookupResponse
     , txPayload = tx
     }
 
-getTransactionReturns :: Codec -> Text -> API.TxLookupResponse -> Wai.Session ()
+getTransactionReturns :: Codec -> Hashed API.RadTx -> API.TxLookupResponse -> Wai.Session ()
 getTransactionReturns codec txHash expected =
-    get codec ("/transactions/" <> txHash) >>=
+    get codec ("/transactions/" <> toUrlPiece (Crypto.fromHashed txHash)) >>=
     assertStatus ok200 <>
     assertResultOK expected
 
@@ -160,16 +162,17 @@ getMissingBlock :: Codec -> IO HTTPTest
 getMissingBlock codec = httpTest emptyNodeState $ do
     get codec "/blocks/not-a-hash" >>= assertStatus notFound404
 
-    let missing = decodeUtf8 $ Crypto.toHex $ (Crypto.zeroHash :: Crypto.Hash)
+    let missing = toUrlPiece (Crypto.zeroHash :: Crypto.Hash)
     get codec ("/blocks/" <> missing) >>= assertStatus notFound404
 
 getExistingBlock :: Codec -> IO HTTPTest
 getExistingBlock codec = do
     chain <- generate $ arbitraryValidBlockchain def
     let g = void $ genesis chain
+    let blockId = toUrlPiece . Crypto.fromHashed $ blockHash g
 
     httpTest (nodeState mempty chain) $
-        get codec ("/blocks/" <> decodeUtf8 (Crypto.toHex (blockHash g))) >>=
+        get codec ("/blocks/" <> blockId) >>=
             assertStatus ok200 <>
             assertResultOK g
 
