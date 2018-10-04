@@ -21,9 +21,9 @@ import           Data.Default (Default(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import qualified Radicle as Rad
+import qualified Radicle.Extended as Rad
 
-newtype Env = Env { fromEnv :: Rad.Bindings Identity }
+newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
 instance Default Env where
     def = Env Rad.pureEnv
@@ -36,7 +36,7 @@ instance Query Env where
         val <- Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
         case val of
             Rad.Ref ref -> lookupReference ref bindings
-            _           -> pure $ val
+            _           -> pure val
 
 data Program = Program
     { progValue   :: Rad.Value
@@ -48,16 +48,13 @@ data Program = Program
 instance Serialise Program
 
 parseValue :: Text -> Text -> Either Text Rad.Value
-parseValue name src =
-    Rad.parse name src primops
-  where
-    primops = Map.keys $ Rad.bindingsPrimops $ Rad.pureEnv @Identity
+parseValue name src = Rad.parse name src
 
 fromSource :: Text -> Text -> Either Text Program
 fromSource name src = do
     value <- parseValue name src
     pure Program
-        { progValue  = value
+        { progValue   = value
         , progAuthor  = toHashed zeroHash
         , progChainId = 0
         , progNonce   = 0

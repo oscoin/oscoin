@@ -4,7 +4,7 @@ import           Oscoin.Prelude
 
 import           Radicle.Conversion
 
-type Commit = ()
+type Commit = Text
 
 newtype Changeset = Changeset [Commit]
-    deriving (Show, Semigroup, Monoid, ToRadicle, FromRadicle)
+    deriving (Show, Semigroup, Monoid, ToRad, FromRad)

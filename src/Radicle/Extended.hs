@@ -3,31 +3,23 @@
 module Radicle.Extended
     ( keyword
     , atom
-    , list
-    , listPrimop
     , fnApply
+
+    , Rad.tagDefault
+    , Rad.annotate
     , module Radicle
     ) where
 
-import           Oscoin.Prelude hiding (list)
+import           Oscoin.Prelude
+
 import           Radicle
+import qualified Radicle.Internal.Annotation as Rad (annotate, tagDefault)
 
 keyword :: Text -> Value
-keyword = Keyword . Ident
+keyword = Keyword . unsafeToIdent
 
 atom :: Text -> Value
-atom = Atom . Ident
-
-listPrimop :: Value
-listPrimop = Primop $ Ident "list"
-
--- | Return a Radicle value that evaluates to the given list of Radicle
--- values.
--- @
---      Rad.eval (list vals) = pure vals
--- @
-list :: [Value] -> Value
-list vals = List $ listPrimop:vals
+atom = Atom . unsafeToIdent
 
 -- | Return a Radicle expression that applies @args@ to the function
 -- named @fnName@.
