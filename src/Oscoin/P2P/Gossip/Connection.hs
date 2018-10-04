@@ -48,6 +48,11 @@ import qualified Network.Socket.ByteString.Lazy as SockLBS
 import qualified STMContainers.Map as STMMap
 import           System.Timeout (timeout)
 
+-- | Captures the identity of a mutual peer connection, and handling of the
+-- underlying transport.
+--
+-- It is the responsibility of the implementation to ensure 'connSendWire' is
+-- safe to be called concurrently.
 data Connection p = Connection
     { connNodeId   :: NodeId
     , connAddr     :: SockAddr
