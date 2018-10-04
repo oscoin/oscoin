@@ -31,7 +31,7 @@ testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
     cliState  <- runCLI ["revision", "create", "--confirmations=1"]
     let submittedMsg = txMessageContent . snd <$> Map.lookupMin (transactions cliState)
-    let expectedMessage = Rad.fnApply "create-revision" [toRadicle emptyRevision]
+    let expectedMessage = Rad.fnApply "create-revision" [toRad emptyRevision]
     assertEqual "Expected message to be an empty revision"
                 (Just expectedMessage)
                 submittedMsg

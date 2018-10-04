@@ -1,18 +1,18 @@
 (do
   ;; ref functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (define modify-ref
-    (lambda (r fn)
-      (write-ref r (fn (read-ref r)))))
+  (def modify-ref
+    (fn [r f]
+      (write-ref r (f (read-ref r)))))
 
   ;; revisions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (define revisions (ref (dict)))
+  (def revisions (ref (dict)))
 
-  (define create-revision
-    (lambda (rev)
+  (def create-revision
+    (fn [rev]
       (do
-        (modify-ref revisions (lambda (rs) (insert (lookup :id rev) rev rs)))
+        (modify-ref revisions (fn [rs] (insert (lookup :id rev) rev rs)))
         :ok
       )))
 )

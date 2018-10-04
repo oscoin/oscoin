@@ -10,8 +10,8 @@ import qualified Radicle.Extended as Rad
 
 import qualified Data.Map as Map
 
-newtype RevisionId = RevisionId { fromRevisionId :: Int }
-    deriving (Show, Num, Eq, Read, ToRadicle, FromRadicle)
+newtype RevisionId = RevisionId { fromRevisionId :: Integer }
+    deriving (Show, Num, Eq, Read, ToRad, FromRad)
 
 data RevisionStatus =
       RevisionOpen
@@ -19,13 +19,13 @@ data RevisionStatus =
     | RevisionMerged
     deriving (Show, Eq)
 
-instance ToRadicle RevisionStatus where
-    toRadicle RevisionOpen   = Rad.keyword "open"
-    toRadicle RevisionClosed = Rad.keyword "closed"
-    toRadicle RevisionMerged = Rad.keyword "merged"
+instance ToRad RevisionStatus where
+    toRad RevisionOpen   = Rad.keyword "open"
+    toRad RevisionClosed = Rad.keyword "closed"
+    toRad RevisionMerged = Rad.keyword "merged"
 
-instance FromRadicle RevisionStatus where
-    parseRadicle val = do
+instance FromRad RevisionStatus where
+    fromRad val = do
         kw <- parseRadicleKeyword val
         case kw of
             "open"   -> pure $ RevisionOpen
@@ -36,7 +36,7 @@ instance FromRadicle RevisionStatus where
 type Ref = Text
 
 newtype RevisionBase = RevisionBase Ref
-    deriving (Show, Eq, IsString, ToRadicle, FromRadicle)
+    deriving (Show, Eq, IsString, ToRad, FromRad)
 
 data Revision = Revision
       { revId          :: RevisionId
@@ -49,20 +49,20 @@ data Revision = Revision
       , revBase        :: RevisionBase
       } deriving (Show)
 
-instance ToRadicle Revision where
-    toRadicle Revision{..} =
-        Rad.Dict $ Map.fromList $ map (first Rad.keyword) $
-            [ ("id",          toRadicle revId)
-            , ("title",       toRadicle revTitle)
-            , ("description", toRadicle revDescription)
-            , ("changeset",   toRadicle revChangeset)
-            , ("author",      toRadicle revAuthor)
-            , ("reviewers",   toRadicle revReviewers)
-            , ("status",      toRadicle revStatus)
-            , ("base",        toRadicle revBase)
+instance ToRad Revision where
+    toRad Revision{..} =
+        Rad.annotate $ Rad.DictF $ Map.fromList $ map (first Rad.keyword) $
+            [ ("id",          toRad revId)
+            , ("title",       toRad revTitle)
+            , ("description", toRad revDescription)
+            , ("changeset",   toRad revChangeset)
+            , ("author",      toRad revAuthor)
+            , ("reviewers",   toRad revReviewers)
+            , ("status",      toRad revStatus)
+            , ("base",        toRad revBase)
             ]
-instance FromRadicle Revision where
-    parseRadicle =
+instance FromRad Revision where
+    fromRad =
         withKeywordDict "Revision" $ \d ->
             Revision
                 <$> d .: "id"

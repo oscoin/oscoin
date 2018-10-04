@@ -6,29 +6,30 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Evaluator.Radicle as OscoinRad
 
 import           Data.Functor.Identity (Identity(..))
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import           Data.Scientific (Scientific)
-import           Data.Text (pack, unpack)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 import           Text.Read (readMaybe)
 
-import           Radicle as Rad
+import qualified Radicle.Extended as Rad
 import           Radicle.Internal.Parse (isValidIdentFirst, isValidIdentRest)
-import           Radicle.Internal.Primops (purePrimops)
+import           Radicle.Internal.PrimFns (purePrimFns)
+
+import           Radicle
 
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
-instance Arbitrary r => Arbitrary (Rad.Env r) where
-    arbitrary = Rad.Env <$> arbitrary
-
 instance Arbitrary OscoinRad.Env where
     arbitrary = pure $ OscoinRad.Env pureEnv
 
-instance Arbitrary Value where
-    arbitrary =
-        sized go
+instance Arbitrary r => Arbitrary (Rad.Env r) where
+    arbitrary = Rad.Env <$> arbitrary
+
+instance Arbitrary Rad.Value where
+    arbitrary = sized go
       where
         -- There's no literal syntax for dicts, only the 'dict' primop. If we
         -- generated them directly, we would generate something that can only
@@ -40,12 +41,11 @@ instance Arbitrary Value where
                 , (3, Boolean <$> arbitrary)
                 , (3, Number <$> arbitrary)
                 , (1, List <$> sizedList)
-                , (6, Primop <$> elements (Map.keys prims))
+                , (6, PrimFn <$> elements (Map.keys $ getPrimFns prims))
                 , (1, Lambda <$> sizedList
-                                <*> scale (`div` 3) arbitrary
-                                <*> scale (`div` 3) arbitrary)
+                             <*> scale (`div` 3) arbitrary
+                             <*> scale (`div` 3) arbitrary)
                 ]
-
         go n | n == 0 = frequency $ first pred <$> freqs
              | otherwise = frequency freqs
 
@@ -54,18 +54,24 @@ instance Arbitrary Value where
             k <- choose (0, n)
             scale (`div` (k + 1)) $ vectorOf k arbitrary
 
-        prims :: Map.Map Ident ([Value] -> Lang Identity Value)
-        prims = purePrimops
+        prims :: Rad.PrimFns Identity
+        prims = purePrimFns
 
-        isPrimop x = x `elem` Map.keys prims
+        isPrimop x = x `elem` Map.keys (getPrimFns prims)
+        isNum x = isJust (readMaybe (toS $ fromIdent x) :: Maybe Scientific)
 
-        isNum x = isJust (readMaybe (unpack $ fromIdent x) :: Maybe Scientific)
-
-instance Arbitrary Ident where
-    arbitrary = ((:) <$> firstL <*> rest) `suchThatMap` (mkIdent . pack)
+instance Arbitrary Rad.Ident where
+    arbitrary = ((:) <$> firstL <*> rest) `suchThatMap` (mkIdent . toS)
       where
         allChars = take 100 ['!' .. maxBound]
         firstL = elements $ filter isValidIdentFirst allChars
         rest = sized $ \n -> do
             k <- choose (0, n)
             vectorOf k . elements $ filter isValidIdentRest allChars
+
+instance Arbitrary a => Arbitrary (Rad.Bindings a) where
+    arbitrary = do
+        refs <- arbitrary
+        env <- arbitrary
+        prims <- arbitrary
+        pure $ Rad.Bindings env prims (IntMap.fromList $ zip [0..] refs) (length refs)
