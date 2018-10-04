@@ -5,11 +5,11 @@ module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude hiding (First)
 
-import           Oscoin.Clock
 import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
 import qualified Oscoin.API.Types as API
+import           Oscoin.Clock
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore

@@ -8,7 +8,7 @@ module Oscoin.Consensus.Nakamoto
     , hasPoW
     , chainDifficulty
     , chainScore
-    , epochLength
+    , blockTime
     ) where
 
 import           Oscoin.Prelude
@@ -20,8 +20,8 @@ import           Oscoin.Crypto.Blockchain
 import           Crypto.Number.Serialize (os2ip)
 import qualified Data.List.NonEmpty as NonEmpty
 
-epochLength :: Duration
-epochLength = 1
+blockTime :: Duration
+blockTime = 1 * seconds
 
 -- | The minimum difficulty.
 minDifficulty :: Difficulty

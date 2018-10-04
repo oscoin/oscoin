@@ -74,8 +74,7 @@ instance HasTestNodeState NakamotoNodeState where
 
 instance TestableNode NakamotoNode NakamotoNodeState where
     testableTick tick = do
-        let time = timeAdd epoch tick
-        blk <- (map . map) void $ mineBlock nakConsensus identityEval time
+        blk <- (map . map) void $ mineBlock nakConsensus identityEval tick
         pure $ maybeToList (BlockMsg <$> blk)
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode

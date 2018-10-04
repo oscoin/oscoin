@@ -5,6 +5,7 @@ module Oscoin.Test.Consensus.Network.Arbitrary where
 import           Oscoin.Prelude
 
 
+import           Oscoin.Clock hiding (as)
 import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
@@ -27,31 +28,31 @@ arbitraryTxMsg = TxMsg <$> arbitrary
 arbitraryNetwork :: Gen (TestNetwork ())
 arbitraryNetwork = arbitrary
 
-arbitraryHealthyNetwork :: Tick -> Gen (TestNetwork ())
-arbitraryHealthyNetwork e = do
-    net  <- arbitrarySynchronousNetwork e
+arbitraryHealthyNetwork :: Duration -> Gen (TestNetwork ())
+arbitraryHealthyNetwork blockTime = do
+    net  <- arbitrarySynchronousNetwork blockTime
     gen  <- mkStdGen <$> arbitrary :: Gen StdGen
 
     pure net
-        { tnLatencies  = map fromIntegral (randomRs (1 :: Int, 1 + 2 * toSeconds e) gen) }
+        { tnLatencies = randomRs (1 * seconds , 1 * seconds + 2 * blockTime) gen }
 
-arbitrarySynchronousNetwork :: Tick -> Gen (TestNetwork ())
-arbitrarySynchronousNetwork e = do
+arbitrarySynchronousNetwork :: Duration -> Gen (TestNetwork ())
+arbitrarySynchronousNetwork blockTime = do
     addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
         `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set DummyNodeId)
 
     let nodes    = zip (toList addrs) (repeat ())
-    let lastTick = max ((length addrs * 3) * toSeconds e) (toSeconds 30) :: Int
+    let duration = max (fromIntegral (length addrs * 3) * blockTime) (30 * seconds)
 
     smsgs <- listOf1 $ do
         (sender, msg) <- liftA2 (,) arbitrary arbitraryTxMsg
         dests <- sublistOf (toList addrs) :: Gen [DummyNodeId]
         for dests $ \d -> do
-            at <- choose (0, lastTick `div` 2) :: Gen Int
-            pure $ ScheduledMessage (fromIntegral at) d sender msg
+            at <- choose (epoch, fromEpoch (duration `div` 2)) :: Gen Timestamp
+            pure $ ScheduledMessage at d sender msg
 
     let ticks = foreach nodes $ \(addr, _) ->
-         [ScheduledTick (fromIntegral sec) addr | sec <- [0..lastTick]]
+         [ScheduledTick (fromEpoch sec) addr | sec <- [0, 1 * seconds .. duration]]
 
     rng <- mkStdGen <$> arbitrary
 
@@ -63,22 +64,23 @@ arbitrarySynchronousNetwork e = do
         , tnLatencies  = repeat 0
         , tnRng        = rng
         , tnMsgCount   = 0
-        , tnLastTick   = fromIntegral lastTick
+        , tnLastTick   = fromEpoch duration
         }
 
-type Tick = Int64
-
-arbitraryPartitionedNetwork :: Tick -> Gen (TestNetwork ())
-arbitraryPartitionedNetwork e = do
-    net@TestNetwork{..} <- arbitraryHealthyNetwork e
+arbitraryPartitionedNetwork :: Duration -> Gen (TestNetwork ())
+arbitraryPartitionedNetwork blockTime = do
+    net@TestNetwork{..} <- arbitraryHealthyNetwork blockTime
     partition           <- arbitraryPartition (Map.keys tnNodes)
-    partitionAt         <- choose ( scheduledTick (minimum tnMsgs)
-                                  , scheduledTick (maximum tnMsgs) `div` 4 )
-    healAt              <- choose ( partitionAt
-                                  , scheduledTick (maximum tnMsgs) `div` 3 )
+
+    let firstTick = scheduledTick $ minimum tnMsgs
+    let lastTick  = scheduledTick $ maximum tnMsgs
+
+    partitionAt <- choose (firstTick, fromEpoch $ sinceEpoch lastTick `div` 4 )
+    healAt <- choose (partitionAt, fromEpoch $ sinceEpoch lastTick `div` 3)
 
     let partheal = Set.fromList [Partition partitionAt partition, Heal healAt]
     pure net { tnMsgs = tnMsgs <> partheal }
+
 
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPartition addrs =
@@ -170,9 +172,6 @@ filterNetwork tn@TestNetwork{..} =
     f msg = all (`Map.member` tnNodes) (scheduledReceivers msg)
 
 --------------------------------------------------------------------------------
-
-toSeconds :: Tick -> Int
-toSeconds = round @Float . realToFrac
 
 -- | Splits a list into length-@n@ pieces. If @n@ is @<= 0@, returns an infinite
 -- list of empty lists.

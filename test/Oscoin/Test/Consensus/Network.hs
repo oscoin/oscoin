@@ -19,6 +19,7 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
+import           Oscoin.Clock
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
@@ -41,15 +42,13 @@ import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
 
-type Tick = Int64
-
 class
     (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m, HasTestNodeState a)
     => TestableNode m a | a -> m, m -> a
   where
     testableInit         :: TestNetwork b -> TestNetwork a
 
-    testableTick         :: Tick -> m [Msg DummyTx]
+    testableTick         :: Timestamp -> m [Msg DummyTx]
     testableRun          :: a -> m b -> (b, a)
     testableScore        :: a -> Blockchain DummyTx DummyState -> Int
 
@@ -91,14 +90,14 @@ data TestNetwork a = TestNetwork
     -- ^ Determines which nodes can send messages between them
     , tnLog        :: [Scheduled]
     -- ^ List of events the network has generated
-    , tnLatencies  :: [Tick]
+    , tnLatencies  :: [Duration]
     -- ^ Infinite list of message latencies. When a node sends a
     -- message we take the first element to determine when the message
     -- gets delivered.
     , tnRng        :: StdGen
     , tnMsgCount   :: Int
     -- ^ Number of messages delivered in the network
-    , tnLastTick   :: Tick
+    , tnLastTick   :: Timestamp
     }
 
 -- | Network partitions is a map of node id to a set of node ids _not_
@@ -136,7 +135,7 @@ runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
 -- advancing the node.
 deliver
     :: TestableNode m a
-    => Tick
+    => Timestamp
     -> DummyNodeId
     -> Maybe (Msg DummyTx)
     -> TestNetwork a
@@ -166,7 +165,7 @@ applyMessage msg = go msg
     resp _               = []
 
 scheduleMessages
-    :: Tick
+    :: Timestamp
     -> DummyNodeId
     -> [Msg DummyTx]
     -> TestNetwork a
@@ -197,7 +196,7 @@ scheduleMessages t from msgs tn@TestNetwork{..} =
 
     scheduled :: [Scheduled]
     scheduled =
-            (\(lat, (to, msg)) -> ScheduledMessage (t + lat) to from msg)
+            (\(lat, (to, msg)) -> ScheduledMessage (t `timeAdd` lat) to from msg)
         <$> zip lats [(rcpt, msg) | rcpt <- recipients, msg <- msgs]
 
 -- | Returns the list of nodes that are reachable from the given node
@@ -222,22 +221,22 @@ networkNonTrivial TestNetwork{tnNodes, tnMsgs}
 
 -- | An event that is to occur in a Node network at a specific tick.
 data Scheduled
-    = ScheduledMessage Tick DummyNodeId DummyNodeId (Msg DummyTx)
+    = ScheduledMessage Timestamp DummyNodeId DummyNodeId (Msg DummyTx)
     -- ^ Message will be delivered from one node to another. First
     -- 'DummyNodeId' is the receipient, second the sender. Results in
     -- calling 'stepM' on the receipient.
-    | ScheduledTick    Tick DummyNodeId
+    | ScheduledTick    Timestamp DummyNodeId
     -- ^ The given node will execute its 'tickM' function
-    | Partition        Tick Partitions
+    | Partition        Timestamp Partitions
     -- ^ Set the partition of the network
-    | Heal             Tick
+    | Heal             Timestamp
     -- ^ Remove any partitioning of the network
     deriving (Eq, Show)
 
 instance Ord Scheduled where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-scheduledTick :: Scheduled -> Tick
+scheduledTick :: Scheduled -> Timestamp
 scheduledTick (ScheduledMessage t _ _ _) = t
 scheduledTick (ScheduledTick t _)        = t
 scheduledTick (Partition t _)            = t

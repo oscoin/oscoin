@@ -68,10 +68,9 @@ instance HasTestNodeState SimpleNodeState where
 
 instance TestableNode SimpleNode SimpleNodeState where
     testableTick tick = do
-        let time = timeAdd epoch tick
         position <- ask
-        blk <- mineBlock (simpleConsensus position) identityEval time
-        reqs <- reconcileSimple time
+        blk <- mineBlock (simpleConsensus position) identityEval tick
+        reqs <- reconcileSimple tick
         pure $ maybeToList (BlockMsg <$> blk) <> (ReqBlockMsg <$> reqs)
 
     testableInit = initSimpleNodes

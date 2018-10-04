@@ -49,17 +49,17 @@ tests =
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     (arbitraryPartitionedNetwork Simple.epochLength)
+                                     (arbitraryPartitionedNetwork Simple.blockTime)
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @SimpleNodeState
                                      testableInit
-                                     (arbitraryHealthyNetwork Simple.epochLength)
+                                     (arbitraryHealthyNetwork Simple.blockTime)
         , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @NakamotoNodeState
                                      testableInit
-                                     (arbitraryHealthyNetwork Nakamoto.epochLength)
+                                     (arbitraryHealthyNetwork Nakamoto.blockTime)
         ]
     , testGroup "Evaluator"
         [ testProperty "applyValidExprs does not reject valid expressions" $ \(xs :: [Int]) ->
@@ -99,7 +99,7 @@ tests =
         [ testCase "'insert' puts blocks with parents on a chain" $ do
             let genBlk = emptyGenesisBlock epoch () :: Block () ()
                 nextBlk = mkBlock emptyHeader
-                    { blockTimestamp = epoch `timeAdd` (1 * seconds)
+                    { blockTimestamp = fromEpoch (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
                 blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk

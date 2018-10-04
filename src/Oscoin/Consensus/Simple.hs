@@ -8,7 +8,7 @@ module Oscoin.Consensus.Simple
     , mineSimple
     , reconcileSimple
 
-    , epochLength
+    , blockTime
     , chainScore
     , shouldCutBlock
     ) where
@@ -34,8 +34,8 @@ class Monad m => MonadLastTime m where
     getLastAskTick   :: m Timestamp
     setLastAskTick   :: Timestamp -> m ()
 
-epochLength :: Duration
-epochLength = 1
+blockTime :: Duration
+blockTime = 1 * seconds
 
 simpleConsensus
     :: (MonadLastTime m)
@@ -82,20 +82,19 @@ chainScore bc =
     h              = height bc
     lastBlock      = tip bc
     timestamp      = blockTimestamp $ blockHeader lastBlock
-    steps          = fromIntegral $ sinceEpoch timestamp `div` epochLength
+    steps          = fromIntegral $ sinceEpoch timestamp `div` blockTime
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
 shouldReconcile :: Timestamp -> Timestamp -> Bool
-shouldReconcile lastAsk at = at `timeDiff` lastAsk >= epochLength
+shouldReconcile lastAsk at = at `timeDiff` lastAsk >= blockTime
 
 shouldCutBlock :: Position -> Timestamp -> Timestamp -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
   where
     time              = at
-    stepTime          = epochLength
-    relativeBlockTime = stepTime * total'
+    relativeBlockTime = blockTime * total'
     beenAWhile        = time `timeDiff` lastBlk >= relativeBlockTime
-    stepNumber        = sinceEpoch time `div` epochLength
+    stepNumber        = sinceEpoch time `div` blockTime
     currentOffset     = stepNumber `mod` total'
     ourTurn           = currentOffset == fromIntegral outOffset
     total'            = fromIntegral total

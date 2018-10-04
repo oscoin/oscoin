@@ -11,7 +11,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=))
 
 instance Arbitrary Timestamp where
-    arbitrary = timeAdd epoch <$> arbitrary
+    arbitrary = fromEpoch <$> arbitrary
 
 tests :: [TestTree]
 tests =

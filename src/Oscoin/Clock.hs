@@ -3,6 +3,7 @@ module Oscoin.Clock
     , Duration
     , Unit(..)
     , sinceEpoch
+    , fromEpoch
     , timeAdd
     , timeDiff
     , epoch
@@ -51,6 +52,10 @@ epoch = Timestamp 0
 -- | Returns the Duration since 'epoch' until the given Timestamp.
 sinceEpoch :: Timestamp -> Duration
 sinceEpoch (Timestamp d) = d
+
+-- | Returns a 'Timestamp' by adding the given 'Duration' to 'epoch'.
+fromEpoch :: Duration -> Timestamp
+fromEpoch = timeAdd epoch
 
 -- | Returns a Timestamp with the given Duration added to it.
 timeAdd :: Timestamp -> Duration -> Timestamp
