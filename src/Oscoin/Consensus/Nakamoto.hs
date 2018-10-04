@@ -13,14 +13,14 @@ module Oscoin.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
+import           Oscoin.Clock
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 
 import           Crypto.Number.Serialize (os2ip)
 import qualified Data.List.NonEmpty as NonEmpty
 
-epochLength :: Tick
+epochLength :: Duration
 epochLength = 1
 
 -- | The minimum difficulty.
@@ -86,7 +86,7 @@ chainDifficulty (Blockchain blks) =
         let rangeStart        = blockHeader . NonEmpty.last
                               $ NonEmpty.head blks :| NonEmpty.tail range
             rangeEnd          = blockHeader $ NonEmpty.head blks
-            actualElapsed     = blockTimestamp rangeEnd - blockTimestamp rangeStart
+            actualElapsed     = blockTimestamp rangeEnd `timeDiff` blockTimestamp rangeStart
             targetElapsed     = fromIntegral $ blocksConsidered * blockTimeSeconds
             currentDifficulty = blockDifficulty rangeEnd
          in currentDifficulty * targetElapsed `div` toInteger actualElapsed

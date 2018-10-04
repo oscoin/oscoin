@@ -4,7 +4,6 @@ module Oscoin.Test.Consensus.Network.Arbitrary where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
 
 import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
@@ -67,14 +66,16 @@ arbitrarySynchronousNetwork e = do
         , tnLastTick   = fromIntegral lastTick
         }
 
+type Tick = Int64
+
 arbitraryPartitionedNetwork :: Tick -> Gen (TestNetwork ())
 arbitraryPartitionedNetwork e = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork e
     partition           <- arbitraryPartition (Map.keys tnNodes)
-    partitionAt         <- toEnum <$> choose ( fromEnum $ scheduledTick (minimum tnMsgs)
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) `div` 4) :: Gen Tick
-    healAt              <- toEnum <$> choose ( fromEnum $ partitionAt
-                                             , fromEnum $ scheduledTick (maximum tnMsgs) `div` 3) :: Gen Tick
+    partitionAt         <- choose ( scheduledTick (minimum tnMsgs)
+                                  , scheduledTick (maximum tnMsgs) `div` 4 )
+    healAt              <- choose ( partitionAt
+                                  , scheduledTick (maximum tnMsgs) `div` 3 )
 
     let partheal = Set.fromList [Partition partitionAt partition, Heal healAt]
     pure net { tnMsgs = tnMsgs <> partheal }

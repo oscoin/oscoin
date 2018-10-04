@@ -21,7 +21,6 @@ import           Oscoin.Test.Consensus.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
-import           Oscoin.Consensus.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
@@ -41,6 +40,8 @@ import           System.Random.Shuffle (shuffle')
 import           Text.Show (Show(..))
 
 -- TestableNode ----------------------------------------------------------------
+
+type Tick = Int64
 
 class
     (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m, HasTestNodeState a)

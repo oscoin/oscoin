@@ -4,7 +4,7 @@ module Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
+import           Oscoin.Clock
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
@@ -68,9 +68,10 @@ instance HasTestNodeState SimpleNodeState where
 
 instance TestableNode SimpleNode SimpleNodeState where
     testableTick tick = do
+        let time = timeAdd epoch tick
         position <- ask
-        blk <- mineBlock (simpleConsensus position) identityEval tick
-        reqs <- reconcileSimple tick
+        blk <- mineBlock (simpleConsensus position) identityEval time
+        reqs <- reconcileSimple time
         pure $ maybeToList (BlockMsg <$> blk) <> (ReqBlockMsg <$> reqs)
 
     testableInit = initSimpleNodes

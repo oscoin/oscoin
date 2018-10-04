@@ -1,11 +1,9 @@
 module Oscoin.Test.Consensus.Class
     ( Msg (..)
-    , module Oscoin.Clock
     ) where
 
 import           Oscoin.Prelude hiding (show)
 
-import           Oscoin.Clock (MonadClock(..), Tick)
 import           Oscoin.Crypto.Blockchain (showBlockDigest)
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 

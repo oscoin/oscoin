@@ -105,7 +105,7 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
   where
     t  = ts blk
     t' = ts blk'
-    ts = duration . blockTimestamp . blockHeader
+    ts = sinceEpoch . blockTimestamp . blockHeader
 
 showChainDigest :: Blockchain tx s -> Text
 showChainDigest =
@@ -117,6 +117,6 @@ showChainDigest =
 
 showBlockDigest :: Block tx s -> Text
 showBlockDigest b@Block{blockHeader} =
-    F.sformat (F.string % "(" % F.int % ")")
+    F.sformat (F.string % "(" % F.build % ")")
               (C8.unpack . Crypto.shortHash . blockHash $ b)
               (blockTimestamp blockHeader)

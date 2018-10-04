@@ -15,7 +15,7 @@ module Oscoin.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
+import           Oscoin.Clock
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
@@ -34,7 +34,7 @@ class Monad m => MonadLastTime m where
     getLastAskTick   :: m Tick
     setLastAskTick   :: Tick -> m ()
 
-epochLength :: Tick
+epochLength :: Duration
 epochLength = 1
 
 simpleConsensus
@@ -53,10 +53,9 @@ mineSimple
 mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
     -- FIXME(kim): this seems wrong
-    let blockHeaderTick = fromInteger $ toInteger blockTimestamp
-    if shouldCutBlock position lastBlk blockHeaderTick
+    if shouldCutBlock position lastBlk blockTimestamp
     then do
-        setLastBlockTick blockHeaderTick
+        setLastBlockTick blockTimestamp
         pure $ Just bh
     else
         pure Nothing
@@ -83,11 +82,11 @@ chainScore bc =
     h              = height bc
     lastBlock      = tip bc
     timestamp      = blockTimestamp $ blockHeader lastBlock
-    steps          = fromIntegral $ timestamp `div` epochLength
+    steps          = fromIntegral $ sinceEpoch timestamp `div` epochLength
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
 shouldReconcile :: Tick -> Tick -> Bool
-shouldReconcile lastAsk at = at - lastAsk >= epochLength
+shouldReconcile lastAsk at = at `timeDiff` lastAsk >= epochLength
 
 shouldCutBlock :: Position -> Tick -> Tick -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
@@ -95,8 +94,8 @@ shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
     time              = at
     stepTime          = epochLength
     relativeBlockTime = stepTime * total'
-    beenAWhile        = time - lastBlk >= relativeBlockTime
-    stepNumber        = time `div` stepTime
+    beenAWhile        = time `timeDiff` lastBlk >= relativeBlockTime
+    stepNumber        = sinceEpoch time `div` epochLength
     currentOffset     = stepNumber `mod` total'
     ourTurn           = currentOffset == fromIntegral outOffset
     total'            = fromIntegral total

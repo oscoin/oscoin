@@ -3,7 +3,10 @@ module Oscoin.Clock
     , Timestamp(..)
     , Duration
     , Unit(..)
-    , duration
+    , sinceEpoch
+    , timeAdd
+    , timeDiff
+    , epoch
     , now
     , as
     , nanoseconds
@@ -21,11 +24,7 @@ import           Codec.Serialise (Serialise)
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Formatting as Fmt
 import           System.Clock (Clock(Realtime), getTime, toNanoSecs)
-
--- | A Duration represents the elapsed time between two instants
--- as an Int64 nanosecond count. The representation limits the
--- largest representable duration to approximately 290 years.
-type Duration = Int64
+import           System.Random (Random)
 
 -- | A sum type of common Duration units. There is no definition for units
 -- of Day or larger to avoid confusion across daylight savings time zone transitions.
@@ -36,14 +35,31 @@ data Unit = Nanoseconds
           | Minutes
           | Hours
 
--- | Unix nanoseconds since epoch.
-newtype Timestamp = Timestamp Duration deriving
-    (Show, Read, Eq, Ord, Enum, Num, Real, Integral,
+-- | A Duration represents the elapsed time between two instants
+-- as an Int64 nanosecond count. The representation limits the
+-- largest representable duration to approximately 290 years.
+type Duration = Int64
+
+-- | A Timestamp represents an absolute point in time.
+newtype Timestamp = Timestamp Int64 deriving
+    (Show, Read, Eq, Ord, Enum, Num, Real, Random,
         Bounded, Generic, ToJSON, FromJSON, Serialise, Fmt.Buildable)
 
--- | Extracts the 'Duration' of a 'Timestamp'
-duration :: Timestamp -> Duration
-duration (Timestamp d) = d
+-- | UNIX epoch, yo.
+epoch :: Timestamp
+epoch = Timestamp 0
+
+-- | Returns the Duration since 'epoch' until the given Timestamp.
+sinceEpoch :: Timestamp -> Duration
+sinceEpoch (Timestamp d) = d
+
+-- | Returns a Timestamp with the given Duration added to it.
+timeAdd :: Timestamp -> Duration -> Timestamp
+timeAdd (Timestamp t) d = Timestamp (t + d)
+
+-- | @ t `timeDiff` t' @ gives the duration elapsed at @t@ since @t'@
+timeDiff :: Timestamp -> Timestamp -> Duration
+timeDiff (Timestamp t) (Timestamp t') = t - t'
 
 -- | Returns the current Timestamp
 now :: MonadIO m => m Timestamp
