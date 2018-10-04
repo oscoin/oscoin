@@ -5,7 +5,6 @@ module Oscoin.Crypto.Blockchain.Eval
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto

@@ -4,7 +4,7 @@ module Oscoin.Test.Crypto.Blockchain
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval

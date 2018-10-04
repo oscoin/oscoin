@@ -19,7 +19,7 @@ module Oscoin.Crypto.Blockchain
 
 import           Oscoin.Prelude hiding (toList)
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 

@@ -13,7 +13,7 @@ module Oscoin.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 

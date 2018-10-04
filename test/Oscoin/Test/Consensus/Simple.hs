@@ -4,7 +4,7 @@ module Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)

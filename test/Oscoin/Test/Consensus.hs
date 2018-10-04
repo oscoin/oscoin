@@ -2,7 +2,7 @@ module Oscoin.Test.Consensus where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary

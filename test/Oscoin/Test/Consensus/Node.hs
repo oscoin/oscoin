@@ -13,7 +13,7 @@ module Oscoin.Test.Consensus.Node
 
 import           Oscoin.Prelude hiding (StateT, runStateT, show)
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))

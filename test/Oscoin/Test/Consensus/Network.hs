@@ -19,7 +19,7 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Evaluator (identityEval)

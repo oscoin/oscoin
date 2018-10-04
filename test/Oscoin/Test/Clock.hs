@@ -2,7 +2,7 @@
 
 module Oscoin.Test.Clock where
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Prelude
 
 import           Test.QuickCheck

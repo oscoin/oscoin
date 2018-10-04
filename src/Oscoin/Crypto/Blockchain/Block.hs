@@ -23,7 +23,7 @@ module Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Prelude
 import qualified Prelude
 
-import           Oscoin.Clock
+import           Oscoin.Time
 import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import qualified Oscoin.Crypto.Hash as Crypto
 
