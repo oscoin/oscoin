@@ -12,7 +12,8 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
-
+import           Data.Aeson
+                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 
 -- | A 'Receipt' is generated whenever a transaction is evaluated as
 -- part of a block.
@@ -25,6 +26,22 @@ data Receipt tx o = Receipt
 
 mkReceipt :: (Crypto.Hashable tx) => Block tx s -> tx -> Either EvalError o -> Receipt tx o
 mkReceipt block tx result = Receipt (Crypto.hash tx) result (blockHash block)
+
+instance (Serialise tx, Serialise o) => Serialise (Receipt tx o)
+
+instance (ToJSON tx, ToJSON o) => ToJSON (Receipt tx o) where
+    toJSON Receipt{..} = object
+        [ "txHash"      .= receiptTx
+        , "txOutput"    .= receiptTxOutput
+        , "txBlockHash" .= receiptTxBlock
+        ]
+
+instance (FromJSON tx, FromJSON o) => FromJSON (Receipt tx o) where
+    parseJSON = withObject "Receipt" $ \o -> do
+        receiptTx        <- o .: "txHash"
+        receiptTxOutput  <- o .: "txOutput"
+        receiptTxBlock   <- o .: "txBlockHash"
+        pure Receipt{..}
 
 
 -- | Build a block by evaluating all the transactions and generating
