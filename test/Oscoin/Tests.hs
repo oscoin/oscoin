@@ -5,16 +5,10 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.Evaluator (foldEval, identityEval)
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), genesis, height, tip, validateBlockchain)
+import           Oscoin.Consensus.Evaluator (foldEval)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHeader(..)
-                 , blockHash
-                 , blockHeader
-                 , validateBlock
-                 )
+                 (Block(..), BlockHeader(..), blockHash, blockHeader)
 import           Oscoin.Crypto.Blockchain.Eval (toOrphan)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -27,16 +21,11 @@ import qualified Oscoin.Test.Clock as Clock
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
-                 ( arbitraryGenesisWith
-                 , arbitraryValidBlockWith
-                 , arbitraryValidBlockchain
-                 )
+                 (arbitraryValidBlockchain)
 import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
-import           Oscoin.Test.Crypto.PubKey.Arbitrary
-                 (arbitrarySigned, arbitrarySignedWith)
+import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import           Oscoin.Test.Helpers
 import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.Test.P2P as P2P
 
@@ -57,7 +46,6 @@ tests = testGroup "Oscoin"
     , testGroup      "Clock"                          Clock.tests
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
-    , testCase       "Blockchain"                     testOscoinBlockchain
     , testCase       "BlockStore lookup block"        testBlockStoreLookupBlock
     , testProperty   "BlockStore"                     (propOscoinBlockStore $ arbitraryValidBlockchain def)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
@@ -108,23 +96,6 @@ testOscoinMempool = do
     fromEvent :: Mempool.Event tx -> Maybe [tx]
     fromEvent (Mempool.Insert txs) = Just txs
     fromEvent _                    = Nothing
-
-testOscoinBlockchain :: Assertion
-testOscoinBlockchain = do
-    (_, key') <- Crypto.generateKeyPair
-
-    txs <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed API.RadTx]
-
-    gblock <- generate $ arbitraryGenesisWith identityEval txs
-    assertNoError $ validateBlock gblock
-
-    txs' <- generate . listOf $
-        arbitrarySignedWith key' :: IO [Crypto.Signed API.RadTx]
-
-    block <- generate $ arbitraryValidBlockWith (blockHeader gblock) txs'
-
-    assertNoError $ validateBlockchain $ Blockchain (block :| [gblock])
 
 testBlockStoreLookupBlock :: Assertion
 testBlockStoreLookupBlock = do
