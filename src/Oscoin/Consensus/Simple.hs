@@ -28,11 +28,11 @@ import           Oscoin.Crypto.Blockchain.Block
 type Position = (Int, Int)
 
 class Monad m => MonadLastTime m where
-    getLastBlockTick :: m Tick
-    setLastBlockTick :: Tick -> m ()
+    getLastBlockTick :: m Timestamp
+    setLastBlockTick :: Timestamp -> m ()
 
-    getLastAskTick   :: m Tick
-    setLastAskTick   :: Tick -> m ()
+    getLastAskTick   :: m Timestamp
+    setLastAskTick   :: Timestamp -> m ()
 
 epochLength :: Duration
 epochLength = 1
@@ -64,7 +64,7 @@ reconcileSimple
     :: ( MonadBlockStore tx () m
        , MonadLastTime         m
        )
-    => Tick
+    => Timestamp
     -> m [BlockHash]
 reconcileSimple tick = do
     lastAsk <- getLastAskTick
@@ -85,10 +85,10 @@ chainScore bc =
     steps          = fromIntegral $ sinceEpoch timestamp `div` epochLength
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
-shouldReconcile :: Tick -> Tick -> Bool
+shouldReconcile :: Timestamp -> Timestamp -> Bool
 shouldReconcile lastAsk at = at `timeDiff` lastAsk >= epochLength
 
-shouldCutBlock :: Position -> Tick -> Tick -> Bool
+shouldCutBlock :: Position -> Timestamp -> Timestamp -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
   where
     time              = at

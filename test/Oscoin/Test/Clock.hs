@@ -5,12 +5,13 @@ module Oscoin.Test.Clock where
 import           Oscoin.Clock
 import           Oscoin.Prelude
 
-import           Test.QuickCheck (Arbitrary)
+import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=))
 
-deriving instance Arbitrary Timestamp
+instance Arbitrary Timestamp where
+    arbitrary = timeAdd epoch <$> arbitrary
 
 tests :: [TestTree]
 tests =

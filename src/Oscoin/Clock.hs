@@ -1,6 +1,5 @@
 module Oscoin.Clock
-    ( Tick
-    , Timestamp(..)
+    ( Timestamp
     , Duration
     , Unit(..)
     , sinceEpoch
@@ -91,15 +90,12 @@ from `as` to = unit' + nsec / fromIntegral to' where
     nsec  = fromIntegral $ from `mod` to'
     to'   = unit to
 
-
-type Tick = Timestamp
-
 class Monad m => MonadClock m where
-    currentTick :: m Tick
+    currentTick :: m Timestamp
 
     default currentTick
         :: (MonadTrans t, m ~ t m', MonadClock m')
-        => m Tick
+        => m Timestamp
     currentTick = lift currentTick
     {-# INLINE currentTick #-}
 

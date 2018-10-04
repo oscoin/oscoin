@@ -23,8 +23,8 @@ import           Lens.Micro
 type Position = (Int, Int)
 
 data LastTime = LastTime
-    { ltLastBlk :: Tick
-    , ltLastAsk :: Tick
+    { ltLastBlk :: Timestamp
+    , ltLastAsk :: Timestamp
     } deriving Show
 
 newtype SimpleT tx i m a = SimpleT (ReaderT Position (StateT LastTime m) a)
