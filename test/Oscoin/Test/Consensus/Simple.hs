@@ -82,7 +82,7 @@ simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
 simpleNode nid peers = SimpleNodeState
     { snsPosition = (ourOffset, nTotalPeers)
     , snsNode = emptyTestNodeState nid
-    , snsLast = LastTime 0 0
+    , snsLast = LastTime epoch epoch
     }
   where
     nTotalPeers = 1 + Set.size peers

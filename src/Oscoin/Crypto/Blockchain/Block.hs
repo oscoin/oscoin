@@ -24,7 +24,7 @@ module Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Prelude
 import qualified Prelude
 
-import           Oscoin.Clock (Timestamp)
+import           Oscoin.Clock
 import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import qualified Oscoin.Crypto.Hash as Crypto
 
@@ -103,7 +103,7 @@ emptyHeader = BlockHeader
     { blockPrevHash = Crypto.toHashed Crypto.zeroHash
     , blockDataHash = Crypto.zeroHash
     , blockState = ()
-    , blockTimestamp = 0
+    , blockTimestamp = epoch
     , blockDifficulty = 0
     , blockNonce = 0
     }

@@ -6,7 +6,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 
-import           Oscoin.Clock (Timestamp(..), seconds)
+import           Oscoin.Clock
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
@@ -51,7 +51,7 @@ arbitraryValidBlockWith prevHeader txs = do
                { blockPrevHash   = hash prevHeader
                , blockDataHash   = hashTxs txs
                , blockState
-               , blockTimestamp  = blockTimestamp prevHeader + Timestamp elapsed
+               , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)

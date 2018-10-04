@@ -2,6 +2,7 @@ module Main (main) where
 
 import           Oscoin.Prelude hiding (option)
 
+import           Oscoin.Clock
 import           Oscoin.API.HTTP (withAPI)
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
@@ -127,7 +128,7 @@ main = do
         val <- ExceptT $ Rad.parseValue (T.pack path) <$> readFile path
         withExceptT (T.unlines . map fromEvalError) . ExceptT $ do
             tx <- liftIO $ createTx kp val
-            pure $ genesisBlock def eval 0 [tx]
+            pure $ genesisBlock def eval epoch [tx]
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
     storage nod   = hoistStorage (runNodeT nod) Node.storage

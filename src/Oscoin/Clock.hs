@@ -42,7 +42,7 @@ type Duration = Int64
 
 -- | A Timestamp represents an absolute point in time.
 newtype Timestamp = Timestamp Int64 deriving
-    (Show, Read, Eq, Ord, Enum, Num, Real, Random,
+    (Show, Read, Eq, Ord, Enum, Random,
         Bounded, Generic, ToJSON, FromJSON, Serialise, Fmt.Buildable)
 
 -- | UNIX epoch, yo.

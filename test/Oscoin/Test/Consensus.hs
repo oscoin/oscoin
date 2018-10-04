@@ -2,6 +2,7 @@ module Oscoin.Test.Consensus where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Clock
 import           Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary
@@ -77,7 +78,7 @@ tests =
              in if | any isRight res -> counterexample ("expected only lefts, got: " ++ show (map (map fst) res)) False
                    | otherwise -> property $ length res == length xs
         , testCase "block data evaluates to block state" $ do
-            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval 0 txs
+            let mgen  = genesisBlock (Env Rad.pureEnv) radicleEval epoch txs
                 txs   = rights $ map (fromSource "test") ["(define x 42)", "(define answer (+ x x))"]
 
             case mgen of
@@ -96,9 +97,9 @@ tests =
 
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = emptyGenesisBlock 0 () :: Block () ()
+            let genBlk = emptyGenesisBlock epoch () :: Block () ()
                 nextBlk = mkBlock emptyHeader
-                    { blockTimestamp = 1
+                    { blockTimestamp = epoch `timeAdd` (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
                 blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk

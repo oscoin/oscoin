@@ -5,6 +5,7 @@ module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude hiding (First)
 
+import           Oscoin.Clock
 import           Oscoin.API.HTTP (api)
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
@@ -91,7 +92,7 @@ nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
 nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
 
 emptyBlockstore :: Blockchain API.RadTx Rad.Env
-emptyBlockstore = Blockchain $ emptyGenesisBlock 0 def :| []
+emptyBlockstore = Blockchain $ emptyGenesisBlock epoch def :| []
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
