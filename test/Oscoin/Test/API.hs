@@ -21,6 +21,7 @@ import qualified Data.Text as T
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import qualified Network.Wai.Test as Wai
+import           Numeric.Natural
 
 import qualified Radicle.Extended as Rad hiding (Env)
 

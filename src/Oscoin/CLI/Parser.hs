@@ -7,6 +7,7 @@ import           Oscoin.Prelude hiding (option)
 
 import           Oscoin.CLI.Command
 
+import           Numeric.Natural
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
