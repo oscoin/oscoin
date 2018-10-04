@@ -1,14 +1,12 @@
 module Oscoin.Consensus.Evaluator
     ( Evaluator
-    , EvalError
-    , evalError
-    , fromEvalError
+    , EvalError(..)
+    , EvalResult
+    , applyValidExprs
+    , evals
+
     , identityEval
     , foldEval
-    , constEval
-    , evals
-    , applyValidExprs
-    , rejectEverythingEval
     ) where
 
 import           Oscoin.Prelude
@@ -16,25 +14,17 @@ import           Oscoin.Prelude
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
 
-evalError :: Text -> EvalError
-evalError = EvalError
+type EvalResult state output = Either [EvalError] (output, state)
 
-type Evaluator s a b = a -> s -> Either [EvalError] (b, s)
+type Evaluator state tx output = tx -> state -> EvalResult state output
 
 -- | The identity evaluator. An evaluator that accepts any expression and has
 -- no state.
 identityEval :: Evaluator s a ()
 identityEval _ s = Right ((), s)
 
--- | An evaluator that rejects any expression and has no state.
-rejectEverythingEval :: Evaluator s a b
-rejectEverythingEval _ = const (Left [])
-
 foldEval :: Monoid w => Evaluator w w ()
 foldEval x xs = Right ((), xs <> x)
-
-constEval :: s -> Evaluator s a ()
-constEval s _ _ = Right ((), s)
 
 -- | Evaluates a list of expressions with the given starting state and evaluator.
 -- If any expression fails to evaluate, the function aborts and 'Nothing'

@@ -11,7 +11,6 @@ module Oscoin.Crypto.Blockchain.Block
     , linkBlock
     , genesisBlock
     , emptyGenesisBlock
-    , isGenesisBlock
     , validateBlock
     , headerHash
     , blockHash
@@ -211,11 +210,6 @@ genesisHeader blockTimestamp blockState txs =
         , blockDifficulty = 0
         , blockNonce = 0
         }
-
-
-isGenesisBlock :: Block tx s -> Bool
-isGenesisBlock blk =
-    (blockPrevHash . blockHeader) blk == Crypto.toHashed Crypto.zeroHash
 
 toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
