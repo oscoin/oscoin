@@ -19,6 +19,7 @@ module Oscoin.Crypto.Blockchain
 
 import           Oscoin.Prelude hiding (toList)
 
+import           Oscoin.Clock
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 
@@ -28,10 +29,8 @@ import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as T
-import           Data.Time.Clock (NominalDiffTime)
 import           Formatting ((%))
 import qualified Formatting as F
-import qualified Formatting.Time as F
 import           GHC.Exts (IsList(..))
 import           Numeric.Natural
 
@@ -105,9 +104,9 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     | otherwise =
         validateBlock blk *> validateBlockchain (Blockchain (blk' :| blks))
   where
-    t  = blockTimestamp (blockHeader blk)
-    t' = blockTimestamp (blockHeader blk')
-    hours = 3600
+    t  = ts blk
+    t' = ts blk'
+    ts = sinceEpoch . blockTimestamp . blockHeader
 
 showChainDigest :: Blockchain tx s -> Text
 showChainDigest =
@@ -119,8 +118,6 @@ showChainDigest =
 
 showBlockDigest :: Block tx s -> Text
 showBlockDigest b@Block{blockHeader} =
-    F.sformat (F.string % "(" % F.seconds 0 % ")")
+    F.sformat (F.string % "(" % F.build % ")")
               (C8.unpack . Crypto.shortHash . blockHash $ b)
-              time
-  where
-    time :: NominalDiffTime = toEnum (fromIntegral $ blockTimestamp blockHeader)
+              (blockTimestamp blockHeader)

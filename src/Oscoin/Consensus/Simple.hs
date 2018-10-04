@@ -8,14 +8,14 @@ module Oscoin.Consensus.Simple
     , mineSimple
     , reconcileSimple
 
-    , epochLength
+    , blockTime
     , chainScore
     , shouldCutBlock
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock (Tick)
+import           Oscoin.Clock
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
@@ -28,14 +28,14 @@ import           Oscoin.Crypto.Blockchain.Block
 type Position = (Int, Int)
 
 class Monad m => MonadLastTime m where
-    getLastBlockTick :: m Tick
-    setLastBlockTick :: Tick -> m ()
+    getLastBlockTick :: m Timestamp
+    setLastBlockTick :: Timestamp -> m ()
 
-    getLastAskTick   :: m Tick
-    setLastAskTick   :: Tick -> m ()
+    getLastAskTick   :: m Timestamp
+    setLastAskTick   :: Timestamp -> m ()
 
-epochLength :: Tick
-epochLength = 1
+blockTime :: Duration
+blockTime = 1 * seconds
 
 simpleConsensus
     :: (MonadLastTime m)
@@ -53,10 +53,9 @@ mineSimple
 mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
     -- FIXME(kim): this seems wrong
-    let blockHeaderTick = fromInteger $ toInteger blockTimestamp
-    if shouldCutBlock position lastBlk blockHeaderTick
+    if shouldCutBlock position lastBlk blockTimestamp
     then do
-        setLastBlockTick blockHeaderTick
+        setLastBlockTick blockTimestamp
         pure $ Just bh
     else
         pure Nothing
@@ -65,7 +64,7 @@ reconcileSimple
     :: ( MonadBlockStore tx () m
        , MonadLastTime         m
        )
-    => Tick
+    => Timestamp
     -> m [BlockHash]
 reconcileSimple tick = do
     lastAsk <- getLastAskTick
@@ -82,25 +81,20 @@ chainScore bc =
   where
     h              = height bc
     lastBlock      = tip bc
-    timestampNs    = blockTimestamp $ blockHeader lastBlock
-    timestamp      = timestampNs `div` 1000000000000
-    e              = round epochLength
-    steps          = fromIntegral timestamp `div` e :: Int
+    timestamp      = blockTimestamp $ blockHeader lastBlock
+    steps          = fromIntegral $ sinceEpoch timestamp `div` blockTime
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
 
-shouldReconcile :: Tick -> Tick -> Bool
-shouldReconcile lastAsk at = time - round lastAsk >= stepTime
-  where
-    time     = round at :: Int
-    stepTime = round epochLength
+shouldReconcile :: Timestamp -> Timestamp -> Bool
+shouldReconcile lastAsk at = at `timeDiff` lastAsk >= blockTime
 
-shouldCutBlock :: Position -> Tick -> Tick -> Bool
+shouldCutBlock :: Position -> Timestamp -> Timestamp -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
   where
-    time              = round at
-    stepTime          = round epochLength
-    relativeBlockTime = stepTime * total
-    beenAWhile        = time - round lastBlk >= relativeBlockTime
-    stepNumber        = time `div` stepTime
-    currentOffset     = stepNumber `mod` total
-    ourTurn           = currentOffset == outOffset
+    time              = at
+    relativeBlockTime = blockTime * total'
+    beenAWhile        = time `timeDiff` lastBlk >= relativeBlockTime
+    stepNumber        = sinceEpoch time `div` blockTime
+    currentOffset     = stepNumber `mod` total'
+    ourTurn           = currentOffset == fromIntegral outOffset
+    total'            = fromIntegral total
