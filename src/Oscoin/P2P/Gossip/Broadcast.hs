@@ -193,7 +193,7 @@ newSchedule interval schedSend = do
     schedDeferred   <- STMMap.newIO
     schedLazyThread <-
         async . forever $ do
-            threadDelay $ round (interval `as` microseconds)
+            threadDelay $ round (interval `as` Microseconds)
             ihaves <-
                 atomically $ do
                     ihaves <- ListT.toList $ STMMap.stream schedLazyQueue

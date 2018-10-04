@@ -16,11 +16,11 @@ tests :: [TestTree]
 tests =
     [ testGroup "Duration"
         [ testCase "1234 milliseconds as 1.234 seconds" $
-            (1234 * milliseconds `as` seconds) @?= 1.234
+            (1234 * milliseconds `as` Seconds) @?= 1.234
         , testCase "3.5 hours as 210 minutes" $
-            (3.5 * hours `as` minutes) @?= 210.0
+            (3.5 * hours `as` Minutes) @?= 210.0
         , testCase "1 second as 1000000 microseconds" $
-            (1 * seconds `as` microseconds) @?= 1000000
+            (1 * seconds `as` Microseconds) @?= 1000000
         ]
     , testGroup "Timestamp"
         [ testCase "now" $ do

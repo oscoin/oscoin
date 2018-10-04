@@ -2,6 +2,7 @@ module Oscoin.Clock
     ( Tick
     , Timestamp(..)
     , Duration
+    , Unit(..)
     , duration
     , now
     , as
@@ -26,6 +27,15 @@ import           System.Clock (Clock(Realtime), getTime, toNanoSecs)
 -- largest representable duration to approximately 290 years.
 type Duration = Int64
 
+-- | A sum type of common Duration units. There is no definition for units
+-- of Day or larger to avoid confusion across daylight savings time zone transitions.
+data Unit = Nanoseconds
+          | Microseconds
+          | Milliseconds
+          | Seconds
+          | Minutes
+          | Hours
+
 -- | Unix nanoseconds since epoch.
 newtype Timestamp = Timestamp Duration deriving
     (Show, Read, Eq, Ord, Enum, Num, Real, Integral,
@@ -49,11 +59,22 @@ seconds      = 1000 * milliseconds
 minutes      = 60   * seconds
 hours        = 60   * minutes
 
--- | converts a 'Duration' to another unit specified by 'Duration'
-as :: Duration -> Duration -> Double
-as from to = to' + nsec / fromIntegral to where
-    to'  = fromIntegral $ from `div` to
-    nsec = fromIntegral $ from `mod` to
+-- | Converts a Unit into its respective Duration in nanoseconds
+unit :: Unit -> Duration
+unit Nanoseconds  = nanoseconds
+unit Microseconds = microseconds
+unit Milliseconds = milliseconds
+unit Seconds      = seconds
+unit Minutes      = minutes
+unit Hours        = hours
+
+-- | converts a 'Duration' to another 'Unit'
+as :: Duration -> Unit -> Double
+from `as` to = unit' + nsec / fromIntegral to' where
+    unit' = fromIntegral $ from `div` to'
+    nsec  = fromIntegral $ from `mod` to'
+    to'   = unit to
+
 
 type Tick = Timestamp
 
