@@ -1,8 +1,6 @@
 {-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE LambdaCase #-}
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 module Oscoin.P2P.Gossip.Handshake
     ( Handshake (..)
 

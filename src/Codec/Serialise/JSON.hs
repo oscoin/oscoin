@@ -27,22 +27,17 @@ module Codec.Serialise.JSON
 
 import           Oscoin.Prelude
 
-import           Codec.Serialise
+import           Codec.Serialise (Serialise, serialise)
 import           Control.Monad.Fail (fail)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
-import qualified Data.ByteString.Base64.Extended as Base64
+import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 
 serialiseToJSON :: (Serialise a) => a -> Aeson.Value
-serialiseToJSON = Aeson.toJSON . Base64.encodeLazy . serialise
+serialiseToJSON = Aeson.toJSON . BaseN.encodeBase64 . LBS.toStrict . serialise
 
 deserialiseParseJSON :: (Serialise a) => Aeson.Value -> Aeson.Parser a
-deserialiseParseJSON val = do
-    base64 <- Aeson.parseJSON val
-    bs <- case Base64.decodeOrFail base64 of
-        Left err -> fail $ "Failed to decode base64 string: " <> err
-        Right a  -> pure a
-    case deserialiseOrFail $ LBS.fromStrict bs of
-        Left err -> fail $ show err
-        Right a  -> pure a
+deserialiseParseJSON = Aeson.withText "deserialiseParseJSON" $ \t ->
+    either (fail . show) pure $
+        BaseN.deserialiseAtBase BaseN.Base64 (encodeUtf8 t)

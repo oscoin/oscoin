@@ -16,7 +16,7 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
 import           Oscoin.API.Types
-import           Oscoin.Crypto.Hash (toHexText)
+import           Oscoin.Crypto.Hash (fromHashed)
 
 import           Codec.Serialise
 import qualified Data.ByteString.Lazy as LBS
@@ -24,6 +24,7 @@ import qualified Data.ByteString.Lazy as LBS
 import           Network.HTTP.Client hiding (Proxy)
 import           Network.HTTP.Types.Header
 import           Network.HTTP.Types.Method
+import           Web.HttpApiData (toUrlPiece)
 
 
 data HttpClient = HttpClient
@@ -41,7 +42,7 @@ instance (Monad m, MonadIO m) => MonadClient (HttpClientT m) where
         post "/transactions" tx
 
     getTransaction txId =
-        get $ "/transactions/" <> toHexText txId
+        get $ "/transactions/" <> toUrlPiece (fromHashed txId)
 
     getState key =
         get $ "/state/" <> key

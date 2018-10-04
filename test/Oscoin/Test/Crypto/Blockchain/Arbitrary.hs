@@ -4,8 +4,6 @@ module Oscoin.Test.Crypto.Blockchain.Arbitrary where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Test.Crypto.Hash.Arbitrary ()
-
 import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)

@@ -9,6 +9,7 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Types (RadTx)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import           Oscoin.Crypto.Hash (toHashed)
 import           Oscoin.Environment
 
 import qualified Oscoin.API.HTTP.Handlers as Handlers
@@ -31,7 +32,7 @@ api env = do
 
     -- /blocks/:id ------------------------------------------------------------
 
-    get ("blocks" <//> var) Handlers.getBlock
+    get ("blocks" <//> var) (Handlers.getBlock . toHashed)
 
     -- /blockchain/best -------------------------------------------------------
 
@@ -44,7 +45,7 @@ api env = do
 
     -- /transactions/:id ------------------------------------------------------
 
-    get ("transactions" <//> var) Handlers.getTransaction
+    get ("transactions" <//> var) (Handlers.getTransaction . toHashed)
 
     -- /state/:chain ----------------------------------------------------------
 

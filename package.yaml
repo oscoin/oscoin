@@ -13,6 +13,7 @@ dependencies:
   - ansi-terminal
   - async
   - base16-bytestring
+  - base58-bytestring
   - base64-bytestring
   - binary
   - bytestring
@@ -56,6 +57,7 @@ dependencies:
   - Spock
   - stm >=2.4.5.0
   - stm-containers
+  - tagged
   - text
   - time
   - transformers

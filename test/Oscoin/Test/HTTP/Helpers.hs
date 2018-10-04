@@ -18,6 +18,7 @@ import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  (blockState, emptyGenesisBlock, emptyHeader)
+import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (mkTx)
@@ -121,14 +122,14 @@ withNode NodeState{..} k = do
         (Consensus.nakamotoConsensus (Just Nakamoto.easyDifficulty))
         k
 
-genDummyTx :: IO (Text, API.RadTx)
+genDummyTx :: IO (Hashed API.RadTx, API.RadTx)
 genDummyTx = do
     msg :: Rad.Value <- generate $ arbitrary
     (pubKey, priKey) <- Crypto.generateKeyPair
     signed           <- Crypto.sign priKey msg
 
     let tx :: API.RadTx = mkTx signed pubKey
-    let txHash          = decodeUtf8 $ Crypto.toHex $ Crypto.hash tx
+    let txHash          = Crypto.hash tx
 
     pure (txHash, tx)
 
