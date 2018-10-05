@@ -9,77 +9,85 @@ github: oscoin/oscoin
 
 dependencies:
   - base >=4.11.1.0 && <4.12
-  - aeson
-  - ansi-terminal
-  - async
-  - base16-bytestring
-  - base58-bytestring
-  - base64-bytestring
-  - binary
-  - bytestring
-  - cborg
-  - clock
-  - conduit
-  - containers
-  - cryptonite
-  - data-default
-  - data-has
-  - deepseq
-  - directory
-  - dlist
-  - fast-logger
-  - filepath
-  - focus
-  - formatting
-  - hashable
-  - http-api-data
-  - http-client
-  - http-types
-  - http-media
-  - list-t
-  - memory
-  - merkle-tree
-  - microlens
-  - microlens-mtl
-  - mmorph
-  - mtl
-  - network
-  - optparse-applicative
-  - prettyprinter
-  - protolude
-  - radicle
-  - random
-  - safe-exceptions
-  - scientific
-  - serialise
-  - semigroups
-  - splitmix
-  - Spock
-  - stm >=2.4.5.0
-  - stm-containers
-  - tagged
-  - text
-  - time
-  - transformers
-  - unliftio-core
-  - unordered-containers
-  - wai
-  - wai-extra
-  - writer-cps-mtl
-  - process
 
 data-files:
   - node/rad/prelude.rad
 
 library:
   source-dirs: src
+  dependencies:
+    - aeson
+    - ansi-terminal
+    - async
+    - base16-bytestring
+    - base58-bytestring
+    - base64-bytestring
+    - binary
+    - bytestring
+    - cborg
+    - clock
+    - conduit
+    - containers
+    - cryptonite
+    - data-default
+    - data-has
+    - deepseq
+    - directory
+    - dlist
+    - fast-logger
+    - filepath
+    - focus
+    - formatting
+    - hashable
+    - http-api-data
+    - http-client
+    - http-types
+    - http-media
+    - list-t
+    - memory
+    - merkle-tree
+    - microlens
+    - microlens-mtl
+    - mmorph
+    - mtl
+    - network
+    - optparse-applicative
+    - prettyprinter
+    - protolude
+    - radicle
+    - random
+    - safe-exceptions
+    - serialise
+    - semigroups
+    - splitmix
+    - Spock
+    - stm >=2.4.5.0
+    - stm-containers
+    - tagged
+    - text
+    - time
+    - transformers
+    - unliftio-core
+    - unordered-containers
+    - wai
+    - wai-extra
+    - writer-cps-mtl
+    - process
 
 executables:
   oscoin:
     main: node/Main.hs
     dependencies:
+      - async
+      - mtl
+      - network
+      - optparse-applicative
       - oscoin
+      - semigroups
+      - text
+      - transformers
       - yaml
+
   oscoin-cli:
     main: cli/Main.hs
     dependencies:
@@ -88,6 +96,7 @@ executables:
     main: git-remote-helper/Main.hs
     dependencies:
       - oscoin
+      - semigroups
 
 tests:
   test:
@@ -99,24 +108,51 @@ tests:
       - -with-rtsopts=-N
       - -O
     dependencies:
-      - algebraic-graphs
       - Diff
-      - hedgehog
-      - microlens
-      - microlens-aeson
-      - nicify-lib
-      - oscoin
       - QuickCheck
+      - Spock
+      - aeson
+      - algebraic-graphs
+      - async
+      - binary
+      - bytestring
+      - conduit
+      - containers
+      - cryptonite
+      - data-default
+      - directory
+      - filepath
+      - formatting
+      - hashable
+      - hedgehog
+      - http-api-data
+      - http-media
+      - http-types
+      - memory
+      - microlens
+      - mtl
+      - network
+      - nicify-lib
+      - optparse-applicative
+      - oscoin
       - quickcheck-instances
+      - radicle
+      - random
       - random-shuffle
+      - safe-exceptions
+      - scientific
+      - serialise
+      - splitmix
       - streaming-commons
       - tasty >=1.0.0.1
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
-      - tasty-expected-failure
       - temporary
-      - vector
+      - text
+      - unordered-containers
+      - wai
+      - wai-extra
 
 default-extensions:
   - BangPatterns
