@@ -1,4 +1,6 @@
-module Oscoin.Test.Consensus where
+module Oscoin.Test.Consensus
+    ( tests
+    ) where
 
 import           Oscoin.Prelude
 

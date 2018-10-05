@@ -1,7 +1,5 @@
 module Crypto.Test.Hash.Multi
     ( tests
-    , propRoundtrip
-    , example
     ) where
 
 import           Oscoin.Prelude

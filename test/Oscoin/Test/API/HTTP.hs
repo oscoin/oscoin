@@ -1,4 +1,6 @@
-module Oscoin.Test.API.HTTP (tests) where
+module Oscoin.Test.API.HTTP
+    ( tests
+    ) where
 
 import           Oscoin.Prelude hiding (get, state)
 

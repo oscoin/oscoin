@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-
-module Crypto.Tests where
+module Crypto.Tests
+    ( tests
+    ) where
 
 import           Prelude hiding (length)
 import qualified Prelude
