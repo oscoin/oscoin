@@ -41,7 +41,7 @@ testBuildBlock = testGroup "buildBlock"
     , testProperty "transactions errors recorded in receipts" $
         \txs err -> let (_, receipts) = buildTestBlock txsWithError
                         txsWithError = TxErr err : txs
-                    in (receiptTxOutput <$> head receipts) === Just (Left [EvalError (show err)])
+                    in (receiptTxOutput <$> head receipts) === Just (Left (EvalError (show err)))
     , testProperty "error transactions do not change block" $
         \txs -> let validTxs = [ TxOk out | TxOk out <- txs ]
                     (blkWithErrors, _) = buildTestBlock txs
@@ -82,7 +82,7 @@ instance Hashable Tx where
 
 eval :: Evaluator St Tx Output
 eval (TxOk output) st = Right (output, output : st)
-eval (TxErr err) _    = Left [EvalError (show err)]
+eval (TxErr err) _    = Left (EvalError (show err))
 
 
 -- | Build block on an empty genesis block with 'eval' as defined

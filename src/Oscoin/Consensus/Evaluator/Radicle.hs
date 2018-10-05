@@ -75,7 +75,7 @@ txEval tx st = radicleEval (txToProgram tx) st
 radicleEval :: Evaluator Env Program Rad.Value
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
-        (Left err, _)           -> Left [EvalError (show err)]
+        (Left err, _)           -> Left (EvalError (show err))
         (Right value, newState) -> Right (value, Env newState)
 
 

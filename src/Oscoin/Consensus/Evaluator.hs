@@ -12,7 +12,7 @@ import           Oscoin.Prelude
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
 
-type EvalResult state output = Either [EvalError] (output, state)
+type EvalResult state output = Either EvalError (output, state)
 
 type Evaluator state tx output = tx -> state -> EvalResult state output
 

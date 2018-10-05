@@ -18,12 +18,12 @@ import           Codec.Serialise (Serialise)
 -- part of a block.
 data Receipt tx o = Receipt
     { receiptTx       :: Crypto.Hashed tx
-    , receiptTxOutput :: Either [EvalError] o
+    , receiptTxOutput :: Either EvalError o
     , receiptTxBlock  :: BlockHash
     -- ^ Identifies the block the output was generated in
     } deriving (Show, Eq, Generic)
 
-mkReceipt :: (Crypto.Hashable tx) => Block tx s -> tx -> Either [EvalError] o -> Receipt tx o
+mkReceipt :: (Crypto.Hashable tx) => Block tx s -> tx -> Either EvalError o -> Receipt tx o
 mkReceipt block tx result = Receipt (Crypto.hash tx) result (blockHash block)
 
 
@@ -59,7 +59,7 @@ buildBlockStrict
     -> Timestamp
     -> [tx]
     -> Block tx s
-    -> Either (tx, [EvalError]) (Block tx s)
+    -> Either (tx, EvalError) (Block tx s)
 buildBlockStrict eval tick txs parent = do
     let initialState = blockState $ blockHeader parent
     newState <- foldlM step initialState txs
@@ -91,14 +91,14 @@ evalTraverse
     => Evaluator state tx output
     -> t tx
     -> state
-    -> (t (tx, Either [EvalError] output), state)
+    -> (t (tx, Either EvalError output), state)
 evalTraverse eval txs s = runState (traverse go txs) s
   where
     go tx = do
         result <- evalToState eval tx
         pure (tx, result)
 
-evalToState :: Evaluator state tx output -> tx -> State state (Either [EvalError] output)
+evalToState :: Evaluator state tx output -> tx -> State state (Either EvalError output)
 evalToState eval tx = state go
   where
     go st =
