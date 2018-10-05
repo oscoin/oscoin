@@ -1,21 +1,5 @@
 module Oscoin.Test.P2P.Gossip.IO
     ( tests
-
-    , propStreamingSerde
-    , propNetworkStreamingHappy
-    , propNetworkFramedHappy
-    , propNetworkFramedServerStreamingClient
-    , propNetworkStreamingServerFramedClient
-
-    , genFrob
-
-    , streamingServer
-    , streamingClient
-    , framedServer
-    , framedClient
-
-    , bind
-    , connect
     ) where
 
 import           Oscoin.Prelude hiding (bracket, try)

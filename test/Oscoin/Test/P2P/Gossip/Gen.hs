@@ -1,7 +1,14 @@
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE TupleSections #-}
-
-module Oscoin.Test.P2P.Gossip.Gen where
+module Oscoin.Test.P2P.Gossip.Gen
+    ( NodeId
+    , Contacts
+    , NetworkBounds
+    , SplitMixSeed
+    , defaultNetworkBounds
+    , connectedContacts
+    , disconnectedContacts
+    , circularContacts
+    , splitMixSeed
+    ) where
 
 import           Oscoin.Prelude
 

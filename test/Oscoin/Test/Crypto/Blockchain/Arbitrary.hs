@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Test.Crypto.Blockchain.Arbitrary where
+module Oscoin.Test.Crypto.Blockchain.Arbitrary
+    ( arbitraryBlockchain
+    , arbitraryValidBlockchain
+    ) where
 
 import           Oscoin.Prelude
 
@@ -51,11 +54,6 @@ arbitraryValidBlockWith prevHeader txs = do
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)
-
-arbitraryEmptyGenesis
-    :: forall tx s. (Arbitrary s) => Gen (Block tx s)
-arbitraryEmptyGenesis =
-    emptyGenesisBlock <$> arbitrary <*> arbitrary
 
 arbitraryValidBlockchain :: (Serialise tx, Arbitrary tx, Arbitrary s) => s -> Gen (Blockchain tx s)
 arbitraryValidBlockchain s = do

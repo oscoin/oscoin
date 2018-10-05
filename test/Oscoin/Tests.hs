@@ -1,4 +1,6 @@
-module Oscoin.Tests where
+module Oscoin.Tests
+    ( tests
+    ) where
 
 import           Oscoin.Prelude
 
