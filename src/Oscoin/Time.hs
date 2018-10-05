@@ -57,8 +57,7 @@ timeDiff (Timestamp t) (Timestamp t') = t - t'
 now :: MonadIO m => m Timestamp
 now = liftIO $ Timestamp . fromIntegral . toNanoSecs <$> getTime Realtime
 
--- | Common durations. There is no definition for units of Day or larger
--- to avoid confusion across daylight savings time zone transitions.
+-- | Common durations.
 nanoseconds, microseconds, milliseconds, seconds, minutes, hours :: Duration
 nanoseconds  = 1
 microseconds = 1000 * nanoseconds
