@@ -118,7 +118,7 @@ withNode NodeState{..} k = do
         mph
         sth
         bsh
-        Node.defaultEval
+        Rad.txEval
         (Consensus.nakamotoConsensus (Just Nakamoto.easyDifficulty))
         k
 

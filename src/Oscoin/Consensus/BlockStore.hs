@@ -2,6 +2,7 @@ module Oscoin.Consensus.BlockStore
     ( BlockStore(..)
     , genesisBlockStore
     , fromOrphans
+    , initWithChain
 
     , maximumChainBy
     , getGenesisBlock
@@ -41,9 +42,12 @@ instance Ord tx => Monoid (BlockStore tx s) where
     mempty = BlockStore mempty mempty
 
 genesisBlockStore :: Block tx s -> BlockStore tx s
-genesisBlockStore gen =
+genesisBlockStore gen = initWithChain $ fromGenesis gen
+
+initWithChain :: Blockchain tx s -> BlockStore tx s
+initWithChain  chain =
     BlockStore
-        { bsChains  = Map.singleton (blockHash gen) (Blockchain (gen :| []))
+        { bsChains  = Map.singleton (blockHash $ genesis chain) chain
         , bsOrphans = Set.empty
         }
 

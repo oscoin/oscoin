@@ -18,6 +18,7 @@ import           Oscoin.P2P.Types (mkNodeId)
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
+import           Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import           Control.Exception.Safe (Exception, throwM)
 import           Control.Monad (unless)
 import           Crypto.Random (getRandomBytes)
@@ -97,7 +98,7 @@ serverHandshake (myPK, mySK) sock addr = do
                         Kk  theirSig -> do
                             verifyE theirPK theirSig (theirRnd <> myRnd)
                             sendE sock Thx
-                            pure $ mkConnection theirPK mySK sock addr
+                            mkConnection theirPK mySK sock addr <$> mkMutexE
                         Bai err      -> throwE err
                         _            -> throwE BadProtocolSequence
 
@@ -124,7 +125,7 @@ clientHandshake (myPK, mySK) sock addr = do
                     sendE sock $ Kk mySig
                     thx   <- recvE sock
                     case thx of
-                        Thx     -> pure $ mkConnection theirPK mySK sock addr
+                        Thx     -> mkConnection theirPK mySK sock addr <$> mkMutexE
                         Bai err -> throwE err
                         _       -> throwE BadProtocolSequence
 
@@ -140,13 +141,15 @@ mkConnection
     -> Crypto.PrivateKey
     -> Socket
     -> SockAddr
+    -> MVar ()
     -> Connection p
-mkConnection theirPK mySK sock connAddr =
+mkConnection theirPK mySK sock connAddr mutex =
     Connection {..}
   where
     connNodeId        = mkNodeId theirPK
     connClose         = Sock.close sock
-    connSendWire wire = sign wire >>= Conn.sockSendStream sock
+    connSendWire wire = sign wire
+                    >>= withMVar mutex . const . Conn.sockSendStream sock
     connRecvWire      =
            Conn.sockRecvStream sock
         .| Conduit.mapM verify
@@ -172,13 +175,13 @@ recvE sock = withExceptT mapRecvError $ ExceptT recv
 
     recv = Conn.sockRecvFramed sock
 
-sendE :: Socket -> HandshakeMessage -> ExceptT HandshakeError IO ()
+sendE :: Socket -> HandshakeMessage -> ExceptT e IO ()
 sendE sock msg = ExceptT $ map pure (Conn.sockSendFramed sock msg)
 
 signE
     :: Crypto.PrivateKey
     -> ByteString
-    -> ExceptT HandshakeError IO Crypto.Signature
+    -> ExceptT e IO Crypto.Signature
 signE mySK msg = map Crypto.sigSignature . liftIO $ Crypto.sign mySK msg
 
 verifyE
@@ -190,8 +193,11 @@ verifyE theirPK theirSig myRnd =
     unless (Crypto.verify theirPK (Crypto.signed theirSig myRnd)) $
         throwE InvalidSignature
 
-randomE :: ExceptT HandshakeError IO ByteString
+randomE :: ExceptT e IO ByteString
 randomE = liftIO (getRandomBytes 32)
+
+mkMutexE :: ExceptT e IO (MVar ())
+mkMutexE = ExceptT $ pure <$> newMVar ()
 
 bai :: Socket -> HandshakeError -> IO ()
 bai sock e = Conn.sockSendFramed sock $ Bai e

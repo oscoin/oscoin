@@ -23,7 +23,7 @@ data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
 instance Arbitrary OscoinRad.Env where
-    arbitrary = pure $ OscoinRad.Env pureEnv
+    arbitrary = pure $ OscoinRad.pureEnv
 
 instance Arbitrary r => Arbitrary (Rad.Env r) where
     arbitrary = Rad.Env <$> arbitrary
