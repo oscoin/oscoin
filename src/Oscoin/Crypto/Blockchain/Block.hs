@@ -6,10 +6,8 @@ module Oscoin.Crypto.Blockchain.Block
     , Height
     , Timestamp
     , Orphan
-    , toOrphan
     , mkBlock
     , linkBlock
-    , genesisBlock
     , emptyGenesisBlock
     , validateBlock
     , headerHash
@@ -23,7 +21,6 @@ import           Oscoin.Prelude
 import qualified Prelude
 
 import           Oscoin.Clock
-import           Oscoin.Consensus.Evaluator (EvalError, Evaluator, evals)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
@@ -176,39 +173,18 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-genesisBlock
-    :: (Foldable t, Serialise tx)
-    => s
-    -> Evaluator s tx a
-    -> Timestamp
-    -> t tx
-    -> Either [EvalError] (Block tx s)
-genesisBlock initialState eval timestamp txs = do
-    blockState <- evals txs initialState eval
-    pure $ mkBlock (genesisHeader timestamp blockState txs) txs
-
-emptyGenesisBlock
-    :: forall tx s. (Serialise tx)
-    => Timestamp
-    -> s
-    -> Block tx s
-emptyGenesisBlock t blockState =
-    mkBlock (genesisHeader t blockState ([] :: [tx])) []
-
-genesisHeader :: (Foldable t, Serialise tx) => Timestamp -> s -> t tx -> BlockHeader s
-genesisHeader blockTimestamp blockState txs =
-    BlockHeader
+emptyGenesisBlock :: Timestamp -> s -> Block tx s
+emptyGenesisBlock blockTimestamp blockState =
+    mkBlock header []
+  where
+    header = BlockHeader
         { blockPrevHash = Crypto.toHashed Crypto.zeroHash
-        , blockDataHash = hashTxs txs
+        , blockDataHash = Crypto.zeroHash
         , blockState
         , blockTimestamp
         , blockDifficulty = 0
         , blockNonce = 0
         }
-
-toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
-toOrphan eval blk =
-    blk $> \s -> rightToMaybe (evals (blockData blk) s eval)
 
 blockHash :: Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)

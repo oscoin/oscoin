@@ -5,8 +5,8 @@ module Oscoin.Test.Crypto.Blockchain.Arbitrary where
 import           Oscoin.Prelude
 
 import           Oscoin.Clock
-import           Oscoin.Consensus.Evaluator (Evaluator, identityEval)
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
 
 import qualified Crypto.Hash as Crypto
@@ -23,13 +23,11 @@ import           Oscoin.Test.Clock ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
-arbitraryBlockchain :: forall tx. (Arbitrary tx, Serialise tx) => Gen (Blockchain tx ())
+arbitraryBlockchain :: (Arbitrary tx, Serialise tx, Arbitrary s) => Gen (Blockchain tx s)
 arbitraryBlockchain = do
-    gen  <- Blockchain . singleton <$> arbitraryGenesis
-    rest <- arbitraryValidBlock gen
-    pure $ rest |> gen
-  where
-    singleton x = x :| []
+    chain <- fromGenesis . emptyGenesisBlock epoch <$> arbitrary
+    rest <- arbitraryValidBlock chain
+    pure $ rest |> chain
 
 instance Arbitrary (Crypto.Digest HashAlgorithm) where
     arbitrary = do
@@ -54,25 +52,8 @@ arbitraryValidBlockWith prevHeader txs = do
                }
     pure $ Block header (Seq.fromList txs)
 
-arbitraryGenesis :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Gen (Block tx s)
-arbitraryGenesis = do
-    txs <- resize 20 arbitrary :: Gen [tx]
-    arbitraryGenesisWith identityEval txs
-
-arbitraryGenesisWith
-    :: forall tx s
-     . (Serialise tx, Arbitrary s)
-     => Evaluator s tx ()
-     -> [tx]
-     -> Gen (Block tx s)
-arbitraryGenesisWith eval txs = do
-    phil <- genesisBlock @[] @tx @s <$> arbitrary <*> pure eval <*> arbitrary <*> pure txs
-    case phil of
-        Right blk -> pure blk
-        Left  err -> panic $ "Failed to generate genesis: " <> show err
-
 arbitraryEmptyGenesis
-    :: forall tx s. (Serialise tx, Arbitrary s) => Gen (Block tx s)
+    :: forall tx s. (Arbitrary s) => Gen (Block tx s)
 arbitraryEmptyGenesis =
     emptyGenesisBlock <$> arbitrary <*> arbitrary
 

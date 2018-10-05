@@ -1,6 +1,8 @@
 module Oscoin.Crypto.Blockchain.Eval
     ( Receipt(..)
     , buildBlock
+    , buildBlockStrict
+    , toOrphan
     ) where
 
 import           Oscoin.Prelude
@@ -47,6 +49,37 @@ buildBlock eval tick txs parent =
         newBlock = mkUnsealedBlock parent tick validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
     in (newBlock, receipts)
+
+
+-- | Try to build a block like 'buildBlock' by applying @txs@ to the
+-- state of a previous block. Unlinke 'buildBlock' evaluation will
+-- abort if one of the transactions produces an error.
+buildBlockStrict
+    :: (Serialise tx)
+    => Evaluator s tx o
+    -> Timestamp
+    -> [tx]
+    -> Block tx s
+    -> Either (tx, [EvalError]) (Block tx s)
+buildBlockStrict eval tick txs parent = do
+    let initialState = blockState $ blockHeader parent
+    newState <- foldlM step initialState txs
+    pure $ mkUnsealedBlock parent tick txs newState
+  where
+    step s tx =
+        case eval tx s of
+            Left err                  -> Left (tx, err)
+            Right (_output, newState) -> Right newState
+
+
+toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
+toOrphan eval blk =
+    blk $> \s -> foldlM step s (blockData blk)
+  where
+    step s tx =
+        case eval tx s of
+            Left _        -> Nothing
+            Right (_, s') -> Just s'
 
 -- Internal ------------------------------------------------------
 
