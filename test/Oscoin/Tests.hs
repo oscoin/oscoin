@@ -15,7 +15,7 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
-import qualified Oscoin.Test.API as API
+import qualified Oscoin.Test.API.HTTP as HTTP
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
@@ -40,7 +40,7 @@ import qualified Data.Map as Map
 
 tests :: TestTree
 tests = testGroup "Oscoin"
-    [ testGroup      "API"                            API.tests
+    [ testGroup      "API.HTTP"                       HTTP.tests
     , testGroup      "CLI"                            CLI.tests
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool

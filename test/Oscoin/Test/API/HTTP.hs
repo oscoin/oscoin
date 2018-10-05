@@ -1,4 +1,4 @@
-module Oscoin.Test.API where
+module Oscoin.Test.API.HTTP (tests) where
 
 import           Oscoin.Prelude hiding (get, state)
 
@@ -29,7 +29,7 @@ import qualified Radicle.Extended as Rad hiding (Env)
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
-import           Test.Tasty.HUnit (assertFailure, testCase)
+import           Test.Tasty.HUnit
 
 tests :: [TestTree]
 tests =
@@ -210,6 +210,3 @@ getReference codec = do
         get codec "/state?q=[my-ref]" >>=
             assertStatus ok200 <>
             assertResultOK (Rad.toRad ("hooray!" :: Text))
-
-notTested :: IO HTTPTest
-notTested = httpTest emptyNodeState $ liftIO $ assertFailure "Not tested"
