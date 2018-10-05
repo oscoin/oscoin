@@ -18,7 +18,7 @@ import qualified Data.Set as Set
 import           Data.Word
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 import           Crypto.Data.Auth.Tree (Tree)

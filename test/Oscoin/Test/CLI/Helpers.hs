@@ -37,7 +37,7 @@ import qualified System.Directory as Dir
 import           System.Environment
 import           System.IO.Temp (withSystemTempDirectory)
 
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit.Extended
 
 
 -- | Run the CLI in a test environment and print the result and the

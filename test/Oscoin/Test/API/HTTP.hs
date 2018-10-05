@@ -31,7 +31,7 @@ import qualified Radicle.Extended as Rad hiding (Env)
 
 import           Test.QuickCheck (generate)
 import           Test.Tasty
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit.Extended
 
 tests :: [TestTree]
 tests =
