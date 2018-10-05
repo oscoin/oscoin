@@ -27,17 +27,18 @@ steps:
 
   - id: "Lint (hlint)"
     name: 'haskell:8.4.3'
-    waitFor: 'Format'
+    waitFor: ['Format']
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'exec', '--', 'hlint', '.']
 
   - id: "Lint (weeder)"
     name: 'haskell:8.4.3'
-    waitFor: 'Format'
+    waitFor: ['Format']
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'exec', '--', 'weeder', '.']
 
   - id: "Test & Build"
+    waitFor: ['Lint (hlint)', 'Lint (weeder)']
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'build', '--fast', '--test', '--no-terminal', '--pedantic']
