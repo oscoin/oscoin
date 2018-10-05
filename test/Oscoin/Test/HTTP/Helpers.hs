@@ -1,9 +1,36 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- TODO: Move this module to Network.Wai.Test.Extended
-module Oscoin.Test.HTTP.Helpers where
+module Oscoin.Test.HTTP.Helpers
+    ( Codec
+    , newCodec
+    , prettyCodec
 
-import           Oscoin.Prelude hiding (First)
+    , (@?=)
+
+    , NodeState(..)
+    , nodeState
+    , withNode
+    , emptyNodeState
+
+    , Session
+    , runSession
+
+    , assertResultOK
+    , assertResultErr
+    , assertStatus
+
+    , get
+    , post
+
+    , blockchainFromEnv
+    , addRadicleRef
+    , initRadicleEnv
+    , genDummyTx
+    , emptyBlockstore
+
+    ) where
+
+import           Oscoin.Prelude hiding (First, get)
 
 import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
@@ -301,7 +328,3 @@ withBody method codec path body' =
 -- | Represents an empty request body.
 noBody :: Maybe ()
 noBody = Nothing
-
--- | Helper for string literals.
-t :: Text -> Text
-t = identity
