@@ -110,7 +110,6 @@ tests:
     dependencies:
       - Diff
       - QuickCheck
-      - Spock
       - aeson
       - algebraic-graphs
       - async
