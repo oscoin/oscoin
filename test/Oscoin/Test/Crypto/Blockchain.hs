@@ -4,11 +4,11 @@ module Oscoin.Test.Crypto.Blockchain
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Hash (Hashable(..), hashSerial)
+import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 

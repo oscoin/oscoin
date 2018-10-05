@@ -19,7 +19,6 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import           Oscoin.Clock
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Evaluator (identityEval)
@@ -29,6 +28,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
+import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Class
 

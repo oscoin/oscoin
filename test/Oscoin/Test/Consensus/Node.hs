@@ -13,7 +13,6 @@ module Oscoin.Test.Consensus.Node
 
 import           Oscoin.Prelude hiding (StateT, runStateT, show)
 
-import           Oscoin.Clock
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
@@ -22,6 +21,7 @@ import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
+import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.State.Strict

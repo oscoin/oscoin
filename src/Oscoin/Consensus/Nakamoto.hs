@@ -13,9 +13,9 @@ module Oscoin.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Time
 
 import           Crypto.Number.Serialize (os2ip)
 import qualified Data.List.NonEmpty as NonEmpty

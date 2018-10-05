@@ -20,8 +20,8 @@ module Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Prelude
 import qualified Prelude
 
-import           Oscoin.Clock
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise

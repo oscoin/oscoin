@@ -5,7 +5,6 @@ import           Oscoin.Prelude hiding (option)
 import           Oscoin.API.HTTP (withAPI)
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
-import           Oscoin.Clock
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (EvalError, fromEvalError)
@@ -27,6 +26,7 @@ import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Time
 
 
 import qualified Control.Concurrent.Async as Async

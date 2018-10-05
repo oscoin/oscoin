@@ -4,10 +4,10 @@ module Oscoin.Test.Crypto.Blockchain.Arbitrary where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
+import           Oscoin.Time
 
 import qualified Crypto.Hash as Crypto
 
@@ -19,7 +19,7 @@ import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
 import           Data.Word (Word8)
 
-import           Oscoin.Test.Clock ()
+import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
