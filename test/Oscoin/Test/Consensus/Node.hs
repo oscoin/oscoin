@@ -21,7 +21,8 @@ import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
-import           Oscoin.Storage.Receipt
+import           Oscoin.Storage.Receipt (MonadReceiptStore)
+import qualified Oscoin.Storage.Receipt as ReceiptStore
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -60,14 +61,14 @@ data TestNodeState = TestNodeState
     , tnsMempool      :: Mempool.Mempool DummyTx
     , tnsBlockstore   :: BlockStore.BlockStore DummyTx ()
     , tnsNodeId       :: DummyNodeId
-    , tnsReceiptStore :: ReceiptStore DummyTx DummyOutput
+    , tnsReceiptStore :: ReceiptStore.Store DummyTx DummyOutput
     } deriving (Show)
 
 class HasTestNodeState a where
     testNodeStateL :: Lens' a TestNodeState
 
-instance HasReceiptStore DummyTx DummyOutput TestNodeState where
-    receiptStoreL = lens tnsReceiptStore (\s tnsReceiptStore -> s { tnsReceiptStore })
+instance ReceiptStore.HasStore DummyTx DummyOutput TestNodeState where
+    storeL = lens tnsReceiptStore (\s tnsReceiptStore -> s { tnsReceiptStore })
 
 tnsMempoolL :: Lens' TestNodeState (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })
@@ -81,7 +82,7 @@ emptyTestNodeState nid = TestNodeState
     , tnsMempool    = mempty
     , tnsBlockstore = BlockStore.genesisBlockStore $ Block.emptyGenesisBlock epoch ()
     , tnsNodeId     = nid
-    , tnsReceiptStore = emptyReceiptStore
+    , tnsReceiptStore = ReceiptStore.emptyStore
     }
 
 newtype TestNodeT m a = TestNodeT (StateT TestNodeState m a)
@@ -127,8 +128,8 @@ instance Monad m => MonadQuery (TestNodeT m) where
     {-# INLINE queryM #-}
 
 instance Monad m => MonadReceiptStore DummyTx DummyOutput (TestNodeT m) where
-    addReceipt = addReceiptStore
-    lookupReceipt = lookupReceiptStore
+    addReceipt = ReceiptStore.addWithStore
+    lookupReceipt = ReceiptStore.lookupWithStore
 
 runTestNodeT :: TestNodeState -> TestNodeT m a -> m (a, TestNodeState)
 runTestNodeT s (TestNodeT ma) = runStateT ma s

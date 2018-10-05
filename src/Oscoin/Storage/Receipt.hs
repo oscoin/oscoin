@@ -5,18 +5,18 @@ module Oscoin.Storage.Receipt
     , Receipt(..)
 
     -- * State based receipt store
-    , ReceiptStore
-    , HasReceiptStore(..)
-    , emptyReceiptStore
-    , addReceiptStore
-    , lookupReceiptStore
+    , Store
+    , HasStore(..)
+    , emptyStore
+    , addWithStore
+    , lookupWithStore
 
     -- * TVar handle based receipt store
-    , ReceiptStoreHandle
-    , HasReceiptStoreHandle(..)
-    , newReceiptHandle
-    , addReceiptHandle
-    , lookupReceiptHandle
+    , Handle
+    , HasHandle(..)
+    , newHandle
+    , addWithHandle
+    , lookupWithHandle
     ) where
 
 import           Oscoin.Prelude
@@ -32,49 +32,49 @@ import           Lens.Micro.Mtl
 
 -- State based MonadReceiptStore --------------------------------------
 
-type ReceiptStore tx o = Map.Map (Crypto.Hashed tx) (Receipt tx o)
+type Store tx o = Map.Map (Crypto.Hashed tx) (Receipt tx o)
 
-class HasReceiptStore tx o r where
-    receiptStoreL :: Lens' r (ReceiptStore tx o)
+class HasStore tx o r where
+    storeL :: Lens' r (Store tx o)
 
-emptyReceiptStore :: ReceiptStore tx o
-emptyReceiptStore = Map.empty
+emptyStore :: Store tx o
+emptyStore = Map.empty
 
-addReceiptStore
-    :: (HasReceiptStore tx o st, MonadState st m)
+addWithStore
+    :: (HasStore tx o st, MonadState st m)
     => Receipt tx o -> m ()
-addReceiptStore receipt = do
-    store <- use receiptStoreL
+addWithStore receipt = do
+    store <- use storeL
     let store' = Map.insert (receiptTx receipt) receipt store
-    receiptStoreL .= store'
+    storeL .= store'
 
-lookupReceiptStore
-    :: (HasReceiptStore tx o st, MonadState st m)
+lookupWithStore
+    :: (HasStore tx o st, MonadState st m)
     => Crypto.Hashed tx -> m (Maybe (Receipt tx o))
-lookupReceiptStore txHash = do
-    store <- use receiptStoreL
+lookupWithStore txHash = do
+    store <- use storeL
     pure $ Map.lookup txHash store
 
 -- TVar handle based MonadReceiptStore --------------------------------------
 
-type ReceiptStoreHandle tx o = TVar (ReceiptStore tx o)
+type Handle tx o = TVar (Store tx o)
 
-class HasReceiptStoreHandle tx o r where
-    receiptStoreHandleL :: Lens' r (ReceiptStoreHandle tx o)
+class HasHandle tx o r where
+    handleL :: Lens' r (Handle tx o)
 
-newReceiptHandle :: MonadIO m => m (ReceiptStoreHandle o tx)
-newReceiptHandle = liftIO $ newTVarIO emptyReceiptStore
+newHandle :: MonadIO m => m (Handle o tx)
+newHandle = liftIO $ newTVarIO emptyStore
 
-addReceiptHandle
-    :: (HasReceiptStoreHandle tx o r, MonadReader r m, MonadIO m)
+addWithHandle
+    :: (HasHandle tx o r, MonadReader r m, MonadIO m)
     => Receipt tx o -> m ()
-addReceiptHandle receipt = do
-    store <- view receiptStoreHandleL
+addWithHandle receipt = do
+    store <- view handleL
     liftIO $ atomically $ modifyTVar' store $ Map.insert (receiptTx receipt) receipt
 
-lookupReceiptHandle
-    :: (HasReceiptStoreHandle tx o r, MonadReader r m, MonadIO m)
+lookupWithHandle
+    :: (HasHandle tx o r, MonadReader r m, MonadIO m)
     => Crypto.Hashed tx -> m (Maybe (Receipt tx o))
-lookupReceiptHandle txHash = do
-    store <- view receiptStoreHandleL
+lookupWithHandle txHash = do
+    store <- view handleL
     Map.lookup txHash <$> liftIO (readTVarIO store)

@@ -39,7 +39,8 @@ import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
-import           Oscoin.Storage.Receipt
+import           Oscoin.Storage.Receipt (MonadReceiptStore)
+import qualified Oscoin.Storage.Receipt as ReceiptStore
 
 import qualified Radicle.Extended as Rad
 
@@ -64,11 +65,11 @@ data Handle tx s i = Handle
     , hMempool      :: Mempool.Handle tx
     , hEval         :: Evaluator s tx Rad.Value
     , hConsensus    :: Consensus tx (NodeT tx s i IO)
-    , hReceiptStore :: ReceiptStoreHandle tx Rad.Value
+    , hReceiptStore :: ReceiptStore.Handle tx Rad.Value
     }
 
-instance HasReceiptStoreHandle tx Rad.Value (Handle tx s i) where
-    receiptStoreHandleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
+instance ReceiptStore.HasHandle tx Rad.Value (Handle tx s i) where
+    handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
 
 withNode
@@ -86,7 +87,7 @@ withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
     bracket open close
   where
     open = do
-        hReceiptStore <- newReceiptHandle
+        hReceiptStore <- ReceiptStore.newHandle
         gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
             BlockStore.getGenesisBlock bs
         Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
@@ -156,8 +157,8 @@ instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
 instance MonadClock m => MonadClock (NodeT tx s i m)
 
 instance (MonadIO m) => MonadReceiptStore tx Rad.Value (NodeT tx s i m) where
-    addReceipt = addReceiptHandle
-    lookupReceipt = lookupReceiptHandle
+    addReceipt = ReceiptStore.addWithHandle
+    lookupReceipt = ReceiptStore.lookupWithHandle
 
 -------------------------------------------------------------------------------
 
