@@ -24,7 +24,7 @@ type CommandRunner a = CommandRunnerT IO a
 
 runCommand :: Command -> IO Result
 runCommand cmd =
-    runHttpClientT "http://127.0.0.1:8080" $ runCommandRunnerT $ dispatchCommand cmd
+    runHttpClientT "http://127.0.0.1:8477" $ runCommandRunnerT $ dispatchCommand cmd
 
 newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: HttpClientT m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadMask, MonadCatch, MonadThrow, MonadTrans, API.MonadClient)

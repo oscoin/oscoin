@@ -67,16 +67,18 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
         <*> option auto
             ( long "api-port"
            <> help "Port number to bind to for the HTTP API"
-           <> value 8080
+           <> value 8477
            <> showDefault
             )
         <*> option str
             ( long "seeds"
            <> help "Path to YAML file describing gossip seed nodes"
+           <> value "node/gossip-seeds.yaml"
             )
         <*> option str
             ( long "prelude"
            <> help "Path to radicle prelude"
+           <> value "node/rad/prelude.rad"
             )
         <*> optional
             ( option auto
