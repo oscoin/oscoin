@@ -2,7 +2,6 @@ module Oscoin.Data.Tx where
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (toHashed, zeroHash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -62,16 +61,6 @@ mkTx sm pk = Tx
 
 txMessageContent :: Tx a -> a
 txMessageContent = sigMessage . txMessage
-
--- | Convert a 'Tx' to a Radicle 'Program'.
-toProgram :: Tx Rad.Value -> Rad.Program
-toProgram Tx{..} =
-    Rad.Program
-        { Rad.progValue   = unsign txMessage
-        , Rad.progAuthor  = Crypto.hash txPubKey
-        , Rad.progChainId = txChainId
-        , Rad.progNonce   = txNonce
-        }
 
 -- | Create a 'Tx' from a 'Serialise' message and key pair.
 createTx :: (Serialise msg, MonadRandom m) => (PublicKey, PrivateKey) -> msg -> m (Tx msg)

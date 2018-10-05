@@ -4,7 +4,6 @@ module Oscoin.Node
     , NodeT
 
     , withNode
-    , defaultEval
 
     , runNodeT
 
@@ -25,13 +24,11 @@ import           Oscoin.Consensus.BlockStore.Class
                  (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
-import           Oscoin.Consensus.Evaluator (EvalError, Evaluator)
-import qualified Oscoin.Consensus.Evaluator.Radicle as Eval
+import           Oscoin.Consensus.Evaluator (Evaluator)
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
 import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Data.Query
-import           Oscoin.Data.Tx (Tx, toProgram)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
@@ -88,9 +85,6 @@ withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
         pure Handle{..}
 
     close = const $ pure ()
-
-defaultEval :: Tx Rad.Value -> Eval.Env -> Either [EvalError] (Rad.Value, Eval.Env)
-defaultEval tx st = Eval.radicleEval (toProgram tx) st
 
 -------------------------------------------------------------------------------
 

@@ -1,9 +1,10 @@
 module Oscoin.Consensus.Evaluator.Radicle
     ( Env(..)
-    , Program(..)
-    , radicleEval
+    , RadTx
+    , RadEvaluator
+    , txEval
+    , pureEnv
     , parseValue
-    , fromSource
 
     -- * Re-exports
     , Rad.Value
@@ -12,9 +13,10 @@ module Oscoin.Consensus.Evaluator.Radicle
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Evaluator (EvalError(..), Evaluator)
-import           Oscoin.Crypto.Hash (Hashed, toHashed, zeroHash)
-import           Oscoin.Crypto.PubKey (PublicKey)
+import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.PubKey (PublicKey, unsign)
 import           Oscoin.Data.Query
+import           Oscoin.Data.Tx (Tx(..))
 
 import           Codec.Serialise (Serialise)
 import           Data.Default (Default(..))
@@ -25,8 +27,15 @@ import qualified Radicle.Extended as Rad
 
 newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
+type RadTx = Tx Rad.Value
+
+type RadEvaluator = Evaluator Env RadTx Rad.Value
+
+pureEnv :: Env
+pureEnv = Env Rad.pureEnv
+
 instance Default Env where
-    def = Env Rad.pureEnv
+    def = pureEnv
 
 instance Query Env where
     type QueryVal Env = Rad.Value
@@ -47,25 +56,28 @@ data Program = Program
 
 instance Serialise Program
 
+-- | Convert a 'Tx' to a Radicle 'Program'.
+txToProgram :: RadTx -> Program
+txToProgram Tx{..} =
+    Program
+        { progValue   = unsign txMessage
+        , progAuthor  = hash txPubKey
+        , progChainId = txChainId
+        , progNonce   = txNonce
+        }
+
 parseValue :: Text -> Text -> Either Text Rad.Value
 parseValue name src = Rad.parse name src
 
-fromSource :: Text -> Text -> Either Text Program
-fromSource name src = do
-    value <- parseValue name src
-    pure Program
-        { progValue   = value
-        , progAuthor  = toHashed zeroHash
-        , progChainId = 0
-        , progNonce   = 0
-        }
+txEval :: Evaluator Env RadTx Rad.Value
+txEval tx st = radicleEval (txToProgram tx) st
 
--- | A radicle evaluator.
 radicleEval :: Evaluator Env Program Rad.Value
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
         (Left err, _)           -> Left [EvalError (show err)]
         (Right value, newState) -> Right (value, Env newState)
+
 
 lookupReference :: Rad.Reference -> Rad.Bindings m -> Maybe Rad.Value
 lookupReference (Rad.Reference r) Rad.Bindings{..} =
