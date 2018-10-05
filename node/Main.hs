@@ -8,6 +8,7 @@ import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (EvalError, fromEvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, Difficulty, fromGenesis, (|>))
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
@@ -91,7 +92,7 @@ main :: IO ()
 main = do
     Args{..} <- execParser args
 
-    let consensus = Consensus.nakamotoConsensus difficulty
+    let consensus = Consensus.nakamotoConsensus (Just Nakamoto.minDifficulty)
 
     keys     <- readKeyPair
     nid      <- pure (mkNodeId $ fst keys)
