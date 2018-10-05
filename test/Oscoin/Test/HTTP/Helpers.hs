@@ -5,9 +5,9 @@ module Oscoin.Test.HTTP.Helpers where
 
 import           Oscoin.Prelude hiding (First)
 
-import           Oscoin.API.HTTP (api)
+import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
-                 (MediaType(..), decode, encode, mkMiddleware, parseMediaType)
+                 (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
@@ -57,7 +57,6 @@ import qualified Network.HTTP.Types.Method as HTTP
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
-import           Web.Spock (spockAsApp)
 
 import qualified Radicle
 -- FIXME(kim): should use unsafeToIdent, cf. radicle#105
@@ -159,7 +158,7 @@ addRadicleRef name value (Rad.Env env) =
 -- | Turn a "Session" into an "Assertion".
 runSession :: Session () -> NodeHandle -> Assertion
 runSession sess nh = do
-    app <- spockAsApp (mkMiddleware (api Testing) nh)
+    app <- API.app Testing nh
     Wai.runSession sess app
 
 infix 1 @?=, @=?, @?

@@ -2,7 +2,6 @@ module Main (main) where
 
 import           Oscoin.Prelude hiding (option)
 
-import           Oscoin.API.HTTP (withAPI)
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
@@ -110,7 +109,6 @@ main = do
                    blkStore
                    Rad.txEval
                    consensus                                      $ \nod ->
-        withAPI    Testing                                        $ \api ->
         withGossip lgr
                    keys
                    P2P.NodeAddr { P2P.nodeId   = nid
@@ -120,7 +118,7 @@ main = do
                    seeds'
                    (storage nod)                                  $ \gos ->
             Async.runConcurrently $
-                     Async.Concurrently (HTTP.run api (fromIntegral apiPort) nod)
+                     Async.Concurrently (HTTP.run (fromIntegral apiPort) Testing nod)
                   <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env lgr = Node.Config
