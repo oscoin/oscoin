@@ -146,6 +146,6 @@ initialBlockchain path keypair = runExceptT $ do
         buildBlockStrict Rad.txEval now' [tx] genesis
     pure $ block |> chain
   where
-    formatBuildError :: (Rad.RadTx, [EvalError]) -> Text
+    formatBuildError :: (Rad.RadTx, EvalError) -> Text
     formatBuildError (_tx, evalErrors) =
-        "Error applying initial transactions:\n" <> T.unlines (map fromEvalError evalErrors)
+        "Error applying initial transactions:\n" <> fromEvalError evalErrors
