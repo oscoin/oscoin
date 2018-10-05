@@ -57,7 +57,7 @@ mineNakamoto difi chain bh = go bh { blockDifficulty = difi chain }
         | otherwise             = pure Nothing
 
 chainScore :: Blockchain tx s -> Int
-chainScore = height
+chainScore = fromIntegral . height
 
 hasPoW :: BlockHeader s -> Bool
 hasPoW header =

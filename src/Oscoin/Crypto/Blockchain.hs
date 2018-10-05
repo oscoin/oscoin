@@ -71,8 +71,8 @@ genesis = NonEmpty.last . fromBlockchain
 fromGenesis :: Block tx s -> Blockchain tx s
 fromGenesis g = Blockchain (g :| [])
 
-height :: Blockchain tx s -> Int
-height = length . fromBlockchain
+height :: Blockchain tx s -> Height
+height = fromIntegral . length . fromBlockchain
 
 -- | Scoring function for blockchains.
 type ScoringFunction tx s = Blockchain tx s -> Blockchain tx s -> Ordering
