@@ -1,8 +1,6 @@
 module Oscoin.API.HTTP
-    ( RadTx
-    , run
-    , api
-    , withAPI
+    ( run
+    , app
     ) where
 
 import           Oscoin.Prelude hiding (get)
@@ -11,15 +9,20 @@ import           Oscoin.API.Types (RadTx)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Crypto.Hash (toHashed)
 import           Oscoin.Environment
+import qualified Oscoin.Node as Node
 
 import qualified Oscoin.API.HTTP.Handlers as Handlers
 import           Oscoin.API.HTTP.Internal
 
 -- TODO: Don't import this here? Create a HTTP.Routing module?
-import           Web.Spock (get, middleware, post, root, var, wildcard, (<//>))
+import qualified Network.Wai as Wai
+import           Web.Spock
 
-withAPI :: Environment -> (Api Rad.Env i () -> m a) -> m a
-withAPI env f = f (api env)
+run :: Int -> Environment -> Node.Handle RadTx Rad.Env i -> IO ()
+run port env hdl = runApi (api env) port hdl
+
+app :: Environment -> Node.Handle RadTx Rad.Env i -> IO Wai.Application
+app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 
 -- | Entry point for API.
 api :: Environment -> Api Rad.Env i ()

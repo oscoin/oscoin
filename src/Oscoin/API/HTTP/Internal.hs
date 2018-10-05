@@ -165,11 +165,11 @@ getBody = do
 notImplemented :: ApiAction s i ()
 notImplemented = respond HTTP.notImplemented501 noBody
 
-run :: Api s i ()
+runApi :: Api s i ()
     -> Int
     -> Node.Handle RadTx s i
     -> IO ()
-run app port hdl =
+runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
