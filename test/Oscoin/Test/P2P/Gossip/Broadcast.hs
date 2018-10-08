@@ -1,14 +1,5 @@
 module Oscoin.Test.P2P.Gossip.Broadcast
     ( tests
-
-    , propAtomicBroadcast
-
-    , genBroadcasts
-
-    , initNodes
-    , bcast
-    , settle
-
     , bootTopo
     , eagerTopo
     , lazyTopo

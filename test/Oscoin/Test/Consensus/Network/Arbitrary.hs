@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Oscoin.Test.Consensus.Network.Arbitrary where
+module Oscoin.Test.Consensus.Network.Arbitrary
+    ( arbitraryPartitionedNetwork
+    , arbitraryHealthyNetwork
+    ) where
 
 import           Oscoin.Prelude
 
@@ -24,9 +27,6 @@ kidSize = 13
 
 arbitraryTxMsg :: Arbitrary tx => Gen (Msg tx)
 arbitraryTxMsg = TxMsg <$> arbitrary
-
-arbitraryNetwork :: Gen (TestNetwork ())
-arbitraryNetwork = arbitrary
 
 arbitraryHealthyNetwork :: Duration -> Gen (TestNetwork ())
 arbitraryHealthyNetwork blockTime = do

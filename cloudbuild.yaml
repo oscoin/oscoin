@@ -18,14 +18,14 @@ steps:
     - |
       stack config set system-ghc --global true
       stack config set install-ghc --global false
-      stack install stylish-haskell hlint
+      stack install stylish-haskell hlint weeder
 
   - id: "Format"
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['./scripts/check-fmt.sh']
 
-  - id: "Lint"
+  - id: "Lint (hlint)"
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'exec', '--', 'hlint', '.']
@@ -34,6 +34,11 @@ steps:
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'build', '--fast', '--test', '--no-terminal', '--pedantic']
+
+  - id: "Lint (weeder)"
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    args: ['stack', 'exec', '--', 'weeder', '.']
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil

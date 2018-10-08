@@ -14,7 +14,6 @@ module Oscoin.Test.CLI.Helpers
     , withSandboxHome
 
     -- * Assertions
-    , assertOutput
     , assertFileExists
     , assertFileNotExists
     ) where
@@ -121,9 +120,6 @@ instance MonadClient TestCommandRunner where
 assertResultOk :: Result -> Assertion
 assertResultOk ResultOk = pure ()
 assertResultOk (ResultError e) = assertFailure $ "Command resulted in error " <> show e
-
-assertOutput :: Text -> TestCommandState -> Assertion
-assertOutput expected TestCommandState{..} = expected @=? commandOutput
 
 assertFileExists :: FilePath -> IO ()
 assertFileExists path =
