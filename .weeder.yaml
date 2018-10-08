@@ -16,13 +16,10 @@
       - module:
         - name: Oscoin.Test.P2P.Gossip.Broadcast
         - identifier:
-          - bcast
+          # BEGIN debug functions
           - bootTopo
           - eagerTopo
-          - genBroadcasts
-          - initNodes
           - lazyTopo
-          - propAtomicBroadcast
           - renderTopo
-          - settle
+          # END debug functions
 
