@@ -27,12 +27,11 @@ import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import           Oscoin.Test.HTTP.Helpers
 import qualified Oscoin.Test.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit hiding ((@?=))
+import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 import qualified Data.Aeson as Aeson

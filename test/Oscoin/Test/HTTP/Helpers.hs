@@ -5,8 +5,6 @@ module Oscoin.Test.HTTP.Helpers
     , newCodec
     , prettyCodec
 
-    , (@?=)
-
     , NodeState(..)
     , nodeState
     , withNode
@@ -61,21 +59,18 @@ import           Oscoin.Test.Consensus.Node (DummyNodeId)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary, generate)
-import           Test.Tasty.HUnit (Assertion, AssertionPredicable)
-import qualified Test.Tasty.HUnit as Tasty
+import           Test.Tasty.HUnit.Extended
 
 import           Codec.Serialise (Serialise)
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
-import           Data.Algorithm.Diff (Diff(..), getDiff)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Default (def)
 import           Data.List (lookup)
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import           Text.Nicify (nicify)
 
 import qualified Network.HTTP.Media as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
@@ -188,25 +183,6 @@ runSession sess nh = do
     app <- API.app Testing nh
     Wai.runSession sess app
 
-infix 1 @?=, @=?, @?
-
-(@?) :: (MonadIO m, AssertionPredicable t, HasCallStack) => t -> String -> m ()
-(@?) predi msg = liftIO $ (Tasty.@?) predi msg
-
-(@?=) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
-(@?=) have want = have == want @? T.unpack (prettyDiff have want)
-
-(@=?) :: (MonadIO m, Eq a, Show a, HasCallStack) => a -> a -> m ()
-(@=?) = flip (@?=)
-
-prettyDiff :: Show a => a -> a -> Text
-prettyDiff have want = T.unlines $ addSign <$> getDiff (pp have) (pp want)
-  where
-    pp = T.lines . T.pack . nicify . show
-    addSign (Both _ s) = "        " <> s
-    addSign (First  s) = "have -> " <> s
-    addSign (Second s) = "want -> " <> s
-
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
 assertStatus want (Wai.simpleStatus -> have) = have @?= want
@@ -219,7 +195,7 @@ assertResultOK
 assertResultOK expected response = do
     result <- assertResponseBody response
     case result of
-        API.Err err -> liftIO $ Tasty.assertFailure $ "Received API error: " <> T.unpack err
+        API.Err err -> assertFailure $ "Received API error: " <> T.unpack err
         API.Ok v    -> expected @=? v
 
 -- | Assert that the response can be deserialised to @API.Err actual@
@@ -231,14 +207,14 @@ assertResultErr expected response = do
     result <- assertResponseBody @(API.Result ()) response
     case result of
         API.Err err -> expected @=? err
-        API.Ok _ -> liftIO $ Tasty.assertFailure $ "Received unexpected API OK result"
+        API.Ok _    -> assertFailure $ "Received unexpected API OK result"
 
 assertResponseBody
     :: (HasCallStack, FromJSON a, Serialise a)
     => Wai.SResponse -> Wai.Session a
 assertResponseBody response =
     case responseBody response of
-        Left err -> liftIO $ Tasty.assertFailure $ show err
+        Left err -> assertFailure $ show err
         Right a  -> pure $ a
 
 
@@ -253,7 +229,7 @@ request
 request method (encodeUtf8 -> path) headers mb
     | Nothing <- mb = req LBS.empty
     | Just b  <- mb = case supportedContentType headers of
-        Left err -> liftIO $ Tasty.assertFailure $ show err
+        Left err -> assertFailure $ show err
         Right ct -> req $ encode ct b
     where req = Wai.srequest . Wai.SRequest (mkRequest method path headers)
 

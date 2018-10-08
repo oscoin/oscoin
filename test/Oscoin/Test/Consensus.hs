@@ -32,7 +32,7 @@ import qualified Data.Text as T
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]

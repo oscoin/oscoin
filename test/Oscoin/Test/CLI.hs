@@ -17,7 +17,7 @@ import qualified Data.Map.Strict as Map
 import           System.FilePath ((</>))
 
 import           Test.Tasty
-import           Test.Tasty.HUnit
+import           Test.Tasty.HUnit.Extended
 
 
 tests :: [TestTree]
