@@ -71,7 +71,6 @@ data Handle tx s i = Handle
 instance ReceiptStore.HasHandle tx Rad.Value (Handle tx s i) where
     handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
-
 withNode
     :: (Hashable tx, Pretty tx)
     => Config
@@ -174,12 +173,16 @@ miner
 miner = do
     Handle{hEval, hConsensus} <- ask
     forever $ do
-        blk <-
-            hoist liftIO
-                . Consensus.mineBlock hConsensus hEval =<< currentTick
-        for_ blk $ \blk' -> do
-            lift . P2P.broadcast $ P2P.BlockMsg (void blk')
-            updateChainState
+        nTxs <- numTxs
+        if nTxs == 0
+        then
+            liftIO $ threadDelay $ 1000 * 1000
+        else do
+            time <- currentTick
+            blk <- hoist liftIO $ Consensus.mineBlock hConsensus hEval time
+            for_ blk $ \blk' -> do
+                lift . P2P.broadcast $ P2P.BlockMsg (void blk')
+                updateChainState
 
 storage
     :: ( MonadIO m
