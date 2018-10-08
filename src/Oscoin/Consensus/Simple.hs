@@ -79,7 +79,7 @@ chainScore :: Blockchain tx s -> Int
 chainScore bc =
     (bigMagicNumber * h) - steps
   where
-    h              = height bc
+    h              = fromIntegral $ height bc
     lastBlock      = tip bc
     timestamp      = blockTimestamp $ blockHeader lastBlock
     steps          = fromIntegral $ sinceEpoch timestamp `div` blockTime

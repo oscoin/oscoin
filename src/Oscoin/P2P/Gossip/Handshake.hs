@@ -17,11 +17,8 @@ import qualified Oscoin.P2P.Gossip.Connection as Conn
 import           Oscoin.P2P.Types (mkNodeId)
 
 import           Codec.Serialise (Serialise)
-import qualified Codec.Serialise as CBOR
-import           Control.Concurrent.MVar (MVar, newMVar, withMVar)
+import           Control.Concurrent.MVar (newMVar, withMVar)
 import           Control.Exception.Safe (Exception, throwM)
-import           Control.Monad (unless)
-import           Crypto.Random (getRandomBytes)
 import           Data.Bitraversable (bitraverse)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Conduit ((.|))
@@ -43,25 +40,13 @@ data Handshake e p = Handshake
 simple :: Serialise p => Handshake HandshakeError p
 simple = Handshake{..}
   where
-    handshakeAcceptor  = serverHandshake
-    handshakeInitiator = clientHandshake
+    handshakeAcceptor  = simpleHandshake
+    handshakeInitiator = simpleHandshake
 
--- | A simplified authentication-only STS.
---
--- This is very obviously vulnerable to a man-in-the-middle attack. A proper
--- implementation would run a DH key exchange, and perform authentication
--- encrypted using the session key. Or, just run TLS.
 data HandshakeMessage =
-      Hai  Crypto.PublicKey ByteString
+      Hai Crypto.PublicKey
     -- ^ Present a pubkey and random value.
-    | Ohai Crypto.PublicKey Crypto.Signature ByteString
-    -- ^ Respond to 'Hai' with own pubkey, signature of @myR <> theirR@ , and
-    -- own random value 'myR'.
-    | Kk   Crypto.Signature
-    -- ^ Respond to 'Ohai' with signature of @myR <> theirR@.
-    | Thx
-    -- ^ Conclude the protocol successfully.
-    | Bai  HandshakeError
+    | Bai HandshakeError
     -- ^ At any point, either side may bail oout.
     deriving (Generic)
 
@@ -70,7 +55,6 @@ instance Serialise HandshakeMessage
 data HandshakeError =
       InvalidSignature
     | InvalidPayload
-    | BadProtocolSequence
     | Timeout
     | Gone
     deriving (Show, Generic)
@@ -78,58 +62,27 @@ data HandshakeError =
 instance Exception HandshakeError
 instance Serialise HandshakeError
 
-serverHandshake
+-- | A simple handshake which just exchanges the 'Crypto.PublicKey's of the
+-- participants.
+--
+-- Subsequent protocol messages are signed when sending, and the signature is
+-- verified when receiving.
+--
+-- This is not a secure protocol, as all communication is in clear text.
+simpleHandshake
     :: Serialise p
     => (Crypto.PublicKey, Crypto.PrivateKey)
     -> Socket
     -> SockAddr
     -> IO (Either HandshakeError (Connection p))
-serverHandshake (myPK, mySK) sock addr = do
+simpleHandshake (myPK, mySK) sock addr = do
     conn <-
         runExceptT $ do
+            sendE sock $ Hai myPK
             hai <- recvE sock
             case hai of
-                Hai theirPK theirRnd -> do
-                    myRnd <- randomE
-                    mySig <- signE mySK (myRnd <> theirRnd)
-                    sendE sock $ Ohai myPK mySig myRnd
-                    kk    <- recvE sock
-                    case kk of
-                        Kk  theirSig -> do
-                            verifyE theirPK theirSig (theirRnd <> myRnd)
-                            sendE sock Thx
-                            mkConnection theirPK mySK sock addr <$> mkMutexE
-                        Bai err      -> throwE err
-                        _            -> throwE BadProtocolSequence
-
-                _ -> throwE BadProtocolSequence
-
-    bitraverse (\e -> bai sock e $> e) pure conn
-
-clientHandshake
-    :: Serialise p
-    => (Crypto.PublicKey, Crypto.PrivateKey)
-    -> Socket
-    -> SockAddr
-    -> IO (Either HandshakeError (Connection p))
-clientHandshake (myPK, mySK) sock addr = do
-    conn <-
-        runExceptT $ do
-            myRnd <- randomE
-            sendE sock $ Hai myPK myRnd
-            ohai  <- recvE sock
-            case ohai of
-                Ohai theirPK theirSig theirRnd -> do
-                    verifyE theirPK theirSig (theirRnd <> myRnd)
-                    mySig <- signE mySK (myRnd <> theirRnd)
-                    sendE sock $ Kk mySig
-                    thx   <- recvE sock
-                    case thx of
-                        Thx     -> mkConnection theirPK mySK sock addr <$> mkMutexE
-                        Bai err -> throwE err
-                        _       -> throwE BadProtocolSequence
-
-                _ -> throwE BadProtocolSequence
+                Hai theirPK -> liftIO $ mkConnection theirPK mySK sock addr
+                Bai err     -> throwE err
 
     bitraverse (\e -> bai sock e $> e) pure conn
 
@@ -141,27 +94,32 @@ mkConnection
     -> Crypto.PrivateKey
     -> Socket
     -> SockAddr
-    -> MVar ()
-    -> Connection p
-mkConnection theirPK mySK sock connAddr mutex =
-    Connection {..}
+    -> IO (Connection p)
+mkConnection theirPK mySK sock addr = do
+    mutex <- newMVar ()
+    pure Connection
+        { connNodeId   = mkNodeId theirPK
+        , connAddr     = addr
+        , connClose    = Sock.close sock
+        , connSendWire = sendWire mutex
+        , connRecvWire = recvWire
+        }
   where
-    connNodeId        = mkNodeId theirPK
-    connClose         = Sock.close sock
-    connSendWire wire = sign wire
-                    >>= withMVar mutex . const . Conn.sockSendStream sock
-    connRecvWire      =
+    sendWire mutex wire = do
+        signed <- Crypto.sign mySK wire
+        withMVar mutex . const $
+            Conn.sockSendStream sock signed
+
+    recvWire =
            Conn.sockRecvStream sock
         .| Conduit.mapM verify
         .| Conduit.map LBS.fromStrict
         .| Conn.conduitDecodeCBOR
 
     verify signed =
-        let valid    = Crypto.verifyBytes theirPK signed
+        let valid    = Crypto.verify theirPK signed
             unsigned = Crypto.unsign signed
          in bool (throwM InvalidSignature) (pure unsigned) valid
-
-    sign wire = Crypto.signBytes mySK . LBS.toStrict $ CBOR.serialise wire
 
 --------------------------------------------------------------------------------
 
@@ -177,27 +135,6 @@ recvE sock = withExceptT mapRecvError $ ExceptT recv
 
 sendE :: Socket -> HandshakeMessage -> ExceptT e IO ()
 sendE sock msg = ExceptT $ map pure (Conn.sockSendFramed sock msg)
-
-signE
-    :: Crypto.PrivateKey
-    -> ByteString
-    -> ExceptT e IO Crypto.Signature
-signE mySK msg = map Crypto.sigSignature . liftIO $ Crypto.sign mySK msg
-
-verifyE
-    :: Crypto.PublicKey
-    -> Crypto.Signature
-    -> ByteString
-    -> ExceptT HandshakeError IO ()
-verifyE theirPK theirSig myRnd =
-    unless (Crypto.verify theirPK (Crypto.signed theirSig myRnd)) $
-        throwE InvalidSignature
-
-randomE :: ExceptT e IO ByteString
-randomE = liftIO (getRandomBytes 32)
-
-mkMutexE :: ExceptT e IO (MVar ())
-mkMutexE = ExceptT $ pure <$> newMVar ()
 
 bai :: Socket -> HandshakeError -> IO ()
 bai sock e = Conn.sockSendFramed sock $ Bai e
