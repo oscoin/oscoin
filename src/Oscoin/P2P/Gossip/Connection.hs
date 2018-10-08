@@ -21,8 +21,6 @@ module Oscoin.P2P.Gossip.Connection
     , sockRecvStream
 
     -- * Conduits
-    , conduitEncodeCBOR
-    , conduitDecodeCBOR
     , sourceSocketLBS
     ) where
 
@@ -34,12 +32,13 @@ import           Oscoin.P2P.Types (NodeId)
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
 import           Control.Exception.Safe (Exception, MonadThrow, throwM)
-import           Control.Monad (unless)
+import           Control.Monad.IO.Unlift (MonadUnliftIO)
 import           Control.Monad.ST (RealWorld, ST, stToIO)
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Internal as LBS
-import           Data.Conduit (ConduitT, await, awaitForever, yield, (.|))
+import           Data.Conduit (ConduitT, catchC, yield, (.|))
+import           Data.Conduit.Serialise (conduitDecodeCBOR)
 import           Data.Int (Int64)
 import qualified Focus
 import           Network.Socket (SockAddr, Socket)
@@ -116,50 +115,14 @@ sockSendStream :: Serialise a => Socket -> a -> IO ()
 sockSendStream sock x = SockBS.sendMany sock . LBS.toChunks $ CBOR.serialise x
 
 sockRecvStream
-    :: ( MonadIO    m
-       , MonadThrow m
-       , Serialise  a
+    :: ( MonadUnliftIO m
+       , MonadThrow    m
+       , Serialise a
        )
     => Socket
     -> ConduitT i a m ()
-sockRecvStream sock = sourceSocketLBS sock .| conduitDecodeCBOR
-
---------------------------------------------------------------------------------
-
-conduitEncodeCBOR :: (Monad m, Serialise a) => ConduitT a LBS.ByteString m ()
-conduitEncodeCBOR = awaitForever $ yield . CBOR.serialise
-
-conduitDecodeCBOR
-    :: ( MonadIO    m
-       , MonadThrow m
-       , Serialise  a
-       )
-    => ConduitT LBS.ByteString a m ()
-conduitDecodeCBOR = sink =<< newDecoder
-  where
-    sink dec = await >>= maybe (close dec) (push dec)
-
-    push dec bs | LBS.null bs = sink dec
-                | otherwise   = go False dec bs
-
-    close dec = go True dec mempty
-
-    go done (CBOR.Done l _ a) bs = do
-        yield a
-        let leftover = LBS.fromStrict l <> bs
-        if done then
-            unless (LBS.null leftover) $ do
-                dec <- newDecoder
-                go done dec leftover
-        else
-            newDecoder >>= flip push leftover
-
-    go _ (CBOR.Fail _ _ e) _  = throwM $ RecvGarbage e
-    go _ partial           bs = lifted (feed bs partial) >>= sink
-
-    newDecoder = lifted CBOR.deserialiseIncremental
-
-    lifted = lift . liftIO . stToIO
+sockRecvStream sock =
+    sourceSocketLBS sock .| catchC conduitDecodeCBOR (throwM . RecvGarbage)
 
 sourceSocketLBS
     :: (MonadIO m, MonadThrow m)

@@ -23,6 +23,7 @@ import           Data.Bitraversable (bitraverse)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Conduit ((.|))
 import qualified Data.Conduit.Combinators as Conduit
+import           Data.Conduit.Serialise (conduitDecodeCBOR)
 import           Network.Socket (SockAddr, Socket)
 import qualified Network.Socket as Sock (close)
 
@@ -114,7 +115,7 @@ mkConnection theirPK mySK sock addr = do
            Conn.sockRecvStream sock
         .| Conduit.mapM verify
         .| Conduit.map LBS.fromStrict
-        .| Conn.conduitDecodeCBOR
+        .| conduitDecodeCBOR
 
     verify signed =
         let valid    = Crypto.verify theirPK signed

@@ -11,7 +11,7 @@ import           Control.Applicative (liftA3)
 import           Control.Concurrent.Async (concurrently)
 import           Control.Exception.Safe (bracket, catchIO, throwM, try)
 import           Data.Conduit (runConduit, (.|))
-import           Data.Conduit.Combinators (sinkList, yieldMany)
+import           Data.Conduit.Combinators (sinkList)
 import           Data.List.NonEmpty (nonEmpty)
 import           Data.Streaming.Network
 import           Network.Socket (SockAddr, Socket)
@@ -25,42 +25,22 @@ import           Test.Tasty.Hedgehog
 
 tests :: TestTree
 tests = testGroup "IO"
-    [ testGroup "Transport"
-        [ testGroup "Pure"
-            [ testProperty "Streaming: deserialise . serialise == id" . property $
-                propStreamingSerde =<< forAll nonEmptyFrobs
-            ]
-        , testGroup "Network I/O"
-            [ testProperty "Works: Streaming Server <-> Streaming Client" . property $
-                propNetworkStreamingHappy =<< forAll nonEmptyFrobs
+    [ testGroup "Wire"
+        [ testProperty "Works: Streaming Server <-> Streaming Client" . property $
+            propNetworkStreamingHappy =<< forAll nonEmptyFrobs
 
-            , testProperty "Works: Framed Server <-> Framed Client" . property $
-                propNetworkFramedHappy =<< forAll nonEmptyFrobs
+        , testProperty "Works: Framed Server <-> Framed Client" . property $
+            propNetworkFramedHappy =<< forAll nonEmptyFrobs
 
-            , testProperty "Fails: Streaming Server <-> Framed Client" . property $
-                propNetworkStreamingServerFramedClient =<< forAll nonEmptyFrobs
+        , testProperty "Fails: Streaming Server <-> Framed Client" . property $
+            propNetworkStreamingServerFramedClient =<< forAll nonEmptyFrobs
 
-            , testProperty "Fails: Framed Server <-> Streaming Client" . property $
-                propNetworkFramedServerStreamingClient =<< forAll nonEmptyFrobs
-            ]
+        , testProperty "Fails: Framed Server <-> Streaming Client" . property $
+            propNetworkFramedServerStreamingClient =<< forAll nonEmptyFrobs
         ]
     ]
   where
     nonEmptyFrobs = Gen.nonEmpty (Range.linear 0 100) genFrob
-
-propStreamingSerde
-    :: (Serialise a, Eq a, Show a)
-    => NonEmpty a
-    -> PropertyT IO ()
-propStreamingSerde xs = do
-    xs' <-
-        runConduit $
-               yieldMany xs
-            .| conduitEncodeCBOR
-            .| conduitDecodeCBOR
-            .| sinkList
-
-    Just xs === nonEmpty xs'
 
 propNetworkStreamingHappy
     :: (Serialise a, Eq a, Show a)
