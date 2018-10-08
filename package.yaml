@@ -78,6 +78,9 @@ library:
 executables:
   oscoin:
     main: node/Main.hs
+    when:
+    - condition: "!os(darwin)"
+      ld-options: -static
     dependencies:
       - async
       - mtl
@@ -91,11 +94,17 @@ executables:
 
   oscoin-cli:
     main: cli/Main.hs
+    when:
+    - condition: "!os(darwin)"
+      ld-options: -static
     dependencies:
       - oscoin
 
   git-remote-oss:
     main: git-remote-helper/Main.hs
+    when:
+    - condition: "!os(darwin)"
+      ld-options: -static
     dependencies:
       - oscoin
       - semigroups
