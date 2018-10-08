@@ -20,6 +20,7 @@ import           Oscoin.Test.HTTP.Helpers
 
 import           Data.Default (def)
 import qualified Data.Text as T
+import qualified Data.Aeson as Aeson
 
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
@@ -30,10 +31,12 @@ import           Web.HttpApiData (toUrlPiece)
 import           Test.QuickCheck (generate)
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
+import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
 tests =
     [ test "Smoke test" smokeTestOscoinAPI
+    , testProperty "JSON encoding of Tx" encodeDecodeTx
     , testGroup "GET /transactions/:hash"
         [ testGroup "404 Not Found"
             [ test "Missing transaction" getMissingTransaction ]
@@ -183,3 +186,6 @@ getBestChain codec = do
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
             assertResultOK (map void $ take 3 $ blocks chain)
+
+encodeDecodeTx :: API.RadTx -> Bool
+encodeDecodeTx tx = (Aeson.decode . Aeson.encode) tx == Just tx
