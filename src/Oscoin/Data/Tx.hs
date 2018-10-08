@@ -51,7 +51,7 @@ instance FromJSON (Tx Rad.Value) where
         txContext <- o .: "ctx"
         pure Tx{..}
       where
-        parseSigned = traverse (Rad.parse "FromJSON")
+        parseSigned = traverse (map (Rad.tagDefault . Rad.untag) . Rad.parse "FromJSON")
 
 instance Pretty msg => Pretty (Tx msg) where
     pretty Tx{txMessage} = pretty txMessage

@@ -32,9 +32,11 @@ instance Arbitrary r => Arbitrary (Radicle.Env r) where
     arbitrary = Radicle.Env <$> arbitrary
 
 instance Arbitrary Value where
-    arbitrary =
-        fromRight (Rad.List [])
-              . Rad.parse "Arbitray" . Rad.prettyValue
+    arbitrary = Rad.tagDefault
+              . Rad.untag
+              . fromRight (Rad.List [])
+              . Rad.parse "Arbitray"
+              . Rad.prettyValue
             <$> sized go
       where
         -- There's no literal syntax for dicts, only the 'dict' primop. If we
@@ -43,7 +45,6 @@ instance Arbitrary Value where
         -- anything a user can write. So we don't generate dicts directly,
         -- instead requiring they go via the primop.
         freqs = [ (3, Atom <$> (arbitrary `suchThat` (\x -> not (isPrimop x || isNum x))))
-                , (3, String <$> arbitrary)
                 , (3, Boolean <$> arbitrary)
                 , (3, Number <$> arbitrary)
                 , (1, List <$> sizedList)

@@ -8,15 +8,18 @@ module Radicle.Extended
 
     , Rad.tagDefault
     , Rad.annotate
+    , Rad.untag
 
     , module Radicle
     ) where
 
-import           Oscoin.Prelude hiding (list)
-import           Data.Text.Prettyprint.Doc hiding (list)
+import           Oscoin.Prelude
+
+import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
 import           Radicle hiding (Env, pureEnv)
-import qualified Radicle.Internal.Annotation as Rad (annotate, tagDefault)
+import qualified Radicle.Internal.Annotation as Rad
+                 (annotate, tagDefault, untag)
 
 keyword :: Text -> Value
 keyword = Keyword . unsafeToIdent

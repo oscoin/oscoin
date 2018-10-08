@@ -56,7 +56,7 @@ submitTransaction = do
         tx <- getBody
         if verifyTx tx
         then pure tx
-        else respond badRequest400 $ body $ Err @() "Invalid transaction signature"
+        else respond badRequest400 $ errBody "Invalid transaction signature"
 
 getBestChain :: ApiAction s i a
 getBestChain = do

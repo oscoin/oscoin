@@ -12,7 +12,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (txPubKey)
+import           Oscoin.Data.Tx (txPubKey, verifyTx)
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
@@ -188,4 +188,4 @@ getBestChain codec = do
             assertResultOK (map void $ take 3 $ blocks chain)
 
 encodeDecodeTx :: API.RadTx -> Bool
-encodeDecodeTx tx = (Aeson.decode . Aeson.encode) tx == Just tx
+encodeDecodeTx tx = (Aeson.decode . Aeson.encode) tx == Just tx && verifyTx tx
