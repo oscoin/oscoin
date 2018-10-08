@@ -7,9 +7,12 @@
       - module:
         - name: Oscoin.Test.Consensus.Network
         - identifier:
+          # BEGIN false positives
           - testableRun
           - testableScore
           - testableTick
+          # END false positives
+
       - module:
         - name: Oscoin.Test.P2P.Gossip.Broadcast
         - identifier:
