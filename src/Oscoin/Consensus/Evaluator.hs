@@ -9,8 +9,19 @@ module Oscoin.Consensus.Evaluator
 
 import           Oscoin.Prelude
 
+import           Codec.Serialise
+import           Data.Aeson (FromJSON(..), ToJSON(..))
+
 newtype EvalError = EvalError { fromEvalError :: Text }
-    deriving (Eq, Show, Read, Semigroup, Monoid, IsString)
+    deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
+
+instance Serialise EvalError
+
+instance ToJSON EvalError where
+    toJSON (EvalError e) = toJSON e
+
+instance FromJSON EvalError where
+    parseJSON v = EvalError <$> parseJSON v
 
 type EvalResult state output = Either EvalError (output, state)
 

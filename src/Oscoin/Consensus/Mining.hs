@@ -14,6 +14,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Eval (buildBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
+import           Oscoin.Storage.Receipt.Class
 
 import           Codec.Serialise (Serialise)
 
@@ -22,6 +23,7 @@ import           Codec.Serialise (Serialise)
 mineBlock
     :: ( MonadBlockStore tx s m
        , MonadMempool    tx   m
+       , MonadReceiptStore tx b m
        , Serialise       tx
        , Crypto.Hashable tx
        )
@@ -33,10 +35,11 @@ mineBlock Consensus{cScore, cMiner} eval time = do
     txs   <- (map . map) snd Mempool.getTxs
     chain <- BlockStore.maximumChainBy cScore
     let parent = tip chain
-    let (blockCandidate, _) = buildBlock eval time txs parent
+    let (blockCandidate, receipts) = buildBlock eval time txs parent
     maybeBlockHeader <- cMiner chain (blockHeader blockCandidate)
     for maybeBlockHeader $ \header -> do
         let blk = blockCandidate { blockHeader = header }
         Mempool.delTxs (blockData blk)
         BlockStore.storeBlock $ map (const . Just) blk
+        for_ receipts addReceipt
         pure blk

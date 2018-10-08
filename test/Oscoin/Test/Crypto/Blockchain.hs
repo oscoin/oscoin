@@ -7,12 +7,16 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
-import           Oscoin.Crypto.Hash (Hashable(..), hashSerial)
+import           Oscoin.Crypto.Hash
+                 (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
+import qualified Data.Aeson as Aeson
 
 import           Test.QuickCheck
+import           Test.QuickCheck.Instances.ByteString ()
+import           Test.QuickCheck.Instances.Text ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
@@ -20,6 +24,9 @@ import           Test.Tasty.QuickCheck
 testBlockchain :: TestTree
 testBlockchain = testGroup "Blockchain.Eval"
     [ testBuildBlock
+    , testProperty "JSON Receipt" $ do
+        receipt <- arbitraryReceipt
+        pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
     ]
 
 testBuildBlock :: TestTree
@@ -49,6 +56,18 @@ testBuildBlock = testGroup "buildBlock"
                 in  blockData blkWithErrors === blockData blkWithoutErrors
     ]
 
+
+arbitraryReceipt :: Gen (Receipt Tx Output)
+arbitraryReceipt = do
+    receiptTxBlock <- arbitraryHashed
+    receiptTx <- arbitraryHashed
+    receiptTxOutput <- liftArbitrary2 (EvalError <$> arbitrary) arbitrary
+    pure Receipt{..}
+  where
+    arbitraryHashed :: Gen (Hashed a)
+    arbitraryHashed = toHashed . fromHashed . hash <$> (arbitrary :: Gen ByteString)
+
+
 --
 -- * Test evaluator
 --
@@ -64,6 +83,9 @@ data Tx
     = TxOk Output
     | TxErr Int
     deriving (Eq, Show, Generic)
+
+instance Aeson.ToJSON Tx
+instance Aeson.FromJSON Tx
 
 txIsOk :: Tx -> Bool
 txIsOk (TxOk _)  = True
