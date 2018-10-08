@@ -50,6 +50,7 @@ import           Lens.Micro (Lens', lens)
 import           Lens.Micro.Mtl (view)
 import           Network.Socket (AddrInfo(..), AddrInfoFlag(..), SocketType(..))
 import qualified Network.Socket as Sock
+import           Network.Socket.Serialise (decodeSockAddr, encodeSockAddr)
 
 data Callbacks p = Callbacks
     { recvPayload    :: Peer -> p -> IO ()
@@ -93,58 +94,13 @@ instance Serialise Peer where
            CBOR.encodeListLen 3
         <> CBOR.encodeWord 0
         <> encode nid
-        <> encodeAddr addr
+        <> encodeSockAddr addr
 
     decode = do
         pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
         case pre of
-            (3, 0) -> liftA2 Peer decode decodeAddr
+            (3, 0) -> liftA2 Peer decode decodeSockAddr
             _      -> fail "CBOR Peer: invalid tag"
-
-encodeAddr :: Sock.SockAddr -> CBOR.Encoding
-encodeAddr = \case
-    Sock.SockAddrInet portNum hostAddr ->
-           CBOR.encodeListLen 3
-        <> CBOR.encodeWord 0
-        <> encodePort portNum
-        <> encodeHost hostAddr
-
-    Sock.SockAddrInet6 portNum flow hostAddr scope ->
-           CBOR.encodeListLen 5
-        <> CBOR.encodeWord 1
-        <> encodePort portNum
-        <> encode flow
-        <> encodeHost6 hostAddr
-        <> encode scope
-
-    Sock.SockAddrUnix path ->
-           CBOR.encodeListLen 2
-        <> CBOR.encodeWord 2
-        <> encode path
-
-    -- Sock.SockAddrCan{} ->
-    _ -> canNotSupported
-  where
-    encodePort  = encode . fromEnum
-    encodeHost  = encode . Sock.hostAddressToTuple
-    encodeHost6 = encode . Sock.hostAddress6ToTuple
-
-decodeAddr :: CBOR.Decoder s Sock.SockAddr
-decodeAddr = do
-    pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
-    case pre of
-        (3, 0) -> liftA2 Sock.SockAddrInet decodePort decodeHost
-        (5, 1) -> Sock.SockAddrInet6
-              <$> decodePort
-              <*> decode
-              <*> decodeHost6
-              <*> decode
-        (2, 2) -> Sock.SockAddrUnix <$> decode
-        _ -> fail canNotSupported
-  where
-    decodePort  = toEnum <$> decode
-    decodeHost  = Sock.tupleToHostAddress <$> decode
-    decodeHost6 = Sock.tupleToHostAddress6 <$> decode
 
 instance Hashable Peer where
     hashWithSalt salt (Peer nid addr) =
