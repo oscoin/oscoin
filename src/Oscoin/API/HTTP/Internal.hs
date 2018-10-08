@@ -12,7 +12,7 @@ import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.List (lookup, isSuffixOf, init)
+import           Data.List (init, isSuffixOf, lookup)
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as T

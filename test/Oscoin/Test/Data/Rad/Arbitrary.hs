@@ -32,6 +32,8 @@ instance Arbitrary r => Arbitrary (Radicle.Env r) where
     arbitrary = Radicle.Env <$> arbitrary
 
 instance Arbitrary Value where
+    -- We have to untag/tagDefault to make sure there's no traces of the original
+    -- parsed value in the AST annotations.
     arbitrary = Rad.tagDefault
               . Rad.untag
               . fromRight (Rad.List [])

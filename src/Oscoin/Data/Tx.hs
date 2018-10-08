@@ -8,10 +8,10 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 
 import           Codec.Serialise
+import           Control.Monad.Fail
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import           Data.Text.Prettyprint.Doc
-import           Control.Monad.Fail
 
 import qualified Radicle.Extended as Rad
 

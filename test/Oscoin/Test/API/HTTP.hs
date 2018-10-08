@@ -18,9 +18,9 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
 
+import qualified Data.Aeson as Aeson
 import           Data.Default (def)
 import qualified Data.Text as T
-import qualified Data.Aeson as Aeson
 
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status

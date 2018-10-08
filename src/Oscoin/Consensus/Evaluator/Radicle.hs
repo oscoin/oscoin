@@ -22,8 +22,8 @@ import           Data.Default (Default(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import qualified Radicle.Extended as Rad
 import qualified Radicle
+import qualified Radicle.Extended as Rad
 
 newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
