@@ -26,11 +26,12 @@ import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
 import           Oscoin.Consensus.Evaluator (Evaluator)
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
-import           Oscoin.Crypto.Blockchain.Block (prettyBlock)
-import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Blockchain.Block (blockHash)
+import           Oscoin.Crypto.Hash (Hashable, formatHashed)
 import           Oscoin.Data.Query
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
+import           Oscoin.Logging ((%))
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -47,7 +48,6 @@ import qualified Radicle.Extended as Rad
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
-import           Data.Text.Prettyprint.Doc
 import           Lens.Micro
 
 -- | Node static config.
@@ -72,8 +72,7 @@ instance ReceiptStore.HasHandle tx Rad.Value (Handle tx s i) where
     handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
 withNode
-    :: (Hashable tx, Pretty tx)
-    => Config
+    :: Config
     -> i
     -> Mempool.Handle tx
     -> STree.Handle s
@@ -89,7 +88,7 @@ withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
         hReceiptStore <- ReceiptStore.newHandle
         gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
             BlockStore.getGenesisBlock bs
-        Log.debug (cfgLogger hConfig) Log.stext (prettyBlock gen (Just 0))
+        Log.info (cfgLogger hConfig) ("genesis is " % formatHashed) (blockHash gen)
         pure Handle{..}
 
     close = const $ pure ()

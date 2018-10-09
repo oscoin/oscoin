@@ -14,18 +14,15 @@ module Oscoin.Crypto.Blockchain.Block
     , blockHash
     , emptyHeader
     , hashTxs
-    , prettyBlock
     ) where
 
 import           Oscoin.Prelude
-import qualified Prelude
 
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
-import           Control.Monad.Writer.CPS (execWriter, tell)
 import qualified Crypto.Hash.MerkleTree as Merkle
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
@@ -34,11 +31,6 @@ import           Data.Bifunctor (Bifunctor(..))
 import           Data.Bitraversable (Bitraversable(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
-import qualified Data.Text as T
-import           Data.Text.Prettyprint.Doc
-import           Data.Text.Prettyprint.Doc.Render.Text
-import           Formatting ((%), (%.))
-import qualified Formatting as Fmt
 import           GHC.Generics (Generic)
 
 -- | Block difficulty.
@@ -206,30 +198,3 @@ hashTxs txs
         . Merkle.mtHash
         . Merkle.mkMerkleTree
         $ map (LBS.toStrict . Serialise.serialise) (toList txs)
-
-prettyBlock :: (Crypto.Hashable tx, Pretty tx) => Block tx s -> Maybe Int -> Text
-prettyBlock (Block bh@BlockHeader{..} txs) blockHeight = execWriter $ do
-    tell $ formatHeaderWith (Fmt.stext % "━━ " % formatHashed % " ") height (headerHash bh)
-    tell $ fencedLineFormat ("prevHash:   " % formatHashed) blockPrevHash
-    tell $ fencedLineFormat ("timestamp:  " % Fmt.right 64 ' ') blockTimestamp
-    tell $ "├" <> dashes 78 <> "┤\n"
-
-    for_ (zip [0..Seq.length txs] (toList txs)) $ \(n, tx) -> do
-        tell $ fencedLineFormat (Fmt.right 3 '0' % ":  " % Crypto.formatHashed) n (Crypto.hash tx)
-        tell $ fencedLineFormat Fmt.stext ""
-        let txContent = renderStrict $ layoutSmart layoutOptions $ pretty $ tx
-        for_ (T.lines txContent) $ tell . fencedLineFormat Fmt.stext
-        tell $ "├" <> dashes 78 <> "┤\n"
-
-    tell $ "└" <> dashes 78 <> "┘\n"
-  where
-    formatHashed = Fmt.right 64 ' ' %. Crypto.formatHashed
-
-    formatHeaderWith format = Fmt.sformat $ "┍━" % (Fmt.left  76 '━' %. format) % "━┑\n"
-    fencedLineFormat format = Fmt.sformat $ "│ " % (Fmt.right 76 ' ' %. format) % " │\n"
-
-    height = maybe "━━━━━━━" (\x -> " " <> show x <> " ") blockHeight
-
-    dashes n = T.pack $ Prelude.replicate n '-'
-
-    layoutOptions = LayoutOptions {layoutPageWidth = AvailablePerLine 76 1.0}
