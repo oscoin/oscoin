@@ -30,8 +30,8 @@ import           Oscoin.Crypto.Blockchain.Block (blockHash)
 import           Oscoin.Crypto.Hash (Hashable, formatHashed)
 import           Oscoin.Data.Query
 import           Oscoin.Environment
-import qualified Oscoin.Logging as Log
 import           Oscoin.Logging ((%))
+import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
