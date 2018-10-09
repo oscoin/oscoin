@@ -25,8 +25,7 @@ module Oscoin.Test.HTTP.Helpers
     , addRadicleRef
     , initRadicleEnv
     , genDummyTx
-    , emptyBlockstore
-
+    , createValidTx
     ) where
 
 import           Oscoin.Prelude hiding (First, get)
@@ -156,11 +155,15 @@ withNode NodeState{..} k = do
 liftNode :: Node a -> Session a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
 
-genDummyTx :: IO (Hashed API.RadTx, API.RadTx)
+genDummyTx :: MonadIO m => m (Hashed API.RadTx, API.RadTx)
 genDummyTx = do
-    msg :: Rad.Value <- generate $ arbitrary
+    radValue <- liftIO $ generate arbitrary
+    createValidTx radValue
+
+createValidTx :: MonadIO m => Rad.Value -> m (Hashed API.RadTx, API.RadTx)
+createValidTx radValue = liftIO $ do
     (pubKey, priKey) <- Crypto.generateKeyPair
-    signed           <- Crypto.sign priKey msg
+    signed           <- Crypto.sign priKey radValue
 
     let tx :: API.RadTx = mkTx signed pubKey
     let txHash          = Crypto.hash tx

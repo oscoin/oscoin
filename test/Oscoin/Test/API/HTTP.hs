@@ -6,8 +6,7 @@ import           Oscoin.Prelude hiding (get, state)
 
 import           Oscoin.API.HTTP.Internal (MediaType(..), fromMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Crypto.Blockchain
-                 (BlockHash, Blockchain(..), blocks, genesis)
+import           Oscoin.Crypto.Blockchain (blocks, genesis)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -24,7 +23,6 @@ import qualified Data.Text as T
 
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
-import           Numeric.Natural
 import           Web.HttpApiData (toUrlPiece)
 
 import           Test.QuickCheck (generate)
@@ -36,15 +34,6 @@ tests :: [TestTree]
 tests =
     [ test "Smoke test" smokeTestOscoinAPI
     , testProperty "JSON encoding of Tx" encodeDecodeTx
-    , testGroup "GET /transactions/:hash"
-        [ testGroup "404 Not Found"
-            [ test "Missing transaction" getMissingTransaction ]
-
-        , testGroup "200 OK"
-            [ test "Unconfirmed transaction" getUnconfirmedTransaction
-            , test "Confirmed transaction" getConfirmedTransaction
-            ]
-        ]
     , testGroup "POST /transactions"
         [ testGroup "400 Bad Request"
             [ test "Invalid signature" postTransactionWithInvalidSignature]
@@ -103,43 +92,6 @@ smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
         assertResultOK [tx]
 
     getTransactionReturns codec txHash $ unconfirmedTx tx
-
-getMissingTransaction :: Codec -> IO HTTPTest
-getMissingTransaction codec = httpTest emptyNodeState $ do
-    -- Malformed transaction hash returns a 404
-    get codec "/transactions/not-a-hash" >>= assertStatus notFound404
-
-    -- Well formed but missing transaction hash returns a 404
-    let missing = toUrlPiece (Crypto.zeroHash :: Crypto.Hash)
-    get codec ("/transactions/" <> missing) >>= assertStatus notFound404
-
-getConfirmedTransaction :: Codec -> IO HTTPTest
-getConfirmedTransaction codec = do
-    chain <- generate $ arbitraryValidBlockchain def
-    case oldestTx chain of
-        Nothing -> panic "No oldestTx found in chain"
-        Just (tx, blkHash, confirmations) -> do
-            let txHash = Crypto.hash tx
-
-            httpTest (nodeState mempty chain) $
-                getTransactionReturns codec txHash $ API.TxLookupResponse
-                    { txHash = Crypto.hash tx
-                    , txBlockHash = Just blkHash
-                    , txConfirmations = confirmations
-                    , txPayload = tx
-                    }
-
-oldestTx :: Blockchain tx s -> Maybe (tx, BlockHash, Natural)
-oldestTx (blocks -> blks) = head $ do
-    (i, blk) <- zip [1..] blks
-    tx <- toList $ blockData blk
-    pure (tx, headerHash $ blockHeader blk, i)
-
-getUnconfirmedTransaction :: Codec -> IO HTTPTest
-getUnconfirmedTransaction codec = do
-    (txHash, tx) <- genDummyTx
-    httpTest (nodeState [tx] emptyBlockstore) $
-        getTransactionReturns codec txHash $ unconfirmedTx tx
 
 unconfirmedTx :: API.RadTx -> API.TxLookupResponse
 unconfirmedTx tx = API.TxLookupResponse

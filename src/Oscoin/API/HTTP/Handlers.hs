@@ -27,7 +27,7 @@ getAllTransactions = do
 
 getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = node (lookupTx txId) >>= \case
-    Nothing -> respond notFound404 noBody
+    Nothing -> respond notFound404 $ errBody "Transaction not found"
     Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok TxLookupResponse
         { txHash = hash tx
         , txBlockHash =  bh
