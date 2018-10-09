@@ -20,7 +20,7 @@ import           Oscoin.Crypto.Hash (fromHashed)
 
 import           Codec.Serialise
 import qualified Data.ByteString.Lazy as LBS
-
+import qualified Data.Text as T
 import           Network.HTTP.Client hiding (Proxy)
 import           Network.HTTP.Types.Header
 import           Network.HTTP.Types.Method
@@ -45,7 +45,7 @@ instance (Monad m, MonadIO m) => MonadClient (HttpClientT m) where
         get $ "/transactions/" <> toUrlPiece (fromHashed txId)
 
     getState key =
-        get $ "/state/" <> key
+        get $ "/state?q=[" <> T.intercalate "," key <> "]"
 
 type Uri = String
 

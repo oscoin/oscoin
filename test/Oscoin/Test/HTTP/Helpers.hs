@@ -7,7 +7,6 @@ module Oscoin.Test.HTTP.Helpers
 
     , NodeState(..)
     , nodeState
-    , withNode
     , emptyNodeState
 
     , Session
@@ -178,10 +177,11 @@ addRadicleRef name value (Rad.Env env) =
 
 
 -- | Turn a "Session" into an "Assertion".
-runSession :: Session () -> NodeHandle -> Assertion
-runSession sess nh = do
-    app <- API.app Testing nh
-    Wai.runSession sess app
+runSession :: NodeState -> Session () -> Assertion
+runSession nst sess =
+    withNode nst $ \nh -> do
+        app <- API.app Testing nh
+        Wai.runSession sess app
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()

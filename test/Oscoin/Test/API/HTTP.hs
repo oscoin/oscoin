@@ -27,8 +27,6 @@ import qualified Network.Wai.Test as Wai
 import           Numeric.Natural
 import           Web.HttpApiData (toUrlPiece)
 
-import qualified Radicle.Extended as Rad hiding (Env)
-
 import           Test.QuickCheck (generate)
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
@@ -56,11 +54,6 @@ tests =
     , testGroup "GET /blockchain/best"
         [ test "No depth specified" getBestChain
         ]
-    , testGroup "GET /state"
-        [ test "Missing key" getMissingStateKey
-        , test "Existing key" getExistingStateKey
-        , test "Derefernce key" getReference
-        ]
     ]
   where
     test name mkTest = testGroup name $ do
@@ -68,7 +61,7 @@ tests =
         let accepts = ("*" // "*") : ctypes
         codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
         [testCase (T.unpack $ prettyCodec codec) $ mkTest codec >>=
-            \HTTPTest{..} -> withNode testState $ runSession testSession]
+            \HTTPTest{..} -> runSession testState testSession]
 
 data HTTPTest = HTTPTest
     { testState   :: NodeState
@@ -178,10 +171,6 @@ getExistingBlock codec = do
             assertStatus ok200 <>
             assertResultOK g
 
-getMissingStateKey :: Codec -> IO HTTPTest
-getMissingStateKey codec = httpTest emptyNodeState $
-    get codec "/state?q=[not,found]" >>= assertStatus notFound404
-
 getBestChain :: Codec -> IO HTTPTest
 getBestChain codec = do
     chain <- generate $ arbitraryValidBlockchain def
@@ -194,21 +183,3 @@ getBestChain codec = do
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
             assertResultOK (map void $ take 3 $ blocks chain)
-
-getExistingStateKey :: Codec -> IO HTTPTest
-getExistingStateKey codec = do
-    let env = initRadicleEnv [("my/key/path", Rad.String "hooray!")]
-
-    httpTest (nodeState mempty $ blockchainFromEnv env) $
-        get codec "/state?q=[my,key,path]" >>=
-            assertStatus ok200 <>
-            assertResultOK (Rad.toRad ("hooray!" :: Text))
-
-getReference :: Codec -> IO HTTPTest
-getReference codec = do
-    let env = initRadicleEnv []
-              & addRadicleRef "my-ref" (Rad.String "hooray!")
-    httpTest (nodeState mempty $ blockchainFromEnv env) $
-        get codec "/state?q=[my-ref]" >>=
-            assertStatus ok200 <>
-            assertResultOK (Rad.toRad ("hooray!" :: Text))

@@ -87,7 +87,7 @@ getStatePath _chain = do
                 Just val ->
                     respondBytes ok200 CBOR (serialise $ Ok val)
                 Nothing ->
-                    respond notFound404 noBody
+                    respond notFound404 $ errBody "Value not found"
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi s i m => Node.NodeT RadTx s i IO a -> m a
