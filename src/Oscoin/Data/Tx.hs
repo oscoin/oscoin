@@ -51,6 +51,11 @@ instance FromJSON (Tx Rad.Value) where
         txContext <- o .: "ctx"
         pure Tx{..}
       where
+        -- Nb. We are currently working with the default `Radicle.Value` type, which is
+        -- tagged (annotated) - but we are not using the tags, since they yield different
+        -- values and thus different encodings/hashes. Therefore, we untag everything
+        -- and re-tag to ensure no tags are preserved from the source, while still returning
+        -- a tagged value.
         parseSigned = traverse (map (Rad.tagDefault . Rad.untag) . Rad.parse "FromJSON")
 
 instance Pretty msg => Pretty (Tx msg) where
