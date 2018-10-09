@@ -12,20 +12,24 @@ module Oscoin.P2P.Gossip
 
     , listen
     , broadcast
+
+    -- * Re-exports
+    , WireMessage
+    , ProtocolMessage
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock)
-import           Oscoin.Crypto.PubKey (PrivateKey, PublicKey)
 import           Oscoin.Logging (Logger)
 
 import qualified Oscoin.P2P.Gossip.Broadcast as Plum
-import qualified Oscoin.P2P.Gossip.Handshake as Handshake
 import           Oscoin.P2P.Gossip.IO (Peer, knownPeer)
 import qualified Oscoin.P2P.Gossip.IO as IO
 import qualified Oscoin.P2P.Gossip.Membership as Hypa
 import           Oscoin.P2P.Gossip.Wire
+import           Oscoin.P2P.Handshake (Handshake)
+import           Oscoin.P2P.Types (NodeId)
 
 import           Codec.Serialise (Serialise)
 import           Control.Concurrent (threadDelay)
@@ -50,72 +54,74 @@ data ProtocolMessage n =
 
 instance (Eq n, Hashable n, Serialise n) => Serialise (ProtocolMessage n)
 
-data Handle e n = Handle
+data Handle e n o = Handle
     { hLogger     :: Logger
-    , hIO         :: IO.Handle e (ProtocolMessage n)
+    , hIO         :: IO.Handle e (ProtocolMessage n) o
     , hBroadcast  :: Plum.Handle n
     , hSchedule   :: Plum.Schedule n
     , hMembership :: Hypa.Handle n
     }
 
-instance IO.HasHandle (Handle e n) e (ProtocolMessage n) where
+instance IO.HasHandle (Handle e n o) e (ProtocolMessage n) o where
     handle = lens hIO (\s a -> s { hIO = a })
     {-# INLINE handle #-}
 
-instance Plum.HasHandle (Handle e n) n where
+instance Plum.HasHandle (Handle e n o) n where
     handle = lens hBroadcast (\s a -> s { hBroadcast = a })
     {-# INLINE handle #-}
 
-instance Hypa.HasHandle (Handle e n) n where
+instance Hypa.HasHandle (Handle e n o) n where
     handle = lens hMembership (\s a -> s { hMembership = a })
     {-# INLINE handle #-}
 
-instance Has Logger (Handle e n) where
+instance Has Logger (Handle e n o) where
     hasLens = lens hLogger (\s a -> s { hLogger = a })
     {-# INLINE hasLens #-}
 
-newtype GossipT e m a = GossipT { unGossipT :: ReaderT (Handle e IO.Peer) m a }
-    deriving ( Functor
-             , Applicative
-             , Alternative
-             , Monad
-             , MonadIO
-             , MonadReader (Handle e IO.Peer)
-             , MonadTrans
-             , MonadMask
-             , MonadCatch
-             , MonadThrow
-             )
+newtype GossipT e o m a = GossipT
+    { unGossipT :: ReaderT (Handle e IO.Peer o) m a
+    } deriving ( Functor
+               , Applicative
+               , Alternative
+               , Monad
+               , MonadIO
+               , MonadReader (Handle e IO.Peer o)
+               , MonadTrans
+               , MonadMask
+               , MonadCatch
+               , MonadThrow
+               )
 
-instance MonadUnliftIO m => MonadUnliftIO (GossipT e m) where
+instance MonadUnliftIO m => MonadUnliftIO (GossipT e o m) where
     withRunInIO = wrappedWithRunInIO GossipT unGossipT
     {-# INLINE withRunInIO #-}
 
-instance MonadClock m => MonadClock (GossipT e m)
+instance MonadClock m => MonadClock (GossipT e o m)
 
-type Gossip e = GossipT e IO
+type Gossip e o = GossipT e o IO
 type Wire     = WireMessage (ProtocolMessage IO.Peer)
 
-runGossipT :: Handle e IO.Peer -> GossipT e m a -> m a
+runGossipT :: Handle e IO.Peer o -> GossipT e o m a -> m a
 runGossipT r (GossipT ma) = runReaderT ma r
 
 withGossip
-    :: Exception e
+    :: ( Exception e
+       , Serialise o
+       )
     => Logger
-    -> (PublicKey, PrivateKey)
     -> IO.Peer
     -> NominalDiffTime
     -> Plum.Callbacks
-    -> Handshake.Handshake e (ProtocolMessage IO.Peer)
+    -> Handshake e NodeId (WireMessage (ProtocolMessage IO.Peer)) o
     -> Hypa.Config
-    -> (Handle e IO.Peer -> IO a)
+    -> (Handle e IO.Peer o -> IO a)
     -> IO a
-withGossip lgr keys self sinterval storage handshake cfg k = do
+withGossip lgr self sinterval storage handshake cfg k = do
     hdl <-
         mfix $ \hdl -> do
             let run = runGossipT hdl
             hio <-
-                IO.new lgr keys handshake IO.Callbacks
+                IO.new lgr handshake IO.Callbacks
                     { IO.recvPayload    = \sender -> run . dispatch sender
                     , IO.connectionLost = run . connectionLost
                     }
@@ -156,7 +162,14 @@ withGossip lgr keys self sinterval storage handshake cfg k = do
         `E.finally` Plum.destroySchedule (hSchedule hdl)
         `E.finally` Async.uninterruptibleCancel periodic
 
-listen :: Exception e => HostName -> PortNumber -> [Peer] -> Gossip e Void
+listen
+    :: ( Exception e
+       , Serialise o
+       )
+    => HostName
+    -> PortNumber
+    -> [Peer]
+    -> Gossip e o Void
 listen host port contacts =
     withRunInIO $ \runIO ->
         Async.withAsync (runIO ioListen) $ \lisn -> do
@@ -168,7 +181,7 @@ listen host port contacts =
         GossipT (Hypa.joinAny contacts) >>= traverse_ sendRPC
         GossipT $ Hypa.getPeers         >>= Plum.resetPeers
 
-broadcast :: MonadIO m => Plum.MessageId -> ByteString -> GossipT e m ()
+broadcast :: MonadIO m => Plum.MessageId -> ByteString -> GossipT e o m ()
 broadcast mid msg =
     GossipT (Plum.broadcast mid msg) >>= traverse_ send'
   where
@@ -176,17 +189,17 @@ broadcast mid msg =
 
 --------------------------------------------------------------------------------
 
-send :: IO.Peer -> WireMessage (ProtocolMessage IO.Peer) -> Gossip e ()
+send :: IO.Peer -> WireMessage (ProtocolMessage IO.Peer) -> Gossip e o ()
 send rcpt wire =
     GossipT (IO.send rcpt wire) `E.catchAny` const (connectionLost rcpt)
 
-sendRPC :: Hypa.RPC IO.Peer -> Gossip e ()
+sendRPC :: Hypa.RPC IO.Peer -> Gossip e o ()
 sendRPC rpc = send (Hypa.rpcRecipient rpc) (WirePayload (ProtocolMembership rpc))
 
-connectionLost :: IO.Peer -> Gossip e ()
+connectionLost :: IO.Peer -> Gossip e o ()
 connectionLost = GossipT . Hypa.eject >=> traverse_ sendRPC
 
-dispatch :: IO.Peer -> ProtocolMessage IO.Peer -> Gossip e ()
+dispatch :: IO.Peer -> ProtocolMessage IO.Peer -> Gossip e o ()
 dispatch sender pm = do
     authorize authorized pm
     case pm of

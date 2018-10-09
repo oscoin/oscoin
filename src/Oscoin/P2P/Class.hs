@@ -18,7 +18,7 @@ import           Data.ByteString.Lazy (toStrict)
 class Monad m => MonadBroadcast m where
     broadcast :: (Serialise tx, Crypto.Hashable tx) => Msg tx -> m ()
 
-instance MonadIO m => MonadBroadcast (GossipT e m) where
+instance MonadIO m => MonadBroadcast (GossipT e o m) where
     broadcast msg =
         uncurry Gossip.broadcast
             . bimap toStrict toStrict . (,CBOR.serialise msg)

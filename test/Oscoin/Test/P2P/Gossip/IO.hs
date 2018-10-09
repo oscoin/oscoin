@@ -4,7 +4,8 @@ module Oscoin.Test.P2P.Gossip.IO
 
 import           Oscoin.Prelude hiding (bracket, try)
 
-import           Oscoin.P2P.Gossip.Connection
+import           Oscoin.P2P.Connection (RecvError(..))
+import qualified Oscoin.P2P.Connection as Conn
 
 import           Codec.Serialise (Serialise)
 import           Control.Applicative (liftA3)
@@ -131,18 +132,18 @@ genFrob = liftA3 Frob foo boo loo
 streamingServer :: Serialise a => Socket -> IO [a]
 streamingServer sock =
     accept sock $ \(sock',_) ->
-        runConduit $ sockRecvStream sock' .| sinkList
+        runConduit $ Conn.sockRecvStream sock' .| sinkList
 
 streamingClient :: (Foldable t, Serialise a) => Int -> t a -> IO ()
 streamingClient port msgs =
     connect port $ \(sock,_) ->
-        traverse_ (sockSendStream sock) msgs
+        traverse_ (Conn.sockSendStream sock) msgs
 
 framedServer :: Serialise a => Socket -> IO [a]
 framedServer sock = accept sock $ map reverse . loop [] . fst
   where
     loop acc sock' = do
-        recv'd <- sockRecvFramed sock'
+        recv'd <- Conn.sockRecvFramed sock'
         case recv'd of
             Left  RecvConnReset -> pure acc
             Left  e             -> throwM e
@@ -151,7 +152,7 @@ framedServer sock = accept sock $ map reverse . loop [] . fst
 framedClient :: (Foldable t, Serialise a) => Int -> t a -> IO ()
 framedClient port msgs =
     connect port $ \(sock,_) ->
-        traverse_ (sockSendFramed sock) msgs
+        traverse_ (Conn.sockSendFramed sock) msgs
 
 bind :: ((Int, Sock.Socket) -> IO a) -> IO a
 bind = bracket (bindRandomPortTCP "127.0.0.1") (Sock.close . snd)

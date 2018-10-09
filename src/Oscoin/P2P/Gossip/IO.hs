@@ -22,22 +22,19 @@ module Oscoin.P2P.Gossip.IO
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.PubKey (PrivateKey, PublicKey)
 import           Oscoin.Logging (Logger, withExceptionLogged)
 import qualified Oscoin.Logging as Log
-import           Oscoin.P2P.Gossip.Connection
-                 (Active, Connection(..), activeNew)
-import qualified Oscoin.P2P.Gossip.Connection as Conn
-import           Oscoin.P2P.Gossip.Handshake (Handshake(..))
+import           Oscoin.P2P.Connection (Active, Connection(..), activeNew)
+import qualified Oscoin.P2P.Connection as Conn
 import           Oscoin.P2P.Gossip.Wire (WireMessage(..))
+import           Oscoin.P2P.Handshake (Handshake)
+import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.P2P.Types (NodeId)
 
 import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Concurrent (forkFinally)
-import           Control.Exception.Safe (Exception)
-import qualified Control.Exception.Safe as E
 import           Control.Monad (unless)
 import           Control.Monad.Fail (fail)
 import           Control.Monad.IO.Unlift
@@ -57,29 +54,27 @@ data Callbacks p = Callbacks
     , connectionLost :: Peer -> IO ()
     }
 
-data Handle e p = Handle
+data Handle e p p' = Handle
     { hLogger    :: Logger
-    , hKeys      :: (PublicKey, PrivateKey)
-    , hConns     :: Active p
-    , hHandshake :: Handshake e p
+    , hConns     :: Active (WireMessage p)
+    , hHandshake :: Handshake e NodeId (WireMessage p) p'
     , hCallbacks :: Callbacks p
     }
 
-class HasHandle a e p | a -> e, a -> p where
-    handle :: Lens' a (Handle e p)
+class HasHandle a e p p' | a -> e, a -> p, a -> p' where
+    handle :: Lens' a (Handle e p p')
 
-instance HasHandle (Handle e p) e p where
+instance HasHandle (Handle e p p') e p p' where
     handle = identity
     {-# INLINE handle #-}
 
-instance Has Logger (Handle e p) where
+instance Has Logger (Handle e p p') where
     hasLens = lens hLogger (\s a -> s { hLogger = a })
     {-# INLINE hasLens #-}
 
 data NetworkError =
       ProtocolError
     | Gone
-    | IdMismatch Peer NodeId
     deriving Show
 
 instance Exception NetworkError
@@ -132,11 +127,10 @@ runNetworkT :: r -> NetworkT r a -> IO a
 runNetworkT = flip runReaderT
 
 new :: Logger
-    -> (PublicKey, PrivateKey)
-    -> Handshake e p
+    -> Handshake e NodeId (WireMessage p) p'
     -> Callbacks p
-    -> IO (Handle e p)
-new hLogger hKeys hHandshake hCallbacks = do
+    -> IO (Handle e p p')
+new hLogger hHandshake hCallbacks = do
     hConns <- atomically activeNew
     pure Handle{..}
 
@@ -153,7 +147,8 @@ knownPeer nid host port = Peer nid <$> resolve
 
 listen
     :: ( Exception      e
-       , HasHandle    r e p
+       , Serialise          p'
+       , HasHandle    r e p p'
        , Has Logger   r
        )
     => Sock.HostName
@@ -161,7 +156,7 @@ listen
     -> NetworkT r Void
 listen host port = do
     addr <- liftIO $ resolve host port
-    E.bracket (liftIO $ open addr) (liftIO . Sock.close) accept
+    bracket (liftIO $ open addr) (liftIO . Sock.close) accept
   where
     resolve h p = do
         let hints = Sock.defaultHints
@@ -184,17 +179,30 @@ listen host port = do
         pure $! sock
 
     accept sock = do
-        Handle{hLogger, hHandshake, hKeys} <- view handle
+        Handle{hLogger, hHandshake} <- view handle
         withRunInIO $ \run ->
             forever $ do
                 (sock', addr) <- Sock.accept sock
                 forkUltimately_ (Sock.close sock') $ do
-                    conn <- handshakeAcceptor hHandshake hKeys sock' addr
+                    conn <-
+                        hHandshake
+                            Handshake.Acceptor
+                            (Conn.mkSocket' sock')
+                            Nothing
+
                     case conn of
                         Left  e -> Log.logException hLogger e
-                        Right c -> run $ recvAll c
+                        Right c -> do
+                            conn' <-
+                                Conn.mkConnection
+                                    (Handshake.hrPeerId c)
+                                    sock'
+                                    addr
+                                    (Handshake.hrSend c)
+                                    (Handshake.hrRecv c)
+                            run $ recvAll conn'
 
-send :: HasHandle r e p
+send :: HasHandle r e p p'
      => Peer
      -> WireMessage p
      -> NetworkT r ()
@@ -203,32 +211,43 @@ send Peer{peerNodeId} msg = do
     conn <- liftIO . atomically $ Conn.activeGet hConns peerNodeId
     case conn of
         Just c  -> liftIO $ connSendWire c msg
-        Nothing -> E.throwM Gone
+        Nothing -> throwM Gone
 
-connect :: (Exception e, HasHandle r e p, Has Logger r) => Peer -> NetworkT r ()
-connect peer@Peer{peerNodeId, peerAddr} = do
-    Handle{hLogger, hKeys, hConns, hHandshake} <- view handle
+connect
+    :: ( Exception    e
+       , Serialise        p'
+       , HasHandle  r e p p'
+       , Has Logger r
+       )
+    => Peer
+    -> NetworkT r ()
+connect Peer{peerNodeId, peerAddr} = do
+    Handle{hLogger, hConns, hHandshake} <- view handle
 
     withRunInIO $ \run -> do
         known <- atomically $ Conn.activeHas hConns peerNodeId
         unless known $ do
             sock <- Sock.socket (family peerAddr) Stream Sock.defaultProtocol
             conn <-
-                flip E.onException (Sock.close sock) . withExceptionLogged hLogger $ do
+                flip onException (Sock.close sock) . withExceptionLogged hLogger $ do
                     Sock.connect sock peerAddr
-                    handshakeInitiator hHandshake hKeys sock peerAddr
+                    hHandshake
+                        Handshake.Connector
+                        (Conn.mkSocket' sock)
+                        (Just peerNodeId)
             case conn of
-                Left  e -> E.throwM e
-                Right c
-                    | nid <- connNodeId c
-                    , nid /= peerNodeId ->
-                        flip E.finally (Sock.close sock) $ do
-                            connSendWire c (WireGoaway (pure "Id Mismatch"))
-                                `E.catchAny` const (pure ())
-                            E.throwM $ IdMismatch peer nid
-                    | otherwise ->
-                        forkUltimately_ (Sock.close sock) $
-                            run $ recvAll c
+                Left  e -> throwM e
+                Right c -> do
+                    conn' <-
+                        Conn.mkConnection
+                            (Handshake.hrPeerId c)
+                            sock
+                            peerAddr
+                            (Handshake.hrSend c)
+                            (Handshake.hrRecv c)
+
+                    forkUltimately_ (connClose conn') . run $
+                        recvAll conn'
   where
     family Sock.SockAddrInet{}  = Sock.AF_INET
     family Sock.SockAddrInet6{} = Sock.AF_INET6
@@ -236,7 +255,7 @@ connect peer@Peer{peerNodeId, peerAddr} = do
     --family Sock.SockAddrCan{}   = Sock.AF_CAN
     family _                    = canNotSupported
 
-disconnect :: HasHandle r e p => Peer -> NetworkT r ()
+disconnect :: HasHandle r e p p' => Peer -> NetworkT r ()
 disconnect Peer{peerNodeId} = do
     Handle{hConns} <- view handle
     liftIO $ do
@@ -245,7 +264,12 @@ disconnect Peer{peerNodeId} = do
 
 --------------------------------------------------------------------------------
 
-recvAll :: (HasHandle r e p, Has Logger r) => Connection p -> NetworkT r ()
+recvAll
+    :: ( HasHandle  r e p p'
+       , Has Logger r
+       )
+    => Connection (WireMessage p)
+    -> NetworkT r ()
 recvAll conn = do
     Handle { hConns
            , hCallbacks = Callbacks {connectionLost, recvPayload}
@@ -253,7 +277,7 @@ recvAll conn = do
 
     ok <- liftIO . atomically $ Conn.activeAdd hConns conn
     if ok then
-        E.onException (runConduit $ recv conn recvPayload) . liftIO $ do
+        onException (runConduit $ recv conn recvPayload) . liftIO $ do
             atomically $ Conn.activeDel_ hConns conn
             connectionLost $ toPeer conn
     else
@@ -267,9 +291,9 @@ recvAll conn = do
         transPipe liftIO (connRecvWire c) .| Conduit.mapM_ (\case
             WirePayload p  -> liftIO $ recvPayload (toPeer c) p
             WireGoaway msg -> Log.errM fgoaway "GOAWAY received: " msg
-                           *> E.throwM ProtocolError)
+                           *> throwM ProtocolError)
 
-    toPeer Connection{connNodeId = peerNodeId, connAddr = peerAddr} = Peer{..}
+    toPeer c = Peer { peerNodeId = connNodeId c, peerAddr = connAddr c }
 
     fgoaway = Log.stext % mapf (fromMaybe mempty) Log.stext
 

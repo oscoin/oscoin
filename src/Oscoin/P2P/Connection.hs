@@ -1,8 +1,19 @@
 {-# LANGUAGE LambdaCase    #-}
 {-# LANGUAGE TupleSections #-}
 
-module Oscoin.P2P.Gossip.Connection
-    ( Connection (..)
+module Oscoin.P2P.Connection
+    ( Connection
+    , connNodeId
+    , connAddr
+    , connSendWire
+    , connRecvWire
+    , connClose
+    , mkConnection
+
+    , Socket'
+    , framedSend
+    , framedRecv
+    , mkSocket'
 
     , Active
     , activeNew
@@ -26,7 +37,6 @@ module Oscoin.P2P.Gossip.Connection
 
 import           Oscoin.Prelude
 
-import           Oscoin.P2P.Gossip.Wire (WireMessage)
 import           Oscoin.P2P.Types (NodeId)
 
 import           Codec.Serialise (Serialise)
@@ -38,27 +48,64 @@ import           Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Internal as LBS
 import           Data.Conduit (ConduitT, catchC, yield, (.|))
+import qualified Data.Conduit.Combinators as Conduit
 import           Data.Conduit.Serialise (conduitDecodeCBOR)
 import           Data.Int (Int64)
 import qualified Focus
 import           Network.Socket (SockAddr, Socket)
+import qualified Network.Socket as Sock
 import qualified Network.Socket.ByteString as SockBS
 import qualified Network.Socket.ByteString.Lazy as SockLBS
 import qualified STMContainers.Map as STMMap
 import           System.Timeout (timeout)
 
+newtype Socket' = Socket' Socket
+
+mkSocket' :: Socket -> Socket'
+mkSocket' = Socket'
+
+framedSend :: Serialise p => Socket' -> p -> IO ()
+framedSend (Socket' sock) = sockSendFramed sock
+
+framedRecv :: Serialise p => Socket' -> IO (Either RecvError p)
+framedRecv (Socket' sock) = sockRecvFramed sock
+
 -- | Captures the identity of a mutual peer connection, and handling of the
 -- underlying transport.
---
--- It is the responsibility of the implementation to ensure 'connSendWire' is
--- safe to be called concurrently.
-data Connection p = Connection
+data Connection wire = Connection
     { connNodeId   :: NodeId
     , connAddr     :: SockAddr
-    , connSendWire :: WireMessage p -> IO ()
-    , connRecvWire :: ConduitT () (WireMessage p) IO ()
+    , connSendWire :: wire -> IO ()
+    , connRecvWire :: ConduitT () wire IO ()
     , connClose    :: IO ()
     }
+
+mkConnection
+    :: Serialise wire'
+    => NodeId
+    -> Socket
+    -> SockAddr
+    -> (wire  -> IO wire')
+    -> (wire' -> IO wire )
+    -> IO (Connection wire)
+mkConnection nid sock addr tsend trecv = do
+    mutex <- newMVar ()
+    pure Connection
+        { connNodeId   = nid
+        , connAddr     = addr
+        , connSendWire = tsend >=> sendWire mutex
+        , connRecvWire = recvWire
+        , connClose    = Sock.close sock
+        }
+  where
+    sendWire mutex wire =
+        withMVar mutex . const $
+            sockSendStream sock wire
+
+    recvWire =
+           sockRecvStream sock
+        .| conduitDecodeCBOR
+        .| Conduit.mapM trecv
 
 newtype Active p = Active (STMMap.Map NodeId (Connection p))
 

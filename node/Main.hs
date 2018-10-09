@@ -24,6 +24,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
+import qualified Oscoin.P2P.Handshake.Simple as Handshake
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Time
@@ -112,13 +113,13 @@ main = do
                    Rad.txEval
                    consensus                                      $ \nod ->
         withGossip lgr
-                   keys
                    P2P.NodeAddr { P2P.nodeId   = nid
                                 , P2P.nodeHost = host
                                 , P2P.nodePort = gossipPort
                                 }
                    seeds'
-                   (storage nod)                                  $ \gos ->
+                   (storage nod)
+                   (Handshake.simpleHandshake keys)               $ \gos ->
             Async.runConcurrently $
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)

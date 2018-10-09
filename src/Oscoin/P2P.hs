@@ -12,7 +12,6 @@ import           Oscoin.Prelude hiding (show)
 
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, blockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Logging (Logger)
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
@@ -20,8 +19,8 @@ import qualified Oscoin.Storage as Storage
 import           Oscoin.P2P.Class
 import qualified Oscoin.P2P.Gossip as Gossip
 import qualified Oscoin.P2P.Gossip.Broadcast as Bcast
-import qualified Oscoin.P2P.Gossip.Handshake as Handshake
 import qualified Oscoin.P2P.Gossip.Membership as Membership
+import           Oscoin.P2P.Handshake (Handshake)
 import           Oscoin.P2P.Types
 
 import           Codec.Serialise (Serialise)
@@ -29,35 +28,34 @@ import qualified Codec.Serialise as CBOR
 import qualified Control.Concurrent.Async as Async
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 
-type GossipHandle = Gossip.Handle Handshake.HandshakeError Gossip.Peer
-
 -- | Start listening to gossip and pass the gossip handle to the runner.
 --
 -- When the runner returns we stop listening and return the runner result.
 withGossip
     :: ( Serialise       tx
        , Crypto.Hashable tx
+       , Exception e
+       , Serialise o
        )
     => Logger
-    -> Crypto.KeyPair
     -> NodeAddr
     -- ^ Node identity (\"self\")
     -> [NodeAddr]
     -- ^ Initial peers to connect to
     -> Storage tx IO
-    -> (GossipHandle -> IO a)
+    -> Handshake e NodeId (Gossip.WireMessage (Gossip.ProtocolMessage Gossip.Peer)) o
+    -> (Gossip.Handle e Gossip.Peer o -> IO a)
     -> IO a
-withGossip logger keypair selfAddr peerAddrs storage run = do
+withGossip logger selfAddr peerAddrs storage handshake run = do
     (self:peers) <-
         for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
             Gossip.knownPeer nodeId nodeHost nodePort
     Gossip.withGossip
         logger
-        keypair
         self
         scheduleInterval
         (storageAsCallbacks storage)
-        Handshake.simple
+        handshake
         Membership.defaultConfig
         (listenAndRun peers)
   where
