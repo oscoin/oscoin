@@ -35,10 +35,9 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import           Oscoin.Consensus.Trivial (trivialConsensus)
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
 import           Oscoin.Crypto.Blockchain.Block
@@ -151,7 +150,7 @@ withNode NodeState{..} k = do
         sth
         bsh
         Rad.txEval
-        (Consensus.nakamotoConsensus (Just Nakamoto.easyDifficulty))
+        trivialConsensus
         k
 
 liftNode :: Node a -> Session a
