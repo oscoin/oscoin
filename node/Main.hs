@@ -9,6 +9,7 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Evaluator (EvalError, fromEvalError)
 import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
                  (Env, RadTx, pureEnv, txEval)
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, Difficulty, fromGenesis, (|>))
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
