@@ -17,10 +17,9 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
-import           Oscoin.Consensus.Evaluator (Evaluator)
 
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
-import           Oscoin.Crypto.Blockchain.Eval (toOrphan)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, toOrphan)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)

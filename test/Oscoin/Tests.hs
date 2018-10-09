@@ -7,7 +7,6 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.Evaluator (foldEval)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHeader(..), blockHash, blockHeader)
@@ -113,6 +112,7 @@ propOscoinBlockStore
     -> Property
 propOscoinBlockStore chainGen =
     forAll chainGen $ \chain -> do
+        let foldEval x xs = Right ((), xs <> x)
         let blks = NonEmpty.toList $ fromBlockchain chain
         let os   = map (toOrphan foldEval) blks
         let bs   = BlockStore.fromOrphans os (genesis chain)

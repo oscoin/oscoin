@@ -24,9 +24,9 @@ import           Oscoin.Consensus.BlockStore.Class
                  (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
-import           Oscoin.Consensus.Evaluator (Evaluator)
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
 import           Oscoin.Crypto.Blockchain.Block (blockHash)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHashed)
 import           Oscoin.Data.Query
 import           Oscoin.Environment

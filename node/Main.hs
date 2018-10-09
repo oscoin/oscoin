@@ -6,15 +6,14 @@ import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.Evaluator (EvalError, fromEvalError)
-import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
-                 (Env, RadTx, pureEnv, txEval)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, Difficulty, fromGenesis, (|>))
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
-import           Oscoin.Crypto.Blockchain.Eval (buildBlockStrict)
+import           Oscoin.Crypto.Blockchain.Eval
+                 (EvalError, buildBlockStrict, fromEvalError)
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Data.RadicleTx as Rad (Env, RadTx, pureEnv, txEval)
 import           Oscoin.Data.Tx (createTx)
 import           Oscoin.Environment (Environment(Development))
 import           Oscoin.Logging (withStdLogger)
