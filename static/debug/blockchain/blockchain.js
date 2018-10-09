@@ -31,11 +31,12 @@ function renderBlock(blk) {
     e.querySelector('.block-timestamp').innerHTML = blk.header.timestamp;
     e.querySelector('.block-nonce').innerHTML = blk.header.nonce;
     e.querySelector('.block-difficulty').innerHTML = blk.header.difficulty;
+    e.querySelector('.block-data').innerHTML = '';
 
     blk.data.forEach(function (tx) {
         var txe = document.createElement('pre');
         txe.classList.add('block-data-tx');
-        txe.innerHTML = tx.msg;
+        txe.innerHTML = tx.msg.msg;
         e.querySelector('.block-data').appendChild(txe);
     });
     return e;
