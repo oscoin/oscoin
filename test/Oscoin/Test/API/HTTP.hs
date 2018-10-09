@@ -24,7 +24,6 @@ import qualified Data.Text as T
 
 import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
-import qualified Network.Wai.Test as Wai
 import           Numeric.Natural
 import           Web.HttpApiData (toUrlPiece)
 
@@ -150,7 +149,7 @@ unconfirmedTx tx = API.TxLookupResponse
     , txPayload = tx
     }
 
-getTransactionReturns :: Codec -> Hashed API.RadTx -> API.TxLookupResponse -> Wai.Session ()
+getTransactionReturns :: Codec -> Hashed API.RadTx -> API.TxLookupResponse -> Session ()
 getTransactionReturns codec txHash expected =
     get codec ("/transactions/" <> toUrlPiece (Crypto.fromHashed txHash)) >>=
     assertStatus ok200 <>
