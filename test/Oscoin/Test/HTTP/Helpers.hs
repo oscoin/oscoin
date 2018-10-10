@@ -34,13 +34,10 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Trivial (trivialConsensus)
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
-import           Oscoin.Crypto.Blockchain.Block
-                 (blockState, emptyGenesisBlock, emptyHeader)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis, height)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -67,9 +64,7 @@ import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Default (def)
 import           Data.List (lookup)
-import qualified Data.Map as Map
 import qualified Data.Text as T
 
 import qualified Network.HTTP.Media as HTTP
@@ -117,13 +112,13 @@ liftWaiSession :: Wai.Session a -> Session a
 liftWaiSession s = Session $ lift s
 
 emptyNodeState :: NodeState
-emptyNodeState = NodeState { mempoolState = mempty, blockstoreState = emptyBlockstore }
+emptyNodeState = NodeState
+    { mempoolState = mempty
+    , blockstoreState = blockchainFromEnv Rad.pureEnv
+    }
 
 nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
 nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
-
-emptyBlockstore :: Blockchain API.RadTx Rad.Env
-emptyBlockstore = Blockchain $ emptyGenesisBlock epoch def :| []
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
@@ -134,13 +129,10 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    let bs = BlockStore
-             { bsOrphans = mempty
-             , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
-             }
+    let blockStore = BlockStore.initWithChain blockstoreState
 
-    bsh <- BlockStore.newIO bs
-    sth <- STree.new (BlockStore.chainState (comparing height) bs)
+    bsh <- BlockStore.newIO blockStore
+    sth <- STree.new (BlockStore.chainState (comparing height) blockStore)
 
     Node.withNode
         cfg
@@ -172,9 +164,7 @@ createValidTx radValue = liftIO $ do
 
 -- | Creates a new Radicle blockchain with no transactions and the given state.
 blockchainFromEnv :: Rad.Env -> Blockchain API.RadTx Rad.Env
-blockchainFromEnv env = fromGenesis genesis
-  where
-    genesis = mkBlock (emptyHeader { blockState = env }) []
+blockchainFromEnv env = fromGenesis $ emptyGenesisBlock epoch env
 
 -- | Create a Radicle environment with the given bindings
 initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
