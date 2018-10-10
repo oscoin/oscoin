@@ -4,21 +4,21 @@ set -euo pipefail
 
 function load-cache() {
   bucket="gs://oscoin-build-cache"
-  key="stack-work-$(cat stack.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
+  key="stack-work-$(sha256sum < stack.yaml | cut -d ' ' -f 1)".tar.gz
   gsutil -m cp -r "$bucket/v2/*" "$bucket/$key" . || true
-  for f in stack.tar.gz $key; do
-    if [[ -e $f ]]; then
-      tar xzf $f
+  for f in stack.tar.gz "$key"; do
+    if [[ -e "$f" ]]; then
+      tar xzf "$f"
     fi
   done
 }
 
 function save-cache() {
   bucket="gs://oscoin-build-cache"
-  key="stack-work-$(cat stack.yaml | sha256sum | cut -d ' ' -f 1)".tar.gz
+  key="stack-work-$(sha256sum < stack.yaml | cut -d ' ' -f 1)".tar.gz
   if ! gsutil ls "$bucket/$key"; then
-    tar czf $key .stack-work
-    gsutil -m cp $key "$bucket/$key" || true
+    tar czf "$key" .stack-work
+    gsutil -m cp "$key" "$bucket/$key" || true
   fi
 
   rm -rf .stack/indices/Hackage/00-index.tar*

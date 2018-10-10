@@ -4,4 +4,4 @@ set -euo pipefail
 
 shopt -s globstar
 
-docker run -w /workspace -v "$(pwd):/workspace" koalaman/shellcheck:stable **/**.sh
+docker run -w /workspace -v "$(pwd):/workspace" koalaman/shellcheck:stable ./**/**.sh
