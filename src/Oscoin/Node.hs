@@ -6,6 +6,7 @@ module Oscoin.Node
     , withNode
 
     , runNodeT
+    , mineBlock
 
     , miner
     , storage
@@ -25,7 +26,7 @@ import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
-import           Oscoin.Crypto.Blockchain.Block (blockHash)
+import           Oscoin.Crypto.Blockchain.Block (Block, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHashed)
 import           Oscoin.Data.Query
@@ -182,6 +183,25 @@ miner = do
             for_ blk $ \blk' -> do
                 lift . P2P.broadcast $ P2P.BlockMsg (void blk')
                 updateChainState
+
+-- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
+-- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
+mineBlock
+    :: ( MonadIO m
+       , MonadClock m
+       , Serialise tx
+       , Hashable tx
+       , Ord  tx
+       )
+    => NodeT tx s i m (Maybe (Block tx s))
+mineBlock = do
+    Handle{hEval, hConsensus} <- ask
+    time <- currentTick
+    blk <-
+        hoist liftIO $ Consensus.mineBlock hConsensus hEval time
+    for blk $ \blk' -> do
+        updateChainState
+        pure blk'
 
 storage
     :: ( MonadIO m

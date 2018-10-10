@@ -11,6 +11,8 @@ module Oscoin.Test.HTTP.Helpers
 
     , Session
     , runSession
+    , liftWaiSession
+    , liftNode
 
     , assertResultOK
     , assertResultErr
@@ -23,8 +25,7 @@ module Oscoin.Test.HTTP.Helpers
     , addRadicleRef
     , initRadicleEnv
     , genDummyTx
-    , emptyBlockstore
-
+    , createValidTx
     ) where
 
 import           Oscoin.Prelude hiding (First, get)
@@ -33,10 +34,9 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import           Oscoin.Consensus.Trivial (trivialConsensus)
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
 import           Oscoin.Crypto.Blockchain.Block
@@ -61,6 +61,7 @@ import           Test.QuickCheck (arbitrary, generate)
 import           Test.Tasty.HUnit.Extended
 
 import           Codec.Serialise (Serialise)
+import           Control.Monad.Fail (MonadFail(..))
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
@@ -83,9 +84,15 @@ import qualified Radicle
 -- FIXME(kim): should use unsafeToIdent, cf. radicle#105
 import qualified Radicle.Internal.Core as Radicle
 
-
 -- | Like "Assertion" but bound to a user session (cookies etc.)
-type Session = Wai.Session
+newtype Session a = Session (ReaderT NodeHandle Wai.Session a)
+    deriving (Functor, Applicative, Monad, MonadIO)
+
+instance MonadFail Session where
+    fail = assertFailure
+
+-- | Node handle for API tests.
+type Node = Node.NodeT API.RadTx Rad.Env DummyNodeId IO
 
 -- | Node handle for API tests.
 type NodeHandle = Node.Handle API.RadTx Rad.Env DummyNodeId
@@ -105,6 +112,9 @@ instance (Monoid a, Semigroup a) => Monoid (Session a) where
 
 instance MonadRandom Session where
     getRandomBytes = liftIO . getRandomBytes
+
+liftWaiSession :: Wai.Session a -> Session a
+liftWaiSession s = Session $ lift s
 
 emptyNodeState :: NodeState
 emptyNodeState = NodeState { mempoolState = mempty, blockstoreState = emptyBlockstore }
@@ -139,14 +149,21 @@ withNode NodeState{..} k = do
         sth
         bsh
         Rad.txEval
-        (Consensus.nakamotoConsensus (Just Nakamoto.easyDifficulty))
+        trivialConsensus
         k
 
-genDummyTx :: IO (Hashed API.RadTx, API.RadTx)
+liftNode :: Node a -> Session a
+liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
+
+genDummyTx :: MonadIO m => m (Hashed API.RadTx, API.RadTx)
 genDummyTx = do
-    msg :: Rad.Value <- generate $ arbitrary
+    radValue <- liftIO $ generate arbitrary
+    createValidTx radValue
+
+createValidTx :: MonadIO m => Rad.Value -> m (Hashed API.RadTx, API.RadTx)
+createValidTx radValue = liftIO $ do
     (pubKey, priKey) <- Crypto.generateKeyPair
-    signed           <- Crypto.sign priKey msg
+    signed           <- Crypto.sign priKey radValue
 
     let tx :: API.RadTx = mkTx signed pubKey
     let txHash          = Crypto.hash tx
@@ -178,20 +195,20 @@ addRadicleRef name value (Rad.Env env) =
 
 -- | Turn a "Session" into an "Assertion".
 runSession :: NodeState -> Session () -> Assertion
-runSession nst sess =
+runSession nst (Session sess) =
     withNode nst $ \nh -> do
         app <- API.app Testing nh
-        Wai.runSession sess app
+        Wai.runSession (runReaderT sess nh) app
 
 
-assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Wai.Session ()
+assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session ()
 assertStatus want (Wai.simpleStatus -> have) = have @?= want
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
 assertResultOK
     :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a)
-    => a -> Wai.SResponse -> Wai.Session ()
+    => a -> Wai.SResponse -> Session ()
 assertResultOK expected response = do
     result <- assertResponseBody response
     case result of
@@ -202,7 +219,7 @@ assertResultOK expected response = do
 -- and @actual@ equals @expected@.
 assertResultErr
     :: (HasCallStack)
-    => Text -> Wai.SResponse -> Wai.Session ()
+    => Text -> Wai.SResponse -> Session ()
 assertResultErr expected response = do
     result <- assertResponseBody @(API.Result ()) response
     case result of
@@ -211,7 +228,7 @@ assertResultErr expected response = do
 
 assertResponseBody
     :: (HasCallStack, FromJSON a, Serialise a)
-    => Wai.SResponse -> Wai.Session a
+    => Wai.SResponse -> Session a
 assertResponseBody response =
     case responseBody response of
         Left err -> assertFailure $ show err
@@ -225,12 +242,12 @@ request
     -> Text                              -- ^ Request path
     -> HTTP.RequestHeaders               -- ^ Request headers
     -> Maybe a                           -- ^ Request body
-    -> Wai.Session Wai.SResponse
+    -> Session Wai.SResponse
 request method (encodeUtf8 -> path) headers mb
-    | Nothing <- mb = req LBS.empty
+    | Nothing <- mb = liftWaiSession $ req LBS.empty
     | Just b  <- mb = case supportedContentType headers of
         Left err -> assertFailure $ show err
-        Right ct -> req $ encode ct b
+        Right ct -> liftWaiSession $ req $ encode ct b
     where req = Wai.srequest . Wai.SRequest (mkRequest method path headers)
 
 
@@ -283,21 +300,21 @@ responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
     Left err -> Left err
     Right ct -> decode ct $ Wai.simpleBody resp
 
-get :: HasCallStack => Codec -> Text -> Wai.Session Wai.SResponse
+get :: HasCallStack => Codec -> Text -> Session Wai.SResponse
 get = withoutBody GET
 
 post
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => Codec -> Text -> a -> Wai.Session Wai.SResponse
+    => Codec -> Text -> a -> Session Wai.SResponse
 post = withBody POST
 
-withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Wai.Session Wai.SResponse
+withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Session Wai.SResponse
 withoutBody method Codec{..} path =
     request method path [acceptHeader codecAccept] noBody
 
 withBody
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => HTTP.StdMethod -> Codec -> Text -> a -> Wai.Session Wai.SResponse
+    => HTTP.StdMethod -> Codec -> Text -> a -> Session Wai.SResponse
 withBody method codec path body' =
     request method path (codecHeaders codec) $ Just body'
 

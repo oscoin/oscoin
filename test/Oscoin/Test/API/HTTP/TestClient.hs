@@ -19,17 +19,19 @@ import           Oscoin.Prelude hiding (get)
 import           Oscoin.API.Client
 import           Oscoin.API.HTTP.Client
 
+import           Oscoin.Test.HTTP.Helpers (Session, liftWaiSession)
+
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 
 
-type TestClient = HttpClientT Wai.Session
+type TestClient = HttpClientT Session
 
-run :: TestClient a -> Wai.Session a
+run :: TestClient a -> Session a
 run = runHttpClientT' makeWaiRequest
 
-makeWaiRequest :: Request -> Wai.Session Response
-makeWaiRequest Request{..} = fromSresp <$> Wai.srequest sreq
+makeWaiRequest :: Request -> Session Response
+makeWaiRequest Request{..} = liftWaiSession $ fromSresp <$> Wai.srequest sreq
   where
     sreq = Wai.SRequest req requestBody
     req = Wai.defaultRequest
