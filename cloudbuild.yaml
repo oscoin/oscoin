@@ -33,12 +33,31 @@ steps:
   - id: "Test & Build"
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
-    args: ['stack', 'build', '--fast', '--test', '--no-terminal', '--pedantic']
+    args: ['stack', 'build', '--test', '--no-terminal', '--pedantic', '--copy-bins', '--local-bin-path=/workspace/bin']
 
   - id: "Lint (weeder)"
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'exec', '--', 'weeder', '.']
+
+  - id: "Publish images"
+    name: gcr.io/cloud-builders/docker
+    entrypoint: 'bash'
+    env:
+    - PROJECT_ID=$PROJECT_ID
+    - COMMIT_SHA=$COMMIT_SHA
+    - BRANCH_NAME=$BRANCH_NAME
+    args:
+    - '-c'
+    - |
+      set -euo pipefail
+
+      bins=(
+        /workspace/bin/oscoin
+        /workspace/bin/oscoin-cli
+      )
+
+      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil

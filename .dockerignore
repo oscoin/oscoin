@@ -1,2 +1,4 @@
 *.sock
 .stack-work
+.stack
+bin
