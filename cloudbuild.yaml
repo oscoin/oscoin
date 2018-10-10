@@ -18,7 +18,7 @@ steps:
     args:
     - '-c'
     - |
-      source scripts/ci.sh
+      source scripts/ci-cache.sh
       load-cache
 
   - id: "Build deps"
@@ -80,6 +80,6 @@ steps:
     args:
     - '-c'
     - |
-      source scripts/ci.sh
+      source scripts/ci-cache.sh
       save-cache
 
