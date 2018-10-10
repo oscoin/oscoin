@@ -84,7 +84,7 @@ newHttpClient uri = liftIO $ do
 makeHttpRequest :: Client.Manager -> Client.Request -> Request -> IO Response
 makeHttpRequest manager baseRequest Request{..} = do
     let req = baseRequest
-            { Client.method = methodGet
+            { Client.method = requestMethod
             , Client.path = encodeUtf8 requestPath
             , Client.requestHeaders = requestHeaders
             , Client.requestBody = Client.RequestBodyLBS $ requestBody
