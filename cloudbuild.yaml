@@ -18,13 +18,19 @@ steps:
     - |
       stack config set system-ghc --global true
       stack config set install-ghc --global false
-      stack install stylish-haskell hlint weeder
+      stack install stylish-haskell hlint weeder ShellCheck
 
   - id: "Format (shell scripts)"
     waitFor: ['-']
     name: gcr.io/cloud-builders/curl
     entrypoint: "bash"
     args: ['./scripts/check-shell-format.sh']
+
+  - id: "Lint (shellcheck)"
+    waitFor: ['Build deps']
+    name: 'haskell:8.4.3'
+    env: ['STACK_ROOT=/workspace/.stack']
+    args: ['stack', 'exec', '--', 'shellcheck', '**/**.sh']
 
   - id: "Format (haskell)"
     name: 'haskell:8.4.3'
