@@ -19,6 +19,7 @@ steps:
       stack config set system-ghc --global true
       stack config set install-ghc --global false
       stack install stylish-haskell hlint weeder
+      curl -L -o /usr/bin/shfmt https://github.com/mvdan/sh/releases/download/v2.5.1/shfmt_v2.5.1_linux_amd64
 
   - id: "Format"
     name: 'haskell:8.4.3'
