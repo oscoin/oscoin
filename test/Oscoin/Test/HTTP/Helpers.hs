@@ -11,6 +11,9 @@ module Oscoin.Test.HTTP.Helpers
 
     , Session
     , runSession
+    , runEmptySession
+    , runSessionBindings
+    , runSessionEnv
     , liftWaiSession
     , liftNode
 
@@ -21,7 +24,6 @@ module Oscoin.Test.HTTP.Helpers
     , get
     , post
 
-    , blockchainFromEnv
     , addRadicleRef
     , initRadicleEnv
     , genDummyTx
@@ -34,13 +36,10 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Trivial (trivialConsensus)
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
-import           Oscoin.Crypto.Blockchain.Block
-                 (blockState, emptyGenesisBlock, emptyHeader)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis, height)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -67,9 +66,7 @@ import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Default (def)
 import           Data.List (lookup)
-import qualified Data.Map as Map
 import qualified Data.Text as T
 
 import qualified Network.HTTP.Media as HTTP
@@ -84,7 +81,11 @@ import qualified Radicle
 -- FIXME(kim): should use unsafeToIdent, cf. radicle#105
 import qualified Radicle.Internal.Core as Radicle
 
--- | Like "Assertion" but bound to a user session (cookies etc.)
+-- | The 'Session' monad allows for arbitrary IO, communication with
+-- the Node HTTP API (via 'Wai.Session') and access to the underlying
+-- node directly.
+--
+-- See also 'liftWaiSession' and 'liftNode'.
 newtype Session a = Session (ReaderT NodeHandle Wai.Session a)
     deriving (Functor, Applicative, Monad, MonadIO)
 
@@ -117,13 +118,13 @@ liftWaiSession :: Wai.Session a -> Session a
 liftWaiSession s = Session $ lift s
 
 emptyNodeState :: NodeState
-emptyNodeState = NodeState { mempoolState = mempty, blockstoreState = emptyBlockstore }
+emptyNodeState = NodeState
+    { mempoolState = mempty
+    , blockstoreState = blockchainFromEnv Rad.pureEnv
+    }
 
 nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
 nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
-
-emptyBlockstore :: Blockchain API.RadTx Rad.Env
-emptyBlockstore = Blockchain $ emptyGenesisBlock epoch def :| []
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
@@ -134,13 +135,10 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    let bs = BlockStore
-             { bsOrphans = mempty
-             , bsChains = Map.singleton (blockHash $ tip $ blockstoreState) blockstoreState
-             }
+    let blockStore = BlockStore.initWithChain blockstoreState
 
-    bsh <- BlockStore.newIO bs
-    sth <- STree.new (BlockStore.chainState (comparing height) bs)
+    bsh <- BlockStore.newIO blockStore
+    sth <- STree.new (BlockStore.chainState (comparing height) blockStore)
 
     Node.withNode
         cfg
@@ -172,9 +170,7 @@ createValidTx radValue = liftIO $ do
 
 -- | Creates a new Radicle blockchain with no transactions and the given state.
 blockchainFromEnv :: Rad.Env -> Blockchain API.RadTx Rad.Env
-blockchainFromEnv env = fromGenesis genesis
-  where
-    genesis = mkBlock (emptyHeader { blockState = env }) []
+blockchainFromEnv env = fromGenesis $ emptyGenesisBlock epoch env
 
 -- | Create a Radicle environment with the given bindings
 initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
@@ -193,12 +189,33 @@ addRadicleRef name value (Rad.Env env) =
         Radicle.defineAtom (Radicle.unsafeToIdent name) ref
 
 
--- | Turn a "Session" into an "Assertion".
+-- | Run a 'Session' with the given initial node state
 runSession :: NodeState -> Session () -> Assertion
 runSession nst (Session sess) =
     withNode nst $ \nh -> do
         app <- API.app Testing nh
         Wai.runSession (runReaderT sess nh) app
+
+-- | Run a 'Session' so that the blockchain state is the given
+-- Radicle environment
+runSessionEnv :: Rad.Env -> Session () -> Assertion
+runSessionEnv env (Session sess) = do
+    let nst = nodeState [] $ blockchainFromEnv $ env
+    withNode nst $ \nh -> do
+        app <- API.app Testing nh
+        Wai.runSession (runReaderT sess nh) app
+
+
+-- | Run a 'Session' so that the blockchain state has the given
+-- Radicle bindings.
+runSessionBindings :: [(Text, Rad.Value)] -> Session () -> Assertion
+runSessionBindings bindings = runSessionEnv (initRadicleEnv bindings)
+
+-- | Run a 'Session' with an empty node state. That is the node mempool
+-- is empty and the blockchain has only the genesis block with a pure
+-- Radicle environment.
+runEmptySession :: Session () -> Assertion
+runEmptySession = runSessionEnv Rad.pureEnv
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session ()
