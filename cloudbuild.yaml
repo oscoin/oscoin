@@ -33,16 +33,19 @@ steps:
     args: ['stack', 'exec', '--', 'shellcheck', '**/**.sh']
 
   - id: "Format (haskell)"
+    waitFor: ['Build deps']
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['./scripts/check-haskell-format.sh']
 
   - id: "Lint (hlint)"
+    waitFor: ['Build deps']
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'exec', '--', 'hlint', '.']
 
   - id: "Test & Build"
+    waitFor: ['Build deps']
     name: 'haskell:8.4.3'
     env: ['STACK_ROOT=/workspace/.stack']
     args: ['stack', 'build', '--test', '--no-terminal', '--pedantic', '--copy-bins', '--local-bin-path=/workspace/bin']
