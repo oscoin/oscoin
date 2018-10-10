@@ -16,4 +16,4 @@ fi
 # -sr   redirect operators will be followed by a space
 # -d    display diffs and exit with non-zero status code
 #       when formatting differs
-echo **/**.sh | xargs -n1 -P8 shfmt -s -i 2 -bn -ci -sr -d
+shfmt -s -i 2 -bn -ci -sr -d **/**.sh
