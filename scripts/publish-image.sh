@@ -14,8 +14,10 @@ COPY $bin /bin/$bin
 ENTRYPOINT ["/bin/$bin"]
 EOF
 
+branch_name_tag=$(echo "$BRANCH_NAME" | tr "/" "-")
+
 docker build --label "version=$COMMIT_SHA" \
-             --tag "$img:$BRANCH_NAME" \
+             --tag "$img:$branch_name_tag" \
              --tag "$img:$COMMIT_SHA" .
 
 if [[ "$BRANCH_NAME" == "master" ]]; then
