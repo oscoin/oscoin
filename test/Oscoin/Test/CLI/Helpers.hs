@@ -108,6 +108,7 @@ instance MonadClient TestCommandRunner where
         Just tx -> pure $ Ok TxLookupResponse
             { txHash = _txHash
             , txBlockHash = Nothing
+            , txOutput = Nothing
             , txConfirmations = 1
             , txPayload = tx
             }

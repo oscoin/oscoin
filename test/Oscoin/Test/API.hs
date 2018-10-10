@@ -63,13 +63,15 @@ tests =
             let expected = API.TxLookupResponse
                     { txHash = Crypto.hash tx
                     , txBlockHash = Nothing
+                    , txOutput = Nothing
                     , txConfirmations = 0
                     , txPayload = tx
                     }
             response @?= API.Ok expected
 
         , testCase "confirmed transaction" $ runEmptySession $ do
-            (txHash, tx) <- createValidTx (Rad.String "jo")
+            let radValue = Rad.String "jo"
+            (txHash, tx) <- createValidTx radValue
             Just blk <- liftNode $ do
                 Mempool.addTxs [tx]
                 blk <- Node.mineBlock
@@ -80,6 +82,7 @@ tests =
                     { txHash = Crypto.hash tx
                     , txBlockHash = Just (blockHash blk)
                     , txConfirmations = 6
+                    , txOutput = Just (Right radValue)
                     , txPayload = tx
                     }
             response @?= API.Ok expected

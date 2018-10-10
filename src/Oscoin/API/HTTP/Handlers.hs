@@ -8,11 +8,13 @@ import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.State.Tree (Key)
+import           Oscoin.Storage.Receipt.Class
 
 import           Codec.Serialise (Serialise, serialise)
 import           Network.HTTP.Types.Status
@@ -26,11 +28,15 @@ getAllTransactions = do
     respond ok200 $ body (Ok mp)
 
 getTransaction :: Hashed RadTx -> ApiAction s i ()
-getTransaction txId = node (lookupTx txId) >>= \case
-    Nothing -> respond notFound404 $ errBody "Transaction not found"
-    Just (tx, bh, confirmations) -> respond ok200 $ body $ Ok TxLookupResponse
+getTransaction txId = do
+    (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
+        Nothing -> respond notFound404 $ errBody "Transaction not found"
+        Just res -> pure $ res
+    txReceipt <- node $ lookupReceipt txId
+    respond ok200 $ body $ Ok TxLookupResponse
         { txHash = hash tx
         , txBlockHash =  bh
+        , txOutput = receiptTxOutput <$> txReceipt
         , txConfirmations = confirmations
         , txPayload = tx
         }

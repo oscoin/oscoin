@@ -97,6 +97,7 @@ unconfirmedTx :: API.RadTx -> API.TxLookupResponse
 unconfirmedTx tx = API.TxLookupResponse
     { txHash = Crypto.hash tx
     , txBlockHash = Nothing
+    , txOutput = Nothing
     , txConfirmations = 0
     , txPayload = tx
     }
