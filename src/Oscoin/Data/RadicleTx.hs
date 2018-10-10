@@ -1,4 +1,5 @@
-module Oscoin.Consensus.Evaluator.Radicle
+-- | Provide Radicle transaction type, state and evaluator for the blockchain.
+module Oscoin.Data.RadicleTx
     ( Env(..)
     , RadTx
     , RadEvaluator
@@ -11,7 +12,7 @@ module Oscoin.Consensus.Evaluator.Radicle
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Evaluator (EvalError(..), Evaluator)
+import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), Evaluator)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import           Oscoin.Crypto.PubKey (PublicKey, unsign)
 import           Oscoin.Data.Query

@@ -21,7 +21,6 @@ import           Oscoin.Test.Consensus.Node
 
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
-import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
                  (BlockHeader(..), blockData, blockHash)
@@ -156,7 +155,7 @@ applyMessage :: (TestableNode m a) => Msg DummyTx -> m [Msg DummyTx]
 applyMessage msg = go msg
   where
     go (TxMsg tx)     = resp <$> Storage.applyTx tx
-    go (BlockMsg blk) = resp <$> Storage.applyBlock identityEval blk
+    go (BlockMsg blk) = resp <$> Storage.applyBlock dummyEval blk
     go (ReqBlockMsg blk) = do
             mblk <- Storage.lookupBlock blk
             pure . maybeToList . map (BlockMsg . void) $ mblk

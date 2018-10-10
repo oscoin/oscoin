@@ -5,7 +5,6 @@ module Oscoin.Test.Consensus.Simple
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
-import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -70,6 +69,7 @@ instance HasTestNodeState SimpleNodeState where
 
 instance TestableNode SimpleNode SimpleNodeState where
     testableTick tick = do
+        let identityEval _ s = Right ((), s)
         position <- ask
         blk <- mineBlock (simpleConsensus position) identityEval tick
         reqs <- reconcileSimple tick

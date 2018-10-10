@@ -36,7 +36,6 @@ import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.BlockStore (BlockStore(..))
 import qualified Oscoin.Consensus.BlockStore as BlockStore
-import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blockHash, fromGenesis, height, mkBlock, tip)
@@ -45,6 +44,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
 import qualified Oscoin.Logging as Log

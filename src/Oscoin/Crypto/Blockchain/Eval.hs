@@ -1,5 +1,8 @@
 module Oscoin.Crypto.Blockchain.Eval
-    ( Receipt(..)
+    ( Evaluator
+    , EvalError(..)
+    , EvalResult
+    , Receipt(..)
     , buildBlock
     , buildBlockStrict
     , toOrphan
@@ -7,13 +10,30 @@ module Oscoin.Crypto.Blockchain.Eval
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Evaluator
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+
+
+type EvalResult state output = Either EvalError (output, state)
+
+type Evaluator state tx output = tx -> state -> EvalResult state output
+
+
+newtype EvalError = EvalError { fromEvalError :: Text }
+    deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
+
+instance Serialise EvalError
+
+instance ToJSON EvalError where
+    toJSON (EvalError e) = toJSON e
+
+instance FromJSON EvalError where
+    parseJSON v = EvalError <$> parseJSON v
+
 
 -- | A 'Receipt' is generated whenever a transaction is evaluated as
 -- part of a block.
