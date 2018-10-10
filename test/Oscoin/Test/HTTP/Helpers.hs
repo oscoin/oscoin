@@ -11,6 +11,9 @@ module Oscoin.Test.HTTP.Helpers
 
     , Session
     , runSession
+    , runEmptySession
+    , runSessionBindings
+    , runSessionEnv
     , liftWaiSession
     , liftNode
 
@@ -21,7 +24,6 @@ module Oscoin.Test.HTTP.Helpers
     , get
     , post
 
-    , blockchainFromEnv
     , addRadicleRef
     , initRadicleEnv
     , genDummyTx
@@ -79,7 +81,11 @@ import qualified Radicle
 -- FIXME(kim): should use unsafeToIdent, cf. radicle#105
 import qualified Radicle.Internal.Core as Radicle
 
--- | Like "Assertion" but bound to a user session (cookies etc.)
+-- | The 'Session' monad allows for arbitrary IO, communication with
+-- the Node HTTP API (via 'Wai.Session') and access to the underlying
+-- node directly.
+--
+-- See also 'liftWaiSession' and 'liftNode'.
 newtype Session a = Session (ReaderT NodeHandle Wai.Session a)
     deriving (Functor, Applicative, Monad, MonadIO)
 
@@ -183,12 +189,33 @@ addRadicleRef name value (Rad.Env env) =
         Radicle.defineAtom (Radicle.unsafeToIdent name) ref
 
 
--- | Turn a "Session" into an "Assertion".
+-- | Run a 'Session' with the given initial node state
 runSession :: NodeState -> Session () -> Assertion
 runSession nst (Session sess) =
     withNode nst $ \nh -> do
         app <- API.app Testing nh
         Wai.runSession (runReaderT sess nh) app
+
+-- | Run a 'Session' so that the blockchain state is the given
+-- Radicle environment
+runSessionEnv :: Rad.Env -> Session () -> Assertion
+runSessionEnv env (Session sess) = do
+    let nst = nodeState [] $ blockchainFromEnv $ env
+    withNode nst $ \nh -> do
+        app <- API.app Testing nh
+        Wai.runSession (runReaderT sess nh) app
+
+
+-- | Run a 'Session' so that the blockchain state has the given
+-- Radicle bindings.
+runSessionBindings :: [(Text, Rad.Value)] -> Session () -> Assertion
+runSessionBindings bindings = runSessionEnv (initRadicleEnv bindings)
+
+-- | Run a 'Session' with an empty node state. That is the node mempool
+-- is empty and the blockchain has only the genesis block with a pure
+-- Radicle environment.
+runEmptySession :: Session () -> Assertion
+runEmptySession = runSessionEnv Rad.pureEnv
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session ()
