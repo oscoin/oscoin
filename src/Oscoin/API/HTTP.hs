@@ -6,8 +6,8 @@ module Oscoin.API.HTTP
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Types (RadTx)
-import qualified Oscoin.Consensus.Evaluator.Radicle as Rad
 import           Oscoin.Crypto.Hash (toHashed)
+import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 

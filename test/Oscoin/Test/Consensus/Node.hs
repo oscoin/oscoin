@@ -2,6 +2,7 @@ module Oscoin.Test.Consensus.Node
     ( DummyNodeId
     , DummyTx(..)
     , DummyState
+    , dummyEval
 
     , TestNodeState(..)
     , TestNodeT
@@ -17,6 +18,7 @@ import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
 import qualified Oscoin.Crypto.Blockchain.Block as Block
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
@@ -40,6 +42,10 @@ newtype DummyTx = DummyTx Word8
 type DummyState = ()
 
 type DummyOutput = ()
+
+
+dummyEval :: Evaluator DummyState DummyTx DummyOutput
+dummyEval _ s = Right ((), s)
 
 instance Show DummyTx where
     show (DummyTx x) = show x

@@ -17,54 +17,30 @@ module Oscoin.Test.API.HTTP.TestClient
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
-import           Oscoin.API.Types
-import           Oscoin.Crypto.Hash (fromHashed)
+import           Oscoin.API.HTTP.Client
 
-import           Codec.Serialise
-import qualified Data.Text as T
-import           Network.HTTP.Types.Header
-import           Network.HTTP.Types.Method
-import           Network.Wai
-import           Network.Wai.Test
-import           Web.HttpApiData (toUrlPiece)
+import           Oscoin.Test.HTTP.Helpers (Session, liftWaiSession)
+
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Test as Wai
 
 
+type TestClient = HttpClientT Session
 
-newtype TestClient a = TestClient { run :: Session a }
-    deriving (Functor, Applicative, Monad, MonadIO)
+run :: TestClient a -> Session a
+run = runHttpClientT' makeWaiRequest
 
-instance MonadClient TestClient where
-    submitTransaction tx =
-        post "/transactions" tx
-
-    getTransaction txId =
-        get $ "/transactions/" <> toUrlPiece (fromHashed txId)
-
-    getState key =
-        get $ "/state?q=[" <> T.intercalate "," key <> "]"
-
-
-get :: (Serialise a) => Text -> TestClient (Result a)
-get reqPath = TestClient $ deserialiseResponse <$> request req
+makeWaiRequest :: Request -> Session Response
+makeWaiRequest Request{..} = liftWaiSession $ fromSresp <$> Wai.srequest sreq
   where
-    req = flip setPath (encodeUtf8 reqPath) $ defaultRequest
-        { requestMethod = methodGet
-        , rawPathInfo = encodeUtf8 reqPath
-        , requestHeaders = [(hAccept, "application/cbor")]
+    sreq = Wai.SRequest req requestBody
+    req = Wai.defaultRequest
+        { Wai.requestMethod = requestMethod
+        , Wai.requestHeaders = requestHeaders
         }
-
-post :: (Serialise a, Serialise b) => Text -> a -> TestClient (Result b)
-post reqPath reqBody = TestClient $ deserialiseResponse <$> srequest sreq
-  where
-    sreq = SRequest req (serialise reqBody)
-    req = flip setPath (encodeUtf8 reqPath) $ defaultRequest
-        { requestMethod = methodPost
-        , rawPathInfo = encodeUtf8 reqPath
-        , requestHeaders = [(hAccept, "application/cbor"), (hContentType, "application/cbor")]
-        }
-
-deserialiseResponse :: (Serialise a) => SResponse -> Result a
-deserialiseResponse response =
-    case deserialiseOrFail $ simpleBody response of
-        Left _    -> Err $ "Failed to deserialise response: " <> show (simpleBody response)
-        Right val -> val
+        & flip Wai.setPath (encodeUtf8 requestPath)
+    fromSresp Wai.SResponse {..} =
+        Response
+            { responseStatus = simpleStatus
+            , responseBody = simpleBody
+            }

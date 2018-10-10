@@ -7,7 +7,6 @@ import           Oscoin.Prelude
 import           Oscoin.Clock
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import           Oscoin.Consensus.Class (MonadUpdate)
-import           Oscoin.Consensus.Evaluator (identityEval)
 import           Oscoin.Consensus.Mining (mineBlock)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Types
@@ -76,7 +75,7 @@ instance HasTestNodeState NakamotoNodeState where
 
 instance TestableNode NakamotoNode NakamotoNodeState where
     testableTick tick = do
-        blk <- (map . map) void $ mineBlock nakConsensus identityEval tick
+        blk <- (map . map) void $ mineBlock nakConsensus dummyEval tick
         pure $ maybeToList (BlockMsg <$> blk)
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode

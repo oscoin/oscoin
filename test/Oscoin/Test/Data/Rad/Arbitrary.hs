@@ -5,7 +5,7 @@ module Oscoin.Test.Data.Rad.Arbitrary
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Evaluator.Radicle as Rad
+import           Oscoin.Data.RadicleTx as Rad
 
 import           Data.Either (fromRight)
 import           Data.Functor.Identity (Identity(..))

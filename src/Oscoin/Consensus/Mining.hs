@@ -6,12 +6,11 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
-import           Oscoin.Consensus.Evaluator
 import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Eval (buildBlock)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, buildBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Storage.Receipt.Class
