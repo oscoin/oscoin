@@ -17,5 +17,10 @@ extra-deps:
 - git: http://git.oscoin.io/radicle
   commit: 12707c83663909d303e4daf1806f22a779be7598
 
+# Due to version bounds
+# https://github.com/centromere/cacophony/pull/10
+- git: https://github.com/kim/cacophony
+  commit: 5afdce755eb4942167f1beed927e0890a481efe5
+
 ghc-options:
   "$locals": -fhide-source-paths

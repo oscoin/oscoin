@@ -41,6 +41,7 @@ import           Control.Monad.Fail (fail)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Hashable as H
 import           Data.Text.Prettyprint.Doc
 
 data PublicKey = PublicKey ECDSA.PublicKey (Crypto.Hashed ECDSA.PublicKey)
@@ -48,6 +49,9 @@ data PublicKey = PublicKey ECDSA.PublicKey (Crypto.Hashed ECDSA.PublicKey)
 
 mkPublicKey :: ECDSA.PublicKey -> PublicKey
 mkPublicKey pk = PublicKey pk (Crypto.hash pk)
+
+instance H.Hashable PublicKey where
+    hashWithSalt salt = H.hashWithSalt salt . Crypto.fromHashed . publicKeyHash
 
 instance Serialise PublicKey where
     encode (PublicKey pk _) = encode pk

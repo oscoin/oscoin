@@ -1,45 +1,90 @@
 module Oscoin.P2P.Handshake.Types
     ( Handshake
     , HandshakeRole (..)
+
+    , HandshakeT
+    , runHandshakeT
+    , withHandshakeT
+    , handshakeSend
+    , handshakeRecv
+    , modifyTransport
+
     , HandshakeResult (..)
-    , mapHandshakeResult
+    , mapInput
+    , mapOutput
     )
 where
 
 import           Oscoin.Prelude
 
-import           Oscoin.P2P.Connection (Socket')
+import           Codec.Serialise (Serialise)
+import           Control.Monad.State (modify')
+import qualified Oscoin.P2P.Transport as Transport
 
 data HandshakeRole = Acceptor | Connector
 
 type Handshake e n i o =
        HandshakeRole
-    -> Socket'
     -> Maybe n       -- ^ 'Just' if the peer id is known and must match 'hrPeerId'
-    -> IO (Either e (HandshakeResult n i o))
+    -> HandshakeT e IO (HandshakeResult i o n)
 
-data HandshakeResult n i o = HandshakeResult
-    { hrPeerId :: n
-    , hrSend   :: i -> IO o
-    , hrRecv   :: o -> IO i
+newtype HandshakeT e m a = HandshakeT
+    { fromHandshakeT :: ExceptT e (StateT Transport.Framed m) a
+    } deriving ( Functor
+               , Applicative
+               , Monad
+               , MonadIO
+               , MonadError e
+               )
+
+instance MonadTrans (HandshakeT e) where
+    lift = HandshakeT . lift . lift
+    {-# INLINE lift #-}
+
+runHandshakeT :: Monad m => Transport.Framed -> HandshakeT e m a -> m (Either e a)
+runHandshakeT t = flip evalStateT t . runExceptT . fromHandshakeT
+
+withHandshakeT :: Functor m => (e -> e') -> HandshakeT e m a -> HandshakeT e' m a
+withHandshakeT f = HandshakeT . withExceptT f . fromHandshakeT
+
+handshakeSend :: (Serialise a, MonadIO m) => a -> HandshakeT e m ()
+handshakeSend a = HandshakeT $ get >>= liftIO . flip Transport.framedSend a
+
+handshakeRecv
+    :: (Serialise a, MonadIO m)
+    => (Transport.RecvError -> e)
+    -> HandshakeT e m a
+handshakeRecv f = HandshakeT $
+    get >>= withExceptT f . ExceptT . liftIO . Transport.framedRecv
+
+modifyTransport
+    :: Monad m
+    => (Transport.Framed -> Transport.Framed)
+    -> HandshakeT e m ()
+modifyTransport f = HandshakeT $ modify' f
+
+data HandshakeResult i o n = HandshakeResult
+    { hrPeerId   :: n
+    , hrPreSend  :: i -> IO o
+    , hrPostRecv :: o -> IO i
+    } deriving Functor
+
+mapInput
+    :: (i' -> IO i )
+    -> (i  -> IO i')
+    -> HandshakeResult i  o n
+    -> HandshakeResult i' o n
+mapInput f g hr = hr
+    { hrPreSend  = f >=> hrPreSend hr
+    , hrPostRecv = hrPostRecv hr >=> g
     }
 
-mapHandshakeResult
-    :: (n  -> n')
-    -> (o  -> IO o')
+mapOutput
+    :: (o  -> IO o')
     -> (o' -> IO o )
-    -> HandshakeResult n  i o
-    -> HandshakeResult n' i o'
-mapHandshakeResult f h g = mapHandshakeResult' f (>=> h) (<=< g)
-
-mapHandshakeResult'
-    :: (n -> n')
-    -> ((i -> IO o) -> (i' -> IO o'))
-    -> ((o -> IO i) -> (o' -> IO i'))
-    -> HandshakeResult n  i  o
-    -> HandshakeResult n' i' o'
-mapHandshakeResult' f h g r = r
-    { hrPeerId = f (hrPeerId r)
-    , hrSend   = h (hrSend   r)
-    , hrRecv   = g (hrRecv   r)
+    -> HandshakeResult i o  n
+    -> HandshakeResult i o' n
+mapOutput f g hr = hr
+    { hrPreSend  = hrPreSend hr >=> f
+    , hrPostRecv = g >=> hrPostRecv hr
     }

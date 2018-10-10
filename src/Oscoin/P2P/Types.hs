@@ -1,6 +1,7 @@
 module Oscoin.P2P.Types
     ( NodeId
     , mkNodeId
+    , fromNodeId
 
     , NodeAddr(..)
 
@@ -11,43 +12,22 @@ module Oscoin.P2P.Types
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
-import           Oscoin.Crypto.Hash (Hashed, fromHashed)
-import           Oscoin.Crypto.PubKey (PublicKey, publicKeyHash)
+import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Crypto.PubKey (PublicKey)
 
 import           Codec.Serialise (Serialise)
-import qualified Codec.Serialise as CBOR
-import qualified Codec.Serialise.Decoding as CBOR
-import qualified Codec.Serialise.Encoding as CBOR
-import           Control.Monad.Fail (fail)
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, (.:))
-import qualified Data.ByteArray as ByteArray
 import           Data.Hashable (Hashable(..))
 import           Network.Socket (HostName, PortNumber)
 
-newtype NodeId = NodeId { fromNodeId :: Hashed ECDSA.PublicKey }
-    deriving (Eq, Ord, Show, FromJSON, ToJSON)
+newtype NodeId = NodeId { fromNodeId :: PublicKey }
+    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+
+instance Hashable  NodeId
+instance Serialise NodeId
 
 mkNodeId :: PublicKey -> NodeId
-mkNodeId = NodeId . publicKeyHash
-
-instance Hashable NodeId where
-    hashWithSalt salt (NodeId h) =
-        let digest = fromHashed h
-            bytes  = ByteArray.convert digest :: ByteString
-         in hashWithSalt salt bytes
-
-instance Serialise NodeId where
-    encode (NodeId pk) =
-           CBOR.encodeListLen 2
-        <> CBOR.encodeWord 0
-        <> CBOR.encodeBytes (ByteArray.convert pk)
-
-    decode = do
-        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
-        case pre of
-            (2, 0) -> NodeId <$> CBOR.decode
-            _      -> fail "CBOR NodeId: invalid tag"
+mkNodeId = NodeId
 
 data NodeAddr = NodeAddr
     { nodeId   :: NodeId

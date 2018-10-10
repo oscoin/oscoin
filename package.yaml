@@ -32,6 +32,7 @@ library:
     - base64-bytestring
     - binary
     - bytestring
+    - cacophony
     - cborg
     - clock
     - conduit
@@ -131,6 +132,7 @@ tests:
       - async
       - binary
       - bytestring
+      - cacophony
       - conduit
       - containers
       - cryptonite
@@ -158,6 +160,7 @@ tests:
       - scientific
       - serialise
       - splitmix
+      - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1
       - tasty-hedgehog

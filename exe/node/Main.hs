@@ -22,7 +22,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
-import qualified Oscoin.P2P.Handshake.Simple as Handshake
+import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 

@@ -20,9 +20,11 @@ module Oscoin.Crypto.Hash
 import           Oscoin.Prelude
 import qualified Prelude
 
+import           Codec.Serialise.Orphans ()
+import           Data.ByteArray.Orphans ()
+
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serial
-import           Codec.Serialise.Orphans ()
 import           Control.Monad.Fail (fail)
 import           Crypto.Hash (Blake2b_256(..), Digest)
 import qualified Crypto.Hash as Crypto
@@ -39,6 +41,7 @@ import           Data.ByteString.BaseN (encodeBase58)
 import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Hashable as H
 import           Data.Maybe (fromJust)
 import           Data.Tagged (Tagged(..))
 import qualified Data.Text as T
@@ -81,6 +84,10 @@ instance Crypto.HashAlgorithm a => Monoid (Hash' a) where
 
     mconcat []     = mempty
     mconcat (x:xs) = sconcat (x :| xs)
+
+instance H.Hashable (Hash' a) where
+    hashWithSalt salt (Hash d) =
+        H.hashWithSalt salt (ByteArray.convert d :: ByteString)
 
 instance Multihashable a => ToJSON (Hash' a) where
     toJSON     = toJSON . multiB58

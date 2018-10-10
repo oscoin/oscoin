@@ -22,4 +22,29 @@
           - lazyTopo
           - renderTopo
           # END debug functions
+      - module:
+        - name: Oscoin.Test.P2P.Gossip.IO
+        - identifier:
+          # BEGIN debug functions
+          - props
+          # END debug functions
+      - module:
+        - name: Oscoin.Test.P2P.Handshake
+        - identifier:
+          # BEGIN debug functions
+          - props
+          # END debug functions
+      - module:
+        - name: Oscoin.Test.P2P.Helpers
+        - identifier:
+          # BEGIN debug functions
+          - accept
+          - connect
+          # END debug functions
+      - module:
+        - name: Oscoin.Test.P2P.Transport
+        - identifier:
+          # BEGIN debug functions
+          - props
+          # END debug functions
 

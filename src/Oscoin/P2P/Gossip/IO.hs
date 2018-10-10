@@ -27,8 +27,9 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.P2P.Connection (Active, Connection(..), activeNew)
 import qualified Oscoin.P2P.Connection as Conn
 import           Oscoin.P2P.Gossip.Wire (WireMessage(..))
-import           Oscoin.P2P.Handshake (Handshake)
+import           Oscoin.P2P.Handshake (Handshake, runHandshakeT)
 import qualified Oscoin.P2P.Handshake as Handshake
+import qualified Oscoin.P2P.Transport as Transport
 import           Oscoin.P2P.Types (NodeId)
 
 import           Codec.Serialise (Serialise(..))
@@ -185,10 +186,8 @@ listen host port = do
                 (sock', addr) <- Sock.accept sock
                 forkUltimately_ (Sock.close sock') $ do
                     conn <-
-                        hHandshake
-                            Handshake.Acceptor
-                            (Conn.mkSocket' sock')
-                            Nothing
+                        runHandshakeT (Transport.framed sock') $
+                            hHandshake Handshake.Acceptor Nothing
 
                     case conn of
                         Left  e -> Log.logException hLogger e
@@ -198,8 +197,8 @@ listen host port = do
                                     (Handshake.hrPeerId c)
                                     sock'
                                     addr
-                                    (Handshake.hrSend c)
-                                    (Handshake.hrRecv c)
+                                    (Handshake.hrPreSend  c)
+                                    (Handshake.hrPostRecv c)
                             run $ recvAll conn'
 
 send :: HasHandle r e p p'
@@ -231,10 +230,8 @@ connect Peer{peerNodeId, peerAddr} = do
             conn <-
                 flip onException (Sock.close sock) . withExceptionLogged hLogger $ do
                     Sock.connect sock peerAddr
-                    hHandshake
-                        Handshake.Connector
-                        (Conn.mkSocket' sock)
-                        (Just peerNodeId)
+                    runHandshakeT (Transport.framed sock) $
+                        hHandshake Handshake.Connector (Just peerNodeId)
             case conn of
                 Left  e -> throwM e
                 Right c -> do
@@ -243,8 +240,8 @@ connect Peer{peerNodeId, peerAddr} = do
                             (Handshake.hrPeerId c)
                             sock
                             peerAddr
-                            (Handshake.hrSend c)
-                            (Handshake.hrRecv c)
+                            (Handshake.hrPreSend  c)
+                            (Handshake.hrPostRecv c)
 
                     forkUltimately_ (connClose conn') . run $
                         recvAll conn'

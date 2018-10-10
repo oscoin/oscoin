@@ -1,22 +1,16 @@
-module Oscoin.Test.P2P.Gossip.IO
-    ( tests
-    ) where
+module Oscoin.Test.P2P.Gossip.IO (tests, props) where
 
-import           Oscoin.Prelude hiding (bracket, try)
+import           Oscoin.Prelude
 
-import           Oscoin.P2P.Connection (RecvError(..))
-import qualified Oscoin.P2P.Connection as Conn
+import qualified Oscoin.P2P.Transport as Transport
+
+import           Oscoin.Test.P2P.Helpers
 
 import           Codec.Serialise (Serialise)
 import           Control.Applicative (liftA3)
 import           Control.Concurrent.Async (concurrently)
-import           Control.Exception.Safe (bracket, catchIO, throwM, try)
-import           Data.Conduit (runConduit, (.|))
-import           Data.Conduit.Combinators (sinkList)
 import           Data.List.NonEmpty (nonEmpty)
-import           Data.Streaming.Network
-import           Network.Socket (SockAddr, Socket)
-import qualified Network.Socket as Sock
+import           Network.Socket (Socket)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -27,52 +21,44 @@ import           Test.Tasty.Hedgehog
 tests :: TestTree
 tests = testGroup "IO"
     [ testGroup "Wire"
-        [ testProperty "Works: Streaming Server <-> Streaming Client" . property $
-            propNetworkStreamingHappy =<< forAll nonEmptyFrobs
-
-        , testProperty "Works: Framed Server <-> Framed Client" . property $
-            propNetworkFramedHappy =<< forAll nonEmptyFrobs
-
-        , testProperty "Fails: Streaming Server <-> Framed Client" . property $
-            propNetworkStreamingServerFramedClient =<< forAll nonEmptyFrobs
-
-        , testProperty "Fails: Framed Server <-> Streaming Client" . property $
-            propNetworkFramedServerStreamingClient =<< forAll nonEmptyFrobs
+        [ testProperty "Works: Streaming Server <-> Streaming Client"
+                        propStreamingHappy
+        , testProperty "Works: Framed Server <-> Framed Client"
+                        propFramedHappy
+        , testProperty "Fails: Streaming Server <-> Framed Client"
+                        propStreamingServerFramedClient
+        , testProperty "Fails: Framed Server <-> Streaming Client"
+                        propFramedServerStreamingClient
         ]
     ]
-  where
-    nonEmptyFrobs = Gen.nonEmpty (Range.linear 0 100) genFrob
 
-propNetworkStreamingHappy
-    :: (Serialise a, Eq a, Show a)
-    => NonEmpty a
-    -> PropertyT IO ()
-propNetworkStreamingHappy xs =
-    propCompatible xs streamingServer streamingClient
+-- | For GHCi use.
+props :: IO Bool
+props = checkParallel $ Group "P2P.IO"
+    [ ("prop_streaming_happy",  propStreamingHappy)
+    , ("prop_framed_happy",     propFramedHappy)
+    , ("prop_streaming_framed", propStreamingServerFramedClient)
+    , ("prop_framed_streaming", propFramedServerStreamingClient)
+    ]
 
-propNetworkFramedHappy
-    :: (Serialise a, Eq a, Show a)
-    => NonEmpty a
-    -> PropertyT IO ()
-propNetworkFramedHappy xs =
-    propCompatible xs framedServer framedClient
+propStreamingHappy :: Property
+propStreamingHappy = property $
+    forAll nonEmptyFrobs >>= compatible streamingServer streamingClient
 
-propNetworkFramedServerStreamingClient
-    :: (Serialise a, Show a)
-    => NonEmpty a
-    -> PropertyT IO ()
-propNetworkFramedServerStreamingClient xs =
-    propIncompatible xs server client
+propFramedHappy :: Property
+propFramedHappy = property $
+    forAll nonEmptyFrobs >>= compatible framedServer framedClient
+
+propFramedServerStreamingClient :: Property
+propFramedServerStreamingClient = property $
+    forAll nonEmptyFrobs >>= incompatible server client
   where
     server s    = try $ framedServer s
     client p ys = streamingClient p ys `catchIO` const (pure ()) -- Ignore server disconnecting
 
-propNetworkStreamingServerFramedClient
-    :: (Serialise a, Show a)
-    => NonEmpty a
-    -> PropertyT IO ()
-propNetworkStreamingServerFramedClient xs =
-    propIncompatible xs server client
+propStreamingServerFramedClient :: Property
+propStreamingServerFramedClient = property $
+    forAll nonEmptyFrobs >>= incompatible server client
   where
     server s    = try $ streamingServer s
     client p ys = framedClient p ys `catchIO` const (pure ()) -- Ignore server disconnecting
@@ -80,26 +66,26 @@ propNetworkStreamingServerFramedClient xs =
 type Server a = Socket -> IO a
 type Client a = Int -> NonEmpty a -> IO ()
 
-propCompatible
+compatible
     :: (Eq a, Show a)
-    => NonEmpty  a
-    -> Server   [a]
+    => Server   [a]
     -> Client    a
+    -> NonEmpty  a
     -> PropertyT IO ()
-propCompatible xs server client = do
+compatible server client xs = do
     xs' <-
         map fst . evalIO . bind $ \(port, sock) ->
             concurrently (server sock) (client port xs)
 
     Just xs === nonEmpty xs'
 
-propIncompatible
+incompatible
     :: Show a
-    => NonEmpty a
-    -> Server (Either RecvError [a])
+    => Server (Either Transport.RecvError [a])
     -> Client   a
+    -> NonEmpty a
     -> PropertyT IO ()
-propIncompatible xs server client = do
+incompatible server client xs = do
     xs' <-
         map fst . evalIO . bind $ \(port, sock) ->
             concurrently (server sock) (client port xs)
@@ -107,8 +93,8 @@ propIncompatible xs server client = do
     annotateShow xs'
     assert $ isGarbage xs'
   where
-    isGarbage (Left RecvGarbage{}) = True
-    isGarbage _                    = False
+    isGarbage (Left Transport.RecvGarbage{}) = True
+    isGarbage _                              = False
 
 --------------------------------------------------------------------------------
 
@@ -120,45 +106,12 @@ data Frob = Frob
 
 instance Serialise Frob
 
-genFrob :: MonadGen m => m Frob
+genFrob :: GenT Identity Frob
 genFrob = liftA3 Frob foo boo loo
   where
     foo = Gen.prune $ Gen.word Range.constantBounded
     boo = Gen.prune $ Gen.text (Range.linear 0 255) Gen.unicode
     loo = Gen.prune $ Gen.unicode
 
---------------------------------------------------------------------------------
-
-streamingServer :: Serialise a => Socket -> IO [a]
-streamingServer sock =
-    accept sock $ \(sock',_) ->
-        runConduit $ Conn.sockRecvStream sock' .| sinkList
-
-streamingClient :: (Foldable t, Serialise a) => Int -> t a -> IO ()
-streamingClient port msgs =
-    connect port $ \(sock,_) ->
-        traverse_ (Conn.sockSendStream sock) msgs
-
-framedServer :: Serialise a => Socket -> IO [a]
-framedServer sock = accept sock $ map reverse . loop [] . fst
-  where
-    loop acc sock' = do
-        recv'd <- Conn.sockRecvFramed sock'
-        case recv'd of
-            Left  RecvConnReset -> pure acc
-            Left  e             -> throwM e
-            Right frame         -> loop (frame : acc) sock'
-
-framedClient :: (Foldable t, Serialise a) => Int -> t a -> IO ()
-framedClient port msgs =
-    connect port $ \(sock,_) ->
-        traverse_ (Conn.sockSendFramed sock) msgs
-
-bind :: ((Int, Sock.Socket) -> IO a) -> IO a
-bind = bracket (bindRandomPortTCP "127.0.0.1") (Sock.close . snd)
-
-accept :: Socket -> ((Socket, SockAddr) -> IO a) -> IO a
-accept sock = bracket (acceptSafe sock) (Sock.close . fst)
-
-connect :: Int -> ((Socket, SockAddr) -> IO a) -> IO a
-connect port = bracket (getSocketTCP "127.0.0.1" port) (Sock.close . fst)
+nonEmptyFrobs :: GenT Identity (NonEmpty Frob)
+nonEmptyFrobs = Gen.nonEmpty (Range.linear 0 100) genFrob
