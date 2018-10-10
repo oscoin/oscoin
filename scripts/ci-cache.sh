@@ -7,7 +7,7 @@ function load-cache() {
   key="stack-work-$(sha256sum < stack.yaml | cut -d ' ' -f 1)".tar.gz
   gsutil -m cp -r "$bucket/v2/*" "$bucket/$key" . || true
   for f in stack.tar.gz "$key"; do
-    if [[ -e "$f" ]]; then
+    if [[ -e $f ]]; then
       tar xzf "$f"
     fi
   done
