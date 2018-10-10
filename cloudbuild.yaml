@@ -53,11 +53,11 @@ steps:
       set -euo pipefail
 
       bins=(
-        oscoin
-        oscoin-cli
+        /workspace/bin/oscoin
+        /workspace/bin/oscoin-cli
       )
 
-      echo "${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
+      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
