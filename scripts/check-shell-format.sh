@@ -1,6 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
+
+shopt -s globstar
 
 if ! which shfmt > /dev/null; then
   curl -s -L -o /usr/bin/shfmt "https://github.com/mvdan/sh/releases/download/v2.5.1/shfmt_v2.5.1_linux_amd64"
@@ -14,4 +16,4 @@ fi
 # -sr   redirect operators will be followed by a space
 # -d    display diffs and exit with non-zero status code
 #       when formatting differs
-shfmt -s -i 2 -bn -ci -sr -d scripts/
+echo **/**.sh | xargs -n1 -P8 shfmt -s -i 2 -bn -ci -sr -d
