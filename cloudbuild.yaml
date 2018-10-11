@@ -1,54 +1,69 @@
 timeout: 1800s # Cache misses are slow to rebuild
 steps:
+  - id: "Format (shell scripts)"
+    waitFor: ["-"]
+    name: gcr.io/cloud-builders/curl
+    entrypoint: "bash"
+    args: ["./scripts/check-shell-format.sh"]
+
+  - id: "Lint (shellcheck)"
+    waitFor: ["-"]
+    name: gcr.io/cloud-builders/docker
+    entrypoint: "bash"
+    args: ["./scripts/shellcheck.sh"]
+
   - id: "Load cache"
     name: gcr.io/cloud-builders/gsutil
-    entrypoint: 'bash'
+    entrypoint: "bash"
     args:
-    - '-c'
+    - "-c"
     - |
-      source scripts/ci.sh
+      source scripts/ci-cache.sh
       load-cache
 
   - id: "Build deps"
-    name: 'haskell:8.4.3'
-    env: ['STACK_ROOT=/workspace/.stack']
-    entrypoint: 'bash'
+    name: "haskell:8.4.3"
+    env: ["STACK_ROOT=/workspace/.stack"]
+    entrypoint: "bash"
     args:
-    - '-c'
+    - "-c"
     - |
       stack config set system-ghc --global true
       stack config set install-ghc --global false
       stack install stylish-haskell hlint weeder
 
-  - id: "Format"
-    name: 'haskell:8.4.3'
-    env: ['STACK_ROOT=/workspace/.stack']
-    args: ['./scripts/check-fmt.sh']
+  - id: "Format (haskell)"
+    waitFor: ["Build deps"]
+    name: "haskell:8.4.3"
+    env: ["STACK_ROOT=/workspace/.stack"]
+    args: ["./scripts/check-haskell-format.sh"]
 
   - id: "Lint (hlint)"
-    name: 'haskell:8.4.3'
-    env: ['STACK_ROOT=/workspace/.stack']
-    args: ['stack', 'exec', '--', 'hlint', '.']
+    waitFor: ["Build deps"]
+    name: "haskell:8.4.3"
+    env: ["STACK_ROOT=/workspace/.stack"]
+    args: ["stack", "exec", "--", "hlint", "."]
 
   - id: "Test & Build"
-    name: 'haskell:8.4.3'
-    env: ['STACK_ROOT=/workspace/.stack']
-    args: ['stack', 'build', '--test', '--no-terminal', '--pedantic', '--copy-bins', '--local-bin-path=/workspace/bin']
+    waitFor: ["Build deps"]
+    name: "haskell:8.4.3"
+    env: ["STACK_ROOT=/workspace/.stack"]
+    args: ["stack", "build", "--test", "--no-terminal", "--pedantic", "--copy-bins", "--local-bin-path=/workspace/bin"]
 
   - id: "Lint (weeder)"
-    name: 'haskell:8.4.3'
-    env: ['STACK_ROOT=/workspace/.stack']
-    args: ['stack', 'exec', '--', 'weeder', '.']
+    name: "haskell:8.4.3"
+    env: ["STACK_ROOT=/workspace/.stack"]
+    args: ["stack", "exec", "--", "weeder", "."]
 
   - id: "Publish images"
     name: gcr.io/cloud-builders/docker
-    entrypoint: 'bash'
+    entrypoint: "bash"
     env:
     - PROJECT_ID=$PROJECT_ID
     - COMMIT_SHA=$COMMIT_SHA
     - BRANCH_NAME=$BRANCH_NAME
     args:
-    - '-c'
+    - "-c"
     - |
       set -euo pipefail
 
@@ -61,10 +76,10 @@ steps:
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
-    entrypoint: 'bash'
+    entrypoint: "bash"
     args:
-    - '-c'
+    - "-c"
     - |
-      source scripts/ci.sh
+      source scripts/ci-cache.sh
       save-cache
 
