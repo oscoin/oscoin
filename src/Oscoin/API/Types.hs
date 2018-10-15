@@ -11,12 +11,13 @@ module Oscoin.API.Types
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 import           Oscoin.Data.Query (Query(..))
 import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Prelude
 import           Oscoin.State.Tree (Key)
-import qualified Radicle as Rad
+import qualified Radicle.Extended as Rad
 
 import qualified Codec.Serialise as Serial
 import           Data.Aeson
@@ -29,6 +30,7 @@ import           Data.Aeson
                  , (.:)
                  , (.=)
                  )
+import           Lens.Micro
 import           Numeric.Natural
 
 -- | The type of a block transaction in the API.
@@ -60,6 +62,10 @@ data TxLookupResponse = TxLookupResponse
     -- ^ Hash of the transaction.
     , txBlockHash     :: Maybe BlockHash
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
+    , txOutput        :: Maybe (Either EvalError Rad.Value)
+    -- ^ Output of the transaction if it was evaluated. If the
+    -- evaluation was successful the transaction is included in the
+    -- block 'txBlockHash'.
     , txConfirmations :: Natural
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
@@ -68,8 +74,24 @@ data TxLookupResponse = TxLookupResponse
     -- ^ The transaction itself.
     } deriving (Show, Eq, Generic)
 
-instance ToJSON TxLookupResponse
-instance FromJSON TxLookupResponse
+instance ToJSON TxLookupResponse where
+    toJSON TxLookupResponse{..} = object
+        [ "txHash" .= toJSON txHash
+        , "txBlockHash" .= toJSON txBlockHash
+        , "txOutput" .= toJSON (map (second Rad.prettyValue) $ txOutput)
+        , "txConfirmations" .= toJSON txConfirmations
+        , "txPayload" .= toJSON txPayload
+        ]
+instance FromJSON TxLookupResponse where
+    parseJSON = withObject "TxLookupResponse" $ \o -> do
+        txHash <- o .: "txHash"
+        txBlockHash <- o .: "txBlockHash"
+        txOutput <- o .: "txOutput" >>= traverseOf (_Just . _Right) Rad.parseFromJson
+        txConfirmations <- o .: "txConfirmations"
+        txPayload <- o .: "txPayload"
+        pure $ TxLookupResponse {..}
+
+
 instance Serial.Serialise TxLookupResponse
 
 -- | A transaction receipt. Contains the hashed transaction.

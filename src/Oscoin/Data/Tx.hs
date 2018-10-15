@@ -8,7 +8,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 
 import           Codec.Serialise
-import           Control.Monad.Fail
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import           Data.Text.Prettyprint.Doc
@@ -39,24 +38,13 @@ instance ToJSON (Tx Rad.Value) where
 
 instance FromJSON (Tx Rad.Value) where
     parseJSON = withObject "Tx" $ \o -> do
-        signedMsg :: Signed Text <- o .: "msg"
-
-        txMessage :: Signed Rad.Value <- case parseSigned signedMsg of
-            Left err  -> fail $ "error parsing Value: " <> toS err
-            Right val -> pure val
-
+        signedJson <- o .: "msg"
+        txMessage <- for signedJson Rad.parseFromJson
         txPubKey  <- o .: "pubkey"
         txChainId <- o .: "chainId"
         txNonce   <- o .: "nonce"
         txContext <- o .: "ctx"
         pure Tx{..}
-      where
-        -- Nb. We are currently working with the default `Radicle.Value` type, which is
-        -- tagged (annotated) - but we are not using the tags, since they yield different
-        -- values and thus different encodings/hashes. Therefore, we untag everything
-        -- and re-tag to ensure no tags are preserved from the source, while still returning
-        -- a tagged value.
-        parseSigned = traverse (map (Rad.tagDefault . Rad.untag) . Rad.parse "FromJSON")
 
 instance Pretty msg => Pretty (Tx msg) where
     pretty Tx{txMessage} = pretty txMessage
