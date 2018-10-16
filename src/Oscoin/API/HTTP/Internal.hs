@@ -1,4 +1,32 @@
-module Oscoin.API.HTTP.Internal where
+module Oscoin.API.HTTP.Internal
+    ( ApiAction
+    , Api
+    , MonadApi
+    , runApi
+    , withHandle
+
+    , MediaType(..)
+    , decode
+    , encode
+    , parseMediaType
+    , fromMediaType
+
+    , trailingSlashPolicy
+    , indexPolicy
+    , mkMiddleware
+    , loggingMiddleware
+
+    , errBody
+    , respond
+    , respondBytes
+    , noBody
+    , body
+
+    , param
+    , param'
+    , decodeListParam
+    , getBody
+    ) where
 
 import           Oscoin.Prelude hiding (State, state)
 
@@ -99,9 +127,6 @@ negotiateContentType = do
         Nothing -> respond HTTP.notAcceptable406 noBody
         Just ct -> pure ct
 
-getState :: ApiAction s i State
-getState = Spock.getState
-
 param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
@@ -162,9 +187,6 @@ getBody = do
     case decode ct body' of
         Left  _ -> respond HTTP.badRequest400 $ body $ Err @() "Failed to decode body"
         Right a -> pure a
-
-notImplemented :: ApiAction s i ()
-notImplemented = respond HTTP.notImplemented501 noBody
 
 runApi :: Api s i ()
     -> Int
