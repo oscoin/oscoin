@@ -5,8 +5,6 @@ module Oscoin.Tests
 import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
-import           Oscoin.Consensus.BlockStore (BlockStore(..))
-import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHeader(..), blockHash, blockHeader)
@@ -15,6 +13,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
+import           Oscoin.Storage.Block (BlockStore(..))
+import qualified Oscoin.Storage.Block as BlockStore
 
 import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.API.HTTP as HTTP
@@ -23,11 +23,11 @@ import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
                  (arbitraryValidBlockchain)
-import           Oscoin.Test.Crypto.BlockStore.Arbitrary ()
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.P2P as P2P
+import           Oscoin.Test.Storage.Block.Arbitrary ()
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty

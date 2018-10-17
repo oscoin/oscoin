@@ -36,7 +36,6 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.Trivial (trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis, height)
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
@@ -51,6 +50,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Block.STM as BlockStore
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId)

@@ -15,11 +15,11 @@ module Oscoin.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHash, BlockHeader(..))
+import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Time
 
 

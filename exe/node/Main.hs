@@ -5,7 +5,6 @@ import           Oscoin.Prelude hiding (option)
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
-import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain (Difficulty, fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block)
@@ -25,6 +24,7 @@ import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Block.STM as BlockStore
 
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml

@@ -4,10 +4,10 @@ module Oscoin.Test.Consensus.Simple
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Storage.Receipt
 import           Oscoin.Time
 

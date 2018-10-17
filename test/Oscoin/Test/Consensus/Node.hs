@@ -14,8 +14,6 @@ module Oscoin.Test.Consensus.Node
 
 import           Oscoin.Prelude hiding (StateT, runStateT, show)
 
-import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore(..))
 import           Oscoin.Consensus.Class (MonadQuery(..))
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -23,6 +21,8 @@ import           Oscoin.Crypto.Hash (Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
+import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import           Oscoin.Time

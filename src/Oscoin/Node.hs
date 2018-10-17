@@ -20,9 +20,6 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Consensus(..))
 import qualified Oscoin.Consensus as Consensus
-import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class
-                 (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
 import           Oscoin.Crypto.Blockchain (Blockchain)
@@ -41,6 +38,12 @@ import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
+
+
+import           Oscoin.Storage.Block.Class
+                 (MonadBlockStore(..), chainState, maximumChainBy)
+import qualified Oscoin.Storage.Block.STM as BlockStore
+import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 
 import qualified Radicle.Extended as Rad

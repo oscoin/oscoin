@@ -5,10 +5,10 @@ module Oscoin.Consensus.Mining
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Storage.Block.Class (MonadBlockStore)
+import qualified Oscoin.Storage.Block.Class as BlockStore
 
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, buildBlock)

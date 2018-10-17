@@ -1,4 +1,4 @@
-module Oscoin.Consensus.BlockStore.Class where
+module Oscoin.Storage.Block.Class where
 
 import           Oscoin.Prelude
 

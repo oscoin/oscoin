@@ -15,8 +15,8 @@ module Oscoin.Storage
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
+import           Oscoin.Storage.Block.Class (MonadBlockStore)
+import qualified Oscoin.Storage.Block.Class as BlockStore
 
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, toOrphan)

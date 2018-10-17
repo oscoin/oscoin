@@ -19,14 +19,14 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class
 import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
                  (BlockHeader(..), blockData, blockHash)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
+import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Storage.Block.Class
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Class

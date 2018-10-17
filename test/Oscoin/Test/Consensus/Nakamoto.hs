@@ -5,13 +5,13 @@ module Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Prelude
 
 import           Oscoin.Clock
-import           Oscoin.Consensus.BlockStore.Class (MonadBlockStore)
 import           Oscoin.Consensus.Class (MonadUpdate)
 import           Oscoin.Consensus.Mining (mineBlock)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.Storage.Block.Class (MonadBlockStore)
 import           Oscoin.Storage.Receipt
 
 import           Oscoin.Test.Consensus.Class

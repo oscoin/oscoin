@@ -11,8 +11,6 @@ import           Oscoin.Test.Consensus.Node (DummyTx)
 import           Oscoin.Test.Consensus.Simple
 import           Oscoin.Time
 
-import           Oscoin.Consensus.BlockStore
-                 (genesisBlockStore, insert, maximumChainBy, orphans)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip)
@@ -25,6 +23,8 @@ import           Oscoin.Crypto.Blockchain.Block
                  , emptyHeader
                  , mkBlock
                  )
+import           Oscoin.Storage.Block
+                 (genesisBlockStore, insert, maximumChainBy, orphans)
 
 import           Data.Function (on)
 import           Data.List (foldr1, isPrefixOf, sort, unlines)

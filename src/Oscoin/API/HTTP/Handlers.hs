@@ -4,7 +4,6 @@ import           Oscoin.Prelude
 
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
-import qualified Oscoin.Consensus.BlockStore.Class as BlockStore
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
@@ -14,6 +13,7 @@ import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.State.Tree (Key)
+import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
 
 import           Codec.Serialise (Serialise, serialise)
