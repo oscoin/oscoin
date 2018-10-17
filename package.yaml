@@ -13,6 +13,12 @@ dependencies:
 data-files:
   - node/rad/prelude.rad
 
+flags:
+    static:
+        description: Statically link executables
+        manual: true
+        default: false
+
 library:
   source-dirs: src
   dependencies:
@@ -79,7 +85,7 @@ executables:
   oscoin:
     main: node/Main.hs
     when:
-    - condition: "!os(darwin)"
+    - condition: "flag(static)"
       ld-options: -static
     dependencies:
       - async
@@ -95,7 +101,7 @@ executables:
   oscoin-cli:
     main: cli/Main.hs
     when:
-    - condition: "!os(darwin)"
+    - condition: "flag(static)"
       ld-options: -static
     dependencies:
       - oscoin
@@ -103,7 +109,7 @@ executables:
   git-remote-oss:
     main: git-remote-helper/Main.hs
     when:
-    - condition: "!os(darwin)"
+    - condition: "flag(static)"
       ld-options: -static
     dependencies:
       - oscoin
