@@ -48,7 +48,7 @@ steps:
     waitFor: ["Build deps"]
     name: "haskell:8.4.3"
     env: ["STACK_ROOT=/workspace/.stack"]
-    args: ["stack", "build", "--test", "--no-terminal", "--pedantic", "--copy-bins", "--local-bin-path=/workspace/bin"]
+    args: ["stack", "build", "--test", "--flag=oscoin:static", "--no-terminal", "--pedantic", "--copy-bins", "--local-bin-path=/workspace/bin"]
 
   - id: "Lint (weeder)"
     name: "haskell:8.4.3"
