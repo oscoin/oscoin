@@ -25,6 +25,7 @@ steps:
     name: "haskell:8.4.3"
     env: ["STACK_ROOT=/workspace/.stack"]
     entrypoint: "bash"
+    dir: "/tmp"
     args:
     - "-c"
     - |
