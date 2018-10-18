@@ -24,7 +24,7 @@ module Oscoin.API.HTTP.Internal
 
     , param
     , param'
-    , decodeListParam
+    , listParam
     , getBody
     ) where
 
@@ -134,10 +134,14 @@ param' = Spock.param'
 param :: (FromHttpApiData p) => Text -> ApiAction i (Maybe p)
 param = Spock.param
 
-decodeListParam :: FromHttpApiData p => Text -> Either Text [p]
-decodeListParam =
-    traverse parseQueryParam . split . inner
+listParam :: (FromHttpApiData p) => Text -> ApiAction i [p]
+listParam key = do
+    p <- param' key
+    case decodeList p of
+        Left err    -> respond HTTP.badRequest400 (errBody err)
+        Right value -> pure value
   where
+    decodeList = traverse parseQueryParam . split . inner
     inner = T.dropWhile (== '[') . T.dropWhileEnd (== ']')
     split = T.splitOn ","
 

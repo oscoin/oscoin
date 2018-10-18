@@ -82,17 +82,13 @@ getBlock h = do
 
 getStatePath :: Key -> ApiAction i ()
 getStatePath _chain = do
-    result <- decodeListParam <$> param' "q"
-    case result of
-        Left err ->
-            respond badRequest400 (errBody err)
-        Right path -> do
-            result' <- node $ Node.getPath path
-            case result' of
-                Just val ->
-                    respondBytes ok200 CBOR (serialise $ Ok val)
-                Nothing ->
-                    respond notFound404 $ errBody "Value not found"
+    path <- listParam "q"
+    result' <- node $ Node.getPath path
+    case result' of
+        Just val ->
+            respondBytes ok200 CBOR (serialise $ Ok val)
+        Nothing ->
+            respond notFound404 $ errBody "Value not found"
 
 -- | Runs a NodeT action in a MonadApi monad.
 node :: MonadApi i m => Node.NodeT RadTx RadicleTx.Env i IO a -> m a
