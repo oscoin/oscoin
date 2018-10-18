@@ -31,6 +31,7 @@ module Oscoin.API.HTTP.Internal
 import           Oscoin.Prelude hiding (State, state)
 
 import           Oscoin.API.Types
+import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 
@@ -68,29 +69,29 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction s i = SpockAction (Node.Handle RadTx s i) () State
+type ApiAction i = SpockAction (Node.Handle RadTx RadicleTx.Env i) () State
 
 -- | The type of our api.
-type Api s i = SpockM (Node.Handle RadTx s i) () State
+type Api i = SpockM (Node.Handle RadTx RadicleTx.Env i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx s i)
+type MonadApi i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx RadicleTx.Env i)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State ()
 
-getHeader :: HeaderName -> ApiAction s i (Maybe BS.ByteString)
+getHeader :: HeaderName -> ApiAction i (Maybe BS.ByteString)
 getHeader = Spock.rawHeader
 
-getHeader' :: HeaderName -> ApiAction s i BS.ByteString
+getHeader' :: HeaderName -> ApiAction i BS.ByteString
 getHeader' name = do
     header <- getHeader name
     case header of
         Just v  -> pure v
         Nothing -> respond HTTP.badRequest400 noBody
 
-getRawBody :: ApiAction s i LBS.ByteString
+getRawBody :: ApiAction i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
 -- | A sum type of supported media types.
@@ -111,7 +112,7 @@ supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
 supportedMediaTypes = NonEmpty.fromList $ [(fromMediaType ct, ct) | ct <- [JSON, CBOR]]
 
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
-getAccepted :: ApiAction s i [Quality HTTP.MediaType]
+getAccepted :: ApiAction i [Quality HTTP.MediaType]
 getAccepted = do
     accept <- maybe "*/*" identity <$> getHeader "Accept"
     case parseQuality accept of
@@ -119,7 +120,7 @@ getAccepted = do
        Just accepted -> pure accepted
 
 -- | Negotiates the best response content type from the request's accept header.
-negotiateContentType :: ApiAction s i MediaType
+negotiateContentType :: ApiAction i MediaType
 negotiateContentType = do
     accepted <- getAccepted
     let supported = NonEmpty.toList supportedMediaTypes
@@ -127,10 +128,10 @@ negotiateContentType = do
         Nothing -> respond HTTP.notAcceptable406 noBody
         Just ct -> pure ct
 
-param' :: (FromHttpApiData p) => Text -> ApiAction s i p
+param' :: (FromHttpApiData p) => Text -> ApiAction i p
 param' = Spock.param'
 
-param :: (FromHttpApiData p) => Text -> ApiAction s i (Maybe p)
+param :: (FromHttpApiData p) => Text -> ApiAction i (Maybe p)
 param = Spock.param
 
 decodeListParam :: FromHttpApiData p => Text -> Either Text [p]
@@ -161,7 +162,7 @@ decode :: (Serialise a, FromJSON a) => MediaType -> LBS.ByteString -> Either Tex
 decode JSON bs = first T.pack          (Aeson.eitherDecode' bs)
 decode CBOR bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
 
-respond :: (ToJSON a, Serialise a) => HTTP.Status -> Maybe a -> ApiAction s i b
+respond :: (ToJSON a, Serialise a) => HTTP.Status -> Maybe a -> ApiAction i b
 respond status (Just bdy) = do
     ct <- negotiateContentType
     respondBytes status ct (encode ct bdy)
@@ -169,18 +170,18 @@ respond status Nothing = do
     Spock.setStatus status
     Spock.lazyBytes ""
 
-respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction s i b
+respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction i b
 respondBytes status ct bdy = do
     Spock.setStatus status
     Spock.setHeader "Content-Type" $ T.pack $ show $ fromMediaType ct
     Spock.lazyBytes bdy
 
-getSupportedContentType :: ApiAction s i MediaType
+getSupportedContentType :: ApiAction i MediaType
 getSupportedContentType = (parseMediaType <$> getHeader' "Content-Type") >>= \case
     Left _   -> respond HTTP.unsupportedMediaType415 noBody
     Right mt -> pure mt
 
-getBody :: (Serialise a, FromJSON a) => ApiAction s i a
+getBody :: (Serialise a, FromJSON a) => ApiAction i a
 getBody = do
     ct <- getSupportedContentType
     !body' <- getRawBody
@@ -188,16 +189,16 @@ getBody = do
         Left  _ -> respond HTTP.badRequest400 $ body $ Err @() "Failed to decode body"
         Right a -> pure a
 
-runApi :: Api s i ()
+runApi :: Api i ()
     -> Int
-    -> Node.Handle RadTx s i
+    -> Node.Handle RadTx RadicleTx.Env i
     -> IO ()
 runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
-    :: Api s i ()
-    -> Node.Handle RadTx s i
+    :: Api i ()
+    -> Node.Handle RadTx RadicleTx.Env i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state
