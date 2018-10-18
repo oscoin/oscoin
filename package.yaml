@@ -41,6 +41,7 @@ library:
     - data-default
     - deepseq
     - directory
+    - direct-sqlite
     - dlist
     - fast-logger
     - filepath
@@ -68,6 +69,7 @@ library:
     - semigroups
     - serialise
     - splitmix
+    - sqlite-simple
     - stm >=2.4.5.0
     - stm-containers
     - tagged

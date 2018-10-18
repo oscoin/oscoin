@@ -20,6 +20,8 @@ import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (FromJSON, ToJSON)
+import           Database.SQLite.Simple.FromField (FromField)
+import           Database.SQLite.Simple.ToField (ToField)
 import qualified Formatting as Fmt
 import           System.Clock (Clock(Realtime), getTime, toNanoSecs)
 import           System.Random (Random)
@@ -33,6 +35,9 @@ type Duration = Int64
 newtype Timestamp = Timestamp Int64 deriving
     (Show, Read, Eq, Ord, Random, Bounded, Generic,
         ToJSON, FromJSON, Serialise, Fmt.Buildable)
+
+deriving instance ToField Timestamp
+deriving instance FromField Timestamp
 
 -- | UNIX epoch, yo.
 epoch :: Timestamp

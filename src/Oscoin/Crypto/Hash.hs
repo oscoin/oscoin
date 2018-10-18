@@ -43,6 +43,10 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
 import           Data.Maybe (fromJust)
 import qualified Data.Text as T
+import qualified Database.SQLite.Simple as Sql
+import qualified Database.SQLite.Simple.FromField as Sql
+import qualified Database.SQLite.Simple.Ok as Sql
+import qualified Database.SQLite.Simple.ToField as Sql
 import           Formatting (Format)
 import qualified Formatting as Fmt
 import qualified Text.Show as Show
@@ -95,6 +99,27 @@ instance Multihashable a => FromJSON (Hash' a) where
     parseJSON = withText "Hash'" $
         either fail pure
             . second Hash . Multihash.decodeAtBase BaseN.Base58 . encodeUtf8
+
+instance Multihashable a => Sql.ToField (Hash' a) where
+    toField = Sql.SQLText . BaseN.encodedText . multiB58
+
+instance (Multihashable a, Typeable a) => Sql.FromField (Hash' a) where
+    fromField f =
+        case Sql.fieldData f of
+            Sql.SQLText t ->
+                either (const sqlErr) (Sql.Ok . Hash)
+                       (Multihash.decodeAtBase BaseN.Base58 $ encodeUtf8 t)
+            _ ->
+                sqlErr
+      where
+        sqlErr = Sql.returnError Sql.ConversionFailed f
+            "couldn't convert from Base58"
+
+instance Sql.ToField (Hashed a) where
+    toField = Sql.toField . fromHashed
+
+instance Sql.FromField (Hashed a) where
+    fromField = map toHashed . Sql.fromField
 
 instance forall a. Multihashable a => Serialise (Hash' a) where
     encode = Multihash.encodeCBOR . fromHash

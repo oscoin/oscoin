@@ -27,6 +27,7 @@ import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.P2P as P2P
+import qualified Oscoin.Test.Storage.Block as BlockStore
 import           Oscoin.Test.Storage.Block.Arbitrary ()
 
 import           Test.QuickCheck.Instances ()
@@ -54,6 +55,7 @@ tests = testGroup "Oscoin"
     , testProperty   "JSON instance of Signed"        propSignedJSON
     , testGroup      "Consensus"                      Consensus.tests
     , testGroup      "P2P"                            P2P.tests
+    , testGroup      "Storage"                        BlockStore.tests
     , testBlockchain
     ]
 

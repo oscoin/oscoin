@@ -3,26 +3,23 @@
 module Oscoin.Test.Crypto.Blockchain.Arbitrary
     ( arbitraryBlockchain
     , arbitraryValidBlockchain
+    , arbitraryBlock
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
-import           Oscoin.Crypto.Hash (HashAlgorithm, hash, hashAlgorithm)
+import           Oscoin.Crypto.Hash (hash)
 import           Oscoin.Time
 
-import qualified Crypto.Hash as Crypto
-
 import           Codec.Serialise (Serialise)
-import           Control.Monad (replicateM)
-import qualified Data.ByteString as BS
 import           Data.List.NonEmpty (NonEmpty((:|)), (<|))
-import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
-import           Data.Word (Word8)
 
+import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Time ()
+
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
@@ -32,10 +29,21 @@ arbitraryBlockchain = do
     rest <- arbitraryValidBlock chain
     pure $ rest |> chain
 
-instance Arbitrary (Crypto.Digest HashAlgorithm) where
-    arbitrary = do
-        str <- replicateM (Crypto.hashDigestSize hashAlgorithm) (arbitrary :: Gen Word8)
-        pure . fromJust $ Crypto.digestFromByteString (BS.pack str)
+arbitraryBlock :: forall tx. (Serialise tx, Arbitrary tx) => Gen (Block tx ())
+arbitraryBlock = do
+    txs <- arbitrary :: Gen [tx]
+    timestamp <- arbitrary
+    diffi <- arbitrary
+    prevHash <- arbitrary
+
+    let header = emptyHeader
+               { blockPrevHash   = prevHash
+               , blockDataHash   = hashTxs txs
+               , blockState      = ()
+               , blockTimestamp  = timestamp
+               , blockDifficulty = diffi
+               }
+    pure $ mkBlock header txs
 
 arbitraryValidBlock :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Blockchain tx s -> Gen (Block tx s)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do

@@ -8,6 +8,7 @@ module Oscoin.Data.RadicleTx
 
     -- * Re-exports
     , Rad.Value
+    , Tx(..)
     ) where
 
 import           Oscoin.Prelude
