@@ -36,14 +36,12 @@ steps:
   - id: "Format (haskell)"
     waitFor: ["Build deps"]
     name: "haskell:8.4.3"
-    env: ["STACK_ROOT=/workspace/.stack"]
     args: ["./scripts/check-haskell-format.sh"]
 
   - id: "Lint (hlint)"
     waitFor: ["Build deps"]
     name: "haskell:8.4.3"
-    env: ["STACK_ROOT=/workspace/.stack"]
-    args: ["stack", "exec", "--", "hlint", "."]
+    args: ["/builder/home/.local/bin/hlint", "."]
 
   - id: "Test & Build"
     waitFor: ["Build deps"]
@@ -53,8 +51,8 @@ steps:
 
   - id: "Lint (weeder)"
     name: "haskell:8.4.3"
-    env: ["STACK_ROOT=/workspace/.stack"]
-    args: ["stack", "exec", "--", "weeder", "."]
+    env: ["STACK_ROOT=/workspace/.stack"] # weeder uses stack under the hood
+    args: ["/builder/home/.local/bin/weeder", "."]
 
   - id: "Publish images"
     name: gcr.io/cloud-builders/docker
