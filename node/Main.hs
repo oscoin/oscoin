@@ -73,7 +73,7 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
         <*> option str
             ( long "genesis"
            <> help "Path to genesis file"
-           <> value "node/data/genesis.yaml"
+           <> value "data/genesis.yaml"
             )
         <*> optional
             ( option auto

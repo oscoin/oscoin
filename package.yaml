@@ -11,7 +11,8 @@ dependencies:
   - base >=4.11.1.0 && <4.12
 
 data-files:
-  - node/rad/prelude.rad
+  - data/rad/prelude.rad
+  - data/genesis.yaml
 
 flags:
     static:
