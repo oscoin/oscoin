@@ -5,7 +5,9 @@ module Oscoin.Crypto.Blockchain.Eval
     , Receipt(..)
     , buildBlock
     , buildBlockStrict
+    , buildGenesis
     , toOrphan
+    , evalBlock
     ) where
 
 import           Oscoin.Prelude
@@ -82,7 +84,7 @@ buildBlock eval tick txs parent =
     let initialState = blockState $ blockHeader parent
         (txOutputs, newState) = evalTraverse eval txs initialState
         validTxs = [tx | (tx, Right _) <- txOutputs]
-        newBlock = mkUnsealedBlock parent tick validTxs newState
+        newBlock = mkUnsealedBlock (blockHash parent) tick validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
     in (newBlock, receipts)
 
@@ -97,16 +99,29 @@ buildBlockStrict
     -> [tx]
     -> Block tx s
     -> Either (tx, EvalError) (Block tx s)
-buildBlockStrict eval tick txs parent = do
-    let initialState = blockState $ blockHeader parent
-    newState <- foldlM step initialState txs
-    pure $ mkUnsealedBlock parent tick txs newState
-  where
-    step s tx =
-        case eval tx s of
-            Left err                  -> Left (tx, err)
-            Right (_output, newState) -> Right newState
+buildBlockStrict eval tick txs parent =
+    mkEvaledUnsealedBlock
+        eval
+        tick
+        txs
+        (blockHash parent)
+        (blockState $ blockHeader parent)
 
+-- | Try to build a genesis block. See 'buildBlockStrict' for more information.
+buildGenesis
+    :: Serialise tx
+    => Evaluator s tx o
+    -> Timestamp
+    -> [tx]
+    -> s
+    -> Either (tx, EvalError) (Block tx s)
+buildGenesis eval tick txs s =
+    mkEvaledUnsealedBlock
+        eval
+        tick
+        txs
+        (Crypto.toHashed Crypto.zeroHash)
+        s
 
 toOrphan :: Evaluator s tx a -> Block tx s' -> Block tx (Orphan s)
 toOrphan eval blk =
@@ -116,6 +131,18 @@ toOrphan eval blk =
         case eval tx s of
             Left _        -> Nothing
             Right (_, s') -> Just s'
+
+-- | Try to evaluate a block, given an initial state and evaluator.
+evalBlock
+    :: Evaluator s tx o
+    -> s
+    -> Block tx ()
+    -> Either EvalError (Block tx s)
+evalBlock eval st blk@Block{blockData} =
+    map (blk $>) result
+  where
+    result = foldlM step st blockData
+    step s tx = map snd (eval tx s)
 
 -- Internal ------------------------------------------------------
 
@@ -146,15 +173,31 @@ evalToState eval tx = state go
 
 -- | Return an unsealed block holding the given transactions and state
 -- on top of the given parent block.
-mkUnsealedBlock :: (Foldable t, Serialise tx) => Block tx s -> Timestamp -> t tx -> s -> Block tx s
+mkUnsealedBlock :: (Foldable t, Serialise tx) => BlockHash -> Timestamp -> t tx -> s -> Block tx s
 mkUnsealedBlock parent blockTimestamp txs blockState = mkBlock header txs
   where
     header =
          BlockHeader
-            { blockPrevHash     = blockHash parent
+            { blockPrevHash     = parent
             , blockDataHash     = hashTxs txs
             , blockState
             , blockDifficulty   = 0
             , blockTimestamp
             , blockNonce        = 0
             }
+
+mkEvaledUnsealedBlock
+    :: Serialise tx
+    => Evaluator s tx o
+    -> Timestamp
+    -> [tx]
+    -> BlockHash
+    -> s
+    -> Either (tx, EvalError) (Block tx s)
+mkEvaledUnsealedBlock eval tick txs parent initState =
+    mkUnsealedBlock parent tick txs <$> foldlM step initState txs
+  where
+    step s tx =
+        case eval tx s of
+            Left err                  -> Left (tx, err)
+            Right (_output, newState) -> Right newState

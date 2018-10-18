@@ -60,23 +60,24 @@ instance Serialise (BlockHeader ())
 instance Crypto.Hashable (BlockHeader ()) where
     hash = Crypto.hashSerial
 
-instance ToJSON (BlockHeader s) where
+instance ToJSON s => ToJSON (BlockHeader s) where
     toJSON BlockHeader{..} = object
         [ "parentHash" .= blockPrevHash
         , "timestamp"  .= blockTimestamp
         , "dataHash"   .= blockDataHash
+        , "stateHash"  .= blockState
         , "nonce"      .= blockNonce
         , "difficulty" .= blockDifficulty
         ]
 
-instance FromJSON (BlockHeader ()) where
+instance FromJSON s => FromJSON (BlockHeader s) where
   parseJSON = withObject "BlockHeader" $ \o -> do
         blockPrevHash   <- o .: "parentHash"
         blockTimestamp  <- o .: "timestamp"
         blockDataHash   <- o .: "dataHash"
+        blockState      <- o .: "stateHash"
         blockNonce      <- o .: "nonce"
         blockDifficulty <- o .: "difficulty"
-        blockState      <- pure ()
 
         pure BlockHeader{..}
 
@@ -140,14 +141,14 @@ instance Bifoldable Block where
         a = blockData blk
         b = blockState (blockHeader blk)
 
-instance ToJSON tx => ToJSON (Block tx s) where
+instance (ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
     toJSON b@Block{..} = object
         [ "hash"   .= blockHash (void b)
         , "header" .= blockHeader
         , "data"   .= blockData
         ]
 
-instance FromJSON tx => FromJSON (Block tx ()) where
+instance (FromJSON s, FromJSON tx) => FromJSON (Block tx s) where
   parseJSON = withObject "Block" $ \o -> do
         blockHeader <- o .: "header"
         blockData   <- o .: "data"

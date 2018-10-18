@@ -39,6 +39,9 @@ defaultGenesisDifficulty =
     0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     -- This is the original difficulty of Bitcoin at genesis.
 
+minGenesisDifficulty :: Difficulty
+minGenesisDifficulty = minDifficulty
+
 nakamotoConsensus :: (Applicative m) => Maybe Difficulty -> Consensus tx m
 nakamotoConsensus difi = Consensus
     { cScore = comparing chainScore
@@ -49,7 +52,8 @@ mineNakamoto
     :: Applicative m
     => (forall tx s. Blockchain tx s -> Difficulty)
     -> Miner m
-mineNakamoto difi chain bh = go bh { blockDifficulty = difi chain }
+mineNakamoto difi chain bh =
+    go bh { blockDifficulty = maybe minGenesisDifficulty difi chain }
   where
     go hdr@BlockHeader { blockNonce }
         | hasPoW hdr            = pure $ Just hdr

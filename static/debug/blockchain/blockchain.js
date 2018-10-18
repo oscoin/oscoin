@@ -36,7 +36,7 @@ function renderBlock(blk) {
     blk.data.forEach(function (tx) {
         var txe = document.createElement('pre');
         txe.classList.add('block-data-tx');
-        txe.innerHTML = tx.msg.msg;
+        txe.innerHTML = tx.message.msg;
         e.querySelector('.block-data').appendChild(txe);
     });
     return e;

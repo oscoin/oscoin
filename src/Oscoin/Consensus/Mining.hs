@@ -1,5 +1,6 @@
 module Oscoin.Consensus.Mining
     ( mineBlock
+    , mineGenesis
     ) where
 
 import           Oscoin.Prelude
@@ -35,10 +36,24 @@ mineBlock Consensus{cScore, cMiner} eval time = do
     chain <- BlockStore.maximumChainBy cScore
     let parent = tip chain
     let (blockCandidate, receipts) = buildBlock eval time txs parent
-    maybeBlockHeader <- cMiner chain (blockHeader blockCandidate)
+    maybeBlockHeader <- cMiner (Just chain) (blockHeader blockCandidate)
     for maybeBlockHeader $ \header -> do
         let blk = blockCandidate { blockHeader = header }
         Mempool.delTxs (blockData blk)
         BlockStore.storeBlock $ map (const . Just) blk
         for_ receipts addReceipt
         pure blk
+
+-- | Mine a genesis block with the given 'Miner'.
+mineGenesis
+    :: (Monad m)
+    => Miner m
+    -> Block tx s
+    -> m (Either Text (Block tx s))
+mineGenesis mine blk = do
+    result <- mine Nothing (blockHeader blk)
+    pure $ case result of
+        Just h ->
+            Right $ blk { blockHeader = h }
+        Nothing ->
+            Left $ "can't mine genesis"

@@ -20,5 +20,5 @@ trivialConsensus = Consensus
 chainScore :: Blockchain tx s -> Int
 chainScore = fromIntegral . height
 
-mineBlock :: Applicative m => Blockchain tx s -> BlockHeader a -> m (Maybe (BlockHeader a))
+mineBlock :: Applicative m => Maybe (Blockchain tx s) -> BlockHeader a -> m (Maybe (BlockHeader a))
 mineBlock _chain bh = pure $ Just bh

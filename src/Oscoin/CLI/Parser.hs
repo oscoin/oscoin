@@ -27,6 +27,7 @@ mainParser :: Parser Command
 mainParser = subparser
     (  command "revision" (revisionParser `withInfo` "Revision commands")
     <> command "keypair"  (keyPairParser `withInfo` "Key pair commands")
+    <> command "genesis"  (genesisParser `withInfo` "Genesis commands")
     )
 
 revisionParser :: Parser Command
@@ -54,6 +55,16 @@ keyPairParser = subparser
         "Generate keypair to use with the other commands"
     where
         keyPairGenerate = pure GenerateKeyPair
+
+genesisParser :: Parser Command
+genesisParser =
+    GenesisCreate <$> genesisOptions
+  where
+    genesisOptions = many $ option str
+        (  long "from"
+        <> help ".rad input file"
+        <> metavar "FILE"
+        )
 
 withInfo :: Parser a -> String -> ParserInfo a
 withInfo opts desc = info (helper <*> opts) $ progDesc desc

@@ -27,6 +27,7 @@ import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Spinner (newTestSpinner)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Time as Time
 
 import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.List as List
@@ -85,6 +86,8 @@ instance MonadCLI TestCommandRunner where
     putLine t = modify $ \s -> s { commandOutput = commandOutput s <> t <> "\n" }
     withSpinner _ _ = (newTestSpinner >>=)
     progress _ _ = pure ()
+    readRadFile _ = pure $ Left "can't read file in tests"
+    getTime = pure Time.epoch
 
 
 instance MonadRandom TestCommandRunner where

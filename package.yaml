@@ -80,6 +80,7 @@ library:
     - wai-extra
     - wai-middleware-static
     - writer-cps-mtl
+    - yaml
 
 executables:
   oscoin:
@@ -89,13 +90,10 @@ executables:
       ld-options: -static
     dependencies:
       - async
-      - mtl
       - network
       - optparse-applicative
       - oscoin
       - semigroups
-      - text
-      - transformers
       - yaml
 
   oscoin-cli:

@@ -13,12 +13,13 @@ module Oscoin.Data.RadicleTx
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), Evaluator)
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.PubKey (PublicKey, unsign)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx(..))
 
 import           Codec.Serialise (Serialise)
+import           Data.Aeson (ToJSON, toJSON)
 import           Data.Default (Default(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
@@ -34,6 +35,16 @@ type RadEvaluator = Evaluator Env RadTx Rad.Value
 
 pureEnv :: Env
 pureEnv = Env Radicle.pureEnv
+
+instance Hashable Env where
+    -- Nb. This instance is probably not correct, since the primops and refs
+    -- are not being hashed. However, they are not currently hashable in
+    -- radicle, so we only hash the Env for now.
+    hash (Env bindings) =
+        toHashed . fromHashed . hashSerial $ Radicle.bindingsEnv bindings
+
+instance ToJSON Env where
+    toJSON = toJSON . hash
 
 instance Default Env where
     def = pureEnv

@@ -28,8 +28,9 @@ instance Serialise msg => Crypto.Hashable (Tx msg) where
 instance Serialise msg => Serialise (Tx msg)
 
 instance ToJSON (Tx Rad.Value) where
-    toJSON Tx{..} =
-        object [ "msg"     .= toJSON (map Rad.prettyValue txMessage)
+    toJSON tx@Tx{..} =
+        object [ "hash"    .= toJSON (Crypto.hash tx)
+               , "message" .= toJSON (map Rad.prettyValue txMessage)
                , "pubkey"  .= toJSON txPubKey
                , "chainId" .= toJSON txChainId
                , "nonce"   .= toJSON txNonce
@@ -38,7 +39,7 @@ instance ToJSON (Tx Rad.Value) where
 
 instance FromJSON (Tx Rad.Value) where
     parseJSON = withObject "Tx" $ \o -> do
-        signedJson <- o .: "msg"
+        signedJson <- o .: "message"
         txMessage <- for signedJson Rad.parseFromJson
         txPubKey  <- o .: "pubkey"
         txChainId <- o .: "chainId"

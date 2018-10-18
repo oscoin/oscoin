@@ -7,14 +7,12 @@ import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain, Difficulty, fromGenesis, (|>))
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
-import           Oscoin.Crypto.Blockchain.Eval
-                 (EvalError, buildBlockStrict, fromEvalError)
-import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.RadicleTx as Rad (Env, RadTx, pureEnv, txEval)
-import           Oscoin.Data.Tx (createTx)
+import           Oscoin.Crypto.Blockchain (Difficulty, fromGenesis)
+import           Oscoin.Crypto.Blockchain.Block (Block)
+import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Data.RadicleTx (RadTx)
+import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Environment (Environment(Development))
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
@@ -27,13 +25,8 @@ import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake.Simple as Handshake
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
-import           Oscoin.Time
-
-import qualified Radicle.Extended as Rad
 
 import qualified Control.Concurrent.Async as Async
-import           Control.Monad.Except
-import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
 import           Network.Socket (HostName, PortNumber)
@@ -45,7 +38,7 @@ data Args = Args
     , gossipPort :: PortNumber
     , apiPort    :: PortNumber
     , seeds      :: FilePath
-    , prelude    :: FilePath
+    , genesis    :: FilePath
     , difficulty :: Maybe Difficulty
     } deriving (Generic, Show)
 
@@ -78,9 +71,9 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> value "node/gossip-seeds.yaml"
             )
         <*> option str
-            ( long "prelude"
-           <> help "Path to radicle prelude"
-           <> value "node/rad/prelude.rad"
+            ( long "genesis"
+           <> help "Path to genesis file"
+           <> value "node/data/genesis.yaml"
             )
         <*> optional
             ( option auto
@@ -100,7 +93,8 @@ main = do
     nid      <- pure (mkNodeId $ fst keys)
     mem      <- Mempool.newIO
     stree    <- STree.new Rad.pureEnv
-    chain    <- either die pure =<< initialBlockchain prelude keys
+    gen      <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Crypto.Hash)
+    chain    <- either (die . fromEvalError) pure (genesisChain (void gen))
     blkStore <- BlockStore.newIO $ BlockStore.initWithChain chain
     seeds'   <- Yaml.decodeFileThrow seeds
 
@@ -132,23 +126,4 @@ main = do
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
     storage nod   = hoistStorage (runNodeT nod) Node.storage
 
--- | Creates a blockchain with two blocks: an empty gensis block and a
--- block containing a single Radicle transaction loaded from @path@ and
--- signed with @keypair@.
-initialBlockchain
-  :: FilePath
-  -> Crypto.KeyPair
-  -> IO (Either Text (Blockchain Rad.RadTx Rad.Env))
-initialBlockchain path keypair = runExceptT $ do
-    val <- ExceptT $ Rad.parse (T.pack path) <$> readFile path
-    tx <- liftIO $ createTx keypair val
-    now' <- now
-    let genesis = emptyGenesisBlock epoch Rad.pureEnv
-    let chain = fromGenesis genesis
-    block <- withExceptT formatBuildError $ liftEither $
-        buildBlockStrict Rad.txEval now' [tx] genesis
-    pure $ block |> chain
-  where
-    formatBuildError :: (Rad.RadTx, EvalError) -> Text
-    formatBuildError (_tx, evalErrors) =
-        "Error applying initial transactions:\n" <> fromEvalError evalErrors
+    genesisChain gen = fromGenesis <$> evalBlock Rad.txEval Rad.pureEnv gen
