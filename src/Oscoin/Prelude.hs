@@ -1,26 +1,36 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
--- | Custom Prelude based on <https://hackage.haskell.org/package/protolude Protolude>
+-- | Custom Prelude based on <https://hackage.haskell.org/package/protolude Protolude>.
 --
--- Deviations from 'Protolude':
+-- Deviations from "Protolude":
 --
 -- * CPP'ed versions of functions for compatibility with older 'base' versions
 --   have been removed.
--- * 'Control.Exception.Safe' instead of 'Control.Exception'.
---   * hiding 'assert' and 'handle', as those symbols are commonly used in our
---     codebase.
--- * Only 'Generic' from 'GHC.Generics' is exported.
--- * Additional exports:
---   * 'String'
---   * 'MonadTrans'
--- * Not exported:
---   * 'Data.Typeable'
---   * 'Data.Type.Coercion'
---   * 'Data.Type.Equality'
---   * 'Data.Complex'
+-- * "Control.Exception.Safe" instead of "Control.Exception".
 --
--- To see the full list of exported symbols, run @browse! Oscoin.Prelude@ in
--- ghci.
+--     * hiding 'assert' and 'handle', as those symbols are commonly used in our
+--       codebase.
+--
+-- * Only 'Generic' from "GHC.Generics" is exported.
+-- * Additional exports:
+--
+--     * 'String'
+--     * 'MonadTrans'
+--
+-- * Not exported:
+--
+--     * "Data.Typeable"
+--     * "Data.Type.Coercion"
+--     * "Data.Type.Equality"
+--     * "Data.Complex"
+--
+-- To see the full list of exported symbols, run
+--
+-- @
+-- Oscoin.Prelude> :browse!
+-- @
+--
+-- in GHCi.
 module Oscoin.Prelude
     ( module Base
     , module X

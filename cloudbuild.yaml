@@ -1,4 +1,4 @@
-timeout: 1800s # Cache misses are slow to rebuild
+timeout: 3600s # Cache misses are slow to rebuild
 steps:
   - id: "Format (shell scripts)"
     waitFor: ["-"]
@@ -46,8 +46,22 @@ steps:
   - id: "Test & Build"
     waitFor: ["Build deps"]
     name: "haskell:8.4.3"
+    entrypoint: "bash"
     env: ["STACK_ROOT=/workspace/.stack"]
-    args: ["stack", "build", "--test", "--flag=oscoin:static", "--no-terminal", "--pedantic", "--copy-bins", "--local-bin-path=/workspace/bin"]
+    args:
+    - "-c"
+    - |
+      set -euo pipefail
+
+      stack build \
+        --test \
+        --flag=oscoin:static \
+        --no-terminal \
+        --pedantic \
+        --copy-bins \
+        --local-bin-path=/workspace/bin \
+        --haddock \
+        --exec="mv $(stack path --local-doc-root) api-docs"
 
   - id: "Lint (weeder)"
     name: "haskell:8.4.3"
@@ -55,6 +69,7 @@ steps:
     args: ["/builder/home/.local/bin/weeder", "."]
 
   - id: "Publish images"
+    waitFor: ["Lint (weeder)"]
     name: gcr.io/cloud-builders/docker
     entrypoint: "bash"
     env:
@@ -73,6 +88,20 @@ steps:
 
       echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
 
+  - id: "Publish Haddocks"
+    waitFor: ["Lint (weeder)"]
+    name: gcr.io/cloud-builders/gsutil
+    entrypoint: "bash"
+    env:
+    - COMMIT_SHA=$COMMIT_SHA
+    - BRANCH_NAME=$BRANCH_NAME
+    args:
+    - "-c"
+    - |
+      set -euo pipefail
+
+      gsutil -m cp -r api-docs gs://oscoin-apidocs/${BRANCH_NAME}-${COMMIT_SHA}
+
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
     entrypoint: "bash"
@@ -81,4 +110,3 @@ steps:
     - |
       source scripts/ci-cache.sh
       save-cache
-
