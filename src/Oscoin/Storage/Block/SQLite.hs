@@ -12,6 +12,7 @@ module Oscoin.Storage.Block.SQLite
     , lookupBlock
     , lookupTx
     , getGenesisBlock
+    , orphans
     ) where
 
 import           Oscoin.Prelude
@@ -33,6 +34,8 @@ import           Database.SQLite.Simple.ToRow (ToRow)
 import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
 import qualified Database.SQLite3 as Sql3
+
+import qualified Data.Set as Set
 
 -- | A handle to an on-disk block store.
 newtype Handle tx s = Handle { fromHandle :: Connection }
@@ -91,6 +94,13 @@ getGenesisBlock (Handle conn) = do
                      LIMIT 1 |]
     bTxs <- getBlockTxs conn bHash
     pure $ mkBlock bHeader bTxs
+
+orphans :: Handle tx s -> IO (Set BlockHash)
+orphans (Handle conn) =
+    Set.fromList . map fromOnly <$> Sql.query_ conn
+        [sql| SELECT hash
+                FROM blocks
+               WHERE parenthash NOT IN (SELECT hash FROM blocks) |]
 
 -- Internal --------------------------------------------------------------------
 
