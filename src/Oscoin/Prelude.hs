@@ -70,6 +70,7 @@ import           Protolude.Applicative as X
 import           Protolude.Bool as X
 import           Protolude.Conv as X
 import           Protolude.Either as X
+import           Protolude.Exceptions as X hiding (tryIO)
 import           Protolude.Functor as X
 import           Protolude.List as X
 import           Protolude.Monad as X
