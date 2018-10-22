@@ -85,7 +85,7 @@ library:
 
 executables:
   oscoin:
-    main: node/Main.hs
+    main: exe/node/Main.hs
     when:
     - condition: "flag(static)"
       ld-options: -static
@@ -98,7 +98,7 @@ executables:
       - yaml
 
   oscoin-cli:
-    main: cli/Main.hs
+    main: exe/cli/Main.hs
     when:
     - condition: "flag(static)"
       ld-options: -static
@@ -106,7 +106,7 @@ executables:
       - oscoin
 
   git-remote-oss:
-    main: git-remote-helper/Main.hs
+    main: exe/git-remote-helper/Main.hs
     when:
     - condition: "flag(static)"
       ld-options: -static
