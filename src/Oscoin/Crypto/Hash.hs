@@ -1,6 +1,8 @@
 module Oscoin.Crypto.Hash
     ( Hashed
+    , Hashed'
     , Hash
+    , Hash'
     , Hashable(..)
     , toHashed
     , fromHashed
@@ -59,10 +61,10 @@ type Hashed a = Hashed' HashAlgorithm a
 -- the hash pre-image is not known or cannot be typed.
 type Hash = Hash' HashAlgorithm
 
--- | Internal: a 'Digest' using some hash algorithm.
+-- | A 'Digest' obtained by some hash algorithm @a@.
 --
 -- Textual representations use base-58 encoding. Serialisation and
--- deserialasation is via 'Multihash', base-58 encoded for non-binary formats.
+-- deserialisation via "Crypto.Hash.Multi".
 newtype Hash' a = Hash { fromHash :: Digest a }
     deriving (Eq, Ord, ByteArrayAccess)
 
@@ -100,28 +102,28 @@ instance Multihashable a => FromHttpApiData (Hash' a) where
     parseQueryParam =
         bimap T.pack Hash . Multihash.decodeAtBase BaseN.Base58 . encodeUtf8
 
--- | A 'Hash\'' tagged by it's pre-image
+-- | A 'Hash'' tagged by its pre-image
 type Hashed' algo a = Tagged a (Hash' algo)
 
--- | Tag a 'Hash\'' with the type it is a hash of.
+-- | Tag a 'Hash'' with the type it is a hash of.
 toHashed :: Hash' algo -> Hashed' algo a
 toHashed = Tagged
 
--- | Un-tag a 'Hashed\'' value.
+-- | Un-tag a 'Hashed'' value.
 fromHashed :: Hashed' algo a -> Hash' algo
 fromHashed = unTagged
 
--- | Format a 'Hash\'' value.
+-- | Format a 'Hash'' value.
 --
--- This base-58 encodes the digest bytes, but does _NOT_ encode it as a
--- 'Multihash'.
+-- This base-58 encodes the digest bytes, but does __NOT__ encode it as a
+-- 'Multihash.Multihash'.
 formatHash :: Multihashable a => Format r (Hash' a -> r)
 formatHash = fmtB58
 
--- | Format a 'Hashed\'' value.
+-- | Format a 'Hashed'' value.
 --
--- This base-58 encodes the digest bytes, but does _NOT_ encode it as a
--- 'Multihash'.
+-- This base-58 encodes the digest bytes, but does __NOT__ encode it as a
+-- 'Multihash.Multihash'.
 formatHashed :: Multihashable algo => Format r (Hashed' algo a -> r)
 formatHashed = Fmt.mapf fromHashed fmtB58
 

@@ -4,7 +4,9 @@
 --
 -- A 'RateLimiter' is constructed with a number of credits by which the bucket
 -- is replenished every tick (that is, second), and an initial and maximum
--- balance. A 'rateLimited' action specifies it's cost. If there is sufficient
+-- balance.
+--
+-- A 'rateLimited' action specifies its cost. If there is sufficient
 -- balance, the cost is deducted, and the action is run. Otherwise, nothing is
 -- deducted, and the action is not run.
 --
@@ -52,8 +54,8 @@ data RateLimiter = RateLimiter
     }
 
 newRateLimiter
-    :: Double -- Credits per second.
-    -> Double -- Maximum balance.
+    :: Double -- ^ Credits per second.
+    -> Double -- ^ Maximum balance.
     -> IO RateLimiter
 newRateLimiter credits maxBalance = do
     balance  <- newIORef maxBalance
@@ -63,9 +65,9 @@ newRateLimiter credits maxBalance = do
 rateLimited
     :: MonadIO m
     => RateLimiter
-    -> Double      -- Cost.
-    -> m a         -- Action to rate limit.
-    -> m (Maybe a) -- 'Just' the result of the action, or 'Nothing' if the balance was insufficient.
+    -> Double      -- ^ Cost.
+    -> m a         -- ^ Action to rate limit.
+    -> m (Maybe a) -- ^ 'Just' the result of the action, or 'Nothing' if the balance was insufficient.
 rateLimited RateLimiter{..} cost ma = do
     pass <- liftIO $ do
         now     <- timeNow
