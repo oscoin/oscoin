@@ -3,6 +3,7 @@
 module Oscoin.Test.Crypto.Blockchain.Arbitrary
     ( arbitraryBlockchain
     , arbitraryValidBlockchain
+    , arbitraryValidBlockchainFrom
     , arbitraryBlock
     ) where
 
@@ -65,8 +66,12 @@ arbitraryValidBlockWith prevHeader txs = do
 
 arbitraryValidBlockchain :: (Serialise tx, Arbitrary tx, Arbitrary s) => s -> Gen (Blockchain tx s)
 arbitraryValidBlockchain s = do
-    gen <- emptyGenesisBlock <$> arbitrary <*> pure s
-    h   <- choose (8, 9) :: Gen Int
+    ts <- arbitrary
+    arbitraryValidBlockchainFrom (emptyGenesisBlock ts s)
+
+arbitraryValidBlockchainFrom :: (Serialise tx, Arbitrary tx, Arbitrary s) => Block tx s -> Gen (Blockchain tx s)
+arbitraryValidBlockchainFrom gen = do
+    h <- choose (8, 9) :: Gen Int
     go (gen :| []) h
   where
     go blks 0 =

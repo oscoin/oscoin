@@ -12,11 +12,13 @@ module Oscoin.Storage.Block.SQLite
     , lookupBlock
     , lookupTx
     , getGenesisBlock
+    , maximumChainBy
     , orphans
     ) where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Crypto.Blockchain (Blockchain(..), ScoringFunction)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -27,14 +29,15 @@ import           Oscoin.Crypto.Blockchain.Block
                  )
 import qualified Oscoin.Crypto.Hash as Crypto
 
-import           Database.SQLite.Simple (Connection, Only(..), (:.)(..))
+import           Database.SQLite.Simple ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromRow (FromRow)
-import           Database.SQLite.Simple.ToRow (ToRow)
 import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
+import           Database.SQLite.Simple.ToRow (ToRow)
 import qualified Database.SQLite3 as Sql3
 
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 
 -- | A handle to an on-disk block store.
@@ -101,6 +104,18 @@ orphans (Handle conn) =
         [sql| SELECT hash
                 FROM blocks
                WHERE parenthash NOT IN (SELECT hash FROM blocks) |]
+
+maximumChainBy :: FromRow tx => Handle tx s -> ScoringFunction tx s -> IO (Blockchain tx ())
+maximumChainBy (Handle conn) _ = do
+    rows :: [Only BlockHash :. BlockHeader ()] <- Sql.query_ conn
+        [sql|  SELECT hash, parenthash, datahash, timestamp, difficulty, nonce
+                 FROM blocks
+             ORDER BY timestamp DESC |]
+
+    blks <- for rows $ \(Only h :. bh) ->
+        mkBlock bh <$> getBlockTxs conn h
+
+    pure $ Blockchain (NonEmpty.fromList blks)
 
 -- Internal --------------------------------------------------------------------
 

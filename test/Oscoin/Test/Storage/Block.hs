@@ -4,7 +4,7 @@ module Oscoin.Test.Storage.Block
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (emptyGenesisBlock)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), emptyGenesisBlock)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
@@ -12,11 +12,13 @@ import qualified Oscoin.Data.RadicleTx as Rad (Env)
 import           Oscoin.Storage.Block.SQLite
 import qualified Oscoin.Time as Time
 
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryBlock)
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+                 (arbitraryBlock, arbitraryValidBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Data.Default (def)
+import qualified Data.List.NonEmpty as NonEmpty
 
 import           Test.QuickCheck
 import           Test.Tasty
@@ -28,6 +30,7 @@ tests =
         [ testCase "Store/lookup Block" (runAndRollback testStoreLookupBlock)
         , testCase "Store/lookup Tx"    (runAndRollback testStoreLookupTx)
         , testCase "Get Genesis Block"  (runAndRollback testGetGenesisBlock)
+        , testCase "Maximum chain"      (runAndRollback testMaximumChain)
         ]
     ]
 
@@ -68,3 +71,17 @@ testGetGenesisBlock :: Handle RadTx Rad.Env -> Assertion
 testGetGenesisBlock h = do
     blk <- getGenesisBlock h
     void defaultGenesis @?= blk
+
+testMaximumChain :: Handle RadTx Rad.Env -> Assertion
+testMaximumChain h = do
+    gen <- getGenesisBlock h
+
+    blks :: Blockchain RadTx () <-
+        generate $ resize 1 $ arbitraryValidBlockchainFrom gen
+
+    for_ (NonEmpty.init $ fromBlockchain blks) $ \b ->
+        storeBlock h (b $> const (Just def))
+
+    blks' <- maximumChainBy h (\_ _ -> EQ)
+
+    fromBlockchain (void blks) @?= fromBlockchain blks'

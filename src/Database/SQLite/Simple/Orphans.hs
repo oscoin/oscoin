@@ -5,16 +5,16 @@ module Database.SQLite.Simple.Orphans where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block
-import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.RadicleTx
 
 import qualified Codec.Serialise as CBOR
 import qualified Data.ByteString.Lazy as LBS
 import           Database.SQLite.Simple
 import           Database.SQLite.Simple.FromField
-import           Database.SQLite.Simple.ToField
 import           Database.SQLite.Simple.Ok (Ok(..))
+import           Database.SQLite.Simple.ToField
 
 toFieldSerial :: CBOR.Serialise a => a -> SQLData
 toFieldSerial a = SQLBlob . LBS.toStrict $ CBOR.serialise a

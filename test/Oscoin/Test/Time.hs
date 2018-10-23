@@ -9,4 +9,4 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 instance Arbitrary Timestamp where
-    arbitrary = fromEpoch <$> arbitrary
+    arbitrary = fromEpoch <$> (arbitrary `suchThat` (>= 0))
