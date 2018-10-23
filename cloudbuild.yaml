@@ -100,7 +100,9 @@ steps:
     - |
       set -euo pipefail
 
-      gsutil -m cp -r api-docs gs://oscoin-apidocs/${BRANCH_NAME}-${COMMIT_SHA}
+      if [ "$BRANCH_NAME" == "master" ]; then
+          gsutil -m cp -r api-docs gs://oscoin-apidocs/${BRANCH_NAME}-${COMMIT_SHA}
+      fi
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
