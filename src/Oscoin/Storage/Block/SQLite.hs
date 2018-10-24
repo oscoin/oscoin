@@ -101,9 +101,11 @@ getGenesisBlock (Handle conn) = do
 orphans :: Handle tx s -> IO (Set BlockHash)
 orphans (Handle conn) =
     Set.fromList . map fromOnly <$> Sql.query_ conn
-        [sql| SELECT hash
-                FROM blocks
-               WHERE parenthash NOT IN (SELECT hash FROM blocks) |]
+        [sql|    SELECT a.hash
+                   FROM blocks AS a
+              LEFT JOIN blocks AS b
+                     ON a.parenthash = b.hash
+                  WHERE b.hash IS NULL |]
 
 maximumChainBy :: FromRow tx => Handle tx s -> ScoringFunction tx s -> IO (Blockchain tx ())
 maximumChainBy (Handle conn) _ = do
