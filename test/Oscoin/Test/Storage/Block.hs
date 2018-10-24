@@ -22,6 +22,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 
 import           Test.QuickCheck
 import           Test.Tasty
+import           Test.Tasty.ExpectedFailure
 import           Test.Tasty.HUnit.Extended
 
 tests :: [TestTree]
@@ -31,6 +32,8 @@ tests =
         , testCase "Store/lookup Tx"    (runAndRollback testStoreLookupTx)
         , testCase "Get Genesis Block"  (runAndRollback testGetGenesisBlock)
         , testCase "Maximum chain"      (runAndRollback testMaximumChain)
+        , expectFail $
+            testCase "Orphans"          (runAndRollback testOrphans)
         ]
     ]
 
@@ -71,6 +74,19 @@ testGetGenesisBlock :: Handle RadTx Rad.Env -> Assertion
 testGetGenesisBlock h = do
     blk <- getGenesisBlock h
     void defaultGenesis @?= blk
+
+testOrphans :: Handle RadTx Rad.Env -> Assertion
+testOrphans h = do
+    blks <- replicateM 10 (generate arbitraryBlock)
+
+    for_ blks $ \b ->
+        storeBlock h (b $> const (Just def))
+
+    blks' <- orphans h
+
+    -- This expectedly fails because `orphans` currently returns the genesis
+    -- block.
+    length blks' @?= length blks
 
 testMaximumChain :: Handle RadTx Rad.Env -> Assertion
 testMaximumChain h = do
