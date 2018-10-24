@@ -94,15 +94,12 @@ steps:
     entrypoint: "bash"
     env:
     - COMMIT_SHA=$COMMIT_SHA
-    - BRANCH_NAME=$BRANCH_NAME
     args:
     - "-c"
     - |
       set -euo pipefail
 
-      if [ "$BRANCH_NAME" == "master" ]; then
-          gsutil -m cp -r api-docs gs://oscoin-apidocs/${BRANCH_NAME}-${COMMIT_SHA}
-      fi
+      gsutil -m cp -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
