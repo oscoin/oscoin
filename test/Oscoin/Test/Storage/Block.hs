@@ -59,7 +59,7 @@ testStoreLookupBlock h = do
 
 testStoreLookupTx :: Handle RadTx Rad.Env -> Assertion
 testStoreLookupTx h = do
-    blk <- generate arbitraryBlock
+    blk <- generate $ arbitraryBlock `suchThat` (not . null . blockData)
 
     storeBlock h (blk $> const (Just def))
 
