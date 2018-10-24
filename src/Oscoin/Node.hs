@@ -211,7 +211,7 @@ storage
     => Storage tx (NodeT tx s i m)
 storage = Storage
     { storageApplyBlock  = applyBlock
-    , storageApplyTx     = applyTx
+    , storageApplyTx     = Storage.applyTx
     , storageLookupBlock = (map . map) void . Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx
     }
@@ -219,10 +219,6 @@ storage = Storage
     applyBlock blk = do
         eval <- asks hEval
         res  <- Storage.applyBlock eval blk
-        res <$ when (res == Storage.Applied) updateChainState
-
-    applyTx tx = do
-        res <- Storage.applyTx tx
         res <$ when (res == Storage.Applied) updateChainState
 
 getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
