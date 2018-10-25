@@ -98,8 +98,8 @@ wrapApply applyBlock applyTx mid payload =
                 TxMsg    tx  -> applyTx tx
   where
     convertApplyResult = \case
-        Storage.Applied -> Bcast.Applied
-        Storage.Stale   -> Bcast.Stale
+        Storage.Applied -> Bcast.Applied Nothing
+        Storage.Stale   -> Bcast.Stale   Nothing
         Storage.Error   -> Bcast.Error
 
 wrapLookup

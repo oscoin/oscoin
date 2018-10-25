@@ -109,8 +109,8 @@ simpleCallbacks ref = Callbacks {..}
 storeInsert :: Store -> MessageId -> ByteString -> IO ApplyResult
 storeInsert ref mid payload = atomicModifyIORef' ref $ \m ->
     case Map.insertLookupWithKey (\_ v _ -> v) mid payload m of
-        (Nothing, m') -> (m', Applied)
-        (Just  _, _ ) -> (m , Stale)
+        (Nothing, m') -> (m', Applied Nothing)
+        (Just  _, _ ) -> (m , Stale   Nothing)
 
 storeLookup :: Store -> MessageId -> IO (Maybe ByteString)
 storeLookup ref mid = Map.lookup mid <$> readIORef ref

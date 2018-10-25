@@ -114,11 +114,15 @@ data Outgoing n =
 
 -- | Result of 'applyMessage'.
 data ApplyResult =
-      Applied
-    -- ^ The message was applied successfully, and was not known before.
-    | Stale
+      Applied (Maybe MessageId)
+    -- ^ The message was applied successfully, and was not known before. If
+    -- 'Just' a 'MessageId' is given, it is indicated that an earlier message by
+    -- that id was determined to be missing, and the network is instructed to
+    -- attempt to retransmit it.
+    | Stale (Maybe MessageId)
     -- ^ The message was either applied before, or a later message rendered it
-    -- obsolete.
+    -- obsolete. Similar to 'Applied', 'Just' a 'MessageId' indicates that an
+    -- earlier message should be retransmitted by the network.
     | Error
     -- ^ An error occurred. Perhaps the message was invalid.
 
@@ -317,7 +321,7 @@ receive (GossipM g) = do
 
     r <- liftIO $ applyMessage mid (gPayload g)
     case r of
-        Applied -> do
+        Applied retransmit -> do
             -- Cancel any timers for this message.
             liftIO . atomically . modifyTVar' missing $ Map.delete mid
             out <-
@@ -327,32 +331,39 @@ receive (GossipM g) = do
                          . over (gMetaL . metaRoundL)  (+1)
                          $ g
             moveToEager sender
-            pure out
-            -- Optimization (Section 3.8)
-            -- Left out for now, as it's unclear what the value of 'threshold'
-            -- should be. Riak also doesn't use this.
-            {-
-            outstanding <- Map.lookup mid <$> io (readTVarIO missing)
-            pure $ case outstanding of
-                Nothing           -> []
-                Just (IHave meta) ->
-                    let round  = view (gMetaL . metaRoundL) g
-                        round' = metaRound meta
-                     in if round' < round || round' - 1 >= threshold then
-                            [ Eager (metaSender meta) $ Graft meta
-                                { metaSender = self
-                                , metaMessageId = ??
-                                ]
-                            , Eager sender $ Prune self
-                            ]
-                        else
-                            []
-            -}
+            pure $
+                case retransmit of
+                    Nothing -> out
+                    Just re ->
+                        let
+                            gmeta = Meta
+                                  { metaMessageId = re
+                                  , metaRound     = 0
+                                  , metaSender    = self
+                                  }
+                            graft = Graft gmeta
+                         in
+                            Eager sender graft : out
+            -- Nb. Optimization (Section 3.8) left out for now, as it's unclear
+            -- what the value of 'threshold' should be. Riak also doesn't use
+            -- this.
 
-        Stale -> do
+        Stale retransmit -> do
             moveToLazy sender
             liftIO . atomically . modifyTVar' missing $ Map.delete mid
-            pure $ [Eager sender $ Prune self]
+            pure $
+                case retransmit of
+                    Nothing -> pure $ Eager sender (Prune self)
+                    Just re ->
+                        let
+                            gmeta = Meta
+                                  { metaMessageId = re
+                                  , metaRound     = 0
+                                  , metaSender    = self
+                                  }
+                            graft = Graft gmeta
+                         in
+                            pure $ Eager sender graft
 
         Error ->
             -- TODO(kim): log this
@@ -374,7 +385,9 @@ receive (Prune sender) =
     moveToLazy sender $> mempty
 
 receive (Graft meta@Meta{metaSender = sender, metaMessageId = mid}) = do
-    Handle{hSelf = self, hCallbacks = Callbacks{lookupMessage}} <- view handle
+    Handle { hSelf      = self
+           , hCallbacks = Callbacks{lookupMessage}
+           } <- view handle
 
     moveToEager sender
 
