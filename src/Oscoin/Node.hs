@@ -18,14 +18,14 @@ module Oscoin.Node
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Consensus)
+import           Oscoin.Consensus (Consensus(..))
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.BlockStore as BlockStore
 import           Oscoin.Consensus.BlockStore.Class
                  (MonadBlockStore(..), chainState, maximumChainBy)
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
-import           Oscoin.Crypto.Blockchain (Blockchain, height)
+import           Oscoin.Crypto.Blockchain (Blockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHashed)
@@ -139,7 +139,9 @@ getPath :: (Query s, MonadIO m) => STree.Path -> NodeT tx s i m (Maybe (QueryVal
 getPath = queryM
 
 getBestChain :: (Hashable tx, Ord tx, MonadIO m) => NodeT tx s i m (Blockchain tx s)
-getBestChain = maximumChainBy (comparing height)
+getBestChain = do
+    Consensus{cScore} <- asks hConsensus
+    maximumChainBy cScore
 
 -- Internal --------------------------------------------------------------------
 
