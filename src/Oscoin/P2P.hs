@@ -10,7 +10,8 @@ module Oscoin.P2P
 
 import           Oscoin.Prelude hiding (show)
 
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, blockHash)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, BlockHash, blockHash, blockHeader, blockPrevHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Logging (Logger)
 import           Oscoin.Storage (Storage(..))
@@ -75,31 +76,42 @@ storageAsCallbacks
        )
     => Storage tx IO
     -> Bcast.Callbacks
-storageAsCallbacks Storage{..} = Bcast.Callbacks
-    { applyMessage  = wrapApply  storageApplyBlock  storageApplyTx
-    , lookupMessage = wrapLookup storageLookupBlock storageLookupTx
-    }
+storageAsCallbacks Storage{..} = Bcast.Callbacks{..}
+  where
+    applyMessage  = wrapApply  storageLookupBlock storageApplyBlock storageApplyTx
+    lookupMessage = wrapLookup storageLookupBlock storageLookupTx
 
 wrapApply
     :: ( Serialise       tx
        , Crypto.Hashable tx
        )
-    => (Block tx () -> IO Storage.ApplyResult)
+    => (BlockHash   -> IO (Maybe (Block tx ())))
+    -> (Block tx () -> IO Storage.ApplyResult)
     -> (tx          -> IO Storage.ApplyResult)
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
-wrapApply applyBlock applyTx mid payload =
+wrapApply lookupBlock applyBlock applyTx mid payload =
     case fromGossip mid payload of
         Left  _   -> pure Bcast.Error -- TODO(kim): log error here (can't do anything about it)
-        Right msg -> map convertApplyResult $
+        Right msg -> map (uncurry convertApplyResult) $
             case msg of
-                BlockMsg blk -> applyBlock blk
-                TxMsg    tx  -> applyTx tx
+                TxMsg    tx  -> (,) Nothing <$> applyTx tx
+                BlockMsg blk ->
+                    let
+                        parentHash = blockPrevHash $ blockHeader blk
+                        parentId   = toStrict $ CBOR.serialise parentHash
+                        -- If we didn't find it, indicate 'parent' is missing.
+                        -- Otherwise, 'Nothing' is missing.
+                        missing    = maybe (Just parentId) (const Nothing)
+                     in
+                        liftA2 (,)
+                               (missing <$> lookupBlock parentHash)
+                               (applyBlock blk)
   where
-    convertApplyResult = \case
-        Storage.Applied -> Bcast.Applied Nothing
-        Storage.Stale   -> Bcast.Stale   Nothing
+    convertApplyResult missing = \case
+        Storage.Applied -> Bcast.Applied missing
+        Storage.Stale   -> Bcast.Stale   missing
         Storage.Error   -> Bcast.Error
 
 wrapLookup
