@@ -21,7 +21,6 @@ import           Oscoin.Prelude
 import qualified Prelude
 
 import           Codec.Serialise.Orphans ()
-import           Data.ByteArray.Orphans ()
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serial
@@ -43,7 +42,6 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
 import           Data.Maybe (fromJust)
-import           Data.Tagged (Tagged(..))
 import qualified Data.Text as T
 import           Formatting (Format)
 import qualified Formatting as Fmt
@@ -110,15 +108,25 @@ instance Multihashable a => FromHttpApiData (Hash' a) where
         bimap T.pack Hash . Multihash.decodeAtBase BaseN.Base58 . encodeUtf8
 
 -- | A 'Hash'' tagged by its pre-image
-type Hashed' algo a = Tagged a (Hash' algo)
+newtype Hashed' algo a = Hashed (Hash' algo)
+    deriving ( Eq
+             , Ord
+             , Show
+             , Semigroup
+             , Monoid
+             , ByteArrayAccess
+             , Serialise
+             , ToJSON
+             , FromJSON
+             )
 
 -- | Tag a 'Hash'' with the type it is a hash of.
 toHashed :: Hash' algo -> Hashed' algo a
-toHashed = Tagged
+toHashed = Hashed
 
 -- | Un-tag a 'Hashed'' value.
 fromHashed :: Hashed' algo a -> Hash' algo
-fromHashed = unTagged
+fromHashed (Hashed h) = h
 
 -- | Format a 'Hash'' value.
 --
@@ -157,11 +165,11 @@ class Hashable a where
 
 -- | Hash a value's 'Binary' represenation.
 hashBinary :: Binary a => a -> Hashed a
-hashBinary = Tagged . Hash . Crypto.hash . LBS.toStrict . Binary.encode
+hashBinary = Hashed . Hash . Crypto.hash . LBS.toStrict . Binary.encode
 
 -- | Hash a values's 'Serialise' (CBOR) representation.
 hashSerial :: Serialise a => a -> Hashed a
-hashSerial = Tagged . Hash . Crypto.hash . LBS.toStrict . Serial.serialise
+hashSerial = Hashed . Hash . Crypto.hash . LBS.toStrict . Serial.serialise
 
 instance Hashable () where
     hash () = toHashed zeroHash

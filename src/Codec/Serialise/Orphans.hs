@@ -7,9 +7,6 @@ import           GHC.Generics.Orphans ()
 import           Codec.Serialise (Serialise)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECC
-import           Data.Tagged (Tagged)
-
-instance Serialise b => Serialise (Tagged s b)
 
 instance Serialise ECDSA.PublicKey
 instance Serialise ECC.Curve
