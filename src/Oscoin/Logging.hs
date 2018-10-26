@@ -20,6 +20,7 @@
 module Oscoin.Logging
     ( -- * Types
       Logger
+    , HasLogger (..)
     , MonadLogger
     , Severity (..)
     , Namespace
@@ -93,7 +94,6 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Writer.CPS (MonadWriter, tell)
 import qualified Data.Aeson.Encoding as Enc
 import           Data.DList (DList, singleton)
-import           Data.Has (Has(..))
 import           Data.Int (Int32)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as LTB
@@ -103,6 +103,7 @@ import qualified Formatting as F
 import           GHC.Stack (CallStack, HasCallStack, SrcLoc(..))
 import qualified GHC.Stack as Stack
 import           Lens.Micro (Lens', lens, set)
+import           Lens.Micro.Mtl (view)
 import           System.Log.FastLogger (BufSize, LogStr)
 import qualified System.Log.FastLogger as FL
 import           System.Posix.Types (CPid, ProcessID)
@@ -144,10 +145,14 @@ data Config = Config
     -- ^ @fast-logger@ buffer size. Default: 'defaultBufSize'
     }
 
-type MonadLogger r m =
-    ( MonadReader r m
-    , Has Logger r
-    , MonadIO m)
+class HasLogger a where
+    loggerL :: Lens' a Logger
+
+instance HasLogger Logger where
+    loggerL = identity
+    {-# INLINE loggerL #-}
+
+type MonadLogger r m = (MonadReader r m, HasLogger r, MonadIO m)
 
 -- | Default 'Config'
 defaultConfig :: Config
@@ -242,7 +247,7 @@ logM :: MonadLogger r m
      -> Format (m ()) a
      -> a
 logM sev loc fmt = F.runFormat fmt $ \bldr -> do
-    Logger{..} <- asks getter
+    Logger{..} <- view loggerL
     if sev < _logLvl then
         pure ()
     else
@@ -276,19 +281,19 @@ errM = logM Err getLoc
 -- | Adjust the log level for the duration of the supplied action.
 --
 -- >>> withStdLogger defaultConfig . runReaderT . withLevel Err $ infoM "not printed"
-withLevel :: (Has Logger r, MonadReader r m) => Severity -> m a -> m a
-withLevel lvl = local (set (hasLens . logLevel) lvl)
+withLevel :: (HasLogger r, MonadReader r m) => Severity -> m a -> m a
+withLevel lvl = local (set (loggerL . logLevel) lvl)
 
 -- | Adjust the 'Namespace' for the duration of the supplied action.
 --
 -- >>> withStdLogger defaultConfig . runReaderT . withNamespace "somelib" $ infoM "lib logs this"
 -- somelib logs this at="I" ns="somelib" loc="interactive:Ghci1:65:70"
-withNamespace :: (Has Logger r, MonadReader r m) => Namespace -> m a -> m a
-withNamespace ns = local (set (hasLens . logNamespace) (Just ns))
+withNamespace :: (HasLogger r, MonadReader r m) => Namespace -> m a -> m a
+withNamespace ns = local (set (loggerL . logNamespace) (Just ns))
 
 -- | Turn off logging for the supplied action.
-withoutLogging :: (Has Logger r, MonadReader r m) => m a -> m a
-withoutLogging = local (set hasLens noLogger)
+withoutLogging :: (HasLogger r, MonadReader r m) => m a -> m a
+withoutLogging = local (set loggerL noLogger)
 
 -- | Like 'logException', but in a transformer stack which has access to a
 -- 'Logger'.
@@ -296,7 +301,7 @@ logExceptionM
     :: (Exception e, HasCallStack, MonadLogger r m)
     => e
     -> m ()
-logExceptionM e = asks getter >>= liftIO . (`logException` e)
+logExceptionM e = view loggerL >>= liftIO . (`logException` e)
 
 -- | Like 'withExceptionLogged', but in a transformer stack which has access to
 -- a 'Logger'.
@@ -304,7 +309,7 @@ withExceptionLoggedM
     :: (MonadLogger r m, MonadMask m, HasCallStack)
     => m a
     -> m a
-withExceptionLoggedM ma = asks getter >>= (`withExceptionLogged` ma)
+withExceptionLoggedM ma = view loggerL >>= (`withExceptionLogged` ma)
 
 -- Pure (MonadWriter) ----------------------------------------------------------
 
@@ -348,7 +353,7 @@ flush lgr =
 
 -- | Like 'flush', but in a transformer stack which has access to a 'Logger'
 flushM :: (MonadLogger r m, Foldable t) => t LogRecord -> m ()
-flushM xs = asks getter >>= (liftIO . (`flush` xs))
+flushM xs = view loggerL >>= (liftIO . (`flush` xs))
 
 -- Formatters ------------------------------------------------------------------
 

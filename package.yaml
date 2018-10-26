@@ -39,7 +39,6 @@ library:
     - containers
     - cryptonite
     - data-default
-    - data-has
     - deepseq
     - directory
     - dlist

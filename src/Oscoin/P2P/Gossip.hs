@@ -21,7 +21,7 @@ module Oscoin.P2P.Gossip
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock)
-import           Oscoin.Logging (Logger)
+import           Oscoin.Logging (HasLogger(..), Logger)
 
 import qualified Oscoin.P2P.Gossip.Broadcast as Plum
 import           Oscoin.P2P.Gossip.IO (Peer, knownPeer)
@@ -40,7 +40,6 @@ import qualified Control.Exception.Safe as E
 import           Control.Monad (unless, (>=>))
 import           Control.Monad.Fix (mfix)
 import           Control.Monad.IO.Unlift (MonadUnliftIO(..), wrappedWithRunInIO)
-import           Data.Has (Has(..))
 import           Data.Hashable (Hashable)
 import           Data.Time.Clock (NominalDiffTime)
 import           Lens.Micro (lens)
@@ -74,9 +73,9 @@ instance Hypa.HasHandle (Handle e n o) n where
     handle = lens hMembership (\s a -> s { hMembership = a })
     {-# INLINE handle #-}
 
-instance Has Logger (Handle e n o) where
-    hasLens = lens hLogger (\s a -> s { hLogger = a })
-    {-# INLINE hasLens #-}
+instance HasLogger (Handle e n o) where
+    loggerL = lens hLogger (\s a -> s { hLogger = a })
+    {-# INLINE loggerL #-}
 
 newtype GossipT e o m a = GossipT
     { unGossipT :: ReaderT (Handle e IO.Peer o) m a

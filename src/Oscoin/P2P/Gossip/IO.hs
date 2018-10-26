@@ -22,7 +22,7 @@ module Oscoin.P2P.Gossip.IO
 
 import           Oscoin.Prelude
 
-import           Oscoin.Logging (Logger, withExceptionLogged)
+import           Oscoin.Logging (HasLogger(..), Logger, withExceptionLogged)
 import qualified Oscoin.Logging as Log
 import           Oscoin.P2P.Connection (Active, Connection(..), activeNew)
 import qualified Oscoin.P2P.Connection as Conn
@@ -41,7 +41,6 @@ import           Control.Monad.Fail (fail)
 import           Control.Monad.IO.Unlift
 import           Data.Conduit (runConduit, transPipe, (.|))
 import qualified Data.Conduit.Combinators as Conduit
-import           Data.Has (Has(..))
 import           Data.Hashable (Hashable(..), hashUsing)
 import           Formatting (mapf, (%))
 import           Lens.Micro (Lens', lens)
@@ -69,9 +68,9 @@ instance HasHandle (Handle e p p') e p p' where
     handle = identity
     {-# INLINE handle #-}
 
-instance Has Logger (Handle e p p') where
-    hasLens = lens hLogger (\s a -> s { hLogger = a })
-    {-# INLINE hasLens #-}
+instance HasLogger (Handle e p p') where
+    loggerL = lens hLogger (\s a -> s { hLogger = a })
+    {-# INLINE loggerL #-}
 
 data NetworkError =
       ProtocolError
@@ -147,10 +146,10 @@ knownPeer nid host port = Peer nid <$> resolve
         pure $ addrAddress addr
 
 listen
-    :: ( Exception      e
-       , Serialise          p'
-       , HasHandle    r e p p'
-       , Has Logger   r
+    :: ( Exception   e
+       , Serialise       p'
+       , HasHandle r e p p'
+       , HasLogger r
        )
     => Sock.HostName
     -> Sock.PortNumber
@@ -213,10 +212,10 @@ send Peer{peerNodeId} msg = do
         Nothing -> throwM Gone
 
 connect
-    :: ( Exception    e
-       , Serialise        p'
-       , HasHandle  r e p p'
-       , Has Logger r
+    :: ( Exception   e
+       , Serialise       p'
+       , HasHandle r e p p'
+       , HasLogger r
        )
     => Peer
     -> NetworkT r ()
@@ -262,8 +261,8 @@ disconnect Peer{peerNodeId} = do
 --------------------------------------------------------------------------------
 
 recvAll
-    :: ( HasHandle  r e p p'
-       , Has Logger r
+    :: ( HasHandle r e p p'
+       , HasLogger r
        )
     => Connection (WireMessage p)
     -> NetworkT r ()
