@@ -43,7 +43,6 @@ import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class
                  (MonadBlockStore(..), chainState, maximumChainBy)
 import qualified Oscoin.Storage.Block.STM as BlockStore
-import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 
 import qualified Radicle.Extended as Rad

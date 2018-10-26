@@ -11,7 +11,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
-import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.Crypto.Hash (Hash, hash, toHashed)
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -35,10 +35,10 @@ arbitraryBlock = do
     txs <- arbitrary :: Gen [tx]
     timestamp <- arbitrary
     diffi <- arbitrary
-    prevHash <- arbitrary
+    prevHash <- arbitrary :: Gen Hash
 
     let header = emptyHeader
-               { blockPrevHash   = prevHash
+               { blockPrevHash   = toHashed prevHash
                , blockDataHash   = hashTxs txs
                , blockState      = ()
                , blockTimestamp  = timestamp

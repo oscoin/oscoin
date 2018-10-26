@@ -10,9 +10,6 @@ module Oscoin.Node.Trans
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Consensus)
-import qualified Oscoin.Consensus.BlockStore as BlockStore
-import           Oscoin.Consensus.BlockStore.Class
-                 (MonadBlockStore(..), maximumChainBy)
 import           Oscoin.Consensus.Class
                  (MonadClock(..), MonadQuery(..), MonadUpdate(..))
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -24,6 +21,9 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Storage.Block.Class
+                 (MonadBlockStore(..), maximumChainBy)
+import qualified Oscoin.Storage.Block.STM as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 
