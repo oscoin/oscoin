@@ -54,8 +54,7 @@ testStoreLookupBlock h = do
     storeBlock h (blk $> const (Just def))
     Just blk' <- lookupBlock h (blockHash blk)
 
-    blockHeader blk' @?= blockHeader blk
-    blockData blk' @?= blockData blk
+    blk' @?= blk
 
 testStoreLookupTx :: Handle RadTx Rad.Env -> Assertion
 testStoreLookupTx h = do
