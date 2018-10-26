@@ -1,15 +1,17 @@
 module Oscoin.P2P
     (-- * Gossip
-      withGossip
-    , Gossip.runGossipT
+      GossipT
+    , withGossip
+    , runGossipT
 
     -- * Re-exports
     , module Oscoin.P2P.Class
     , module Oscoin.P2P.Types
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (show)
 
+import           Oscoin.Clock (MonadClock)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHash, blockHash, blockHeader, blockPrevHash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -18,26 +20,60 @@ import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 
 import           Oscoin.P2P.Class
-import qualified Oscoin.P2P.Gossip as Gossip
-import qualified Oscoin.P2P.Gossip.Broadcast as Bcast
-import qualified Oscoin.P2P.Gossip.Membership as Membership
-import           Oscoin.P2P.Handshake (Handshake)
+import           Oscoin.P2P.Handshake
+import qualified Oscoin.P2P.Transport as Transport
 import           Oscoin.P2P.Types
+
+import qualified Network.Gossip.HyParView as Membership
+import qualified Network.Gossip.HyParView.Periodic as Periodic
+import qualified Network.Gossip.IO.Peer as Gossip
+import qualified Network.Gossip.IO.Run as Gossip
+import qualified Network.Gossip.IO.Socket as Gossip
+import qualified Network.Gossip.IO.Wire as Gossip
+import qualified Network.Gossip.Plumtree as Bcast
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
-import qualified Control.Concurrent.Async as Async
 import           Data.ByteString.Lazy (fromStrict, toStrict)
+import           Network.Socket (SockAddr, Socket)
+
+type Wire = Gossip.WireMessage (Gossip.ProtocolMessage (Gossip.Peer NodeId))
+
+newtype GossipT m a = GossipT (ReaderT (Gossip.Env NodeId) m a)
+    deriving ( Functor
+             , Applicative
+             , Alternative
+             , Monad
+             , MonadIO
+             , MonadTrans
+             , MonadReader (Gossip.Env NodeId)
+             )
+
+instance MonadIO m => MonadBroadcast (GossipT m) where
+    broadcast msg = do
+        env <- ask
+        liftIO $
+            uncurry (Gossip.broadcast env)
+                . bimap toStrict toStrict . (,CBOR.serialise msg)
+                $ case msg of
+                    BlockMsg blk -> CBOR.serialise $ blockHash blk
+                    TxMsg    tx  -> CBOR.serialise $ Crypto.hash tx
+    {-# INLINE broadcast #-}
+
+instance MonadClock m => MonadClock (GossipT m)
+
+runGossipT :: Gossip.Env NodeId -> GossipT m a -> m a
+runGossipT r (GossipT ma) = runReaderT ma r
 
 -- | Start listening to gossip and pass the gossip handle to the runner.
 --
 -- When the runner returns we stop listening and return the runner result.
 withGossip
-    :: ( Serialise       tx
+    :: ( Serialise s
+       , Serialise       tx
        , Crypto.Hashable tx
        , Exception e
        , Serialise o
-       , Serialise s
        )
     => Logger
     -> NodeAddr
@@ -45,43 +81,62 @@ withGossip
     -> [NodeAddr]
     -- ^ Initial peers to connect to
     -> Storage tx s IO
-    -> Handshake e NodeId (Gossip.WireMessage (Gossip.ProtocolMessage Gossip.Peer)) o
-    -> (Gossip.Handle e Gossip.Peer o -> IO a)
+    -> Handshake e NodeId Wire o
+    -> (Gossip.Env NodeId -> IO a)
     -> IO a
-withGossip logger selfAddr peerAddrs storage handshake run = do
+withGossip _logger selfAddr peerAddrs Storage{..} handshake run = do
     (self:peers) <-
         for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
             Gossip.knownPeer nodeId nodeHost nodePort
     Gossip.withGossip
-        logger
         self
-        scheduleInterval
-        (storageAsCallbacks storage)
-        handshake
         Membership.defaultConfig
-        (listenAndRun peers)
+        Periodic.defaultConfig
+        scheduleInterval
+        (wrapHandshake handshake)
+        (wrapApply  storageLookupBlock storageApplyBlock storageApplyTx)
+        (wrapLookup storageLookupBlock storageLookupTx)
+        (nodeHost selfAddr)
+        (nodePort selfAddr)
+        peers
+        run
   where
-    listenAndRun peers gossipHandle =
-        Async.withAsync (listen peers gossipHandle) . const $ run gossipHandle
-
-    listen peers = flip Gossip.runGossipT $
-        Gossip.listen (nodeHost selfAddr) (nodePort selfAddr) peers
-
     scheduleInterval = 10
 
 --------------------------------------------------------------------------------
 
-storageAsCallbacks
-    :: ( Serialise       s
-       , Serialise       tx
-       , Crypto.Hashable tx
+wrapHandshake
+    :: ( Exception e
+       , Serialise o
        )
-    => Storage tx s IO
-    -> Bcast.Callbacks
-storageAsCallbacks Storage{..} = Bcast.Callbacks{..}
+    => Handshake e NodeId Wire o
+    -> Gossip.HandshakeRole
+    -> Socket
+    -> SockAddr
+    -> Maybe NodeId
+    -> IO (Gossip.Connection NodeId Wire)
+wrapHandshake handshake role sock addr psk = do
+    hres <-
+        runHandshakeT (Transport.framed sock) $
+            handshake (mapHandshakeRole role) psk
+    case hres of
+        Left  e -> throwM e
+        Right r -> do
+            mutex <- newMVar ()
+            let transp = Transport.streamingEnvelope (hrPreSend r) (hrPostRecv r)
+                       $ Transport.streaming sock
+            pure Gossip.Connection
+                { Gossip.connPeer = Gossip.Peer
+                    { Gossip.peerNodeId = hrPeerId r
+                    , Gossip.peerAddr   = addr
+                    }
+                , Gossip.connSend  = withMVar mutex . const . Transport.streamingSend transp
+                , Gossip.connRecv  = Transport.streamingRecv transp
+                , Gossip.connClose = pure ()
+                }
   where
-    applyMessage  = wrapApply  storageLookupBlock storageApplyBlock storageApplyTx
-    lookupMessage = wrapLookup storageLookupBlock storageLookupTx
+    mapHandshakeRole Gossip.Acceptor  = Acceptor
+    mapHandshakeRole Gossip.Connector = Connector
 
 wrapApply
     :: ( Serialise       s

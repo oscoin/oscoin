@@ -7,15 +7,12 @@
 -- 'connOpen'). In order to impede both sybil and eclipse attacks, it is
 -- advisable to also factor in a cryptographic node id. How to do that is beyond
 -- the scope of this module.
-module Oscoin.P2P.Gossip.Membership
+module Network.Gossip.HyParView
     ( Peers (active, passive)
-
-    , Callbacks (..)
 
     , getPeers
 
     , Handle
-    , HasHandle (..)
     , hSelf
     , new
 
@@ -25,6 +22,9 @@ module Oscoin.P2P.Gossip.Membership
     , RPC (..)
     , Message (..)
     , Priority (..)
+
+    , Connection (..)
+    , HyParViewC (..)
 
     , HyParView
     , runHyParView
@@ -41,58 +41,38 @@ module Oscoin.P2P.Gossip.Membership
     , promoteRandom
     ) where
 
-import           Oscoin.Prelude
+import           Prelude
 
-import           Oscoin.P2P.Gossip.Membership.Internal
+import           Network.Gossip.HyParView.Internal
 
 import           Codec.Serialise (Serialise)
-import           Control.Concurrent.STM.TVar
+import           Control.Applicative (liftA2)
+import           Control.Concurrent.STM
 import           Control.Exception.Safe
-                 (SomeException, handleAny, throwM, tryAny)
+                 (Exception, SomeException, toException, tryAny)
 import           Control.Monad (when)
-import           Data.Foldable (foldlM)
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Cont
+import           Data.Bool (bool)
+import           Data.Foldable (foldlM, for_, traverse_)
 import           Data.Hashable (Hashable)
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as Map
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
 import           Data.IORef (IORef, atomicModifyIORef', newIORef)
-import           Data.Maybe (listToMaybe, maybeToList)
+import           Data.Maybe (listToMaybe)
 import           Data.Traversable (for)
-import           Lens.Micro (Lens', lens, _1, _2)
-import           Lens.Micro.Mtl (view)
+import           Data.Word (Word8)
+import           GHC.Generics (Generic)
 import           System.Random (randomR, split)
 import           System.Random.SplitMix (SMGen)
 
-data Callbacks n = Callbacks
-    { -- | Called when a node gets added to the active view.
-      --
-      -- Part of the \"Peer Sampling Service\" interface as specified by the
-      -- plumtree paper.
-      neighborUp   :: n -> IO ()
+{-# ANN module ("HLint: ignore Use map" :: String) #-}
 
-      -- | Called when a node gets removed from the active view.
-      --
-      -- Part of the \"Peer Sampling Service\" interface as specified by the
-      -- plumtree paper.
-    , neighborDown :: n -> IO ()
-
-      -- | Open a new physical connection to 'n'.
-      --
-      -- The connection must have reliable ordered semantics.
-      --
-      -- If the connection could not be established, this should throw an
-      -- exception.
-      --
-      -- The implementor should keep track of open connections, and use an
-      -- existing one if possible.
-    , connOpen     :: n -> IO ()
-
-      -- | Close a physical connection to 'n'.
-      --
-      -- This is mostly an optimisation to allow for prompt finalisation. Once
-      -- this has been called, the connection must not be used to send or
-      -- receive 'RPC's. Closing an already closed connection should have no
-      -- effect. Exceptions raised by this action are ignored.
-    , connClose    :: n -> IO ()
+data Connection n = Connection
+    { connSend  :: RPC n -> IO ()
+    , connClose :: IO ()
     }
 
 data Peers n = Peers
@@ -100,48 +80,17 @@ data Peers n = Peers
     , passive :: HashSet n
     }
 
+-- TODO: stm containers
 data Handle n = Handle
-    { hSelf      :: n
-    , hConfig    :: Config
-    , hPRNG      :: IORef SMGen
-    , hActive    :: TVar (HashSet n)
-    , hPassive   :: TVar (HashSet n)
-    , hCallbacks :: Callbacks n
+    { hSelf    :: n
+    , hConfig  :: Config
+    , hPRNG    :: IORef SMGen
+    , hActive  :: TVar (HashMap n (Connection n))
+    , hPassive :: TVar (HashSet n)
     }
 
-class HasHandle a n | a -> n where
-    handle :: Lens' a (Handle n)
-
-hSelfL :: HasHandle a n => Lens' a n
-hSelfL = handle . lens hSelf (\s a -> s { hSelf = a })
-{-# INLINE hSelfL #-}
-
-hConfigL :: HasHandle a n => Lens' a Config
-hConfigL = handle . lens hConfig (\s a -> s { hConfig = a })
-{-# INLINE hConfigL #-}
-
-hActiveL :: HasHandle a n => Lens' a (TVar (HashSet n))
-hActiveL = handle . lens hActive (\s a -> s { hActive = a })
-{-# INLINE hActiveL #-}
-
-hPassiveL :: HasHandle a n => Lens' a (TVar (HashSet n))
-hPassiveL = handle . lens hPassive (\s a -> s { hPassive = a })
-{-# INLINE hPassiveL #-}
-
-instance HasHandle (Handle n) n where
-    handle = identity
-    {-# INLINE handle #-}
-
-instance {-# OVERLAPPABLE #-} HasHandle (Handle n, a) n where
-    handle = _1
-    {-# INLINE handle #-}
-
-instance {-# OVERLAPPABLE #-} HasHandle (a, Handle n) n where
-    handle = _2
-    {-# INLINE handle #-}
-
-new :: (Eq n, Hashable n) => n -> Config -> SMGen -> Callbacks n -> IO (Handle n)
-new hSelf hConfig prng hCallbacks = do
+new :: (Eq n, Hashable n) => n -> Config -> SMGen -> IO (Handle n)
+new hSelf hConfig prng = do
     hPRNG    <- newIORef prng
     hActive  <- newTVarIO mempty
     hPassive <- newTVarIO mempty
@@ -209,47 +158,98 @@ data Priority = Low | High
 
 instance Serialise Priority
 
-type HyParView n r = ReaderT r IO
+-- Continuations ---------------------------------------------------------------
 
-runHyParView :: r -> HyParView n r a -> IO a
-runHyParView = flip runReaderT
+data HyParViewC n a =
+      ConnectionOpen n       (Either SomeException (Connection n) -> IO (HyParViewC n a))
+    | SendAdHoc      (RPC n) (IO (HyParViewC n a))
+    | NeighborUp     n       (IO (HyParViewC n a))
+    | NeighborDown   n       (IO (HyParViewC n a))
+    | Done           a
+
+connectionOpen :: n -> HyParView n (Either SomeException (Connection n))
+connectionOpen to =
+    HyParView $ ReaderT $ \_ -> ContT $ \k ->
+        pure $ ConnectionOpen to k
+
+sendAdHoc :: RPC n -> HyParView n ()
+sendAdHoc rpc =
+    HyParView $ ReaderT $ \_ -> ContT $ \k ->
+        pure $ SendAdHoc rpc (k ())
+
+neighborUp :: n -> HyParView n ()
+neighborUp n =
+    HyParView $ ReaderT $ \_ -> ContT $ \k ->
+        pure $ NeighborUp n (k ())
+
+neighborDown :: n -> HyParView n ()
+neighborDown n =
+    HyParView $ ReaderT $ \_ -> ContT $ \k ->
+        pure $ NeighborDown n (k ())
+
+-- Monad -----------------------------------------------------------------------
+
+newtype HyParView n a = HyParView
+    { fromHyParView
+        :: forall x. ReaderT (Handle n) (ContT (HyParViewC n x) IO) a
+    } deriving Functor
+
+instance Applicative (HyParView n) where
+    pure x = HyParView $ pure x
+    (<*>)  = ap
+
+instance Monad (HyParView n) where
+    return            = pure
+    HyParView m >>= f = HyParView $ m >>= fromHyParView . f
+    {-# INLINE (>>=) #-}
+
+instance MonadIO (HyParView n) where
+    liftIO io = HyParView $ liftIO io
+
+instance MonadReader (Handle n) (HyParView n) where
+    ask       = HyParView $ ReaderT pure
+    local f m = HyParView $ local f (fromHyParView m)
+
+runHyParView :: Handle n -> HyParView n a -> IO (HyParViewC n a)
+runHyParView r (HyParView m) = runContT (runReaderT m r) (pure . Done)
+
+-- API -------------------------------------------------------------------------
 
 -- | Obtain the current active view.
 --
 -- This is part of the \"Peer Sampling Service\" interface as specified by the
 -- plumtree paper.
-getPeers :: HasHandle r n => HyParView n r (HashSet n)
+getPeers :: (Eq n, Hashable n) => HyParView n (HashSet n)
 getPeers = activeView
 
 -- | Obtain a consistent snapshot of both the active and passive view.
-getPeers' :: HasHandle r n => HyParView n r (Peers n)
+getPeers' :: (Eq n, Hashable n) => HyParView n (Peers n)
 getPeers' = do
-    Handle{hActive, hPassive} <- view handle
+    Handle{hActive, hPassive} <- ask
     liftIO . atomically $
-        liftA2 Peers (readTVar hActive) (readTVar hPassive)
+        liftA2 Peers (keysSet <$> readTVar hActive) (readTVar hPassive)
 
 -- | Obtain a snapshot of the active view.
-activeView :: HasHandle r n => HyParView n r (HashSet n)
-activeView = view hActiveL >>= liftIO . readTVarIO
+activeView :: (Eq n, Hashable n) => HyParView n (HashSet n)
+activeView = asks hActive >>= liftIO . fmap keysSet . readTVarIO
 
 -- | Obtain a snapshot of the passive view.
-passiveView :: HasHandle r n => HyParView n r (HashSet n)
-passiveView = view hPassiveL >>= liftIO . readTVarIO
+passiveView :: HyParView n (HashSet n)
+passiveView = asks hPassive >>= liftIO . readTVarIO
 
 -- | Handle an incoming 'RPC' and return a (possibly empty) list of outgoing
 -- 'RPC's.
 --
 -- Rethrows any exceptions raised by attempting to establish new connections.
-receive :: (Eq n, Hashable n, HasHandle r n) => RPC n -> HyParView n r [RPC n]
+receive :: (Eq n, Hashable n) => RPC n -> HyParView n ()
 receive RPC{rpcSender, rpcPayload} = case rpcPayload of
     Join -> do
-        arwl <- fromIntegral . cfgARWL <$> view hConfigL
-        liftA2 (<>)
-               (addToActive' rpcSender)
-               (broadcast $ ForwardJoin rpcSender arwl)
+        arwl <- fromIntegral . cfgARWL <$> asks hConfig
+        void $ addToActive rpcSender
+        broadcast $ ForwardJoin rpcSender arwl
 
     ForwardJoin joining ttl -> do
-        self  <- view hSelfL
+        self  <- asks hSelf
         nactv <- numActive
         if joining /= self && (isExpired ttl || nactv == 1) then do
             -- Notify the joining node of the endpoint of the random walk by
@@ -257,42 +257,45 @@ receive RPC{rpcSender, rpcPayload} = case rpcPayload of
             -- paper: the joining node cannot otherwise learn about having been
             -- added to some other node's active view, violating the
             -- symmetricity property of the active views.
-            prio <- neighborPriority
-            liftA2 (:)
-                   (send joining $ Neighbor prio)
-                   (addToActive' joining)
+            conn <- addToActive joining
+            case conn of
+                Left  _ -> eject joining
+                Right c -> do
+                    prio <- neighborPriority
+                    sendTo c joining $ Neighbor prio
         else do
-            prwl <- fromIntegral . cfgPRWL <$> view hConfigL
+            prwl <- fromIntegral . cfgPRWL <$> asks hConfig
             when (ttl == prwl) $
                 addToPassive joining
-            let fwd = ForwardJoin joining (decr ttl)
-            maybeToList <$> sendAnyActive fwd [joining]
+            sendAnyActive (ForwardJoin joining (decr ttl)) [joining]
 
     Disconnect -> do
-        removeFromActive rpcSender >>= traverse_ closeConnection
+        removeFromActive rpcSender >>= traverse_ (liftIO . connClose)
         addToPassive rpcSender
         -- Crucial omission in the paper: if the network starts to 'Disconnect'
         -- us, we must actively seek to remain connected.
         nactv <- numActive
-        if nactv > 1 then
-            pure mempty
-        else do
+        unless (nactv > 1) $ do
             -- Try to promote a random passive node.
             rpn <- randomPassiveNodeNot rpcSender
             case rpn of
                 -- Note: 'High' priority to ensure this actually succeeds (the
                 -- same node could have rejected us before).
-                Just n  -> liftA2 (:) (send n $ Neighbor High) (addToActive' n)
+                Just n  -> do
+                    conn <- addToActive n
+                    case conn of
+                        Left  _ -> eject n
+                        Right c -> sendTo c n $ Neighbor High
                 -- We ran out of passive nodes, ask the network for some fresh
                 -- ones.
-                Nothing -> maybeToList <$> shuffle
+                Nothing -> shuffle
 
     Neighbor prio -> do
-        full <- view handle >>= liftIO . atomically . isActiveAtCapacity
+        full <- ask >>= liftIO . atomically . isActiveAtCapacity
         if prio == High || not full then
-            addToActive' rpcSender
+            void $ addToActive rpcSender
         else
-            singleton <$> reply NeighborReject
+            sendAdHoc =<< reply NeighborReject
 
     NeighborReject ->
         -- Deviation from the paper: we do _not_ add the rejecting node to the
@@ -306,29 +309,31 @@ receive RPC{rpcSender, rpcPayload} = case rpcPayload of
         nactv <- numActive
         let ttl' = decr ttl
         if not (isExpired ttl') && nactv > 1 then
-            maybeToList <$> sendAnyActive (Shuffle origin nodes ttl') mempty
+            sendAnyActive (Shuffle origin nodes ttl') mempty
         else do
             rpns <- randomPassiveNodes (Set.size nodes)
             addAllToPassive nodes
-            singleton <$> send origin (ShuffleReply rpns)
+            sendAdHoc =<< mkRPC origin (ShuffleReply rpns)
 
     ShuffleReply nodes -> do
         addAllToPassive nodes
         -- Emergency: we may have issued a shuffle because we where running low
         -- on peers. Try to promote a random passive node if that's the case.
         nactv <- numActive
-        if nactv <= 1 then promoteRandom else pure mempty
+        when (nactv <= 1) promoteRandom
   where
-    singleton x = [x]
+    reply = mkRPC rpcSender
 
-    reply = send rpcSender
-
-    sendAnyActive msg omit =
-        traverse (`send` msg) =<< randomActiveNodeNot (Set.fromList (rpcSender:omit))
+    sendAnyActive msg omit = do
+        actv <- randomActiveNodeNot (Set.fromList (rpcSender:omit))
+        for_ actv $ \(n, conn) -> sendTo conn n msg
 
     broadcast msg = do
-        actv <- view hActiveL >>= liftIO . readTVarIO
-        traverse (`send` msg) . Set.toList $ Set.delete rpcSender actv
+        actv <- asks hActive >>= liftIO . readTVarIO
+        void $
+            Map.traverseWithKey
+                (\n conn -> sendTo conn n msg)
+                (Map.delete rpcSender actv)
 
 -- | Eject a node suspected to be faulty from the active view.
 --
@@ -352,16 +357,13 @@ receive RPC{rpcSender, rpcPayload} = case rpcPayload of
 --   close the connection on its end after replying with 'NeighborReject', such
 --   that the node gets 'eject'ed on the requestor's side on the next attempt to
 --   use the connection.
-eject :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r [RPC n]
+eject :: (Eq n, Hashable n) => n -> HyParView n ()
 eject n = do
-    removeFromActive n >>= traverse_ closeConnection
-    promoted <- promoteRandom
-    nactv    <- numActive
+    removeFromActive n >>= traverse_ (liftIO . connClose)
+    promoteRandom
+    nactv <- numActive
     -- Crucial: initiate a 'shuffle' if we seem to run out of peers.
-    if null promoted || nactv <= 2 then
-        mappend promoted . maybeToList <$> shuffle
-    else
-        pure promoted
+    when (nactv <= 2) $ shuffle
 
 -- | Join the overlay by attempting to connect to the supplied contact nodes.
 --
@@ -376,73 +378,64 @@ eject n = do
 -- This condition is, however, not checked nor enforced. Hence, the returned
 -- list of 'RPC's may also contain 'Disconnect' messages due to evicted active
 -- peers.
-joinAny :: (Eq n, Hashable n, HasHandle r n) => [n] -> HyParView n r [RPC n]
+joinAny :: (Eq n, Hashable n) => [n] -> HyParView n ()
 joinAny ns = do
-    Config{cfgMaxActive, cfgMaxPassive} <- view hConfigL
-    map join . traverse go $
+    Config{cfgMaxActive, cfgMaxPassive} <- asks hConfig
+    traverse_ go $
         take (fromIntegral $ cfgMaxActive + cfgMaxPassive) ns
   where
-    go n = do
-        x <- tryAny $ addToActive' n
-        case x of
-            Right r -> (:r) <$> send n Join
-            Left  _ -> pure []
+    go n = addToActive n >>= traverse_ (\conn -> sendTo conn n Join)
 
 -- | Like 'joinAny', but stop on the first successfully established connection.
-joinFirst :: (Eq n, Hashable n, HasHandle r n) => [n] -> HyParView n r [RPC n]
-joinFirst []     = pure []
+joinFirst :: (Eq n, Hashable n) => [n] -> HyParView n ()
+joinFirst []     = pure ()
 joinFirst (n:ns) = do
-    x <- tryAny $ addToActive' n
+    x <- addToActive n
     case x of
-        Right r -> (:r) <$> send n Join
+        Right c -> sendTo c n Join
         Left  _ -> joinFirst ns
 
 -- | Initiate a 'Shuffle'.
 --
 -- This is supposed to be called periodically in order to exchange peers with
 -- the known part of the network.
---
--- Returns 'Nothing' if the active view is empty, 'Just' the 'Shuffle' 'RPC'
--- otherwise.
-shuffle :: (Eq n, Hashable n, HasHandle r n) => HyParView n r (Maybe (RPC n))
+shuffle :: (Eq n, Hashable n) => HyParView n ()
 shuffle = do
     Config{cfgARWL=arwl, cfgShuffleActive=ka, cfgShufflePassive=kp} <-
-        view hConfigL
-    s   <- view hSelfL
+        asks hConfig
+    s   <- asks hSelf
     ran <- randomActiveNode
-    for ran $ \r -> do
-        as <- randomActiveNodesNot (Set.singleton r) (fromIntegral ka)
-        ps <- randomPassiveNodes (fromIntegral kp)
-        send r $ Shuffle s (as <> ps) (fromIntegral arwl)
+    for_ ran $ \(r, rconn) -> do
+        as  <- keysSet
+           <$> randomActiveNodesNot (Set.singleton r) (fromIntegral ka)
+        ps  <- randomPassiveNodes (fromIntegral kp)
+        sendTo rconn r $ Shuffle s (as <> ps) (fromIntegral arwl)
 
---------------------------------------------------------------------------------
+-- Internal --------------------------------------------------------------------
 
 -- | Select a node from the active view at random.
 --
 -- If the active view is empty, 'Nothing' is returned, otherwise 'Just' the
 -- random node.
-randomActiveNode :: HasHandle r n => HyParView n r (Maybe n)
-randomActiveNode = do
-    Handle{hPRNG, hActive} <- view handle
-    liftIO $ do
-        actv <- readTVarIO hActive
-        prng <- atomicModifyIORef' hPRNG split
-        pure . fst $ randomFromSet actv prng
+randomActiveNode :: (Eq n , Hashable n) => HyParView n (Maybe (n, Connection n))
+randomActiveNode = randomActiveNodeNot mempty
 
 -- | Select a node @n@, but not nodes @ns@, from the active view at random.
 randomActiveNodeNot
-    :: ( Eq          n
-       , Hashable    n
-       , HasHandle r n
-       )
+    :: (Eq n, Hashable n)
     => HashSet n
-    -> HyParView n r (Maybe n)
+    -> HyParView n (Maybe (n, Connection n))
 randomActiveNodeNot ns = do
-    Handle{hPRNG, hActive} <- view handle
+    Handle{hPRNG, hActive} <- ask
     liftIO $ do
-        actv <- readTVarIO hActive
         prng <- atomicModifyIORef' hPRNG split
-        pure . fst $ randomFromSet (Set.difference actv ns) prng
+        atomically $ do
+            actv <- readTVar hActive
+            let
+                actv'   = Set.difference (keysSet actv) ns
+                (rnd,_) = randomFromSet actv' prng
+              in
+                pure $ rnd >>= \x -> (x,) <$> Map.lookup x actv
 
 -- | Select 'num' nodes, but not nodes 'ns', from the active view at random.
 --
@@ -451,25 +444,26 @@ randomActiveNodeNot ns = do
 --
 -- > min (size active - size omitted) (min cfgMaxActive num)
 randomActiveNodesNot
-    :: ( Eq          n
-       , Hashable    n
-       , HasHandle r n
-       )
+    :: (Eq n, Hashable n)
     => HashSet n
     -> Int
-    -> HyParView n r (HashSet n)
+    -> HyParView n (HashMap n (Connection n))
 randomActiveNodesNot ns num = do
-    Handle{hConfig, hActive} <- view handle
+    Handle{hConfig, hActive} <- ask
     actv <- liftIO $ readTVarIO hActive
-    let min' = min (Set.size actv - Set.size ns) . min num . fromIntegral . cfgMaxActive $ hConfig
-    loop min' Set.empty
+    let min' = min (Map.size actv - Set.size ns)
+             . min num
+             . fromIntegral
+             . cfgMaxActive
+             $ hConfig
+    loop min' Map.empty
   where
     loop min' !s = do
         ran <- randomActiveNodeNot ns
         case ran of
             Nothing -> pure s
-            Just n' | s' <- Set.insert n' s ->
-                if Set.size s' >= min' then
+            Just (n', c) | s' <- Map.insert n' c s ->
+                if Map.size s' >= min' then
                     pure s'
                 else
                     loop min' s'
@@ -478,9 +472,9 @@ randomActiveNodesNot ns num = do
 --
 -- If the passive view is empty, 'Nothing' is returned, otherwise 'Just' the
 -- random node.
-randomPassiveNode :: HasHandle r n => HyParView n r (Maybe n)
+randomPassiveNode :: HyParView n (Maybe n)
 randomPassiveNode = do
-    Handle{hPRNG, hPassive} <- view handle
+    Handle{hPRNG, hPassive} <- ask
     liftIO $ do
         pasv <- readTVarIO hPassive
         prng <- atomicModifyIORef' hPRNG split
@@ -488,14 +482,11 @@ randomPassiveNode = do
 
 -- | Select a node @n'@ from the passive view at random, such that @n' /= n@
 randomPassiveNodeNot
-    :: ( Eq          n
-       , Hashable    n
-       , HasHandle r n
-       )
+    :: (Eq n, Hashable n)
     => n
-    -> HyParView n r (Maybe n)
+    -> HyParView n (Maybe n)
 randomPassiveNodeNot n = do
-    Handle{hPRNG, hPassive} <- view handle
+    Handle{hPRNG, hPassive} <- ask
     liftIO $ do
         pasv <- readTVarIO hPassive
         prng <- atomicModifyIORef' hPRNG split
@@ -508,14 +499,11 @@ randomPassiveNodeNot n = do
 --
 -- > min (size passive) (min cfgMaxPassive num)
 randomPassiveNodes
-    :: ( Eq          n
-       , Hashable    n
-       , HasHandle r n
-       )
+    :: (Eq n, Hashable n)
     => Int
-    -> HyParView n r (HashSet n)
+    -> HyParView n (HashSet n)
 randomPassiveNodes num = do
-    Handle{hConfig, hPRNG, hPassive} <- view handle
+    Handle{hConfig, hPRNG, hPassive} <- ask
     prng <- liftIO $ atomicModifyIORef' hPRNG split
     liftIO . atomically $ do
         pasv <- readTVar hPassive
@@ -534,46 +522,46 @@ randomPassiveNodes num = do
                 else
                     loop min' pasv prng' s'
 
+data SelfConnection = SelfConnection deriving Show
+instance Exception SelfConnection
+
 -- | Add a peer to the active view, removing a random other node from the active
 -- view if it is full.
 --
 -- If the peer is in the passive view, it will get removed from there.
 --
--- If a peer gets removed to make space for the new one, it is returned as a
--- 'Just', otherwise 'Nothing' is returned.
---
 -- Before the peer is added to the active view, a connection is attempted to be
--- established via 'connOpen'. This may fail throwing an arbitrary exception, in
--- which case the peer is /not/ added to the active view. __The exception is
--- rethrown__
-addToActive :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r (Maybe n)
-addToActive n = view handle >>= go
+-- established via 'connectionOpen'. This may fail throwing an arbitrary
+-- exception, in which case the peer is /not/ added to the active view.
+addToActive
+    :: (Eq n, Hashable n)
+    => n
+    -> HyParView n (Either SomeException (Connection n))
+addToActive n = ask >>= go
   where
     go hdl@Handle{hSelf, hPRNG, hActive, hPassive}
-      | hSelf == n = pure Nothing
+      | hSelf == n = pure . Left $ toException SelfConnection
       | otherwise  = do
-        conn <- tryAny $ openConnection n
-        case conn of
-            Left e   -> throwM e
-            Right () -> do
-                removed <- liftIO $ do
-                    gen <- atomicModifyIORef' hPRNG split
-                    atomically $ do
-                        (removed,_) <- evictActive hdl gen
-                        modifyTVar' hActive  $ Set.insert n
-                        modifyTVar' hPassive $ Set.delete n
-                        pure removed
-                notifyUp n
-                for_ removed $ \rm'd -> do
-                    closeConnection rm'd
-                    notifyDown rm'd
-                pure removed
+        conn <- connectionOpen n
+        for conn $ \c -> do
+            removed <- liftIO $ do
+                gen <- atomicModifyIORef' hPRNG split
+                atomically $ do
+                    (removed,_) <- evictActive hdl gen
+                    modifyTVar' hActive  $ Map.insert n c
+                    modifyTVar' hPassive $ Set.delete n
+                    pure removed
+            neighborUp n
+            for_ removed $ \(rn, rconn) -> do
+                liftIO $ connClose rconn
+                neighborDown rn
+            pure c
 
 -- | Add a peer to the passive view, removing a random other node from the
 -- passive view if it is full.
-addToPassive :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r ()
+addToPassive :: (Eq n, Hashable n) => n -> HyParView n ()
 addToPassive n = do
-    hdl@Handle{hPRNG} <- view handle
+    hdl@Handle{hPRNG} <- ask
     liftIO $ do
         gen <- atomicModifyIORef' hPRNG split
         atomically . void $ addToPassive' hdl gen n
@@ -583,95 +571,80 @@ addToPassive n = do
 -- This implements an optimisation: by first removing the given peers from the
 -- passive view, we avoid having the repeatedly evict peers when the passive
 -- view is at capacity.
-addAllToPassive :: (Eq n, Hashable n, HasHandle r n) => HashSet n -> HyParView n r ()
+addAllToPassive :: (Eq n, Hashable n) => HashSet n -> HyParView n ()
 addAllToPassive ns = do
-    hdl@Handle{hSelf = self, hPRNG, hActive, hPassive} <- view handle
+    hdl@Handle{hSelf = self, hPRNG, hActive, hPassive} <- ask
     liftIO $ do
         gen <- atomicModifyIORef' hPRNG split
         atomically $ do
-            actv <- readTVar hActive
+            actv <- keysSet <$> readTVar hActive
             let ns' = Set.difference (Set.delete self ns) actv
             modifyTVar' hPassive $ (`Set.difference` ns')
             void $ foldlM (addToPassive' hdl) gen ns'
 
-removeFromActive :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r (Maybe n)
+removeFromActive
+    :: (Eq n, Hashable n)
+    => n
+    -> HyParView n (Maybe (Connection n))
 removeFromActive n = do
-    prev <- view handle >>= liftIO . atomically . flip removeFromActive' n
-    traverse_ notifyDown prev
+    prev <- ask >>= liftIO . atomically . flip removeFromActive' n
+    for_ prev . const $ neighborDown n
     pure prev
 
-removeFromPassive :: (Eq n, Hashable n , HasHandle r n) => n -> HyParView n r ()
-removeFromPassive n = view handle >>= liftIO . atomically . flip removeFromPassive' n
+removeFromPassive :: (Eq n, Hashable n) => n -> HyParView n ()
+removeFromPassive n = ask >>= liftIO . atomically . flip removeFromPassive' n
 
 -- | Attempt to promote a random passive node to the active view.
 --
 -- This should be called periodically at an interval smaller than the rate of
 -- new nodes joining (which in turn should be rate-limited).
-promoteRandom :: (Eq n, Hashable n, HasHandle r n) => HyParView n r [RPC n]
-promoteRandom = randomPassiveNode >>= maybe (pure []) promote
+promoteRandom :: (Eq n, Hashable n) => HyParView n ()
+promoteRandom = randomPassiveNode >>= maybe (pure ()) promote
   where
     promote n' = do
-        x <- tryAny $ addToActive' n'
+        x <- addToActive n'
         case x of
             Left  _ -> do
                 -- TODO(kim): logging?
                 removeFromPassive n'
                 promoteRandom
-            Right r -> do
+            Right c -> do
                 prio <- neighborPriority
-                (:r) <$> send n' (Neighbor prio)
+                sendTo c n' $ Neighbor prio
 
 --------------------------------------------------------------------------------
 
-notifyUp :: HasHandle r n => n -> HyParView n r ()
-notifyUp n = do
-    up <- neighborUp . hCallbacks <$> view handle
-    liftIO $ up n
+numActive :: HyParView n Int
+numActive = asks hActive >>= fmap Map.size . liftIO . readTVarIO
 
-notifyDown :: HasHandle r n => n -> HyParView n r ()
-notifyDown n = do
-    down <- neighborDown . hCallbacks <$> view handle
-    liftIO $ down n
-
-openConnection :: HasHandle r n => n -> HyParView n r ()
-openConnection to = do
-    open <- connOpen . hCallbacks <$> view handle
-    liftIO $ open to
-
-closeConnection :: HasHandle r n => n -> HyParView n r ()
-closeConnection to = do
-    close <- connClose . hCallbacks <$> view handle
-    handleAny ignoreException $ liftIO (close to)
-
---------------------------------------------------------------------------------
-
-addToActive' :: (Eq n, Hashable n, HasHandle r n) => n -> HyParView n r [RPC n]
-addToActive' n =
-    addToActive n >>= map maybeToList . traverse (`send` Disconnect)
-
-numActive :: HasHandle r n => HyParView n r Int
-numActive = view hActiveL >>= map Set.size . liftIO . readTVarIO
-
-send :: HasHandle r n => n -> Message n -> HyParView n r (RPC n)
-send to payload = do
-    s <- view hSelfL
+mkRPC :: n -> Message n -> HyParView n (RPC n)
+mkRPC to payload = do
+    s <- asks hSelf
     pure RPC
         { rpcSender    = s
         , rpcRecipient = to
         , rpcPayload   = payload
         }
 
-neighborPriority :: HasHandle r n => HyParView n r Priority
+sendTo :: (Eq n, Hashable n) => Connection n -> n -> Message n -> HyParView n ()
+sendTo Connection{connSend} to msg = do
+    rpc <- mkRPC to msg
+    res <- liftIO . tryAny $ connSend rpc
+    case res of
+        Left  _  -> eject to
+        Right () -> pure ()
+
+neighborPriority :: HyParView n Priority
 neighborPriority = do
-    actv <- view hActiveL
-    bool Low High . Set.null <$> liftIO (readTVarIO actv)
+    actv <- asks hActive
+    bool Low High . Map.null <$> liftIO (readTVarIO actv)
 
 --------------------------------------------------------------------------------
 
 isActiveAtCapacity :: Handle n -> STM Bool
 isActiveAtCapacity Handle{hConfig = Config{cfgMaxActive}, hActive} = do
     actv <- readTVar hActive
-    pure $ Set.size actv >= maxActv
+    pure $ Map.size actv >= maxActv
   where
     maxActv = fromIntegral cfgMaxActive
 
@@ -682,50 +655,69 @@ isPassiveAtCapacity Handle{hConfig = Config{cfgMaxPassive}, hPassive} = do
   where
     maxPasv = fromIntegral cfgMaxPassive
 
-evictActive :: (Eq n, Hashable n) => Handle n -> SMGen -> STM (Maybe n, SMGen)
-evictActive hdl@Handle{hActive} gen =
-    isActiveAtCapacity hdl >>= bool (pure (Nothing, gen)) (evict hActive gen)
+evictActive
+    :: (Eq n, Hashable n)
+    => Handle n
+    -> SMGen
+    -> STM (Maybe (n, Connection n), SMGen)
+evictActive hdl@Handle{hActive} gen = do
+    full <- isActiveAtCapacity hdl
+    if full then do
+        m <- readTVar hActive
+        let (key, gen') = randomFromSet (keysSet m) gen
+        case key of
+            Nothing -> pure (Nothing, gen')
+            Just  k ->
+                case Map.lookup k m of
+                    Nothing -> pure (Nothing, gen')
+                    Just  v -> do
+                        modifyTVar' hActive $ Map.delete k
+                        pure (Just (k, v), gen')
+    else
+        pure (Nothing, gen)
 
 evictPassive :: (Eq n, Hashable n) => Handle n -> SMGen -> STM (Maybe n, SMGen)
-evictPassive hdl@Handle{hPassive} gen =
-    isPassiveAtCapacity hdl >>= bool (pure (Nothing, gen)) (evict hPassive gen)
-
-evict :: (Eq n, Hashable n) => TVar (HashSet n) -> SMGen -> STM (Maybe n, SMGen)
-evict ref gen = do
-    s <- readTVar ref
-    let rnd = randomFromSet s gen
-    traverse_ (modifyTVar' ref . Set.delete) $ fst rnd
-    pure rnd
+evictPassive hdl@Handle{hPassive} gen = do
+    full <- isPassiveAtCapacity hdl
+    if full then do
+        s <- readTVar hPassive
+        let rnd = randomFromSet s gen
+        traverse_ (modifyTVar' hPassive . Set.delete) $ fst rnd
+        pure rnd
+    else
+        pure (Nothing, gen)
 
 addToPassive' :: (Eq n, Hashable n) => Handle n -> SMGen -> n -> STM SMGen
 addToPassive' hdl@Handle{hSelf = self, hActive, hPassive} gen n = do
     actv <- readTVar hActive
-    if n /= self && not (Set.member n actv) then do
+    if n /= self && not (Map.member n actv) then do
         (_,gen') <- evictPassive hdl gen
         modifyTVar' hPassive $ Set.insert n
         pure gen'
     else
         pure gen
 
-removeFromActive' :: (Eq n, Hashable n) => Handle n -> n -> STM (Maybe n)
+removeFromActive'
+    :: (Eq n, Hashable n)
+    => Handle n
+    -> n
+    -> STM (Maybe (Connection n))
 removeFromActive' Handle{hActive} n = do
     actv <- readTVar hActive
-    if Set.member n actv then do
-        modifyTVar' hActive $ Set.delete n
-        pure $ Just n
-    else
-        pure Nothing
+    for (Map.lookup n actv) $ \conn -> do
+        modifyTVar' hActive $ Map.delete n
+        pure conn
 
 removeFromPassive' :: (Eq n, Hashable n) => Handle n -> n -> STM ()
 removeFromPassive' Handle{hPassive} n = modifyTVar' hPassive $ Set.delete n
 
 --------------------------------------------------------------------------------
 
-ignoreException :: (Applicative m, Monoid w) => SomeException -> m w
-ignoreException = const $ pure mempty
-
 randomFromSet :: HashSet a -> SMGen -> (Maybe a, SMGen)
 randomFromSet s gen | Set.null s = (Nothing, gen)
                     | otherwise  =
     let (i, gen') = randomR (0, Set.size s - 1) gen
      in (listToMaybe . drop i $ Set.toList s, gen')
+
+keysSet :: (Eq k, Hashable k) => HashMap k v -> HashSet k
+keysSet = Set.fromList . Map.keys
