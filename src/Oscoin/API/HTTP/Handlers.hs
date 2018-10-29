@@ -17,7 +17,6 @@ import           Oscoin.State.Tree (Key)
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
 
-import           Codec.Serialise (serialise)
 import           Network.HTTP.Types.Status
 
 root :: ApiAction i ()
@@ -86,7 +85,7 @@ getStatePath _chain = do
     result' <- node $ Node.getPath path
     case result' of
         Just val ->
-            respondBytes ok200 CBOR (serialise $ Ok val)
+            respondCbor ok200 (Ok val)
         Nothing ->
             respond notFound404 $ errBody "Value not found"
 

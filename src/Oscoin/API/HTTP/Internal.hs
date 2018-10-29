@@ -18,7 +18,7 @@ module Oscoin.API.HTTP.Internal
 
     , errBody
     , respond
-    , respondBytes
+    , respondCbor
     , noBody
     , body
 
@@ -173,6 +173,17 @@ respond status (Just bdy) = do
 respond status Nothing = do
     Spock.setStatus status
     Spock.lazyBytes ""
+
+-- | Respond with a CBOR encoded payload.
+--
+-- Responds with a 406 status code if the @Accept@ header is not
+-- @appliaction/cbor@.
+respondCbor :: (Serialise a) => HTTP.Status -> a -> ApiAction i b
+respondCbor status value = do
+    ct <- negotiateContentType
+    case ct of
+        CBOR -> respondBytes status ct $ Serialise.serialise value
+        _    -> respond HTTP.notAcceptable406 noBody
 
 respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction i b
 respondBytes status ct bdy = do
