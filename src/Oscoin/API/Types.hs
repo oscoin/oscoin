@@ -7,13 +7,11 @@ module Oscoin.API.Types
     , resultToEither
     , TxSubmitResponse(..)
     , Key
-    , Query(..)
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
-import           Oscoin.Data.Query (Query(..))
 import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Prelude
 import           Oscoin.State.Tree (Key)

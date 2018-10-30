@@ -35,7 +35,7 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api :: Environment -> Api Rad.Env i ()
+api :: Environment -> Api i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy staticFilePolicy

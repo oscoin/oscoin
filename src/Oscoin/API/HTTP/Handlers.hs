@@ -9,6 +9,7 @@ import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -16,18 +17,17 @@ import           Oscoin.State.Tree (Key)
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
 
-import           Codec.Serialise (Serialise, serialise)
 import           Network.HTTP.Types.Status
 
-root :: ApiAction s i ()
+root :: ApiAction i ()
 root = respond ok200 noBody
 
-getAllTransactions :: ApiAction s i ()
+getAllTransactions :: ApiAction i ()
 getAllTransactions = do
     mp <- node Node.getMempool
     respond ok200 $ body (Ok mp)
 
-getTransaction :: Hashed RadTx -> ApiAction s i ()
+getTransaction :: Hashed RadTx -> ApiAction i ()
 getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
         Nothing -> respond notFound404 $ errBody "Transaction not found"
@@ -49,7 +49,7 @@ getTransaction txId = do
                 pure $ fromTxLookup <$> Blockchain.lookupTx id chain
 
 
-submitTransaction :: ApiAction s i a
+submitTransaction :: ApiAction i a
 submitTransaction = do
     tx <- getVerifiedTxBody
     receipt <- node $ do
@@ -64,13 +64,13 @@ submitTransaction = do
         then pure tx
         else respond badRequest400 $ errBody "Invalid transaction signature"
 
-getBestChain :: ApiAction s i a
+getBestChain :: ApiAction i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
     blks <- node $ take n . Blockchain.blocks <$> Node.getBestChain
     respond ok200 (body $ Ok $ map void blks)
 
-getBlock :: BlockHash -> ApiAction s i a
+getBlock :: BlockHash -> ApiAction i a
 getBlock h = do
     result <- node $ BlockStore.lookupBlock h
     case result of
@@ -79,23 +79,17 @@ getBlock h = do
         Nothing ->
             respond notFound404 noBody
 
-getStatePath
-    :: (Serialise (QueryVal s), Query s)
-    => Key -> ApiAction s i ()
+getStatePath :: Key -> ApiAction i ()
 getStatePath _chain = do
-    result <- decodeListParam <$> param' "q"
-    case result of
-        Left err ->
-            respond badRequest400 (errBody err)
-        Right path -> do
-            result' <- node $ Node.getPath path
-            case result' of
-                Just val ->
-                    respondBytes ok200 CBOR (serialise $ Ok val)
-                Nothing ->
-                    respond notFound404 $ errBody "Value not found"
+    path <- listParam "q"
+    result' <- node $ Node.getPath path
+    case result' of
+        Just val ->
+            respondCbor ok200 (Ok val)
+        Nothing ->
+            respond notFound404 $ errBody "Value not found"
 
 -- | Runs a NodeT action in a MonadApi monad.
-node :: MonadApi s i m => Node.NodeT RadTx s i IO a -> m a
+node :: MonadApi i m => Node.NodeT RadTx RadicleTx.Env i IO a -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s
