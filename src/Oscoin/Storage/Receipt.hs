@@ -1,4 +1,4 @@
--- | Provides heleprs functions to easily implement 'MonadReceiptStore'
+-- | Provides helper functions to easily implement 'MonadReceiptStore'
 -- instances for State monads and IO Reader monads with handles.
 module Oscoin.Storage.Receipt
     ( MonadReceiptStore(..)
@@ -51,9 +51,8 @@ addWithStore receipt = do
 lookupWithStore
     :: (HasStore tx o st, MonadState st m)
     => Crypto.Hashed tx -> m (Maybe (Receipt tx o))
-lookupWithStore txHash = do
-    store <- use storeL
-    pure $ Map.lookup txHash store
+lookupWithStore txHash =
+    Map.lookup txHash <$> use storeL
 
 -- TVar handle based MonadReceiptStore --------------------------------------
 

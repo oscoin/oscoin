@@ -27,8 +27,13 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Radicle
 import qualified Radicle.Extended as Rad
+import qualified Text.Show as Show
 
 newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
+
+instance Show.Show Env where
+    show (Env inner) =
+        T.unpack . Rad.prettyValue . Rad.toRad $ Rad.bindingsEnv inner
 
 type RadTx = Tx Rad.Value
 

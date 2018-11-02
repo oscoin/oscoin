@@ -4,12 +4,12 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain, ScoringFunction, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, Orphan, blockHeader, blockState)
+                 (Block, BlockHash, StateHash, blockHeader, blockStateHash)
 import           Oscoin.Crypto.Hash (Hashed)
 
 class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     -- | Store a block in the block-store.
-    storeBlock :: Block tx (Orphan s) -> m ()
+    storeBlock :: Block tx s -> m ()
 
     -- | Lookup a 'Block' by its header.
     lookupBlock :: BlockHash -> m (Maybe (Block tx s))
@@ -29,7 +29,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
 
     default storeBlock
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => Block tx (Orphan s) -> m ()
+        => Block tx s -> m ()
     storeBlock = lift . storeBlock
     {-# INLINE storeBlock #-}
 
@@ -64,7 +64,7 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     maximumChainBy = lift . maximumChainBy
     {-# INLINE maximumChainBy #-}
 
--- | The state @s@ of the best chain according to the supplied scoring function.
-chainState :: ScoringFunction tx s -> MonadBlockStore tx s m => m s
-chainState sf =
-    blockState . blockHeader . tip <$> maximumChainBy sf
+-- | The state hash of the best chain according to the supplied scoring function.
+chainStateHash :: ScoringFunction tx s -> MonadBlockStore tx s m => m StateHash
+chainStateHash sf =
+    blockStateHash . blockHeader . tip <$> maximumChainBy sf

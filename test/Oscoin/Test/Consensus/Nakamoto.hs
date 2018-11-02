@@ -5,14 +5,16 @@ module Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Prelude
 
 import           Oscoin.Clock
-import           Oscoin.Consensus.Class (MonadUpdate)
 import           Oscoin.Consensus.Mining (mineBlock)
+import           Oscoin.Consensus.Nakamoto (PoW(..), emptyPoW)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import           Oscoin.State.Tree (Tree)
 import           Oscoin.Storage.Block.Class (MonadBlockStore)
 import           Oscoin.Storage.Receipt
+import           Oscoin.Storage.State.Class (MonadStateStore)
 
 import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
@@ -23,17 +25,16 @@ import qualified Data.Map.Strict as Map
 import           Lens.Micro
 import           System.Random
 
+type NakamotoConsensus tx m = Consensus tx PoW (NakamotoT tx m)
 
-type NakamotoConsensus tx s m = Consensus tx (NakamotoT tx s m)
-
-nakConsensus :: Monad m => NakamotoConsensus tx s m
+nakConsensus :: Monad m => NakamotoConsensus tx m
 nakConsensus = Consensus
     { cScore = comparing Nakamoto.chainScore
     , cMiner = \_chain hdr -> do gen <- state split
                                  pure $ mineBlockRandom gen hdr
     }
 
-newtype NakamotoT tx s m a =
+newtype NakamotoT tx m a =
     NakamotoT (StateT StdGen m a)
     deriving ( Functor
              , Applicative
@@ -43,39 +44,40 @@ newtype NakamotoT tx s m a =
              , MonadTrans
              )
 
-instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx s m)
+instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx m)
 
-instance MonadMempool     tx   m => MonadMempool     tx   (NakamotoT tx s m)
-instance MonadBlockStore  tx s m => MonadBlockStore  tx s (NakamotoT tx s m)
-instance MonadUpdate         s m => MonadUpdate         s (NakamotoT tx s m)
-instance MonadReceiptStore tx () m => MonadReceiptStore tx () (NakamotoT tx s m)
+instance MonadBlockStore   tx PoW m => MonadBlockStore   tx PoW  (NakamotoT tx m)
+instance MonadMempool      tx     m => MonadMempool      tx      (NakamotoT tx m)
+instance MonadReceiptStore tx ()  m => MonadReceiptStore tx ()   (NakamotoT tx m)
 
-runNakamotoT :: StdGen -> NakamotoT tx s m a -> m (a, StdGen)
+instance MonadStateStore Tree m => MonadStateStore Tree (NakamotoT tx m)
+
+runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
 runNakamotoT rng (NakamotoT ma) = runStateT ma rng
 
 -- | Mine a block header in 10% of the cases. The forged header does
 -- not have a valid proof of work.
-mineBlockRandom :: StdGen -> BlockHeader a -> Maybe (BlockHeader a)
+mineBlockRandom :: StdGen -> BlockHeader s -> Maybe (BlockHeader PoW)
 mineBlockRandom stdGen bh@BlockHeader{..} =
     let r = fst $ randomR (0, 1) stdGen
         p = 0.1 :: Float
      in if r < p
-           then Just bh
+           then Just $ bh $> emptyPoW
            else Nothing
 
-type NakamotoNode = NakamotoT DummyTx () (TestNodeT Identity)
+type NakamotoNode = NakamotoT DummyTx (TestNodeT PoW Identity)
 
 data NakamotoNodeState = NakamotoNodeState
     { nakStdGen :: StdGen
-    , nakNode   :: TestNodeState
+    , nakNode   :: TestNodeState PoW
     } deriving Show
 
-instance HasTestNodeState NakamotoNodeState where
+instance HasTestNodeState PoW NakamotoNodeState where
     testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
 
-instance TestableNode NakamotoNode NakamotoNodeState where
+instance TestableNode PoW NakamotoNode NakamotoNodeState where
     testableTick tick = do
-        blk <- (map . map) void $ mineBlock nakConsensus dummyEval tick
+        blk <- mineBlock nakConsensus dummyEval tick
         pure $ maybeToList (BlockMsg <$> blk)
     testableInit = initNakamotoNodes
     testableRun  = runNakamotoNode
@@ -84,10 +86,12 @@ instance TestableNode NakamotoNode NakamotoNodeState where
 nakamotoNode :: DummyNodeId -> NakamotoNodeState
 nakamotoNode nid = NakamotoNodeState
     { nakStdGen = mkStdGen (Hashable.hash nid)
-    , nakNode   = emptyTestNodeState nid
+    , nakNode   = emptyTestNodeState dummyPoW nid
     }
+  where
+    dummyPoW blk = blk $> emptyPoW
 
-initNakamotoNodes :: TestNetwork a -> TestNetwork NakamotoNodeState
+initNakamotoNodes :: TestNetwork PoW a -> TestNetwork PoW NakamotoNodeState
 initNakamotoNodes tn@TestNetwork{tnNodes} =
     tn { tnNodes = Map.mapWithKey (const . nakamotoNode) tnNodes }
 

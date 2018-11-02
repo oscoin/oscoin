@@ -10,16 +10,17 @@ module Oscoin.Storage.Block
     , lookupBlock
     , lookupTx
     , orphans
-    , chainState
+    , chainStateHash
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain.Block (Block, Orphan)
+import           Oscoin.Crypto.Blockchain.Block (Block)
 
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
 
+import           Codec.Serialise (Serialise)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -28,25 +29,25 @@ import           Text.Show (Show(..))
 -- | Store of 'Block's and 'Blockchain's.
 data BlockStore tx s = BlockStore
     { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
-    , bsOrphans :: Set (Block tx (Orphan s))       -- ^ Orphan blocks.
+    , bsOrphans :: Set (Block tx s)                -- ^ Orphan blocks.
     }
 
 instance Show (BlockStore tx s) where
     -- We can't derive Show because 'Orphan' is a function.
     show = const "BlockStore{}"
 
-instance Ord tx => Semigroup (BlockStore tx s) where
+instance (Ord tx, Ord s) => Semigroup (BlockStore tx s) where
     (<>) a b = BlockStore
         { bsOrphans = bsOrphans a <> bsOrphans b
         , bsChains  = bsChains  a <> bsChains  b }
 
-instance Ord tx => Monoid (BlockStore tx s) where
+instance (Ord tx, Ord s) => Monoid (BlockStore tx s) where
     mempty = BlockStore mempty mempty
 
-genesisBlockStore :: Block tx s -> BlockStore tx s
+genesisBlockStore :: Serialise s => Block tx s -> BlockStore tx s
 genesisBlockStore gen = initWithChain $ fromGenesis gen
 
-initWithChain :: Blockchain tx s -> BlockStore tx s
+initWithChain :: Serialise s => Blockchain tx s -> BlockStore tx s
 initWithChain  chain =
     BlockStore
         { bsChains  = Map.singleton (blockHash $ genesis chain) chain
@@ -68,20 +69,20 @@ getGenesisBlock BlockStore{bsChains} =
     -- Nb. since all blockchains share the same genesis block, we can just pick
     -- any.
 
-insert :: Ord tx => Block tx (Orphan s) -> BlockStore tx s -> BlockStore tx s
+insert :: (Ord s, Ord tx, Serialise s) => Block tx s -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
     linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
 
-fromOrphans :: (Ord tx, Foldable t) => t (Block tx (Orphan s)) -> Block tx s -> BlockStore tx s
+fromOrphans :: (Ord tx, Ord s, Serialise s, Foldable t) => t (Block tx s) -> Block tx s -> BlockStore tx s
 fromOrphans (toList -> blks) gen =
     linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
 
 -- | /O(n)/. Lookup a block in all chains.
-lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
+lookupBlock :: Serialise s => BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock h (Map.elems . bsChains -> chains) =
     List.find ((== h) . blockHash) (foldMap blocks chains)
 
-orphans :: BlockStore tx s -> Set BlockHash
+orphans :: Serialise s => BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
     let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
         danglingHashes = Set.map blockHash bsOrphans
@@ -98,14 +99,14 @@ lookupTx h BlockStore{bsChains} =
         blks = concatMap blocks (Map.elems bsChains)
      in List.lookup h txs
 
--- | The state @s@ of the best chain according to the supplied scoring function.
-chainState :: ScoringFunction tx s -> BlockStore tx s -> s
-chainState sf =
-    blockState . blockHeader . tip . maximumChainBy sf
+-- | The state hash of the best chain according to the supplied scoring function.
+chainStateHash :: ScoringFunction tx s -> BlockStore tx s -> StateHash
+chainStateHash sf =
+    blockStateHash . blockHeader . tip . maximumChainBy sf
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.
-linkBlocks :: forall tx s. Ord tx => BlockStore tx s -> BlockStore tx s
+linkBlocks :: forall tx s. (Ord tx, Ord s, Serialise s) => BlockStore tx s -> BlockStore tx s
 linkBlocks bs' =
     go (Set.elems (bsOrphans bs')) bs'
   where
@@ -115,13 +116,10 @@ linkBlocks bs' =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
                 let store = Set.delete blk bsOrphans
-                 in go (Set.elems store) $ case linkBlock (tip chain) blk of
-                     Just blk' -> bs
-                         { bsOrphans  = store
-                         , bsChains    = Map.insert (blockHash blk')
-                                                    (blk' |> chain)
-                                                    bsChains }
-                     Nothing -> bs
-                         { bsOrphans = store }
+                 in go (Set.elems store) $
+                    bs { bsOrphans  = store
+                       , bsChains   = Map.insert (blockHash blk)
+                                                 (blk |> chain)
+                                                 bsChains }
             Nothing ->
                 go blks bs

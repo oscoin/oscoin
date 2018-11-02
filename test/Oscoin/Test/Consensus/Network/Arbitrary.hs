@@ -7,6 +7,7 @@ module Oscoin.Test.Consensus.Network.Arbitrary
 
 import           Oscoin.Prelude
 
+import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 
 import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
@@ -25,10 +26,10 @@ import           Test.QuickCheck
 kidSize :: Int
 kidSize = 13
 
-arbitraryTxMsg :: Arbitrary tx => Gen (Msg tx)
+arbitraryTxMsg :: (Arbitrary tx) => Gen (Msg tx s)
 arbitraryTxMsg = TxMsg <$> arbitrary
 
-arbitraryHealthyNetwork :: Duration -> Gen (TestNetwork ())
+arbitraryHealthyNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitraryHealthyNetwork blockTime = do
     net  <- arbitrarySynchronousNetwork blockTime
     gen  <- mkStdGen <$> arbitrary :: Gen StdGen
@@ -36,7 +37,7 @@ arbitraryHealthyNetwork blockTime = do
     pure net
         { tnLatencies = randomRs (1 * seconds , 1 * seconds + 2 * blockTime) gen }
 
-arbitrarySynchronousNetwork :: Duration -> Gen (TestNetwork ())
+arbitrarySynchronousNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitrarySynchronousNetwork blockTime = do
     addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
         `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set DummyNodeId)
@@ -63,11 +64,12 @@ arbitrarySynchronousNetwork blockTime = do
         , tnLog        = []
         , tnLatencies  = repeat 0
         , tnRng        = rng
+        , tnEval       = identityEval
         , tnMsgCount   = 0
         , tnLastTick   = fromEpoch duration
         }
 
-arbitraryPartitionedNetwork :: Duration -> Gen (TestNetwork ())
+arbitraryPartitionedNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitraryPartitionedNetwork blockTime = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork blockTime
     partition           <- arbitraryPartition (Map.keys tnNodes)
@@ -141,7 +143,7 @@ arbitraryBridgePartition addrs = do
         [] ->
             mempty
 
-instance Arbitrary (TestNetwork ()) where
+instance (Ord s) => Arbitrary (TestNetwork s ()) where
     arbitrary = arbitraryPartitionedNetwork 1 -- TODO: use size for epochLength?
 
     shrink tn =
@@ -154,7 +156,7 @@ instance Arbitrary (TestNetwork ()) where
                   $ filter (not . null . tnNodes)
                   $ [filterNetwork tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
-shrinkScheduledMsgs :: Set Scheduled -> [Set Scheduled]
+shrinkScheduledMsgs :: Ord s => Set (Scheduled s) -> [Set (Scheduled s)]
 shrinkScheduledMsgs msgs =
     mempty : [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
   where
@@ -165,7 +167,7 @@ shrinkScheduledMsgs msgs =
             (shrinkList shrinkNothing)
             (Set.filter isMsg msgs)
 
-filterNetwork :: TestNetwork a -> TestNetwork a
+filterNetwork :: TestNetwork s a -> TestNetwork s a
 filterNetwork tn@TestNetwork{..} =
     tn { tnMsgs = Set.filter f tnMsgs }
   where

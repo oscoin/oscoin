@@ -42,12 +42,12 @@ instance FromJSON NodeAddr where
         nodePort <- toEnum <$> o .: "port"
         pure NodeAddr{..}
 
-data Msg tx =
-      BlockMsg (Block tx ())
+data Msg tx s =
+      BlockMsg (Block tx s)
     | TxMsg    tx
     deriving (Eq, Generic)
 
-instance Serialise tx => Serialise (Msg tx)
+instance (Serialise tx, Serialise s) => Serialise (Msg tx s)
 
 data MsgId tx =
       BlockId BlockHash

@@ -8,14 +8,14 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
 
-data Consensus tx m = Consensus
-    { cScore :: ChainScore tx
-    , cMiner :: Miner m
+data Consensus tx s m = Consensus
+    { cScore :: ChainScore tx s
+    , cMiner :: Miner s m
     }
 
-type ChainScore tx = forall s. Blockchain tx s -> Blockchain tx s -> Ordering
+type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering
 
-type Miner m = forall tx s a.
+type Miner s m = forall tx unsealed.
        Maybe (Blockchain tx s)
-    -> BlockHeader a
-    -> m (Maybe (BlockHeader a))
+    -> BlockHeader unsealed
+    -> m (Maybe (BlockHeader s))

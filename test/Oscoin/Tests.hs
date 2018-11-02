@@ -6,9 +6,8 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip)
-import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHeader(..), blockHash, blockHeader)
-import           Oscoin.Crypto.Blockchain.Eval (toOrphan)
+import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
+import           Oscoin.Crypto.Blockchain.Eval (evalBlockchain)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
@@ -50,7 +49,7 @@ tests = testGroup "Oscoin"
     , testCase       "Crypto"                         testOscoinCrypto
     , testCase       "Mempool"                        testOscoinMempool
     , testCase       "BlockStore lookup block"        testBlockStoreLookupBlock
-    , testProperty   "BlockStore"                     (propOscoinBlockStore $ arbitraryValidBlockchain def)
+    , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
     , testGroup      "Consensus"                      Consensus.tests
@@ -103,7 +102,7 @@ testOscoinMempool = do
 
 testBlockStoreLookupBlock :: Assertion
 testBlockStoreLookupBlock = do
-    blks <- generate $ arbitraryValidBlockchain @() @() def
+    blks <- generate $ arbitraryValidBlockchain @() @()
     let g  = genesis blks
     let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
                         , bsOrphans = mempty }
@@ -116,10 +115,9 @@ propOscoinBlockStore chainGen =
     forAll chainGen $ \chain -> do
         let foldEval x xs = Right ((), xs <> x)
         let blks = NonEmpty.toList $ fromBlockchain chain
-        let os   = map (toOrphan foldEval) blks
-        let bs   = BlockStore.fromOrphans os (genesis chain)
+        let bs   = BlockStore.fromOrphans blks (genesis chain)
         let best = BlockStore.maximumChainBy (comparing height) bs
-        let z    = blockState $ blockHeader $ tip best
+        let z    = snd $ evalBlockchain foldEval def best
         let txs  = concatMap (toList . blockData) $ reverse blks
         let txs' = mconcat txs
         counterexample ("From input: " ++ show txs ++ ", Expected: "

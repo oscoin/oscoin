@@ -17,17 +17,19 @@ import           Oscoin.State.Tree (Key)
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
 
+import           Codec.Serialise (Serialise)
+import           Data.Aeson (ToJSON)
 import           Network.HTTP.Types.Status
 
-root :: ApiAction i ()
+root :: ApiAction s i ()
 root = respond ok200 noBody
 
-getAllTransactions :: ApiAction i ()
+getAllTransactions :: ApiAction s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
     respond ok200 $ body (Ok mp)
 
-getTransaction :: Hashed RadTx -> ApiAction i ()
+getTransaction :: (Serialise s, Ord s) => Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
         Nothing -> respond notFound404 $ errBody "Transaction not found"
@@ -49,7 +51,7 @@ getTransaction txId = do
                 pure $ fromTxLookup <$> Blockchain.lookupTx id chain
 
 
-submitTransaction :: ApiAction i a
+submitTransaction :: ApiAction s i a
 submitTransaction = do
     tx <- getVerifiedTxBody
     receipt <- node $ do
@@ -64,32 +66,32 @@ submitTransaction = do
         then pure tx
         else respond badRequest400 $ errBody "Invalid transaction signature"
 
-getBestChain :: ApiAction i a
+getBestChain :: (ToJSON s, Ord s, Serialise s) => ApiAction s i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
     blks <- node $ take n . Blockchain.blocks <$> Node.getBestChain
-    respond ok200 (body $ Ok $ map void blks)
+    respond ok200 $ body (Ok blks)
 
-getBlock :: BlockHash -> ApiAction i a
+getBlock :: (ToJSON s, Ord s, Serialise s) => BlockHash -> ApiAction s i a
 getBlock h = do
     result <- node $ BlockStore.lookupBlock h
     case result of
         Just blk ->
-            respond ok200 (body . Ok $ void blk)
+            respond ok200 $ body (Ok blk)
         Nothing ->
             respond notFound404 noBody
 
-getStatePath :: Key -> ApiAction i ()
+getStatePath :: (Ord s, Serialise s) => Key -> ApiAction s i ()
 getStatePath _chain = do
     path <- listParam "q"
-    result' <- node $ Node.getPath path
+    result' <- node $ Node.getPathLatest path
     case result' of
-        Just val ->
+        Just (_sh, val) ->
             respondCbor ok200 (Ok val)
         Nothing ->
             respond notFound404 $ errBody "Value not found"
 
 -- | Runs a NodeT action in a MonadApi monad.
-node :: MonadApi i m => Node.NodeT RadTx RadicleTx.Env i IO a -> m a
+node :: (MonadApi s i m) => Node.NodeT RadTx RadicleTx.Env s i IO a -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s

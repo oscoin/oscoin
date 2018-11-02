@@ -11,7 +11,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
-import           Oscoin.Crypto.Hash (Hash, hash, toHashed)
+import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -24,52 +24,58 @@ import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
-arbitraryBlockchain :: (Arbitrary tx, Serialise tx, Arbitrary s) => Gen (Blockchain tx s)
+arbitraryBlockchain :: (Arbitrary tx, Serialise tx) => Gen (Blockchain tx ())
 arbitraryBlockchain = do
-    chain <- fromGenesis . emptyGenesisBlock epoch <$> arbitrary
+    chain <- pure $ fromGenesis $ emptyGenesisBlock epoch
     rest <- arbitraryValidBlock chain
     pure $ rest |> chain
 
-arbitraryBlock :: forall tx. (Serialise tx, Arbitrary tx) => Gen (Block tx ())
+arbitraryBlock :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Gen (Block tx s)
 arbitraryBlock = do
     txs <- arbitrary :: Gen [tx]
     timestamp <- arbitrary
     diffi <- arbitrary
     prevHash <- arbitrary :: Gen Hash
+    stateHash <- arbitrary :: Gen Hash
+    blockSeal  <- arbitrary
 
     let header = emptyHeader
-               { blockPrevHash   = toHashed prevHash
+               { blockPrevHash   = prevHash
                , blockDataHash   = hashTxs txs
-               , blockState      = ()
+               , blockStateHash  = stateHash
+               , blockSeal
                , blockTimestamp  = timestamp
                , blockDifficulty = diffi
                }
     pure $ mkBlock header txs
 
-arbitraryValidBlock :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Blockchain tx s -> Gen (Block tx s)
+arbitraryValidBlock :: forall tx s. (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Blockchain tx s -> Gen (Block tx s)
 arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
-    arbitraryValidBlockWith (void prevHeader) txs
+    arbitraryValidBlockWith prevHeader txs
 
-arbitraryValidBlockWith :: (Serialise tx, Arbitrary s) => BlockHeader () -> [tx] -> Gen (Block tx s)
+arbitraryValidBlockWith :: (Serialise tx, Serialise s, Arbitrary s) => BlockHeader s -> [tx] -> Gen (Block tx s)
 arbitraryValidBlockWith prevHeader txs = do
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
-    blockState <- arbitrary
+    blockState <- arbitrary :: Gen Word8
+    blockSeal  <- arbitrary
     let header = emptyHeader
-               { blockPrevHash   = hash prevHeader
+               { blockPrevHash   = headerHash prevHeader
                , blockDataHash   = hashTxs txs
-               , blockState
+               , blockStateHash  = hashState blockState
+               , blockSeal
                , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
                , blockDifficulty = 0
                }
     pure $ Block header (Seq.fromList txs)
 
-arbitraryValidBlockchain :: (Serialise tx, Arbitrary tx, Arbitrary s) => s -> Gen (Blockchain tx s)
-arbitraryValidBlockchain s = do
+arbitraryValidBlockchain :: (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Gen (Blockchain tx s)
+arbitraryValidBlockchain = do
     ts <- arbitrary
-    arbitraryValidBlockchainFrom (emptyGenesisBlock ts s)
+    seal <- arbitrary
+    arbitraryValidBlockchainFrom (emptyGenesisBlock ts $> seal)
 
-arbitraryValidBlockchainFrom :: (Serialise tx, Arbitrary tx, Arbitrary s) => Block tx s -> Gen (Blockchain tx s)
+arbitraryValidBlockchainFrom :: (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Block tx s -> Gen (Blockchain tx s)
 arbitraryValidBlockchainFrom gen = do
     h <- choose (8, 9) :: Gen Int
     go (gen :| []) h

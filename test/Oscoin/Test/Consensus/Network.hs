@@ -21,16 +21,18 @@ import           Oscoin.Test.Consensus.Node
 
 import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
-                 (BlockHeader(..), blockData, blockHash)
-import           Oscoin.Crypto.Hash (Hashed)
+                 (BlockHash, blockData, blockHash)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class
+import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Class
 
+import           Codec.Serialise (Serialise)
 import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -42,68 +44,75 @@ import           Text.Show (Show(..))
 -- TestableNode ----------------------------------------------------------------
 
 class
-    (MonadMempool DummyTx m, MonadBlockStore DummyTx DummyState m, HasTestNodeState a)
-    => TestableNode m a | a -> m, m -> a
+    ( MonadMempool DummyTx m
+    , MonadBlockStore DummyTx s m
+    , MonadStateStore DummyState m
+    , HasTestNodeState s a
+    ) => TestableNode s m a | a -> m, m -> a
   where
-    testableInit         :: TestNetwork b -> TestNetwork a
+    testableInit         :: TestNetwork s b -> TestNetwork s a
 
-    testableTick         :: Timestamp -> m [Msg DummyTx]
+    testableTick         :: Timestamp -> m [Msg DummyTx s]
     testableRun          :: a -> m b -> (b, a)
-    testableScore        :: a -> Blockchain DummyTx DummyState -> Int
+    testableScore        :: a -> Blockchain DummyTx s -> Int
 
-testableLongestChain :: TestableNode m a => a -> [Hashed (BlockHeader ())]
+testableLongestChain :: Serialise s => TestableNode s m a => a -> [BlockHash]
 testableLongestChain =
       map blockHash
     . blocks
     . testableBestChain
 
-testableNodeAddr :: TestableNode m a => a -> DummyNodeId
+testableNodeAddr :: TestableNode s m a => a -> DummyNodeId
 testableNodeAddr nodeState = tnsNodeId $ nodeState ^. testNodeStateL
 
-testableIncludedTxs :: TestableNode m a => a -> [DummyTx]
+testableIncludedTxs :: TestableNode s m a => a -> [DummyTx]
 testableIncludedTxs =
       concatMap (toList . blockData)
     . blocks
     . testableBestChain
 
-testableShow :: TestableNode m a => a -> Text
+testableShow :: Serialise s => TestableNode s m a => a -> Text
 testableShow = showChainDigest . testableBestChain
 
-testableBestChain :: TestableNode m a => a -> Blockchain DummyTx DummyState
+testableBestChain :: TestableNode s m a => a -> Blockchain DummyTx s
 testableBestChain nodeState =
     let blockStore = nodeState ^. testNodeStateL . tnsBlockstoreL
         score = comparing $ testableScore nodeState
-    in BlockStore.maximumChainBy score blockStore
+     in BlockStore.maximumChainBy score blockStore
 
 
 
 -- TestNetwork -----------------------------------------------------------------
 
--- | The @TestNetwork a@ models a set of nodes parameterized over the
+-- | The @TestNetwork s a@ models a set of nodes parameterized over the
 -- node state @a@ and messages to be delivered between the nodes.
-data TestNetwork a = TestNetwork
+data TestNetwork s a = TestNetwork
     { tnNodes      :: Map DummyNodeId a
-    , tnMsgs       :: Set Scheduled
+    , tnMsgs       :: Set (Scheduled s)
     -- ^ Events that are to be delivered to the network
     , tnPartitions :: Partitions
     -- ^ Determines which nodes can send messages between them
-    , tnLog        :: [Scheduled]
+    , tnLog        :: [Scheduled s]
     -- ^ List of events the network has generated
     , tnLatencies  :: [Duration]
     -- ^ Infinite list of message latencies. When a node sends a
     -- message we take the first element to determine when the message
     -- gets delivered.
     , tnRng        :: StdGen
+    , tnEval       :: DummyEval
     , tnMsgCount   :: Int
     -- ^ Number of messages delivered in the network
     , tnLastTick   :: Timestamp
     }
 
+-- | Test evaluator.
+type DummyEval = Evaluator DummyState DummyTx ()
+
 -- | Network partitions is a map of node id to a set of node ids _not_
 -- reachable from that node id.
 type Partitions = Map DummyNodeId (Set DummyNodeId)
 
-instance Show (TestNetwork a) where
+instance Serialise s => Show (TestNetwork s a) where
     show TestNetwork{..} =
         unlines [ "TestNetwork"
                 , " nodes: "       ++ show (Map.keys tnNodes)
@@ -116,7 +125,7 @@ instance Show (TestNetwork a) where
 
 -- | Takes the next scheduled event from 'tnMsgs' and applies it to the
 -- network.
-runNetwork :: TestableNode m a => TestNetwork a -> TestNetwork a
+runNetwork :: (Ord s, Serialise s, TestableNode s m a) => TestNetwork s a -> TestNetwork s a
 runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
     | Just (nextMessage, remainingMessages) <- Set.minView tnMsgs
     , scheduledTick nextMessage <= tnLastTick =
@@ -133,15 +142,15 @@ runNetwork tn@TestNetwork{tnMsgs, tnLastTick}
 -- with the advanced node and schedule all messages generated by
 -- advancing the node.
 deliver
-    :: TestableNode m a
+    :: (Ord s, Serialise s, TestableNode s m a)
     => Timestamp
     -> DummyNodeId
-    -> Maybe (Msg DummyTx)
-    -> TestNetwork a
-    -> TestNetwork a
-deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
+    -> Maybe (Msg DummyTx s)
+    -> TestNetwork s a
+    -> TestNetwork s a
+deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnEval}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (testableTick tick) applyMessage msg
+        let (outgoing, a) = testableRun node $ maybe (testableTick tick) (applyMessage tnEval) msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -151,24 +160,25 @@ deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount}
 
     | otherwise = tn
 
-applyMessage :: (TestableNode m a) => Msg DummyTx -> m [Msg DummyTx]
-applyMessage msg = go msg
+applyMessage :: (Serialise s, TestableNode s m a) => DummyEval -> Msg DummyTx s -> m [Msg DummyTx s]
+applyMessage eval msg = go msg
   where
     go (TxMsg tx)     = resp <$> Storage.applyTx tx
-    go (BlockMsg blk) = resp <$> Storage.applyBlock dummyEval blk
+    go (BlockMsg blk) = resp <$> Storage.applyBlock eval blk
     go (ReqBlockMsg blk) = do
-            mblk <- Storage.lookupBlock blk
-            pure . maybeToList . map (BlockMsg . void) $ mblk
+        mblk <- Storage.lookupBlock blk
+        pure . maybeToList . map BlockMsg $ mblk
 
     resp Storage.Applied = [msg]
     resp _               = []
 
 scheduleMessages
-    :: Timestamp
+    :: forall s a. Ord s
+    => Timestamp
     -> DummyNodeId
-    -> [Msg DummyTx]
-    -> TestNetwork a
-    -> TestNetwork a
+    -> [Msg DummyTx s]
+    -> TestNetwork s a
+    -> TestNetwork s a
 scheduleMessages t from msgs tn@TestNetwork{..} =
     tn { tnMsgs = msgs', tnLog = log, tnLatencies = tnLatencies', tnRng = tnRng' }
   where
@@ -193,14 +203,14 @@ scheduleMessages t from msgs tn@TestNetwork{..} =
     sample [] = []
     sample xs = take 3 $ shuffle' xs (length xs) rng
 
-    scheduled :: [Scheduled]
+    scheduled :: [Scheduled s]
     scheduled =
             (\(lat, (to, msg)) -> ScheduledMessage (t `timeAdd` lat) to from msg)
         <$> zip lats [(rcpt, msg) | rcpt <- recipients, msg <- msgs]
 
 -- | Returns the list of nodes that are reachable from the given node
 -- in the network taking into account the network partition.
-peers :: TestNetwork a -> DummyNodeId -> [DummyNodeId]
+peers :: TestNetwork s a -> DummyNodeId -> [DummyNodeId]
 peers TestNetwork{..} node =
     let notReachable = fromMaybe Set.empty (Map.lookup node tnPartitions)
     in toList $ Set.delete node $ Map.keysSet tnNodes `Set.difference` notReachable
@@ -208,7 +218,7 @@ peers TestNetwork{..} node =
 
 -- | A trivial network is a network without any nodes or scheduled
 -- messages.
-networkNonTrivial :: TestNetwork v -> Bool
+networkNonTrivial :: TestNetwork s v -> Bool
 networkNonTrivial TestNetwork{tnNodes, tnMsgs}
     | Map.null tnNodes = False
     | Set.null msgs    = False
@@ -219,8 +229,8 @@ networkNonTrivial TestNetwork{tnNodes, tnMsgs}
 -- Scheduled -------------------------------------------------------------------
 
 -- | An event that is to occur in a Node network at a specific tick.
-data Scheduled
-    = ScheduledMessage Timestamp DummyNodeId DummyNodeId (Msg DummyTx)
+data Scheduled s
+    = ScheduledMessage Timestamp DummyNodeId DummyNodeId (Msg DummyTx s)
     -- ^ Message will be delivered from one node to another. First
     -- 'DummyNodeId' is the receipient, second the sender. Results in
     -- calling 'stepM' on the receipient.
@@ -232,25 +242,25 @@ data Scheduled
     -- ^ Remove any partitioning of the network
     deriving (Eq, Show)
 
-instance Ord Scheduled where
+instance Ord s => Ord (Scheduled s) where
     s <= s' = scheduledTick s <= scheduledTick s'
 
-scheduledTick :: Scheduled -> Timestamp
+scheduledTick :: Scheduled s -> Timestamp
 scheduledTick (ScheduledMessage t _ _ _) = t
 scheduledTick (ScheduledTick t _)        = t
 scheduledTick (Partition t _)            = t
 scheduledTick (Heal t)                   = t
 
-scheduledReceivers :: Scheduled -> [DummyNodeId]
+scheduledReceivers :: Scheduled s -> [DummyNodeId]
 scheduledReceivers (ScheduledMessage _ a _ _) = [a]
 scheduledReceivers (ScheduledTick _ a)        = [a]
 scheduledReceivers (Partition _ _)            = [] -- XXX
 scheduledReceivers (Heal _)                   = []
 
-isTick :: Scheduled -> Bool
+isTick :: Scheduled s -> Bool
 isTick (ScheduledTick _ _) = True
 isTick _                   = False
 
-isMsg :: Scheduled -> Bool
+isMsg :: Scheduled s -> Bool
 isMsg ScheduledMessage{} = True
 isMsg _                  = False

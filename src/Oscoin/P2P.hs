@@ -8,7 +8,7 @@ module Oscoin.P2P
     , module Oscoin.P2P.Types
     ) where
 
-import           Oscoin.Prelude hiding (show)
+import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHash, blockHash, blockHeader, blockPrevHash)
@@ -37,13 +37,14 @@ withGossip
        , Crypto.Hashable tx
        , Exception e
        , Serialise o
+       , Serialise s
        )
     => Logger
     -> NodeAddr
     -- ^ Node identity (\"self\")
     -> [NodeAddr]
     -- ^ Initial peers to connect to
-    -> Storage tx IO
+    -> Storage tx s IO
     -> Handshake e NodeId (Gossip.WireMessage (Gossip.ProtocolMessage Gossip.Peer)) o
     -> (Gossip.Handle e Gossip.Peer o -> IO a)
     -> IO a
@@ -71,10 +72,11 @@ withGossip logger selfAddr peerAddrs storage handshake run = do
 --------------------------------------------------------------------------------
 
 storageAsCallbacks
-    :: ( Serialise       tx
+    :: ( Serialise       s
+       , Serialise       tx
        , Crypto.Hashable tx
        )
-    => Storage tx IO
+    => Storage tx s IO
     -> Bcast.Callbacks
 storageAsCallbacks Storage{..} = Bcast.Callbacks{..}
   where
@@ -82,11 +84,12 @@ storageAsCallbacks Storage{..} = Bcast.Callbacks{..}
     lookupMessage = wrapLookup storageLookupBlock storageLookupTx
 
 wrapApply
-    :: ( Serialise       tx
+    :: ( Serialise       s
+       , Serialise       tx
        , Crypto.Hashable tx
        )
-    => (BlockHash   -> IO (Maybe (Block tx ())))
-    -> (Block tx () -> IO Storage.ApplyResult)
+    => (BlockHash   -> IO (Maybe (Block tx s)))
+    -> (Block tx s  -> IO Storage.ApplyResult)
     -> (tx          -> IO Storage.ApplyResult)
     -> Bcast.MessageId
     -> ByteString
@@ -115,8 +118,8 @@ wrapApply lookupBlock applyBlock applyTx mid payload =
         Storage.Error   -> Bcast.Error
 
 wrapLookup
-    :: Serialise tx
-    => (BlockHash -> IO (Maybe (Block tx ())))
+    :: (Serialise tx, Serialise s)
+    => (BlockHash -> IO (Maybe (Block tx s)))
     -> (Crypto.Hashed tx -> IO (Maybe tx))
     -> Bcast.MessageId
     -> IO (Maybe ByteString)
@@ -131,10 +134,10 @@ data ConversionError =
     | IdPayloadMismatch
 
 fromGossip
-    :: (Serialise tx, Crypto.Hashable tx)
+    :: (Serialise s, Serialise tx, Crypto.Hashable tx)
     => Bcast.MessageId
     -> ByteString
-    -> Either ConversionError (Msg tx)
+    -> Either ConversionError (Msg tx s)
 fromGossip mid payload = do
     mid' <- first DeserialiseFailure $ deserialiseMessageId mid
     msg  <- first DeserialiseFailure $ deserialisePayload payload
@@ -151,7 +154,7 @@ deserialiseMessageId
 deserialiseMessageId = CBOR.deserialiseOrFail . fromStrict
 
 deserialisePayload
-    :: Serialise tx
+    :: (Serialise tx, Serialise s)
     => ByteString
-    -> Either CBOR.DeserialiseFailure (Msg tx)
+    -> Either CBOR.DeserialiseFailure (Msg tx s)
 deserialisePayload = CBOR.deserialiseOrFail . fromStrict

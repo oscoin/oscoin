@@ -9,9 +9,10 @@ module Oscoin.Storage.Block.STM
 
 import           Oscoin.Prelude hiding (for, put)
 
-import           Oscoin.Crypto.Blockchain.Block (Block, Orphan)
+import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Storage.Block
 
+import           Codec.Serialise (Serialise)
 import           Control.Concurrent.STM
                  (TVar, modifyTVar', newTVar, newTVarIO, readTVar)
 
@@ -24,7 +25,7 @@ new bs = Handle <$> newTVar bs
 newIO :: BlockStore tx s -> IO (Handle tx s)
 newIO bs = Handle <$> newTVarIO bs
 
-put :: (Ord tx) => Handle tx s -> Block tx (Orphan s) -> STM ()
+put :: (Ord tx, Ord s, Serialise s) => Handle tx s -> Block tx s -> STM ()
 put (Handle tvar) = modifyTVar' tvar . insert
 
 for :: Handle tx s -> (BlockStore tx s -> a) -> STM a

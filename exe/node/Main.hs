@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain (Difficulty, fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
-import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Environment (Environment(Development))
@@ -18,13 +17,13 @@ import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import qualified Oscoin.Node.Tree as STree
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
+import qualified Oscoin.Storage.State as StateStore
 
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml
@@ -92,17 +91,17 @@ main = do
     keys     <- readKeyPair
     nid      <- pure (mkNodeId $ fst keys)
     mem      <- Mempool.newIO
-    stree    <- STree.new Rad.pureEnv
-    gen      <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Crypto.Hash)
-    chain    <- either (die . fromEvalError) pure (genesisChain (void gen))
-    blkStore <- BlockStore.newIO $ BlockStore.initWithChain chain
+    gen      <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
+    genState <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
+    stStore  <- StateStore.fromStateM genState
+    blkStore <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
     seeds'   <- Yaml.decodeFileThrow seeds
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
         withNode   (mkNodeConfig Development lgr)
                    nid
                    mem
-                   stree
+                   stStore
                    blkStore
                    Rad.txEval
                    consensus                                      $ \nod ->
@@ -124,6 +123,4 @@ main = do
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
-    storage nod   = hoistStorage (runNodeT nod) Node.storage
-
-    genesisChain gen = fromGenesis <$> evalBlock Rad.txEval Rad.pureEnv gen
+    storage nod   = hoistStorage (runNodeT nod) (Node.storage Rad.txEval)

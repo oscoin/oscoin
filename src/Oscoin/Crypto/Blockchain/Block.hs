@@ -2,17 +2,19 @@ module Oscoin.Crypto.Blockchain.Block
     ( Block(..)
     , BlockHash
     , BlockHeader(..)
+    , StateHash
     , Difficulty
     , Height
     , Timestamp
-    , Orphan
     , mkBlock
-    , linkBlock
     , emptyGenesisBlock
+    , emptyGenesisFromState
+    , genesisBlock
     , validateBlock
     , headerHash
     , blockHash
     , emptyHeader
+    , hashState
     , hashTxs
     ) where
 
@@ -41,23 +43,20 @@ type Height = Integer
 
 -- | Block header.
 data BlockHeader s = BlockHeader
-    { blockPrevHash   :: Crypto.Hashed (BlockHeader ())
+    { blockPrevHash   :: Crypto.Hash
     , blockDataHash   :: Crypto.Hash
-    , blockState      :: s
+    , blockStateHash  :: Crypto.Hash
     , blockTimestamp  :: Timestamp
     , blockDifficulty :: Difficulty
-    , blockNonce      :: Word32
+    , blockSeal       :: s
     } deriving (Show, Generic, Functor, Foldable, Traversable)
 
-deriving instance {-# OVERLAPPING #-} Eq (BlockHeader ())
-deriving instance {-# OVERLAPPING #-} Ord (BlockHeader ())
+deriving instance Ord s => Ord (BlockHeader s)
+deriving instance Eq s => Eq (BlockHeader s)
 
-instance {-# OVERLAPPABLE #-} Eq (BlockHeader s) where
-    (==) a b = void a == void b
+instance Serialise s => Serialise (BlockHeader s)
 
-instance Serialise (BlockHeader ())
-
-instance Crypto.Hashable (BlockHeader ()) where
+instance Serialise s => Crypto.Hashable (BlockHeader s) where
     hash = Crypto.hashSerial
 
 instance ToJSON s => ToJSON (BlockHeader s) where
@@ -65,8 +64,8 @@ instance ToJSON s => ToJSON (BlockHeader s) where
         [ "parentHash" .= blockPrevHash
         , "timestamp"  .= blockTimestamp
         , "dataHash"   .= blockDataHash
-        , "stateHash"  .= blockState
-        , "nonce"      .= blockNonce
+        , "stateHash"  .= blockStateHash
+        , "seal"       .= blockSeal
         , "difficulty" .= blockDifficulty
         ]
 
@@ -75,8 +74,8 @@ instance FromJSON s => FromJSON (BlockHeader s) where
         blockPrevHash   <- o .: "parentHash"
         blockTimestamp  <- o .: "timestamp"
         blockDataHash   <- o .: "dataHash"
-        blockState      <- o .: "stateHash"
-        blockNonce      <- o .: "nonce"
+        blockStateHash  <- o .: "stateHash"
+        blockSeal       <- o .: "seal"
         blockDifficulty <- o .: "difficulty"
 
         pure BlockHeader{..}
@@ -84,27 +83,23 @@ instance FromJSON s => FromJSON (BlockHeader s) where
 -- | Create an empty block header.
 emptyHeader :: BlockHeader ()
 emptyHeader = BlockHeader
-    { blockPrevHash = Crypto.toHashed Crypto.zeroHash
+    { blockPrevHash = Crypto.zeroHash
     , blockDataHash = Crypto.zeroHash
-    , blockState = ()
+    , blockStateHash = Crypto.zeroHash
+    , blockSeal = ()
     , blockTimestamp = epoch
     , blockDifficulty = 0
-    , blockNonce = 0
     }
 
-headerHash :: BlockHeader s -> Crypto.Hashed (BlockHeader ())
+headerHash :: Serialise s => BlockHeader s -> BlockHash
 headerHash =
-    Crypto.hash . void
-
--- | Represents an orphan state @s@. Blocks of type @Block tx (Orphan s)@ are
--- considered orphan blocks. The type @s -> Maybe s@ represents a function from
--- a parent state @s@ to a new state @s@ after a block is evaluated. Thus, we
--- can say that orphan blocks have an unapplied state function which produces
--- a state when they are linked to a parent.
-type Orphan s = s -> Maybe s
+    Crypto.fromHashed . Crypto.hash
 
 -- | The hash of a block.
-type BlockHash = Crypto.Hashed (BlockHeader ())
+type BlockHash = Crypto.Hash
+
+-- | The hash of a state tree.
+type StateHash = Crypto.Hash
 
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx s = Block
@@ -112,16 +107,10 @@ data Block tx s = Block
     , blockData   :: Seq tx
     } deriving (Show, Generic, Functor, Foldable, Traversable)
 
-deriving instance {-# OVERLAPPING #-} Eq tx => Eq (Block tx ())
-deriving instance {-# OVERLAPPING #-} Ord tx => Ord (Block tx ())
+deriving instance (Eq tx, Eq s) => Eq (Block tx s)
+deriving instance (Ord tx, Ord s) => Ord (Block tx s)
 
-instance {-# OVERLAPPABLE #-} (Eq tx)  => Eq (Block tx s) where
-    (==) a b = void a == void b
-
-instance {-# OVERLAPPABLE #-} (Ord tx)  => Ord (Block tx s) where
-    (<=) a b = void a <= void b
-
-instance (Serialise tx) => Serialise (Block tx ())
+instance (Serialise tx, Serialise s) => Serialise (Block tx s)
 
 instance Bifunctor Block where
     first f b = b { blockData = f <$> blockData b }
@@ -129,21 +118,21 @@ instance Bifunctor Block where
 
 instance Bitraversable Block where
     bitraverse f g blk = go <$> traverse f (blockData blk)
-                            <*> g (blockState $ blockHeader blk)
+                            <*> g (blockSeal $ blockHeader blk)
       where
         go a b = blk { blockHeader = h b, blockData = a }
-        h a = (blockHeader blk) { blockState = a }
+        h a = (blockHeader blk) { blockSeal = a }
 
 instance Bifoldable Block where
     bifoldMap f g blk =
         mappend (foldMap f a) (g b)
       where
         a = blockData blk
-        b = blockState (blockHeader blk)
+        b = blockSeal (blockHeader blk)
 
-instance (ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
+instance (Serialise s, ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
     toJSON b@Block{..} = object
-        [ "hash"   .= blockHash (void b)
+        [ "hash"   .= blockHash b
         , "header" .= blockHeader
         , "data"   .= blockData
         ]
@@ -166,24 +155,38 @@ mkBlock
 mkBlock header txs =
     Block header (Seq.fromList (toList txs))
 
-emptyGenesisBlock :: Timestamp -> s -> Block tx s
-emptyGenesisBlock blockTimestamp blockState =
+emptyGenesisBlock :: Timestamp -> Block tx ()
+emptyGenesisBlock blockTimestamp =
     mkBlock header []
   where
-    header = BlockHeader
-        { blockPrevHash = Crypto.toHashed Crypto.zeroHash
-        , blockDataHash = Crypto.zeroHash
-        , blockState
-        , blockTimestamp
-        , blockDifficulty = 0
-        , blockNonce = 0
+    header = emptyHeader { blockTimestamp }
+
+emptyGenesisFromState :: Crypto.Hashable st => Timestamp -> st -> Block tx ()
+emptyGenesisFromState blockTimestamp st =
+    mkBlock header []
+  where
+    header = emptyHeader { blockTimestamp, blockStateHash = stHash }
+    stHash = Crypto.fromHashed . Crypto.hash $ st
+
+-- | Construct a sealed genesis block.
+genesisBlock
+    :: (Serialise tx, Crypto.Hashable st)
+    => [tx] -> st -> s -> Timestamp -> Block tx s
+genesisBlock txs st seal t =
+    mkBlock header txs
+  where
+    header = emptyHeader
+        { blockTimestamp = t
+        , blockSeal = seal
+        , blockStateHash = hashState st
+        , blockDataHash = hashTxs txs
         }
 
-blockHash :: Block tx s -> BlockHash
+blockHash :: Serialise s => Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
 
-linkBlock :: Monad m => Block tx s -> Block tx (s -> m t) -> m (Block tx t)
-linkBlock (blockState . blockHeader -> s) = traverse ($ s)
+hashState :: Crypto.Hashable st => st -> StateHash
+hashState = Crypto.fromHashed . Crypto.hash
 
 hashTxs :: (Foldable t, Serialise tx) => t tx -> Crypto.Hash
 hashTxs txs

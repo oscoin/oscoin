@@ -69,29 +69,29 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction i = SpockAction (Node.Handle RadTx RadicleTx.Env i) () State
+type ApiAction s i = SpockAction (Node.Handle RadTx RadicleTx.Env s i) () State
 
 -- | The type of our api.
-type Api i = SpockM (Node.Handle RadTx RadicleTx.Env i) () State
+type Api s i = SpockM (Node.Handle RadTx RadicleTx.Env s i) () State
 
 -- | Represents any monad which can act like an ApiAction.
-type MonadApi i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx RadicleTx.Env i)
+type MonadApi s i m = (HasSpock m, SpockConn m ~ Node.Handle RadTx RadicleTx.Env s i)
 
 -- | Create an empty state.
 mkState :: State
 mkState = State ()
 
-getHeader :: HeaderName -> ApiAction i (Maybe BS.ByteString)
+getHeader :: HeaderName -> ApiAction s i (Maybe BS.ByteString)
 getHeader = Spock.rawHeader
 
-getHeader' :: HeaderName -> ApiAction i BS.ByteString
+getHeader' :: HeaderName -> ApiAction s i BS.ByteString
 getHeader' name = do
     header <- getHeader name
     case header of
         Just v  -> pure v
         Nothing -> respond HTTP.badRequest400 noBody
 
-getRawBody :: ApiAction i LBS.ByteString
+getRawBody :: ApiAction s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
 -- | A sum type of supported media types.
@@ -112,7 +112,7 @@ supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
 supportedMediaTypes = NonEmpty.fromList $ [(fromMediaType ct, ct) | ct <- [JSON, CBOR]]
 
 -- | Gets the parsed content types out of the Accept header, ordered by priority.
-getAccepted :: ApiAction i [Quality HTTP.MediaType]
+getAccepted :: ApiAction s i [Quality HTTP.MediaType]
 getAccepted = do
     accept <- maybe "*/*" identity <$> getHeader "Accept"
     case parseQuality accept of
@@ -120,7 +120,7 @@ getAccepted = do
        Just accepted -> pure accepted
 
 -- | Negotiates the best response content type from the request's accept header.
-negotiateContentType :: ApiAction i MediaType
+negotiateContentType :: ApiAction s i MediaType
 negotiateContentType = do
     accepted <- getAccepted
     let supported = NonEmpty.toList supportedMediaTypes
@@ -128,13 +128,13 @@ negotiateContentType = do
         Nothing -> respond HTTP.notAcceptable406 noBody
         Just ct -> pure ct
 
-param' :: (FromHttpApiData p) => Text -> ApiAction i p
+param' :: (FromHttpApiData p) => Text -> ApiAction s i p
 param' = Spock.param'
 
-param :: (FromHttpApiData p) => Text -> ApiAction i (Maybe p)
+param :: (FromHttpApiData p) => Text -> ApiAction s i (Maybe p)
 param = Spock.param
 
-listParam :: (FromHttpApiData p) => Text -> ApiAction i [p]
+listParam :: (FromHttpApiData p) => Text -> ApiAction s i [p]
 listParam key = do
     p <- param' key
     case decodeList p of
@@ -166,7 +166,7 @@ decode :: (Serialise a, FromJSON a) => MediaType -> LBS.ByteString -> Either Tex
 decode JSON bs = first T.pack          (Aeson.eitherDecode' bs)
 decode CBOR bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
 
-respond :: (ToJSON a, Serialise a) => HTTP.Status -> Maybe a -> ApiAction i b
+respond :: (ToJSON a, Serialise a) => HTTP.Status -> Maybe a -> ApiAction s i b
 respond status (Just bdy) = do
     ct <- negotiateContentType
     respondBytes status ct (encode ct bdy)
@@ -178,25 +178,25 @@ respond status Nothing = do
 --
 -- Responds with a 406 status code if the @Accept@ header is not
 -- @appliaction/cbor@.
-respondCbor :: (Serialise a) => HTTP.Status -> a -> ApiAction i b
+respondCbor :: (Serialise a) => HTTP.Status -> a -> ApiAction s i b
 respondCbor status value = do
     ct <- negotiateContentType
     case ct of
         CBOR -> respondBytes status ct $ Serialise.serialise value
         _    -> respond HTTP.notAcceptable406 noBody
 
-respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction i b
+respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction s i b
 respondBytes status ct bdy = do
     Spock.setStatus status
     Spock.setHeader "Content-Type" $ T.pack $ show $ fromMediaType ct
     Spock.lazyBytes bdy
 
-getSupportedContentType :: ApiAction i MediaType
+getSupportedContentType :: ApiAction s i MediaType
 getSupportedContentType = (parseMediaType <$> getHeader' "Content-Type") >>= \case
     Left _   -> respond HTTP.unsupportedMediaType415 noBody
     Right mt -> pure mt
 
-getBody :: (Serialise a, FromJSON a) => ApiAction i a
+getBody :: (Serialise a, FromJSON a) => ApiAction s i a
 getBody = do
     ct <- getSupportedContentType
     !body' <- getRawBody
@@ -204,16 +204,16 @@ getBody = do
         Left  _ -> respond HTTP.badRequest400 $ body $ Err @() "Failed to decode body"
         Right a -> pure a
 
-runApi :: Api i ()
+runApi :: Api s i ()
     -> Int
-    -> Node.Handle RadTx RadicleTx.Env i
+    -> Node.Handle RadTx RadicleTx.Env s i
     -> IO ()
 runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
-    :: Api i ()
-    -> Node.Handle RadTx RadicleTx.Env i
+    :: Api s i ()
+    -> Node.Handle RadTx RadicleTx.Env s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

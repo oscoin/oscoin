@@ -3,7 +3,7 @@ module Oscoin.Data.Tx where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Hash (toHashed, zeroHash)
+import           Oscoin.Crypto.Hash (zeroHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 
@@ -56,7 +56,7 @@ mkTx sm pk = Tx
     , txPubKey  = pk
     , txChainId = 0
     , txNonce   = 0
-    , txContext = toHashed zeroHash
+    , txContext = zeroHash
     }
 
 

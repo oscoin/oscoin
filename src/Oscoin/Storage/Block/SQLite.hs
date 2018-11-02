@@ -20,23 +20,20 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain(..), ScoringFunction)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHash
-                 , BlockHeader(..)
-                 , Orphan
-                 , blockHash
-                 , mkBlock
-                 )
+                 (Block(..), BlockHash, BlockHeader(..), blockHash, mkBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Database.SQLite.Simple ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
+import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.FromRow (FromRow)
 import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
+import           Database.SQLite.Simple.ToField (ToField)
 import           Database.SQLite.Simple.ToRow (ToRow)
 import qualified Database.SQLite3 as Sql3
 
+import           Codec.Serialise (Serialise)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 
@@ -56,7 +53,7 @@ withBlockStore path = bracket (open path) close
 
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.
-initialize :: ToRow tx => Block tx s -> Handle tx s -> IO (Handle tx s)
+initialize :: (Serialise s, ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
 initialize gen h@(Handle conn) =
     readFile "data/blockstore.sql" >>=
         Sql3.exec (Sql.connectionHandle conn) >>
@@ -64,14 +61,14 @@ initialize gen h@(Handle conn) =
                 pure h
 
 -- | Store a block, along with its transactions in the block store.
-storeBlock :: forall tx s. ToRow tx => Handle tx s -> Block tx (Orphan s) -> IO ()
+storeBlock :: forall tx s. (Serialise s, ToField s, ToRow tx) => Handle tx s -> Block tx s -> IO ()
 storeBlock (Handle conn) blk@Block{blockHeader = BlockHeader{..}} =
     Sql.withTransaction conn $ storeBlock_ conn blk
 
-lookupBlock :: forall tx s. FromRow tx => Handle tx s -> BlockHash -> IO (Maybe (Block tx ()))
+lookupBlock :: forall tx s. (FromField s, FromRow tx) => Handle tx s -> BlockHash -> IO (Maybe (Block tx s))
 lookupBlock (Handle conn) h = Sql.withTransaction conn $ do
-    result :: Maybe (BlockHeader ()) <- listToMaybe <$> Sql.query conn
-        [sql| SELECT parenthash, datahash, timestamp, difficulty, nonce
+    result :: Maybe (BlockHeader s) <- listToMaybe <$> Sql.query conn
+        [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
                 FROM blocks
                WHERE hash = ? |] (Only h)
 
@@ -87,11 +84,11 @@ lookupTx (Handle conn) h =
                 FROM transactions
                WHERE hash = ? |] (Only h)
 
-getGenesisBlock :: FromRow tx => Handle tx s -> IO (Block tx ())
+getGenesisBlock :: (FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
 getGenesisBlock (Handle conn) = do
     Only bHash :. bHeader <-
         headDef (panic "No genesis block!") <$> Sql.query_ conn
-            [sql|   SELECT hash, parenthash, datahash, timestamp, difficulty, nonce
+            [sql|   SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
                       FROM blocks
                   ORDER BY timestamp
                      LIMIT 1 |]
@@ -107,10 +104,10 @@ orphans (Handle conn) =
                      ON a.parenthash = b.hash
                   WHERE b.hash IS NULL |]
 
-maximumChainBy :: FromRow tx => Handle tx s -> ScoringFunction tx s -> IO (Blockchain tx ())
+maximumChainBy :: (FromField s, FromRow tx) => Handle tx s -> ScoringFunction tx s -> IO (Blockchain tx s)
 maximumChainBy (Handle conn) _ = do
-    rows :: [Only BlockHash :. BlockHeader ()] <- Sql.query_ conn
-        [sql|  SELECT hash, parenthash, datahash, timestamp, difficulty, nonce
+    rows :: [Only BlockHash :. BlockHeader s] <- Sql.query_ conn
+        [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
                  FROM blocks
              ORDER BY timestamp DESC |]
 
@@ -132,22 +129,23 @@ getBlockTxs conn h =
 --
 -- Must be called from within a transaction. Does not check whether the parent
 -- reference is valid.
-storeBlock_ :: ToRow tx => Connection -> Block tx s -> IO ()
+storeBlock_ :: (Serialise s, ToRow tx, ToField s) => Connection -> Block tx s -> IO ()
 storeBlock_ conn blk@Block{blockHeader = BlockHeader{..}, blockData} = do
     -- Nb. To relate transactions with blocks, we store an extra block hash field
     -- for each row in the transactions table.
     Sql.execute conn
-        [sql| INSERT INTO blocks  (hash, timestamp, nonce, parenthash, datahash, difficulty)
-              VALUES              (?, ?, ?, ?, ?, ?) |] row
+        [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
+              VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
     Sql.executeMany conn
         [sql| INSERT INTO transactions  (hash, message, author, chainid, nonce, context, blockhash)
               VALUES                    (?, ?, ?, ?, ?, ?, ?) |] txs
   where
     row = ( blockHash blk
           , blockTimestamp
-          , blockNonce
           , blockPrevHash
           , blockDataHash
+          , blockStateHash
           , blockDifficulty
+          , blockSeal
           )
     txs = [tx :. Only (blockHash blk) | tx <- toList blockData]

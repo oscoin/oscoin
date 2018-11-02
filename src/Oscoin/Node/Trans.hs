@@ -10,8 +10,8 @@ module Oscoin.Node.Trans
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Consensus)
-import           Oscoin.Consensus.Class
-                 (MonadClock(..), MonadQuery(..), MonadUpdate(..))
+import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
+import           Oscoin.Crypto.Blockchain.Block (StateHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Data.Query
@@ -26,25 +26,28 @@ import           Oscoin.Storage.Block.Class
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
+import qualified Oscoin.Storage.State as StateStore
+import           Oscoin.Storage.State.Class (MonadStateStore(..))
 
 import qualified Radicle.Extended as Rad
 
+import           Codec.Serialise (Serialise)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 import           Lens.Micro
 
 
-newtype NodeT tx s i m a = NodeT (ReaderT (Handle tx s i) m a)
+newtype NodeT tx st s i m a = NodeT (ReaderT (Handle tx st s i) m a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadReader (Handle tx s i)
+             , MonadReader (Handle tx st s i)
              , MonadIO
              , MonadTrans
              , MFunctor
              )
 
-runNodeT :: Handle tx s i -> NodeT tx s i m a -> m a
+runNodeT :: Handle tx st s i -> NodeT tx st s i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
@@ -54,23 +57,23 @@ data Config = Config
     }
 
 -- | Node handle.
-data Handle tx s i = Handle
+data Handle tx st s i = Handle
     { hConfig       :: Config
     , hNodeId       :: i
-    , hStateTree    :: STree.Handle s
+    , hStateStore   :: StateStore.Handle st
     , hBlockStore   :: BlockStore.Handle tx s
     , hMempool      :: Mempool.Handle tx
-    , hEval         :: Evaluator s tx Rad.Value
-    , hConsensus    :: Consensus tx (NodeT tx s i IO)
+    , hEval         :: Evaluator st tx Rad.Value
+    , hConsensus    :: Consensus tx s (NodeT tx st s i IO)
     , hReceiptStore :: ReceiptStore.Handle tx Rad.Value
     }
 
 -------------------------------------------------------------------------------
 
-instance ReceiptStore.HasHandle tx Rad.Value (Handle tx s i) where
+instance ReceiptStore.HasHandle tx Rad.Value (Handle tx st s i) where
     handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
-instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) where
+instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m) where
     addTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.insertMany` txs)
     getTxs     = asks hMempool >>= liftIO . atomically . Mempool.toList
     delTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.removeMany` txs)
@@ -84,7 +87,7 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx s i m) w
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx s i m) where
+instance (Monad m, MonadIO m, Ord s, Ord tx, Serialise s, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         liftIO . atomically $ BlockStore.put bs blk
@@ -103,28 +106,34 @@ instance (Monad m, MonadIO m, Ord tx, Hashable tx) => MonadBlockStore tx s (Node
 withBlockStore
     :: MonadIO m
     => (BlockStore.BlockStore tx s -> b)
-    -> NodeT tx s i m b
+    -> NodeT tx st s i m b
 withBlockStore f = do
     bs <- asks hBlockStore
     liftIO . atomically $
         BlockStore.for bs f
 
-instance (Monad m, MonadIO m, Query s) => MonadQuery (NodeT tx s i m) where
-    type Key (NodeT tx s i m) = STree.Path
-    type Val (NodeT tx s i m) = QueryVal s
+instance (Monad m, MonadIO m, Query st, Hashable st) => MonadQuery (NodeT tx st s i m) where
+    type Key (NodeT tx st s i m) = (StateHash, STree.Path)
+    type Val (NodeT tx st s i m) = QueryVal st
 
-    queryM k = do
-        st <- asks hStateTree
-        lift $ STree.getPath st k
+    queryM (sh, k) = do
+        result <- lookupState sh
+        pure $ query k =<< result
     {-# INLINE queryM #-}
 
-instance (Monad m, MonadIO m) => MonadUpdate s (NodeT tx s i m) where
-    updateM s = do
-        st <- asks hStateTree
-        liftIO . atomically $ STree.updateTree st s
+instance MonadClock m => MonadClock (NodeT tx st s i m)
 
-instance MonadClock m => MonadClock (NodeT tx s i m)
-
-instance (MonadIO m) => MonadReceiptStore tx Rad.Value (NodeT tx s i m) where
+instance (MonadIO m) => MonadReceiptStore tx Rad.Value (NodeT tx st s i m) where
     addReceipt = ReceiptStore.addWithHandle
     lookupReceipt = ReceiptStore.lookupWithHandle
+
+instance (MonadIO m, Hashable st) => MonadStateStore st (NodeT tx st s i m) where
+    lookupState k = do
+        h <- asks hStateStore
+        lift $ StateStore.withHandle h (pure . StateStore.lookupState k)
+    storeState st = do
+        h <- asks hStateStore
+        liftIO $ StateStore.storeStateIO h st
+
+    {-# INLINE lookupState #-}
+    {-# INLINE storeState #-}

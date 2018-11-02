@@ -41,6 +41,7 @@ import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
+import qualified Data.Map as Map
 import           Data.Maybe (fromJust)
 import qualified Data.Text as T
 import qualified Database.SQLite.Simple as Sql
@@ -180,8 +181,8 @@ zeroHash = Hash . fromJust $
         (ByteArray.zero (hashDigestSize (Proxy @a)))
 
 -- | The first 7 bytes of the base-58 encoded hash.
-shortHash :: Hashed a -> ByteString
-shortHash = BS.take 7 . BaseN.encodedBytes . encodeBase58 . convert . fromHashed
+shortHash :: Hash -> ByteString
+shortHash = BS.take 7 . BaseN.encodedBytes . encodeBase58 . convert
 
 -------------------------------------------------------------------------------
 
@@ -205,6 +206,9 @@ instance Hashable Text where
 instance Hashable ByteString where
     hash = toHashed . Hash . Crypto.hash
 
+instance Hashable LByteString where
+    hash = toHashed . fromHashed . hash . LBS.toStrict
+
 instance Hashable Word8 where
     hash = toHashed . Hash . Crypto.hash . BS.singleton
 
@@ -220,6 +224,12 @@ instance (ByteArrayAccess a) => Hashable (Maybe a) where
 
 instance Hashable ECDSA.PublicKey where
     hash = hashSerial
+
+instance (Hashable k, Hashable v) => Hashable (k, v) where
+    hash (k, v) = toHashed (fromHashed (hash k) <> fromHashed (hash v))
+
+instance (Hashable k, Hashable v) => Hashable (Map k v) where
+    hash = toHashed . fromHashed . hash . Map.toList
 
 -- Internal --------------------------------------------------------------------
 

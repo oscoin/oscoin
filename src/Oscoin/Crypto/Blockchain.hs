@@ -23,6 +23,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
+import           Codec.Serialise (Serialise)
 import           Control.Monad (guard)
 import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
@@ -83,14 +84,14 @@ data TxLookup tx = TxLookup
     , txConfirmations :: Natural
     }
 
-lookupTx :: forall tx s. Crypto.Hashable tx => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
+lookupTx :: forall tx s. (Crypto.Hashable tx, Serialise s) => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
 lookupTx h (blocks -> chain) = listToMaybe $ do
     (i, block) <- zip [1..] chain
     tx <- toList $ blockData block
     guard (Crypto.hash tx == h)
     pure $ TxLookup tx (headerHash $ blockHeader block) i
 
-validateBlockchain :: Crypto.Hashable s => Blockchain tx s -> Either Text (Blockchain tx s)
+validateBlockchain :: Serialise s => Blockchain tx s -> Either Text (Blockchain tx s)
 validateBlockchain (Blockchain (blk :| [])) = do
     blk' <- validateBlock blk
     pure $ fromList [blk']
@@ -108,7 +109,7 @@ validateBlockchain (Blockchain (blk :| blk' : blks))
     t' = ts blk'
     ts = sinceEpoch . blockTimestamp . blockHeader
 
-showChainDigest :: Blockchain tx s -> Text
+showChainDigest :: Serialise s => Blockchain tx s -> Text
 showChainDigest =
     T.unwords . intersperse "←"
               . reverse
@@ -116,7 +117,7 @@ showChainDigest =
               . map showBlockDigest
               . fromBlockchain
 
-showBlockDigest :: Block tx s -> Text
+showBlockDigest :: Serialise s => Block tx s -> Text
 showBlockDigest b@Block{blockHeader} =
     F.sformat (F.string % "(" % F.build % ")")
               (C8.unpack . Crypto.shortHash . blockHash $ b)

@@ -13,6 +13,7 @@ module Oscoin.Node
 
     , getMempool
     , getPath
+    , getPathLatest
     , getBestChain
     ) where
 
@@ -20,12 +21,12 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Consensus(..))
 import qualified Oscoin.Consensus as Consensus
-import           Oscoin.Consensus.Class
-                 (MonadClock(..), MonadQuery(..), MonadUpdate(..))
-import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block, blockHash)
+import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
+import           Oscoin.Crypto.Blockchain (Blockchain, tip)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block(..), BlockHeader(..), StateHash, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
-import           Oscoin.Crypto.Hash (Hashable, formatHashed)
+import           Oscoin.Crypto.Hash (Hashable, formatHash)
 import           Oscoin.Data.Query
 import           Oscoin.Logging ((%))
 import qualified Oscoin.Logging as Log
@@ -41,9 +42,10 @@ import qualified Oscoin.Storage.Block as BlockStore
 
 
 import           Oscoin.Storage.Block.Class
-                 (MonadBlockStore(..), chainState, maximumChainBy)
+                 (MonadBlockStore(..), maximumChainBy)
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
+import qualified Oscoin.Storage.State as StateStore
 
 import qualified Radicle.Extended as Rad
 
@@ -52,23 +54,24 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 
 withNode
-    :: Config
+    :: (Serialise s)
+    => Config
     -> i
     -> Mempool.Handle tx
-    -> STree.Handle s
+    -> StateStore.Handle st
     -> BlockStore.Handle tx s
-    -> Evaluator s tx Rad.Value
-    -> Consensus tx (NodeT tx s i IO)
-    -> (Handle tx s i -> IO c)
+    -> Evaluator st tx Rad.Value
+    -> Consensus tx s (NodeT tx st s i IO)
+    -> (Handle tx st s i -> IO c)
     -> IO c
-withNode hConfig hNodeId hMempool hStateTree hBlockStore hEval hConsensus =
+withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     bracket open close
   where
     open = do
         hReceiptStore <- ReceiptStore.newHandle
         gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
             BlockStore.getGenesisBlock bs
-        Log.info (cfgLogger hConfig) ("genesis is " % formatHashed) (blockHash gen)
+        Log.info (cfgLogger hConfig) ("genesis is " % formatHash) (blockHash gen)
         pure Handle{..}
 
     close = const $ pure ()
@@ -80,8 +83,11 @@ miner
        , Serialise tx
        , Hashable  tx
        , Ord       tx
+       , Serialise s
+       , Ord       s
+       , Hashable  st
        )
-    => NodeT tx s i m a
+    => NodeT tx st s i m a
 miner = do
     Handle{hEval, hConsensus} <- ask
     forever $ do
@@ -92,9 +98,7 @@ miner = do
         else do
             time <- currentTick
             blk <- hoist liftIO $ Consensus.mineBlock hConsensus hEval time
-            for_ blk $ \blk' -> do
-                lift . P2P.broadcast $ P2P.BlockMsg (void blk')
-                updateChainState
+            for_ blk $ lift . P2P.broadcast . P2P.BlockMsg
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
@@ -102,50 +106,53 @@ mineBlock
     :: ( MonadIO m
        , MonadClock m
        , Serialise tx
+       , Serialise s
        , Hashable tx
+       , Hashable st
        , Ord  tx
+       , Ord  s
        )
-    => NodeT tx s i m (Maybe (Block tx s))
+    => NodeT tx st s i m (Maybe (Block tx s))
 mineBlock = do
     Handle{hEval, hConsensus} <- ask
     time <- currentTick
-    blk <-
-        hoist liftIO $ Consensus.mineBlock hConsensus hEval time
-    for blk $ \blk' -> do
-        updateChainState
-        pure blk'
+    hoist liftIO $ Consensus.mineBlock hConsensus hEval time
 
 storage
     :: ( MonadIO m
        , Hashable  tx
+       , Hashable  st
        , Ord       tx
+       , Ord       s
+       , Serialise s
        )
-    => Storage tx (NodeT tx s i m)
-storage = Storage
-    { storageApplyBlock  = applyBlock
+    => Evaluator st tx o
+    -> Storage tx s (NodeT tx st s i m)
+storage eval = Storage
+    { storageApplyBlock  = Storage.applyBlock eval
     , storageApplyTx     = Storage.applyTx
-    , storageLookupBlock = (map . map) void . Storage.lookupBlock
+    , storageLookupBlock = Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx
     }
-  where
-    applyBlock blk = do
-        eval <- asks hEval
-        res  <- Storage.applyBlock eval blk
-        res <$ when (res == Storage.Applied) updateChainState
 
-getMempool :: MonadIO m => NodeT tx s i m (Mempool tx)
+getMempool :: MonadIO m => NodeT tx st s i m (Mempool tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 
--- | Get a state value at the given path.
-getPath :: (Query s, MonadIO m) => STree.Path -> NodeT tx s i m (Maybe (QueryVal s))
-getPath = queryM
+-- | Get a value from the given state hash.
+getPath :: (Query st, Hashable st, MonadIO m) => StateHash -> STree.Path -> NodeT tx st s i m (Maybe (QueryVal st))
+getPath sh p = queryM (sh, p)
 
-getBestChain :: (Hashable tx, Ord tx, MonadIO m) => NodeT tx s i m (Blockchain tx s)
+-- | Get a value from the latest state.
+getPathLatest
+    :: (Serialise s, Ord s, Ord tx, Hashable tx, MonadIO m, Query st, Hashable st)
+    => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
+getPathLatest path = do
+    stateHash <- blockStateHash . blockHeader . tip <$> getBestChain
+    result <- getPath stateHash path
+    for result $ \v ->
+        pure (stateHash, v)
+
+getBestChain :: (Hashable tx, Ord tx, Ord s, Serialise s, MonadIO m) => NodeT tx st s i m (Blockchain tx s)
 getBestChain = do
     Consensus{cScore} <- asks hConsensus
     maximumChainBy cScore
-
--- Internal --------------------------------------------------------------------
-
-updateChainState :: (MonadIO m, Hashable tx, Ord tx) => NodeT tx s i m ()
-updateChainState = updateM =<< chainState . Consensus.cScore =<< asks hConsensus

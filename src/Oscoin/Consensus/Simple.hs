@@ -4,6 +4,7 @@
 module Oscoin.Consensus.Simple
     ( simpleConsensus
 
+    , PoA
     , MonadLastTime(..)
     , mineSimple
     , reconcileSimple
@@ -27,6 +28,9 @@ import           Oscoin.Time
 -- @(k, n)@ means that the node has index `k` in a set of `n` nodes.
 type Position = (Int, Int)
 
+-- | The simple consensus seal (proof-of-authority). Currently just a placeholder.
+type PoA = ()
+
 class Monad m => MonadLastTime m where
     getLastBlockTick :: m Timestamp
     setLastBlockTick :: Timestamp -> m ()
@@ -40,7 +44,7 @@ blockTime = 1 * seconds
 simpleConsensus
     :: (MonadLastTime m)
     => Position
-    -> Consensus tx m
+    -> Consensus tx PoA m
 simpleConsensus position = Consensus
     { cScore = comparing chainScore
     , cMiner = mineSimple position
@@ -49,14 +53,14 @@ simpleConsensus position = Consensus
 mineSimple
     :: (MonadLastTime m)
     => Position
-    -> Miner m
+    -> Miner PoA m
 mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
     -- FIXME(kim): this seems wrong
     if shouldCutBlock position lastBlk blockTimestamp
     then do
         setLastBlockTick blockTimestamp
-        pure $ Just bh
+        pure $ Just $ void bh
     else
         pure Nothing
 

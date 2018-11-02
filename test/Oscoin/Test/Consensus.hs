@@ -26,6 +26,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Storage.Block
                  (genesisBlockStore, insert, maximumChainBy, orphans)
 
+import           Codec.Serialise (Serialise)
 import           Data.Function (on)
 import           Data.List (foldr1, isPrefixOf, sort, unlines)
 import qualified Data.Text as T
@@ -39,28 +40,28 @@ tests :: [TestTree]
 tests =
     [ testGroup "With Partitions"
         [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @SimpleNodeState
+            propNetworkNodesConverge @Simple.PoA @SimpleNodeState
                                      testableInit
                                      (arbitraryPartitionedNetwork Simple.blockTime)
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @SimpleNodeState
+            propNetworkNodesConverge @Simple.PoA @SimpleNodeState
                                      testableInit
                                      (arbitraryHealthyNetwork Simple.blockTime)
         , testProperty "Nodes converge (nakamoto)" $
-            propNetworkNodesConverge @NakamotoNodeState
+            propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
                                      testableInit
                                      (arbitraryHealthyNetwork Nakamoto.blockTime)
         ]
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = emptyGenesisBlock epoch () :: Block () ()
+            let genBlk = emptyGenesisBlock epoch :: Block () ()
                 nextBlk = mkBlock emptyHeader
                     { blockTimestamp = fromEpoch (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
-                blkStore = insert (const . Just <$> nextBlk) $ genesisBlockStore genBlk
+                blkStore = insert nextBlk $ genesisBlockStore genBlk
                 chain = maximumChainBy (compare `on` length) blkStore
             tip chain @?= nextBlk
             orphans blkStore @?= mempty
@@ -69,9 +70,10 @@ tests =
     ]
 
 propNetworkNodesConverge
-    :: forall a m. TestableNode m a
-    => (TestNetwork () -> TestNetwork a) -- ^ Network initialization function
-    -> Gen (TestNetwork ())              -- ^ TestNetwork generator
+    :: forall s a m
+     . (Serialise s, Ord s, TestableNode s m a)
+    => (TestNetwork s () -> TestNetwork s a) -- ^ Network initialization function
+    -> Gen (TestNetwork s ())                -- ^ TestNetwork generator
     -> Property
 propNetworkNodesConverge tnInit genNetworks =
     forAllShrink genNetworks shrink $ \tn ->
@@ -116,7 +118,7 @@ propNetworkNodesConverge tnInit genNetworks =
               $ propMajorityPrefix
 
 -- | Return a pretty-printed TestNetwork for counter-examples.
-prettyCounterexample :: TestableNode m a => TestNetwork a -> [DummyTx] -> String
+prettyCounterexample :: (Ord s, Serialise s, TestableNode s m a) => TestNetwork s a -> [DummyTx] -> String
 prettyCounterexample tn@TestNetwork{..} txsReplicated =
     prettyLog ++ prettyInfo ++ prettyNodes ++ prettyStats
   where
@@ -127,18 +129,18 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated =
                               " txs replicated: " ++ show (length txsReplicated),
                               " common prefix: "  ++ show (length $ longestCommonPrefix $ nodePrefixes tn) ]
 
-nodePrefixesMatch :: TestableNode m a => TestNetwork a -> Bool
+nodePrefixesMatch :: (Serialise s, TestableNode s m a) => TestNetwork s a -> Bool
 nodePrefixesMatch tn =
     (>= length (shortestChain tn) - 3) . length . longestCommonPrefix $ nodePrefixes tn
 
-shortestChain :: TestableNode m a => TestNetwork a -> [BlockHash]
+shortestChain :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [BlockHash]
 shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
 
-longestChain :: TestableNode m a => TestNetwork a -> [BlockHash]
+longestChain :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [BlockHash]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | A 50%+ majority of nodes in the network have a common prefix.
-majorityNodePrefixesMatch :: TestableNode m a => TestNetwork a -> Bool
+majorityNodePrefixesMatch :: (Serialise s, TestableNode s m a) => TestNetwork s a -> Bool
 majorityNodePrefixesMatch tn@TestNetwork{..} =
     length ns > length tnNodes - length ns
   where
@@ -146,12 +148,12 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: TestableNode m a => [BlockHash] -> a -> Bool
+nodeHasPrefix :: (Serialise s, TestableNode s m a) => [BlockHash] -> a -> Bool
 nodeHasPrefix p node =
     p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: TestableNode m a => TestNetwork a -> [[BlockHash]]
+nodePrefixes :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [[BlockHash]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

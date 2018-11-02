@@ -37,7 +37,7 @@ type RadTx = Tx Rad.Value
 data Result a =
       Ok  a
     | Err Text
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Functor, Generic)
 
 instance ToJSON a => ToJSON (Result a)
 instance FromJSON a => FromJSON (Result a)

@@ -117,27 +117,27 @@ getMissingBlock codec = httpTest emptyNodeState $ do
 
 getExistingBlock :: Codec -> IO HTTPTest
 getExistingBlock codec = do
-    chain <- generate $ arbitraryValidBlockchain def
-    let g = void $ genesis chain
-    let blockId = toUrlPiece . Crypto.fromHashed $ blockHash g
+    chain <- generate arbitraryValidBlockchain
+    let g = genesis chain
+    let blockId = toUrlPiece $ blockHash g
 
-    httpTest (nodeState mempty chain) $
+    httpTest (nodeState mempty chain def) $
         get codec ("/blocks/" <> blockId) >>=
             assertStatus ok200 <>
             assertResultOK g
 
 getBestChain :: Codec -> IO HTTPTest
 getBestChain codec = do
-    chain <- generate $ arbitraryValidBlockchain def
+    chain <- generate $ arbitraryValidBlockchain
 
-    httpTest (nodeState mempty chain) $ do
+    httpTest (nodeState mempty chain def) $ do
         get codec "/blockchain/best?depth=1" >>=
             assertStatus ok200 <>
-            assertResultOK (map void $ take 1 $ blocks chain)
+            assertResultOK (take 1 $ blocks chain)
 
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
-            assertResultOK (map void $ take 3 $ blocks chain)
+            assertResultOK (take 3 $ blocks chain)
 
 encodeDecodeTx :: API.RadTx -> Bool
 encodeDecodeTx tx = (Aeson.decode . Aeson.encode) tx == Just tx && verifyTx tx

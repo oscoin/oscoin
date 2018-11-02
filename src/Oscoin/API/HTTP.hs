@@ -21,10 +21,13 @@ import qualified Network.Wai.Middleware.Static as Wai
 import qualified Network.Wai as Wai
 import           Web.Spock
 
-run :: Int -> Environment -> Node.Handle RadTx Rad.Env i -> IO ()
+import           Codec.Serialise (Serialise)
+import           Data.Aeson (ToJSON)
+
+run :: (ToJSON s, Ord s, Serialise s) => Int -> Environment -> Node.Handle RadTx Rad.Env s i -> IO ()
 run port env hdl = runApi (api env) port hdl
 
-app :: Environment -> Node.Handle RadTx Rad.Env i -> IO Wai.Application
+app :: (ToJSON s, Ord s, Serialise s) => Environment -> Node.Handle RadTx Rad.Env s i -> IO Wai.Application
 app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 
 -- | Policy for static file serving.
@@ -35,7 +38,7 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api :: Environment -> Api i ()
+api :: (ToJSON s, Ord s, Serialise s) => Environment -> Api s i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy staticFilePolicy
@@ -46,7 +49,7 @@ api env = do
 
     -- /blocks/:id ------------------------------------------------------------
 
-    get ("blocks" <//> var) (Handlers.getBlock . toHashed)
+    get ("blocks" <//> var) Handlers.getBlock
 
     -- /blockchain/best -------------------------------------------------------
 

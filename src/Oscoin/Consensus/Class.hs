@@ -1,7 +1,6 @@
 module Oscoin.Consensus.Class
     ( Score
     , MonadQuery (..)
-    , MonadUpdate (..)
 
     -- * Re-exports
     , module Oscoin.Clock
@@ -24,12 +23,3 @@ class Monad m => MonadQuery m where
         => Key m -> m (Maybe (Val m))
     queryM = lift . queryM
     {-# INLINE queryM #-}
-
-class Monad m => MonadUpdate s m | m -> s where
-    updateM :: s -> m ()
-
-    default updateM
-        :: (MonadUpdate s m', MonadTrans t, m ~ t m')
-        => s -> m ()
-    updateM s = lift $ updateM s
-    {-# INLINE updateM #-}

@@ -10,10 +10,10 @@ type Path = [Text]
 type Val = LBS.ByteString
 
 -- | Key/value tree data-structure.
-type Tree k v = Map k v
+type Tree = Map Path Val
 
-get :: Ord k => k -> Tree k v -> Maybe v
+get :: Path -> Tree -> Maybe Val
 get = Map.lookup
 
-set :: Ord k => k -> v -> Tree k v -> Tree k v
+set :: Path -> Val -> Tree -> Tree
 set = Map.insert

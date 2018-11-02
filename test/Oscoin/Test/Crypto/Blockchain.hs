@@ -31,34 +31,34 @@ testBlockchain = testGroup "Blockchain.Eval"
 testBuildBlock :: TestTree
 testBuildBlock = testGroup "buildBlock"
     [ testProperty "creates receipt for all transactions" $
-        \txs -> let (_, receipts) = buildTestBlock txs
+        \txs -> let (_, _, receipts) = buildTestBlock mempty txs
                 in map receiptTx receipts === map hash txs
     , testProperty "receipts have block hash" $
-        \txs -> let (blk, receipts) = buildTestBlock txs
+        \txs -> let (blk, _, receipts) = buildTestBlock mempty txs
                 in conjoin [ receiptTxBlock receipt === blockHash blk | receipt <- receipts ]
     , testProperty "valid transactions create new state" $
-        \txs -> let (blk, _) = buildTestBlock txs
+        \txs -> let (_, s, _) = buildTestBlock mempty txs
                     validTxOutputs = [ output | TxOk output <- txs ]
-                in reverse validTxOutputs === blockState (blockHeader blk)
+                in reverse validTxOutputs === s
     , testProperty "only valid transactions are included in block" $
-        \txs -> let (blk, _) = buildTestBlock txs
+        \txs -> let (blk, _, _) = buildTestBlock mempty txs
                     validTxs = filter txIsOk txs
                 in validTxs === toList (blockData blk)
     , testProperty "transactions errors recorded in receipts" $
-        \txs err -> let (_, receipts) = buildTestBlock txsWithError
+        \txs err -> let (_, _, receipts) = buildTestBlock mempty txsWithError
                         txsWithError = TxErr err : txs
                     in (receiptTxOutput <$> head receipts) === Just (Left (EvalError (show err)))
     , testProperty "error transactions do not change block" $
         \txs -> let validTxs = [ TxOk out | TxOk out <- txs ]
-                    (blkWithErrors, _) = buildTestBlock txs
-                    (blkWithoutErrors, _) = buildTestBlock validTxs
+                    (blkWithErrors, _, _) = buildTestBlock mempty txs
+                    (blkWithoutErrors, _, _) = buildTestBlock mempty validTxs
                 in  blockData blkWithErrors === blockData blkWithoutErrors
     ]
 
 
 arbitraryReceipt :: Gen (Receipt Tx Output)
 arbitraryReceipt = do
-    receiptTxBlock <- arbitraryHashed
+    receiptTxBlock <- fromHashed <$> arbitraryHashed
     receiptTx <- arbitraryHashed
     receiptTxOutput <- liftArbitrary2 (EvalError <$> arbitrary) arbitrary
     pure Receipt{..}
@@ -74,7 +74,7 @@ arbitraryReceipt = do
 -- or an error and the state is just the list of outputs.
 --
 
-type Output = Int
+type Output = Word8
 
 type St = [Output]
 
@@ -108,5 +108,5 @@ eval (TxErr err) _    = Left (EvalError (show err))
 
 -- | Build block on an empty genesis block with 'eval' as defined
 -- above.
-buildTestBlock :: [Tx] -> (Block Tx St, [Receipt Tx Output])
-buildTestBlock txs = buildBlock eval epoch txs (emptyGenesisBlock epoch [])
+buildTestBlock :: St -> [Tx] -> (Block Tx (), St, [Receipt Tx Output])
+buildTestBlock st txs = buildBlock eval epoch st txs (blockHash $ emptyGenesisBlock epoch)

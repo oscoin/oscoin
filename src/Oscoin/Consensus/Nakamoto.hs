@@ -5,6 +5,8 @@ module Oscoin.Consensus.Nakamoto
     , easyDifficulty
     , defaultGenesisDifficulty
     , difficulty
+    , PoW(..)
+    , emptyPoW
     , hasPoW
     , chainDifficulty
     , chainScore
@@ -17,7 +19,9 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Time
 
+import           Codec.Serialise (Serialise)
 import           Crypto.Number.Serialize (os2ip)
+import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.List.NonEmpty as NonEmpty
 
 blockTime :: Duration
@@ -42,36 +46,53 @@ defaultGenesisDifficulty =
 minGenesisDifficulty :: Difficulty
 minGenesisDifficulty = minDifficulty
 
-nakamotoConsensus :: (Applicative m) => Maybe Difficulty -> Consensus tx m
+-- | A PoW nonce.
+type Nonce = Word32
+
+-- | A PoW seal.
+newtype PoW = PoW Nonce
+    deriving (Eq, Ord, Show, Generic)
+
+instance ToJSON PoW
+instance FromJSON PoW
+
+-- | An empty (zero nonce) proof-of-work.
+emptyPoW :: PoW
+emptyPoW = PoW 0
+
+instance Serialise PoW
+
+nakamotoConsensus :: (Applicative m) => Maybe Difficulty -> Consensus tx PoW m
 nakamotoConsensus difi = Consensus
     { cScore = comparing chainScore
     , cMiner = mineNakamoto $ maybe chainDifficulty const difi
     }
 
 mineNakamoto
-    :: Applicative m
-    => (forall tx s. Blockchain tx s -> Difficulty)
-    -> Miner m
+    :: forall m. Applicative m
+    => (forall tx. Blockchain tx PoW -> Difficulty)
+    -> Miner PoW m
 mineNakamoto difi chain bh =
-    go bh { blockDifficulty = maybe minGenesisDifficulty difi chain }
+    go $ bh { blockDifficulty = maybe minGenesisDifficulty difi chain } $> PoW 0
   where
-    go hdr@BlockHeader { blockNonce }
-        | hasPoW hdr            = pure $ Just hdr
-        | blockNonce < maxBound = go hdr { blockNonce = blockNonce + 1 }
+    go :: BlockHeader PoW -> m (Maybe (BlockHeader PoW))
+    go hdr@BlockHeader { blockSeal = PoW nonce }
+        | hasPoW hdr            = pure $ Just $ hdr $> PoW nonce
+        | nonce < maxBound      = go hdr { blockSeal = PoW (nonce + 1) }
         | otherwise             = pure Nothing
 
-chainScore :: Blockchain tx s -> Int
+chainScore :: Blockchain tx PoW -> Int
 chainScore = fromIntegral . height
 
-hasPoW :: BlockHeader s -> Bool
+hasPoW :: BlockHeader PoW -> Bool
 hasPoW header =
     difficulty header < blockDifficulty header
 
-difficulty :: BlockHeader s -> Difficulty
+difficulty :: BlockHeader PoW -> Difficulty
 difficulty = os2ip . headerHash
 
 -- | Calculate the difficulty of a blockchain.
-chainDifficulty :: Blockchain tx s -> Difficulty
+chainDifficulty :: Blockchain tx PoW -> Difficulty
 chainDifficulty (Blockchain blks) =
     let range = nonEmpty $ NonEmpty.take blocksConsidered blks
      in maybe genesisDifficulty computedDifficulty range

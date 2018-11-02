@@ -12,6 +12,6 @@ import           Codec.Serialise (Serialise)
 
 import           Test.QuickCheck
 
-instance (Serialise tx, Arbitrary tx, Arbitrary s) => Arbitrary (BlockStore tx s) where
+instance (Serialise tx, Arbitrary tx) => Arbitrary (BlockStore tx ()) where
     arbitrary =
         BlockStore.initWithChain <$> arbitraryBlockchain

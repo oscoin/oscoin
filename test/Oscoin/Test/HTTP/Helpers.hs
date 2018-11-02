@@ -37,8 +37,9 @@ import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.Trivial (trivialConsensus)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis, height)
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
+import           Oscoin.Crypto.Blockchain.Block
+                 (emptyGenesisBlock, genesisBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -48,12 +49,12 @@ import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
+import qualified Oscoin.Storage.State as StateStore
 import           Oscoin.Time
 
-import           Oscoin.Test.Consensus.Node (DummyNodeId)
+import           Oscoin.Test.Consensus.Node (DummyNodeId, DummySeal)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary, generate)
@@ -93,15 +94,16 @@ instance MonadFail Session where
     fail = assertFailure
 
 -- | Node handle for API tests.
-type Node = Node.NodeT API.RadTx Rad.Env DummyNodeId IO
+type Node = Node.NodeT API.RadTx Rad.Env DummySeal DummyNodeId IO
 
 -- | Node handle for API tests.
-type NodeHandle = Node.Handle API.RadTx Rad.Env DummyNodeId
+type NodeHandle = Node.Handle API.RadTx Rad.Env DummySeal DummyNodeId
 
 -- | Node state to instantiate a NodeHandle with.
 data NodeState = NodeState
     { mempoolState    :: [API.RadTx]
-    , blockstoreState :: Blockchain API.RadTx Rad.Env
+    , blockstoreState :: Blockchain API.RadTx DummySeal
+    , statestoreState :: Rad.Env
     }
 
 instance Semigroup a => Semigroup (Session a) where
@@ -120,11 +122,12 @@ liftWaiSession s = Session $ lift s
 emptyNodeState :: NodeState
 emptyNodeState = NodeState
     { mempoolState = mempty
-    , blockstoreState = blockchainFromEnv Rad.pureEnv
+    , blockstoreState = emptyBlockchain
+    , statestoreState = Rad.pureEnv
     }
 
-nodeState :: [API.RadTx] -> Blockchain API.RadTx Rad.Env -> NodeState
-nodeState mp bs = NodeState { mempoolState = mp, blockstoreState = bs }
+nodeState :: [API.RadTx] -> Blockchain API.RadTx DummySeal -> Rad.Env -> NodeState
+nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, statestoreState = st }
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
@@ -135,10 +138,8 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    let blockStore = BlockStore.initWithChain blockstoreState
-
-    bsh <- BlockStore.newIO blockStore
-    sth <- STree.new (BlockStore.chainState (comparing height) blockStore)
+    bsh <- BlockStore.newIO $ BlockStore.initWithChain blockstoreState
+    sth <- liftIO $ StateStore.fromStateM statestoreState
 
     Node.withNode
         cfg
@@ -147,7 +148,7 @@ withNode NodeState{..} k = do
         sth
         bsh
         Rad.txEval
-        trivialConsensus
+        (trivialConsensus "")
         k
 
 liftNode :: Node a -> Session a
@@ -168,9 +169,9 @@ createValidTx radValue = liftIO $ do
 
     pure (txHash, tx)
 
--- | Creates a new Radicle blockchain with no transactions and the given state.
-blockchainFromEnv :: Rad.Env -> Blockchain API.RadTx Rad.Env
-blockchainFromEnv env = fromGenesis $ emptyGenesisBlock epoch env
+-- | Creates a new empty blockchain with a dummy seal.
+emptyBlockchain :: Blockchain API.RadTx DummySeal
+emptyBlockchain = fromGenesis $ emptyGenesisBlock epoch $> ""
 
 -- | Create a Radicle environment with the given bindings
 initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
@@ -200,7 +201,7 @@ runSession nst (Session sess) =
 -- Radicle environment
 runSessionEnv :: Rad.Env -> Session () -> Assertion
 runSessionEnv env (Session sess) = do
-    let nst = nodeState [] $ blockchainFromEnv $ env
+    let nst = nodeState [] (fromGenesis $ genesisBlock [] env "" epoch) env
     withNode nst $ \nh -> do
         app <- API.app Testing nh
         Wai.runSession (runReaderT sess nh) app

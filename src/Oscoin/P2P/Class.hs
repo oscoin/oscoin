@@ -16,7 +16,7 @@ import qualified Codec.Serialise as CBOR
 import           Data.ByteString.Lazy (toStrict)
 
 class Monad m => MonadBroadcast m where
-    broadcast :: (Serialise tx, Crypto.Hashable tx) => Msg tx -> m ()
+    broadcast :: (Serialise s, Serialise tx, Crypto.Hashable tx) => Msg tx s -> m ()
 
 instance MonadIO m => MonadBroadcast (GossipT e o m) where
     broadcast msg =
