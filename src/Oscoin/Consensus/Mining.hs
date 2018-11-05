@@ -43,12 +43,13 @@ mineBlock Consensus{cScore, cMiner} eval time = do
     maybeState <- StateStore.lookupState $ blockStateHash $ blockHeader parent
     case maybeState of
         Just st -> do
-            let (blockCandidate, _st', receipts) = buildBlock eval time st txs (blockHash parent)
+            let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
             maybeBlockHeader <- cMiner (Just chain) (blockHeader blockCandidate)
             for maybeBlockHeader $ \header ->
                 let blk = blockCandidate { blockHeader = header }
                  in do Mempool.delTxs (blockData blk)
                        BlockStore.storeBlock blk
+                       StateStore.storeState st'
                        for_ receipts addReceipt
                        pure blk
         Nothing ->
