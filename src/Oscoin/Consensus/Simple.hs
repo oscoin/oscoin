@@ -56,7 +56,6 @@ mineSimple
     -> Miner PoA m
 mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     lastBlk <- getLastBlockTick
-    -- FIXME(kim): this seems wrong
     if shouldCutBlock position lastBlk blockTimestamp
     then do
         setLastBlockTick blockTimestamp
