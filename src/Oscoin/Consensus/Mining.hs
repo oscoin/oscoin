@@ -59,7 +59,7 @@ mineBlock Consensus{cScore, cMiner} eval time = do
 mineGenesis
     :: (Monad m)
     => Miner s m
-    -> Block tx ()
+    -> Block tx r
     -> m (Either Text (Block tx s))
 mineGenesis mine blk = do
     result <- mine Nothing (blockHeader blk)
