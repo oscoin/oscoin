@@ -47,21 +47,27 @@ steps:
     waitFor: ["Build deps"]
     name: "haskell:8.4.3"
     entrypoint: "bash"
-    env: ["STACK_ROOT=/workspace/.stack"]
+    env:
+    - STACK_ROOT=/workspace/.stack
+    - BRANCH_NAME=$BRANCH_NAME
     args:
     - "-c"
     - |
       set -euo pipefail
 
-      stack build \
-        --test \
-        --flag=oscoin:static \
-        --no-terminal \
-        --pedantic \
-        --copy-bins \
-        --local-bin-path=/workspace/bin \
-        --haddock \
-        --exec="mv $(stack path --local-doc-root) api-docs"
+      if [ "$BRANCH_NAME" == "master" ]; then
+        stack build \
+          --test \
+          --flag=oscoin:static \
+          --no-terminal \
+          --pedantic \
+          --copy-bins \
+          --local-bin-path=/workspace/bin \
+          --haddock \
+          --exec="mv $(stack path --local-doc-root) api-docs"
+      else
+        stack build --test --no-terminal --pedantic
+      fi
 
   - id: "Lint (weeder)"
     name: "haskell:8.4.3"
@@ -81,12 +87,14 @@ steps:
     - |
       set -euo pipefail
 
-      bins=(
-        /workspace/bin/oscoin
-        /workspace/bin/oscoin-cli
-      )
+      if [ "$BRANCH_NAME" == "master" ]; then
+        bins=(
+          /workspace/bin/oscoin
+          /workspace/bin/oscoin-cli
+        )
 
-      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
+        echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
+      fi
 
   - id: "Publish Haddocks"
     waitFor: ["Lint (weeder)"]
@@ -94,12 +102,15 @@ steps:
     entrypoint: "bash"
     env:
     - COMMIT_SHA=$COMMIT_SHA
+    - BRANCH_NAME=$BRANCH_NAME
     args:
     - "-c"
     - |
       set -euo pipefail
 
-      gsutil -m rsync -d -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
+      if [ "$BRANCH_NAME" == "master" ]; then
+        gsutil -m rsync -d -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
+      fi
 
   - id: "Save cache"
     name: gcr.io/cloud-builders/gsutil
