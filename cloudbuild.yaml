@@ -22,7 +22,7 @@ steps:
       load-cache
 
   - id: "Build deps"
-    name: "haskell:8.4.3"
+    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
     env: ["STACK_ROOT=/workspace/.stack"]
     entrypoint: "bash"
     dir: "/tmp"
@@ -35,17 +35,17 @@ steps:
 
   - id: "Format (haskell)"
     waitFor: ["Build deps"]
-    name: "haskell:8.4.3"
+    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
     args: ["./scripts/check-haskell-format.sh"]
 
   - id: "Lint (hlint)"
     waitFor: ["Build deps"]
-    name: "haskell:8.4.3"
+    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
     args: ["/builder/home/.local/bin/hlint", "."]
 
   - id: "Test & Build"
     waitFor: ["Build deps"]
-    name: "haskell:8.4.3"
+    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
     entrypoint: "bash"
     env:
     - STACK_ROOT=/workspace/.stack
@@ -70,7 +70,7 @@ steps:
       fi
 
   - id: "Lint (weeder)"
-    name: "haskell:8.4.3"
+    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
     env: ["STACK_ROOT=/workspace/.stack"] # weeder uses stack under the hood
     args: ["/builder/home/.local/bin/weeder", "."]
 
