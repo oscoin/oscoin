@@ -6,6 +6,7 @@ packages:
 extra-deps:
 - algebraic-graphs-0.1.1.1
 - base58-bytestring-0.1.0
+- cacophony-0.10.1
 - cborg-0.2.1.0
 - half-0.3
 - merkle-tree-0.1.0
@@ -16,11 +17,6 @@ extra-deps:
 
 - git: http://git.oscoin.io/radicle
   commit: 12707c83663909d303e4daf1806f22a779be7598
-
-# Due to version bounds
-# https://github.com/centromere/cacophony/pull/10
-- git: https://github.com/kim/cacophony
-  commit: 5afdce755eb4942167f1beed927e0890a481efe5
 
 ghc-options:
   "$locals": -fhide-source-paths
