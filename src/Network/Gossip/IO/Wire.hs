@@ -1,10 +1,12 @@
-module Oscoin.P2P.Gossip.Wire
+module Network.Gossip.IO.Wire
     ( WireMessage (..)
     ) where
 
-import           Oscoin.Prelude
+import           Prelude
 
 import           Codec.Serialise (Serialise)
+import           Data.Text (Text)
+import           GHC.Generics (Generic)
 
 data WireMessage p =
       WirePayload p

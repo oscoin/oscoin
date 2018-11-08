@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Gossip.IO (tests, props) where
+module Oscoin.Test.P2P.IO (tests, props) where
 
 import           Oscoin.Prelude
 

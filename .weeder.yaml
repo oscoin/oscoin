@@ -12,18 +12,8 @@
           - testableScore
           - testableTick
           # END false positives
-
       - module:
-        - name: Oscoin.Test.P2P.Gossip.Broadcast
-        - identifier:
-          # BEGIN debug functions
-          - bootTopo
-          - eagerTopo
-          - lazyTopo
-          - renderTopo
-          # END debug functions
-      - module:
-        - name: Oscoin.Test.P2P.Gossip.IO
+        - name: Oscoin.Test.P2P.IO
         - identifier:
           # BEGIN debug functions
           - props
@@ -47,4 +37,19 @@
           # BEGIN debug functions
           - props
           # END debug functions
-
+      - module:
+        - name: Network.Gossip.Test.Broadcast
+        - identifier:
+          # BEGIN debug functions
+          - props
+          - bootTopo
+          - eagerTopo
+          - lazyTopo
+          - renderTopo
+          # END debug functions
+      - module:
+        - name: Network.Gossip.Test.Membership
+        - identifier:
+          # BEGIN debug functions
+          - props
+          # END debug functions

@@ -77,7 +77,6 @@ library:
     - time
     - transformers
     - typed-process
-    - unliftio-core
     - unordered-containers
     - wai
     - wai-extra
@@ -161,6 +160,7 @@ tests:
       - scientific
       - serialise
       - splitmix
+      - stm
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1
@@ -170,6 +170,7 @@ tests:
       - tasty-quickcheck
       - temporary
       - text
+      - transformers
       - unordered-containers
       - wai
       - wai-extra

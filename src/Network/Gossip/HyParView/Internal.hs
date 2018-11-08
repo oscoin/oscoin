@@ -1,12 +1,14 @@
-module Oscoin.P2P.Gossip.Membership.Internal
+module Network.Gossip.HyParView.Internal
     ( TimeToLive
     , decr
     , isExpired
     ) where
 
-import           Oscoin.Prelude
+import           Prelude
 
 import           Codec.Serialise (Serialise)
+import           Data.Word (Word8)
+import           GHC.Generics (Generic)
 
 -- | The time-to-live of a random walk.
 --

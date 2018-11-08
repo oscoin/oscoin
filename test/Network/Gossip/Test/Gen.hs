@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Gossip.Gen
+module Network.Gossip.Test.Gen
     ( NodeId
     , Contacts
     , NetworkBounds
@@ -10,20 +10,24 @@ module Oscoin.Test.P2P.Gossip.Gen
     , splitMixSeed
     ) where
 
-import           Oscoin.Prelude
-
+import           Prelude
 
 import qualified Algebra.Graph.AdjacencyMap as Alga
 import qualified Algebra.Graph.Class as Alga (toGraph)
 import qualified Algebra.Graph.Relation.Symmetric as Sym (toRelation)
+import           Control.Applicative (liftA2)
 import           Data.Bifunctor (second)
 import qualified Data.Graph as Graph
-import           Data.List (unfoldr)
+import           Data.List (uncons, unfoldr)
+import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Word (Word16, Word64)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+
+{-# ANN module ("HLint: ignore Use map" :: String) #-}
 
 type NodeId   = Word16
 type Contacts = [(NodeId, [NodeId])]
@@ -47,7 +51,7 @@ connectedContacts bounds = do
     splits <- Gen.list (Range.singleton (Set.size nodes))
                        (Gen.int (Range.constant 1 (netMaxContacts bounds)))
     graph  <-
-        map Alga.overlays . traverse subgraph $
+        fmap Alga.overlays . traverse subgraph $
             clusters (Set.toList nodes, splits)
     pure $ Alga.adjacencyList (ensureConnected graph)
   where
