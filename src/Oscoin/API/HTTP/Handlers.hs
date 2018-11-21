@@ -5,7 +5,6 @@ import           Oscoin.Prelude
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
-import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
@@ -47,8 +46,8 @@ getTransaction txId = do
         lookupTx id = Mempool.lookupTx id >>= \case
             Just tx -> pure $ Just (tx, Nothing, 0)
             Nothing -> do
-                chain <- BlockStore.maximumChainBy (comparing Blockchain.height)
-                pure $ fromTxLookup <$> Blockchain.lookupTx id chain
+                result <- BlockStore.lookupTx id
+                pure $ fromTxLookup <$> result
 
 
 submitTransaction :: ApiAction s i a
@@ -69,7 +68,7 @@ submitTransaction = do
 getBestChain :: (ToJSON s, Ord s, Serialise s) => ApiAction s i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
-    blks <- node $ take n . Blockchain.blocks <$> Node.getBestChain
+    blks <- node $ Node.getBlocks n
     respond ok200 $ body (Ok blks)
 
 getBlock :: (ToJSON s, Ord s, Serialise s) => BlockHash -> ApiAction s i a

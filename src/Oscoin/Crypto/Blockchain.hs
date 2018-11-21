@@ -3,6 +3,7 @@ module Oscoin.Crypto.Blockchain
     , ScoringFunction
     , TxLookup(..)
     , (|>)
+    , unsafeToBlockchain
     , tip
     , genesis
     , fromGenesis
@@ -56,6 +57,10 @@ infixr 5 |>
 
 (|>) :: Block tx s -> Blockchain tx s -> Blockchain tx s
 (|>) blk (Blockchain blks) = Blockchain (blk <| blks)
+
+unsafeToBlockchain :: [Block tx s] -> Blockchain tx s
+unsafeToBlockchain blks =
+    Blockchain $ NonEmpty.fromList blks
 
 blocks :: Blockchain tx s -> [Block tx s]
 blocks = NonEmpty.toList . fromBlockchain

@@ -14,7 +14,7 @@ module Oscoin.Node
     , getMempool
     , getPath
     , getPathLatest
-    , getBestChain
+    , getBlocks
     ) where
 
 import           Oscoin.Prelude
@@ -22,9 +22,8 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus (Consensus(..))
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
-import           Oscoin.Crypto.Blockchain (Blockchain, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHeader(..), StateHash, blockHash)
+                 (Block(..), BlockHeader(..), Depth, StateHash, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHash)
 import           Oscoin.Data.Query
@@ -38,11 +37,8 @@ import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
-import qualified Oscoin.Storage.Block as BlockStore
 
-
-import           Oscoin.Storage.Block.Class
-                 (MonadBlockStore(..), maximumChainBy)
+import qualified Oscoin.Storage.Block.Class as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
@@ -54,7 +50,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 
 withNode
-    :: (Serialise s)
+    :: (Serialise s, Ord s, Ord tx, Hashable tx)
     => Config
     -> i
     -> Mempool.Handle tx
@@ -69,8 +65,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
   where
     open = do
         hReceiptStore <- ReceiptStore.newHandle
-        gen <- atomically $ BlockStore.for hBlockStore $ \bs ->
-            BlockStore.getGenesisBlock bs
+        gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
         Log.info (cfgLogger hConfig) ("genesis is " % formatHash) (blockHash gen)
         pure Handle{..}
 
@@ -147,12 +142,10 @@ getPathLatest
     :: (Serialise s, Ord s, Ord tx, Hashable tx, MonadIO m, Query st, Hashable st)
     => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
 getPathLatest path = do
-    stateHash <- blockStateHash . blockHeader . tip <$> getBestChain
+    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip
     result <- getPath stateHash path
     for result $ \v ->
         pure (stateHash, v)
 
-getBestChain :: (Hashable tx, Ord tx, Ord s, Serialise s, MonadIO m) => NodeT tx st s i m (Blockchain tx s)
-getBestChain = do
-    Consensus{cScore} <- asks hConsensus
-    maximumChainBy cScore
+getBlocks :: (Hashable tx, Ord tx, Ord s, Serialise s, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
+getBlocks = BlockStore.getBlocks

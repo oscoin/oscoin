@@ -62,18 +62,19 @@ emptyPoW = PoW 0
 
 instance Serialise PoW
 
-nakamotoConsensus :: (Applicative m) => Maybe Difficulty -> Consensus tx PoW m
+nakamotoConsensus :: (Monad m) => Maybe Difficulty -> Consensus tx PoW m
 nakamotoConsensus difi = Consensus
     { cScore = comparing chainScore
     , cMiner = mineNakamoto $ maybe chainDifficulty const difi
     }
 
 mineNakamoto
-    :: forall m. Applicative m
-    => (forall tx. Blockchain tx PoW -> Difficulty)
+    :: forall m. Monad m
+    => (forall tx. [Block tx PoW] -> Difficulty)
     -> Miner PoW m
-mineNakamoto difi chain bh =
-    go $ bh { blockDifficulty = maybe minGenesisDifficulty difi chain } $> PoW 0
+mineNakamoto difiFn getBlocks bh = do
+    blks <- getBlocks difficultyBlocks
+    go $ bh { blockDifficulty = difiFn blks } $> PoW 0
   where
     go :: BlockHeader PoW -> m (Maybe (BlockHeader PoW))
     go hdr@BlockHeader { blockSeal = PoW nonce }
@@ -91,22 +92,26 @@ hasPoW header =
 difficulty :: BlockHeader PoW -> Difficulty
 difficulty = os2ip . headerHash
 
+-- | Number of blocks to consider in Nakamoto consensus. Roughly 2 weeks.
+difficultyBlocks :: Depth
+difficultyBlocks = 2016
+
 -- | Calculate the difficulty of a blockchain.
-chainDifficulty :: Blockchain tx PoW -> Difficulty
-chainDifficulty (Blockchain blks) =
-    let range = nonEmpty $ NonEmpty.take blocksConsidered blks
-     in maybe genesisDifficulty computedDifficulty range
+chainDifficulty :: [Block tx PoW] -> Difficulty
+chainDifficulty [] =
+    minGenesisDifficulty
+chainDifficulty (NonEmpty.fromList -> blks) =
+    computedDifficulty . NonEmpty.fromList $ NonEmpty.take blocksConsidered blks
   where
     blocksConsidered  = timePeriodMinutes `div` blockTimeMinutes
     timePeriodMinutes = timePeriodDays * 24 * 60
     timePeriodDays    = 2 * 7 -- Two weeks.
     blockTimeMinutes  = 10
     blockTimeSeconds  = blockTimeMinutes * 60
-
-    genesisDifficulty = blockDifficulty . blockHeader $ NonEmpty.last blks
+    oldDifficulty     = blockDifficulty . blockHeader $ NonEmpty.last blks
 
     computedDifficulty range
-        | NonEmpty.length range < blocksConsidered = genesisDifficulty
+        | NonEmpty.length range < blocksConsidered = oldDifficulty
         | otherwise =
         let rangeStart        = blockHeader . NonEmpty.last
                               $ NonEmpty.head blks :| NonEmpty.tail range

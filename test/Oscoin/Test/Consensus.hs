@@ -13,7 +13,7 @@ import           Oscoin.Time
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Blockchain (blockHash, tip)
+import           Oscoin.Crypto.Blockchain (blockHash, tip, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block
                  , BlockHash
@@ -24,10 +24,9 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  )
 import           Oscoin.Storage.Block
-                 (genesisBlockStore, insert, maximumChainBy, orphans)
+                 (genesisBlockStore, getBlocks, insert, orphans)
 
 import           Codec.Serialise (Serialise)
-import           Data.Function (on)
 import           Data.List (foldr1, isPrefixOf, sort, unlines)
 import qualified Data.Text as T
 
@@ -62,7 +61,7 @@ tests =
                     , blockPrevHash = blockHash genBlk
                     } []
                 blkStore = insert nextBlk $ genesisBlockStore genBlk
-                chain = maximumChainBy (compare `on` length) blkStore
+                chain = unsafeToBlockchain $ getBlocks 2 blkStore
             tip chain @?= nextBlk
             orphans blkStore @?= mempty
 

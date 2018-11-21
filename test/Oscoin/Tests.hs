@@ -5,7 +5,8 @@ module Oscoin.Tests
 import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
-import           Oscoin.Crypto.Blockchain (Blockchain(..), genesis, height, tip)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain(..), genesis, height, tip, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlockchain)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -105,7 +106,8 @@ testBlockStoreLookupBlock = do
     blks <- generate $ arbitraryValidBlockchain @() @()
     let g  = genesis blks
     let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
-                        , bsOrphans = mempty }
+                        , bsOrphans = mempty
+                        , bsScoreFn = comparing height }
     BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore
@@ -116,8 +118,8 @@ propOscoinBlockStore chainGen =
         let foldEval x xs = Right ((), xs <> x)
         let blks = NonEmpty.toList $ fromBlockchain chain
         let bs   = BlockStore.fromOrphans blks (genesis chain)
-        let best = BlockStore.maximumChainBy (comparing height) bs
-        let z    = snd $ evalBlockchain foldEval def best
+        let best = BlockStore.getBlocks (fromIntegral $ height chain) bs
+        let z    = snd $ evalBlockchain foldEval def (unsafeToBlockchain best)
         let txs  = concatMap (toList . blockData) $ reverse blks
         let txs' = mconcat txs
         counterexample ("From input: " ++ show txs ++ ", Expected: "

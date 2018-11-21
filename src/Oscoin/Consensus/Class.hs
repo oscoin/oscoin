@@ -1,6 +1,5 @@
 module Oscoin.Consensus.Class
-    ( Score
-    , MonadQuery (..)
+    ( MonadQuery (..)
 
     -- * Re-exports
     , module Oscoin.Clock
@@ -9,8 +8,6 @@ module Oscoin.Consensus.Class
 import           Oscoin.Prelude
 
 import           Oscoin.Clock
-
-type Score = ByteString
 
 class Monad m => MonadQuery m where
     type Key m

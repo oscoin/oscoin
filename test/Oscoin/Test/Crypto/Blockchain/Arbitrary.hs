@@ -4,7 +4,9 @@ module Oscoin.Test.Crypto.Blockchain.Arbitrary
     ( arbitraryBlockchain
     , arbitraryValidBlockchain
     , arbitraryValidBlockchainFrom
+    , arbitraryValidBlockWith
     , arbitraryBlock
+    , arbitraryBlockWith
     ) where
 
 import           Oscoin.Prelude
@@ -31,10 +33,13 @@ arbitraryBlockchain = do
     pure $ rest |> chain
 
 arbitraryBlock :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Gen (Block tx s)
-arbitraryBlock = do
-    txs <- arbitrary :: Gen [tx]
+arbitraryBlock =
+    arbitraryBlockWith =<< arbitrary
+
+arbitraryBlockWith :: forall tx s. (Serialise tx, Arbitrary s) => [tx] -> Gen (Block tx s)
+arbitraryBlockWith txs = do
     timestamp <- arbitrary
-    diffi <- arbitrary
+    diffi <- arbitrary `suchThat` (> 0)
     prevHash <- arbitrary :: Gen Hash
     stateHash <- arbitrary :: Gen Hash
     blockSeal  <- arbitrary
@@ -59,13 +64,14 @@ arbitraryValidBlockWith prevHeader txs = do
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- arbitrary
+    blockDiffi <- choose (1, 3)
     let header = emptyHeader
                { blockPrevHash   = headerHash prevHeader
                , blockDataHash   = hashTxs txs
                , blockStateHash  = hashState blockState
                , blockSeal
                , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
-               , blockDifficulty = 0
+               , blockDifficulty = blockDifficulty prevHeader + blockDiffi
                }
     pure $ Block header (Seq.fromList txs)
 

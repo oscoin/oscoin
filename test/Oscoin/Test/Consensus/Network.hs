@@ -19,7 +19,8 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
-import           Oscoin.Crypto.Blockchain (Blockchain, blocks, showChainDigest)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain, blocks, showChainDigest, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block
                  (BlockHash, blockData, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -77,8 +78,8 @@ testableShow = showChainDigest . testableBestChain
 testableBestChain :: TestableNode s m a => a -> Blockchain DummyTx s
 testableBestChain nodeState =
     let blockStore = nodeState ^. testNodeStateL . tnsBlockstoreL
-        score = comparing $ testableScore nodeState
-     in BlockStore.maximumChainBy score blockStore
+     in unsafeToBlockchain $ BlockStore.getBlocks 10000 blockStore
+     -- XXX(alexis): Don't use a magic number.
 
 
 

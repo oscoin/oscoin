@@ -31,6 +31,7 @@
 - ignore: {name: Use map, within: [Crypto.Data.Auth.Tree.Proof]}
 - ignore: {name: Collapse lambdas}
 
+- ignore: {name: Reduce duplication}
 - ignore: {name: Use concatMap}
 - ignore: {name: Use ++}
 - ignore: {name: Use &&}

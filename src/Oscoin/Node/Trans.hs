@@ -21,8 +21,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block as BlockStore
-import           Oscoin.Storage.Block.Class
-                 (MonadBlockStore(..), maximumChainBy)
+import           Oscoin.Storage.Block.Class (MonadBlockStore(..), getBlocks)
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
@@ -93,15 +92,17 @@ instance (Monad m, MonadIO m, Ord s, Ord tx, Serialise s, Hashable tx) => MonadB
         liftIO . atomically $ BlockStore.put bs blk
 
     lookupBlock     = withBlockStore . BlockStore.lookupBlock
-    getGenesisBlock = withBlockStore   BlockStore.getGenesisBlock
     lookupTx        = withBlockStore . BlockStore.lookupTx
-    orphans         = withBlockStore   BlockStore.orphans
-    maximumChainBy  = withBlockStore . BlockStore.maximumChainBy
+    getGenesisBlock = withBlockStore   BlockStore.getGenesisBlock
+    getOrphans      = withBlockStore   BlockStore.orphans
+    getBlocks       = withBlockStore . BlockStore.getBlocks
+    getTip          = withBlockStore   BlockStore.getTip
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
-    {-# INLINE orphans        #-}
-    {-# INLINE maximumChainBy #-}
+    {-# INLINE getOrphans     #-}
+    {-# INLINE getBlocks      #-}
+    {-# INLINE getTip         #-}
 
 withBlockStore
     :: MonadIO m

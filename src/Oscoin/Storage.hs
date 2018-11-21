@@ -117,7 +117,7 @@ lookupTx
     -> m (Maybe tx)
 lookupTx hsh =
     runMaybeT $
-            MaybeT (BlockStore.lookupTx hsh)
+            MaybeT (BlockStore.lookupTx hsh <&> map txPayload)
         <|> MaybeT (Mempool.lookupTx    hsh)
 
 --------------------------------------------------------------------------------

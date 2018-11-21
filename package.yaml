@@ -164,7 +164,6 @@ tests:
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1
-      - tasty-expected-failure
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck

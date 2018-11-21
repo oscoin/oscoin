@@ -16,6 +16,6 @@ data Consensus tx s m = Consensus
 type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering
 
 type Miner s m = forall tx unsealed.
-       Maybe (Blockchain tx s)
+    (Depth -> m [Block tx s])
     -> BlockHeader unsealed
     -> m (Maybe (BlockHeader s))

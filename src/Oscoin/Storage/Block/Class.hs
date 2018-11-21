@@ -2,9 +2,8 @@ module Oscoin.Storage.Block.Class where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain, ScoringFunction, tip)
-import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, StateHash, blockHeader, blockStateHash)
+import           Oscoin.Crypto.Blockchain (TxLookup)
+import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash, Depth)
 import           Oscoin.Crypto.Hash (Hashed)
 
 class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
@@ -18,13 +17,17 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
     getGenesisBlock :: m (Block tx s)
 
     -- | Lookup a transaction by its hash.
-    lookupTx :: Hashed tx -> m (Maybe tx)
+    lookupTx :: Hashed tx -> m (Maybe (TxLookup tx))
 
     -- | The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
-    orphans :: m (Set BlockHash)
+    getOrphans :: m (Set BlockHash)
 
-    -- | Returns the maximum chain, according to the ordering function provided.
-    maximumChainBy :: ScoringFunction tx s -> m (Blockchain tx s)
+    -- | Returns the last N blocks, given a depth.
+    getBlocks :: Depth -> m [Block tx s]
+
+    -- | Returns the tip of the chain.
+    getTip :: m (Block tx s)
+    getTip = headDef (panic "Empty Blockchain!") <$> getBlocks 1
 
 
     default storeBlock
@@ -47,24 +50,19 @@ class (Monad m) => MonadBlockStore tx s m | m -> tx, m -> s where
 
     default lookupTx
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => Hashed tx -> m (Maybe tx)
+        => Hashed tx -> m (Maybe (TxLookup tx))
     lookupTx = lift . lookupTx
     {-# INLINE lookupTx #-}
 
-    default orphans
+    default getOrphans
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
         => m (Set BlockHash)
-    orphans = lift orphans
-    {-# INLINE orphans #-}
+    getOrphans = lift getOrphans
+    {-# INLINE getOrphans #-}
 
-    default maximumChainBy
+    default getBlocks
         :: (MonadBlockStore tx s m', MonadTrans t, m ~ t m')
-        => ScoringFunction tx s
-        -> m (Blockchain tx s)
-    maximumChainBy = lift . maximumChainBy
-    {-# INLINE maximumChainBy #-}
-
--- | The state hash of the best chain according to the supplied scoring function.
-chainStateHash :: ScoringFunction tx s -> MonadBlockStore tx s m => m StateHash
-chainStateHash sf =
-    blockStateHash . blockHeader . tip <$> maximumChainBy sf
+        => Depth
+        -> m [Block tx s]
+    getBlocks = lift . getBlocks
+    {-# INLINE getBlocks #-}

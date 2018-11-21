@@ -128,13 +128,14 @@ instance (Serialise s, Ord s, Monad m) => MonadBlockStore DummyTx s (TestNodeT s
     lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
     lookupTx    txh  = BlockStore.lookupTx txh <$> gets tnsBlockstore
     getGenesisBlock  = BlockStore.getGenesisBlock <$> gets tnsBlockstore
-    orphans          = BlockStore.orphans <$> gets tnsBlockstore
-    maximumChainBy f = BlockStore.maximumChainBy f <$> gets tnsBlockstore
+    getOrphans       = BlockStore.orphans <$> gets tnsBlockstore
+    getBlocks d      = BlockStore.getBlocks d <$> gets tnsBlockstore
+    getTip           = BlockStore.getTip <$> gets tnsBlockstore
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
-    {-# INLINE orphans        #-}
-    {-# INLINE maximumChainBy #-}
+    {-# INLINE getOrphans     #-}
+    {-# INLINE getBlocks      #-}
 
 instance Monad m => MonadQuery (TestNodeT s m) where
     type Key (TestNodeT s m) = (StateHash, STree.Path)

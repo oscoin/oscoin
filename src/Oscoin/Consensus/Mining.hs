@@ -36,15 +36,14 @@ mineBlock
     -> Evaluator st tx b
     -> Timestamp
     -> m (Maybe (Block tx s))
-mineBlock Consensus{cScore, cMiner} eval time = do
+mineBlock Consensus{cMiner} eval time = do
     txs   <- (map . map) snd Mempool.getTxs
-    chain <- BlockStore.maximumChainBy cScore
-    let parent = tip chain
+    parent <- BlockStore.getTip
     maybeState <- StateStore.lookupState $ blockStateHash $ blockHeader parent
     case maybeState of
         Just st -> do
             let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
-            maybeBlockHeader <- cMiner (Just chain) (blockHeader blockCandidate)
+            maybeBlockHeader <- cMiner BlockStore.getBlocks (blockHeader blockCandidate)
             for maybeBlockHeader $ \header ->
                 let blk = blockCandidate { blockHeader = header }
                  in do Mempool.delTxs (blockData blk)
@@ -62,7 +61,7 @@ mineGenesis
     -> Block tx r
     -> m (Either Text (Block tx s))
 mineGenesis mine blk = do
-    result <- mine Nothing (blockHeader blk)
+    result <- mine (\_ -> pure []) (blockHeader blk)
     pure $ case result of
         Just h ->
             Right $ blk { blockHeader = h }

@@ -4,7 +4,8 @@ module Oscoin.Storage.Block
     , fromOrphans
     , initWithChain
 
-    , maximumChainBy
+    , getBlocks
+    , getTip
     , getGenesisBlock
     , insert
     , lookupBlock
@@ -18,7 +19,8 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain.Block (Block)
 
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, hash)
+import qualified Oscoin.Crypto.Blockchain as Blockchain
+import           Oscoin.Crypto.Hash (Hashable, Hashed)
 
 import           Codec.Serialise (Serialise)
 import qualified Data.List as List
@@ -30,19 +32,21 @@ import           Text.Show (Show(..))
 data BlockStore tx s = BlockStore
     { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
     , bsOrphans :: Set (Block tx s)                -- ^ Orphan blocks.
+    , bsScoreFn :: ScoringFunction tx s            -- ^ Chain scoring function.
     }
 
 instance Show (BlockStore tx s) where
-    -- We can't derive Show because 'Orphan' is a function.
+    -- We can't derive Show because 'bsScoreFn' is a function.
     show = const "BlockStore{}"
 
 instance (Ord tx, Ord s) => Semigroup (BlockStore tx s) where
     (<>) a b = BlockStore
         { bsOrphans = bsOrphans a <> bsOrphans b
-        , bsChains  = bsChains  a <> bsChains  b }
+        , bsChains  = bsChains  a <> bsChains  b
+        , bsScoreFn = bsScoreFn a }
 
 instance (Ord tx, Ord s) => Monoid (BlockStore tx s) where
-    mempty = BlockStore mempty mempty
+    mempty = BlockStore mempty mempty (comparing height)
 
 genesisBlockStore :: Serialise s => Block tx s -> BlockStore tx s
 genesisBlockStore gen = initWithChain $ fromGenesis gen
@@ -52,15 +56,24 @@ initWithChain  chain =
     BlockStore
         { bsChains  = Map.singleton (blockHash $ genesis chain) chain
         , bsOrphans = Set.empty
+        , bsScoreFn = comparing height
         }
 
-maximumChainBy
-    :: (Blockchain tx s -> Blockchain tx s -> Ordering)
+getBlocks
+    :: Depth
     -> BlockStore tx s
-    -> Blockchain tx s
-maximumChainBy cmp = maximumBy cmp . Map.elems . bsChains
+    -> [Block tx s]
+getBlocks (fromIntegral -> d) BlockStore{..} =
+    takeBlocks d . maximumBy bsScoreFn . Map.elems $ bsChains
 -- Nb. we guarantee that there is at least one chain in the store by exposing
 -- only the 'genesisBlockStore' smart constructor.
+
+getTip :: BlockStore tx s -> Block tx s
+getTip = tip . getBestChain
+
+getBestChain :: BlockStore tx s -> Blockchain tx s
+getBestChain BlockStore{..} =
+    maximumBy bsScoreFn . Map.elems $ bsChains
 
 -- | /O(n)/. Get the genesis block.
 getGenesisBlock :: BlockStore tx s -> Block tx s
@@ -89,20 +102,14 @@ orphans BlockStore{bsOrphans} =
      in Set.difference parentHashes danglingHashes
 
 -- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
--- blocks which lead back to genesis.
-lookupTx :: forall tx s. Hashable tx => Hashed tx -> BlockStore tx s -> Maybe tx
-lookupTx h BlockStore{bsChains} =
-    -- Nb. This is very slow. One way to make it faster would be to traverse
-    -- all chains starting from the tip, in lock step, because it's likely
-    -- that the transaction we're looking for is near the tip.
-    let txs  = [(hash tx, tx) | tx <- concatMap (toList . blockData) blks]
-        blks = concatMap blocks (Map.elems bsChains)
-     in List.lookup h txs
+-- the best chain.
+lookupTx :: forall tx s. (Serialise s, Hashable tx) => Hashed tx -> BlockStore tx s -> Maybe (TxLookup tx)
+lookupTx h = Blockchain.lookupTx h . getBestChain
 
--- | The state hash of the best chain according to the supplied scoring function.
-chainStateHash :: ScoringFunction tx s -> BlockStore tx s -> StateHash
-chainStateHash sf =
-    blockStateHash . blockHeader . tip . maximumChainBy sf
+-- | The state hash of the chain.
+chainStateHash :: BlockStore tx s -> StateHash
+chainStateHash =
+    blockStateHash . blockHeader . getTip
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.

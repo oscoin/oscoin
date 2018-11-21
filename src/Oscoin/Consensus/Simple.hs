@@ -74,7 +74,7 @@ reconcileSimple tick = do
     if shouldReconcile lastAsk tick
     then do
         setLastAskTick tick
-        toList <$> orphans
+        toList <$> getOrphans
     else
         pure []
 

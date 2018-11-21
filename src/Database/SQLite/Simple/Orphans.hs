@@ -14,6 +14,7 @@ import qualified Codec.Serialise as CBOR
 import qualified Data.ByteString.Lazy as LBS
 import           Database.SQLite.Simple
 import           Database.SQLite.Simple.FromField
+import           Database.SQLite.Simple.FromRow (fieldWith)
 import           Database.SQLite.Simple.Ok (Ok(..))
 import           Database.SQLite.Simple.ToField
 
@@ -31,7 +32,7 @@ deriving instance ToField   PoW
 
 instance FromField s => FromRow (BlockHeader s) where
     fromRow = BlockHeader
-        <$> field
+        <$> fieldWith fromPrevHashField
         <*> field
         <*> field
         <*> field
@@ -45,6 +46,14 @@ instance FromRow RadTx where
         <*> field
         <*> field
         <*> field
+
+-- | Convert a SQL parent hash field to a 'Crypto.Hash'. The SQL value is
+-- 'SQLNull' in the case of the genesis block.
+fromPrevHashField :: Field -> Ok Crypto.Hash
+fromPrevHashField f =
+    case fieldData f of
+        SQLNull -> Ok Crypto.zeroHash
+        _       -> fromField f
 
 instance ToRow RadTx where
     toRow tx@Tx{..} =

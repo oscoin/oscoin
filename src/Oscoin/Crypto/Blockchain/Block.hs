@@ -5,14 +5,19 @@ module Oscoin.Crypto.Blockchain.Block
     , StateHash
     , Difficulty
     , Height
+    , Depth
+    , Score
     , Timestamp
     , mkBlock
     , emptyGenesisBlock
     , emptyGenesisFromState
     , genesisBlock
+    , isGenesisBlock
     , validateBlock
     , headerHash
     , blockHash
+    , blockScore
+    , linkParent
     , emptyHeader
     , hashState
     , hashTxs
@@ -34,12 +39,19 @@ import           Data.Bitraversable (Bitraversable(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
+import           Numeric.Natural
 
 -- | Block difficulty.
 type Difficulty = Integer
 
 -- | Block height.
 type Height = Integer
+
+-- | Block depth.
+type Depth = Natural
+
+-- | Block score.
+type Score = Integer
 
 -- | Block header.
 data BlockHeader s = BlockHeader
@@ -94,6 +106,15 @@ emptyHeader = BlockHeader
 headerHash :: Serialise s => BlockHeader s -> BlockHash
 headerHash =
     Crypto.fromHashed . Crypto.hash
+
+-- | Set the block parent hash of a block to the supplied parent.
+linkParent
+    :: Serialise s
+    => Block tx s -- ^ The parent block
+    -> Block tx s -- ^ The unlinked child block
+    -> Block tx s -- ^ The newly-linked child
+linkParent p blk =
+    blk { blockHeader = (blockHeader blk) { blockPrevHash = blockHash p }}
 
 -- | The hash of a block.
 type BlockHash = Crypto.Hash
@@ -182,8 +203,15 @@ genesisBlock txs st seal t =
         , blockDataHash = hashTxs txs
         }
 
+isGenesisBlock :: Block tx s -> Bool
+isGenesisBlock Block{..} =
+    blockPrevHash blockHeader == Crypto.zeroHash
+
 blockHash :: Serialise s => Block tx s -> BlockHash
 blockHash blk = headerHash (blockHeader blk)
+
+blockScore :: Block tx s -> Integer
+blockScore = blockDifficulty . blockHeader
 
 hashState :: Crypto.Hashable st => st -> StateHash
 hashState = Crypto.fromHashed . Crypto.hash
