@@ -6,6 +6,7 @@ module Oscoin.Crypto.Hash
     , Hashable(..)
     , toHashed
     , fromHashed
+    , toHash
     , formatHash
     , formatHashed
     , hashBinary
@@ -153,6 +154,10 @@ toHashed = Hashed
 -- | Un-tag a 'Hashed'' value.
 fromHashed :: Hashed' algo a -> Hash' algo
 fromHashed (Hashed h) = h
+
+-- | Convert a 'Digest' to a 'Hash''.
+toHash :: Digest algo -> Hash' algo
+toHash = Hash
 
 -- | Format a 'Hash'' value.
 --

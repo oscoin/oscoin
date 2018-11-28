@@ -27,6 +27,7 @@ library:
     - aeson
     - ansi-terminal
     - async
+    - avl-auth
     - base16-bytestring
     - base58-bytestring
     - base64-bytestring
@@ -54,7 +55,6 @@ library:
     - http-types
     - list-t
     - memory
-    - merkle-tree
     - microlens
     - microlens-mtl
     - mmorph

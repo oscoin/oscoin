@@ -9,7 +9,6 @@ extra-deps:
 - cacophony-0.10.1
 - cborg-0.2.1.0
 - half-0.3
-- merkle-tree-0.1.0
 - reroute-0.5.0.0
 - serialise-0.2.1.0
 - Spock-0.13.0.0
@@ -17,6 +16,9 @@ extra-deps:
 
 - git: http://git.oscoin.io/radicle
   commit: 12707c83663909d303e4daf1806f22a779be7598
+
+- git: https://github.com/oscoin/avl-auth
+  commit: 2508d2c44b87354f6c1e4fda619b43f2f0705c77
 
 ghc-options:
   "$locals": -fhide-source-paths

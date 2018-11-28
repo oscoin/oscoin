@@ -30,7 +30,7 @@ import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
-import qualified Crypto.Hash.MerkleTree as Merkle
+import qualified Crypto.Data.Auth.Tree as AuthTree
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import           Data.Bifoldable (Bifoldable(..))
@@ -217,16 +217,14 @@ hashState :: Crypto.Hashable st => st -> StateHash
 hashState = Crypto.fromHashed . Crypto.hash
 
 hashTxs :: (Foldable t, Serialise tx) => t tx -> Crypto.Hash
-hashTxs txs
-    -- TODO: Get rid of merkle-tree dependency, or create our own that doesn't
-    -- depend on protolude.
-    -- TODO: Needs to return `Hashed (t tx)` or something.
+hashTxs (toList -> txs)
     | null txs = Crypto.zeroHash
     | otherwise =
-        -- TODO(alexis): We shouldn't be double hashing here, but 'mtHash'
-        -- gives us a SHA256 which we can't use.
-        Crypto.fromHashed
-        . Crypto.hash
-        . Merkle.mtHash
-        . Merkle.mkMerkleTree
-        $ map (LBS.toStrict . Serialise.serialise) (toList txs)
+          Crypto.toHash
+        . AuthTree.merkleHash
+        . AuthTree.fromList
+        $ [(tx, mempty :: ByteString) | tx <-
+            map (LBS.toStrict . Serialise.serialise) txs]
+        -- Nb. Since our Merkle tree works with key-value pairs, but we're only
+        -- really interested in the keys being present or absent for this use-case,
+        -- we use the empty byte string as the value component.
