@@ -22,7 +22,6 @@ import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Hash (Hashable, Hashed)
 
-import           Codec.Serialise (Serialise)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -48,10 +47,10 @@ instance (Ord tx, Ord s) => Semigroup (BlockStore tx s) where
 instance (Ord tx, Ord s) => Monoid (BlockStore tx s) where
     mempty = BlockStore mempty mempty (comparing height)
 
-genesisBlockStore :: Serialise s => Block tx s -> BlockStore tx s
+genesisBlockStore :: Block tx s -> BlockStore tx s
 genesisBlockStore gen = initWithChain $ fromGenesis gen
 
-initWithChain :: Serialise s => Blockchain tx s -> BlockStore tx s
+initWithChain :: Blockchain tx s -> BlockStore tx s
 initWithChain  chain =
     BlockStore
         { bsChains  = Map.singleton (blockHash $ genesis chain) chain
@@ -82,20 +81,20 @@ getGenesisBlock BlockStore{bsChains} =
     -- Nb. since all blockchains share the same genesis block, we can just pick
     -- any.
 
-insert :: (Ord s, Ord tx, Serialise s) => Block tx s -> BlockStore tx s -> BlockStore tx s
+insert :: (Ord s, Ord tx) => Block tx s -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
     linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
 
-fromOrphans :: (Ord tx, Ord s, Serialise s, Foldable t) => t (Block tx s) -> Block tx s -> BlockStore tx s
+fromOrphans :: (Ord tx, Ord s, Foldable t) => t (Block tx s) -> Block tx s -> BlockStore tx s
 fromOrphans (toList -> blks) gen =
     linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
 
 -- | /O(n)/. Lookup a block in all chains.
-lookupBlock :: Serialise s => BlockHash -> BlockStore tx s -> Maybe (Block tx s)
+lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
 lookupBlock h (Map.elems . bsChains -> chains) =
     List.find ((== h) . blockHash) (foldMap blocks chains)
 
-orphans :: Serialise s => BlockStore tx s -> Set BlockHash
+orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
     let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
         danglingHashes = Set.map blockHash bsOrphans
@@ -103,7 +102,7 @@ orphans BlockStore{bsOrphans} =
 
 -- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
 -- the best chain.
-lookupTx :: forall tx s. (Serialise s, Hashable tx) => Hashed tx -> BlockStore tx s -> Maybe (TxLookup tx)
+lookupTx :: forall tx s. (Hashable tx) => Hashed tx -> BlockStore tx s -> Maybe (TxLookup tx)
 lookupTx h = Blockchain.lookupTx h . getBestChain
 
 -- | The state hash of the chain.
@@ -113,7 +112,7 @@ chainStateHash =
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.
-linkBlocks :: forall tx s. (Ord tx, Ord s, Serialise s) => BlockStore tx s -> BlockStore tx s
+linkBlocks :: forall tx s. (Ord tx, Ord s) => BlockStore tx s -> BlockStore tx s
 linkBlocks bs' =
     go (Set.elems (bsOrphans bs')) bs'
   where

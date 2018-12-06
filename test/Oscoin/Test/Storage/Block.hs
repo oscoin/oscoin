@@ -27,6 +27,7 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
+import           Codec.Serialise (Serialise)
 import qualified Data.Set as Set
 
 import           Test.QuickCheck
@@ -55,7 +56,7 @@ type DummySeal = Text
 
 defaultGenesis :: Block tx DummySeal
 defaultGenesis =
-    emptyGenesisBlock Time.epoch $> mempty
+    sealBlock mempty (emptyGenesisBlock Time.epoch)
 
 withMemDB :: (Handle RadTx DummySeal -> IO a) -> IO a
 withMemDB action =
@@ -208,6 +209,8 @@ testIsConflicting h@Handle{..} = do
 
 -- Helpers ---------------------------------------------------------------------
 
-withDifficulty :: Difficulty -> Block tx s -> Block tx s
+withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
 withDifficulty d blk =
-    blk { blockHeader = (blockHeader blk) { blockDifficulty = d } }
+    blk { blockHeader = header, blockHash = headerHash header }
+  where
+    header = (blockHeader blk) { blockDifficulty = d }

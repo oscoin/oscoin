@@ -7,6 +7,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
+import           Oscoin.Crypto.Blockchain.Block (sealBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Storage.Receipt
@@ -86,11 +87,10 @@ instance TestableNode PoA SimpleNode SimpleNodeState where
 simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
 simpleNode nid peers = SimpleNodeState
     { snsPosition = (ourOffset, nTotalPeers)
-    , snsNode = emptyTestNodeState dummySeal nid
+    , snsNode = emptyTestNodeState (sealBlock ()) nid
     , snsLast = LastTime epoch epoch
     }
   where
-    dummySeal blk = blk $> ()
     nTotalPeers = 1 + Set.size peers
     ourOffset   = Set.size $ Set.filter (< nid) peers
 

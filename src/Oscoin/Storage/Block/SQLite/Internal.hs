@@ -42,7 +42,6 @@ import           Database.SQLite.Simple.QQ
 import           Database.SQLite.Simple.ToField (ToField)
 import           Database.SQLite.Simple.ToRow (ToRow)
 
-import           Codec.Serialise (Serialise)
 import           Control.Concurrent.STM
 import qualified Data.Set as Set
 import           GHC.Exts (IsList(fromList))
@@ -78,7 +77,7 @@ deleteOrphans Handle{..} =
     atomically . modifyTVar hOrphans . Set.difference . Set.fromList
 
 -- | Finds the longest orphan chain according to the scoring function in `Handle`.
-longestOrphanChain :: Serialise s => Handle tx s -> IO [Block tx s]
+longestOrphanChain :: Handle tx s -> IO [Block tx s]
 longestOrphanChain Handle{..} =
     -- Sorts all orphan blocks by timestamp, and checks all subsequences for
     -- validity. Then choses the subsequence with the highest score as the
@@ -134,7 +133,7 @@ revertBlocks conn hsh = do
         Nothing ->
             pure ()
 
-storeBlockchain' :: (ToRow tx, ToField s, Serialise s) => Handle tx s -> [Block tx s] -> IO ()
+storeBlockchain' :: (ToRow tx, ToField s) => Handle tx s -> [Block tx s] -> IO ()
 storeBlockchain' h = traverse_ (storeBlock' h) . reverse
 
 lookupBlockTimestamp :: Connection -> BlockHash -> IO (Maybe Timestamp)
@@ -145,7 +144,7 @@ lookupBlockTimestamp conn hsh =
 -- | Store a block in the block store.
 --
 -- Must be called from within a transaction. Must include a valid parent reference.
-storeBlock' :: (Serialise s, ToRow tx, ToField s) => Handle tx s -> Block tx s -> IO ()
+storeBlock' :: (ToRow tx, ToField s) => Handle tx s -> Block tx s -> IO ()
 storeBlock' Handle{..} blk@Block{blockHeader = BlockHeader{..}, blockData} = do
     parentTimestamp <- lookupBlockTimestamp hConn blockPrevHash
 

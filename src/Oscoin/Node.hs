@@ -50,7 +50,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 
 withNode
-    :: (Serialise s, Ord s, Ord tx, Hashable tx)
+    :: (Ord s, Ord tx, Hashable tx)
     => Config
     -> i
     -> Mempool.Handle tx
@@ -119,7 +119,6 @@ storage
        , Hashable  st
        , Ord       tx
        , Ord       s
-       , Serialise s
        )
     => Evaluator st tx o
     -> Storage tx s (NodeT tx st s i m)
@@ -139,7 +138,7 @@ getPath sh p = queryM (sh, p)
 
 -- | Get a value from the latest state.
 getPathLatest
-    :: (Serialise s, Ord s, Ord tx, Hashable tx, MonadIO m, Query st, Hashable st)
+    :: (Ord s, Ord tx, Hashable tx, MonadIO m, Query st, Hashable st)
     => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
 getPathLatest path = do
     stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip
@@ -147,5 +146,5 @@ getPathLatest path = do
     for result $ \v ->
         pure (stateHash, v)
 
-getBlocks :: (Hashable tx, Ord tx, Ord s, Serialise s, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
+getBlocks :: (Hashable tx, Ord tx, Ord s, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
 getBlocks = BlockStore.getBlocks

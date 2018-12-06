@@ -28,7 +28,7 @@ getAllTransactions = do
     mp <- node Node.getMempool
     respond ok200 $ body (Ok mp)
 
-getTransaction :: (Serialise s, Ord s) => Hashed RadTx -> ApiAction s i ()
+getTransaction :: (Ord s) => Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
         Nothing -> respond notFound404 $ errBody "Transaction not found"
@@ -80,7 +80,7 @@ getBlock h = do
         Nothing ->
             respond notFound404 noBody
 
-getStatePath :: (Ord s, Serialise s) => Key -> ApiAction s i ()
+getStatePath :: (Ord s) => Key -> ApiAction s i ()
 getStatePath _chain = do
     path <- listParam "q"
     result' <- node $ Node.getPathLatest path

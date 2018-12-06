@@ -27,7 +27,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
-import           Codec.Serialise (Serialise)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
 -- | Package up the storage operations in a dictionary
@@ -57,7 +56,6 @@ applyBlock
     :: ( MonadBlockStore tx s m
        , MonadStateStore st   m
        , MonadMempool    tx   m
-       , Serialise          s
        )
     => Evaluator st tx o
     -> Block        tx s

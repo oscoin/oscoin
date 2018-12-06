@@ -39,7 +39,7 @@ import qualified Oscoin.API.Types as API
 import           Oscoin.Consensus.Trivial (trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block
-                 (emptyGenesisBlock, genesisBlock)
+                 (emptyGenesisBlock, genesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -171,7 +171,7 @@ createValidTx radValue = liftIO $ do
 
 -- | Creates a new empty blockchain with a dummy seal.
 emptyBlockchain :: Blockchain API.RadTx DummySeal
-emptyBlockchain = fromGenesis $ emptyGenesisBlock epoch $> ""
+emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch)
 
 -- | Create a Radicle environment with the given bindings
 initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env

@@ -30,7 +30,6 @@ import           Oscoin.Storage.State.Class (MonadStateStore(..))
 
 import qualified Radicle.Extended as Rad
 
-import           Codec.Serialise (Serialise)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 import           Lens.Micro
@@ -86,7 +85,7 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadIO m, Ord s, Ord tx, Serialise s, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
+instance (Monad m, MonadIO m, Ord s, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         liftIO . atomically $ BlockStore.put bs blk

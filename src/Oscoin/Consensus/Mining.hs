@@ -45,7 +45,7 @@ mineBlock Consensus{cMiner} eval time = do
             let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
             maybeBlockHeader <- cMiner BlockStore.getBlocks (blockHeader blockCandidate)
             for maybeBlockHeader $ \header ->
-                let blk = blockCandidate { blockHeader = header }
+                let blk = blockCandidate `withHeader` header
                  in do Mempool.delTxs (blockData blk)
                        BlockStore.storeBlock blk
                        StateStore.storeState st'
@@ -56,7 +56,7 @@ mineBlock Consensus{cMiner} eval time = do
 
 -- | Mine a genesis block with the given 'Miner'.
 mineGenesis
-    :: (Monad m)
+    :: (Monad m, Serialise s)
     => Miner s m
     -> Block tx r
     -> m (Either Text (Block tx s))
@@ -64,6 +64,6 @@ mineGenesis mine blk = do
     result <- mine (\_ -> pure []) (blockHeader blk)
     pure $ case result of
         Just h ->
-            Right $ blk { blockHeader = h }
+            Right $ blk `withHeader` h
         Nothing ->
             Left $ "can't mine genesis"

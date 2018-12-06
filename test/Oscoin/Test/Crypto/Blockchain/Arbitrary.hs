@@ -18,7 +18,6 @@ import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import           Data.List.NonEmpty (NonEmpty((:|)), (<|))
-import qualified Data.Sequence as Seq
 
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Time ()
@@ -32,11 +31,11 @@ arbitraryBlockchain = do
     rest <- arbitraryValidBlock chain
     pure $ rest |> chain
 
-arbitraryBlock :: forall tx s. (Serialise tx, Arbitrary tx, Arbitrary s) => Gen (Block tx s)
+arbitraryBlock :: forall tx s. (Serialise s, Serialise tx, Arbitrary tx, Arbitrary s) => Gen (Block tx s)
 arbitraryBlock =
     arbitraryBlockWith =<< arbitrary
 
-arbitraryBlockWith :: forall tx s. (Serialise tx, Arbitrary s) => [tx] -> Gen (Block tx s)
+arbitraryBlockWith :: forall tx s. (Serialise s, Serialise tx, Arbitrary s) => [tx] -> Gen (Block tx s)
 arbitraryBlockWith txs = do
     timestamp <- arbitrary
     diffi <- arbitrary `suchThat` (> 0)
@@ -55,7 +54,7 @@ arbitraryBlockWith txs = do
     pure $ mkBlock header txs
 
 arbitraryValidBlock :: forall tx s. (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Blockchain tx s -> Gen (Block tx s)
-arbitraryValidBlock (Blockchain (Block prevHeader _ :| _)) = do
+arbitraryValidBlock (Blockchain (Block prevHeader _ _ :| _)) = do
     txs <- arbitrary :: Gen [tx]
     arbitraryValidBlockWith prevHeader txs
 
@@ -73,13 +72,13 @@ arbitraryValidBlockWith prevHeader txs = do
                , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
                , blockDifficulty = blockDifficulty prevHeader + blockDiffi
                }
-    pure $ Block header (Seq.fromList txs)
+    pure $ mkBlock header txs
 
 arbitraryValidBlockchain :: (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Gen (Blockchain tx s)
 arbitraryValidBlockchain = do
     ts <- arbitrary
     seal <- arbitrary
-    arbitraryValidBlockchainFrom (emptyGenesisBlock ts $> seal)
+    arbitraryValidBlockchainFrom (sealBlock seal (emptyGenesisBlock ts))
 
 arbitraryValidBlockchainFrom :: (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Block tx s -> Gen (Blockchain tx s)
 arbitraryValidBlockchainFrom gen = do

@@ -68,7 +68,7 @@ withBlockStore path score = bracket (open path score) close
 
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.
-initialize :: (Serialise s, ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
+initialize :: (ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
 initialize gen h@Handle{hConn} =
     readFile "data/blockstore.sql" >>=
         Sql3.exec (Sql.connectionHandle hConn) >>
@@ -76,7 +76,7 @@ initialize gen h@Handle{hConn} =
                 pure h
 
 -- | Store a block, along with its transactions in the block store.
-storeBlock :: forall tx s. (Serialise s, ToField s, ToRow tx, Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
+storeBlock :: forall tx s. (ToField s, ToRow tx, Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
 storeBlock h@Handle{..} blk =
     Sql.withTransaction hConn $ do
         blockExists       <- isStored hConn $ blockHash blk
@@ -123,7 +123,7 @@ storeBlock h@Handle{..} blk =
             _ ->
                 pass
 
-lookupBlock :: forall tx s. (FromField s, FromRow tx) => Handle tx s -> BlockHash -> IO (Maybe (Block tx s))
+lookupBlock :: forall tx s. (Serialise s, FromField s, FromRow tx) => Handle tx s -> BlockHash -> IO (Maybe (Block tx s))
 lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
     result :: Maybe (BlockHeader s) <- listToMaybe <$> Sql.query hConn
         [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
@@ -142,7 +142,7 @@ lookupTx Handle{hConn} h =
                 FROM transactions
                WHERE hash = ? |] (Only h)
 
-getGenesisBlock :: (FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
+getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
 getGenesisBlock Handle{hConn} = do
     Only bHash :. bHeader <-
         headDef (panic "No genesis block!") <$> Sql.query_ hConn
@@ -152,11 +152,11 @@ getGenesisBlock Handle{hConn} = do
     bTxs <- getBlockTxs hConn bHash
     pure $ mkBlock bHeader bTxs
 
-getOrphans :: Serialise s => Handle tx s -> IO (Set BlockHash)
+getOrphans :: Handle tx s -> IO (Set BlockHash)
 getOrphans Handle{..} =
     Set.map blockHash <$> readTVarIO hOrphans
 
-getBlocks :: (FromField s, FromRow tx) => Handle tx s -> Depth -> IO [Block tx s]
+getBlocks :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> Depth -> IO [Block tx s]
 getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do
     rows :: [Only BlockHash :. BlockHeader s] <- Sql.query hConn
         [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
@@ -167,6 +167,6 @@ getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do
     for rows $ \(Only h :. bh) ->
         mkBlock bh <$> getBlockTxs hConn h
 
-getTip :: (FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
+getTip :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
 getTip h =
     headDef (panic "No blocks in storage!") <$> getBlocks h 1

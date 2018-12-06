@@ -89,7 +89,7 @@ nakamotoNode nid = NakamotoNodeState
     , nakNode   = emptyTestNodeState dummyPoW nid
     }
   where
-    dummyPoW blk = blk $> emptyPoW
+    dummyPoW = sealBlock emptyPoW
 
 initNakamotoNodes :: TestNetwork PoW a -> TestNetwork PoW NakamotoNodeState
 initNakamotoNodes tn@TestNetwork{tnNodes} =

@@ -132,10 +132,10 @@ nodePrefixesMatch :: (Serialise s, TestableNode s m a) => TestNetwork s a -> Boo
 nodePrefixesMatch tn =
     (>= length (shortestChain tn) - 3) . length . longestCommonPrefix $ nodePrefixes tn
 
-shortestChain :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [BlockHash]
+shortestChain :: (TestableNode s m a) => TestNetwork s a -> [BlockHash]
 shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
 
-longestChain :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [BlockHash]
+longestChain :: (TestableNode s m a) => TestNetwork s a -> [BlockHash]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | A 50%+ majority of nodes in the network have a common prefix.
@@ -147,12 +147,12 @@ majorityNodePrefixesMatch tn@TestNetwork{..} =
     ns  = filter (nodeHasPrefix pre) (toList tnNodes)
 
 -- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: (Serialise s, TestableNode s m a) => [BlockHash] -> a -> Bool
+nodeHasPrefix :: (TestableNode s m a) => [BlockHash] -> a -> Bool
 nodeHasPrefix p node =
     p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: (Serialise s, TestableNode s m a) => TestNetwork s a -> [[BlockHash]]
+nodePrefixes :: (TestableNode s m a) => TestNetwork s a -> [[BlockHash]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

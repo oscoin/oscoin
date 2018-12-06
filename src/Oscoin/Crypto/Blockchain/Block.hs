@@ -15,8 +15,9 @@ module Oscoin.Crypto.Blockchain.Block
     , isGenesisBlock
     , validateBlock
     , headerHash
-    , blockHash
+    , withHeader
     , blockScore
+    , sealBlock
     , linkParent
     , emptyHeader
     , hashState
@@ -30,6 +31,7 @@ import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
+import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
@@ -107,6 +109,9 @@ headerHash :: Serialise s => BlockHeader s -> BlockHash
 headerHash =
     Crypto.fromHashed . Crypto.hash
 
+withHeader :: Serialise s => Block tx a -> BlockHeader s -> Block tx s
+withHeader blk h = blk { blockHeader = h, blockHash = headerHash h }
+
 -- | Set the block parent hash of a block to the supplied parent.
 linkParent
     :: Serialise s
@@ -114,7 +119,9 @@ linkParent
     -> Block tx s -- ^ The unlinked child block
     -> Block tx s -- ^ The newly-linked child
 linkParent p blk =
-    blk { blockHeader = (blockHeader blk) { blockPrevHash = blockHash p }}
+    blk { blockHeader = header, blockHash = headerHash header }
+  where
+    header = (blockHeader blk) { blockPrevHash = blockHash p }
 
 -- | The hash of a block.
 type BlockHash = Crypto.Hash
@@ -125,13 +132,21 @@ type StateHash = Crypto.Hash
 -- | Block. @tx@ is the type of transaction stored in this block.
 data Block tx s = Block
     { blockHeader :: BlockHeader s
+    , blockHash   :: BlockHash
     , blockData   :: Seq tx
     } deriving (Show, Generic, Functor, Foldable, Traversable)
 
 deriving instance (Eq tx, Eq s) => Eq (Block tx s)
 deriving instance (Ord tx, Ord s) => Ord (Block tx s)
 
-instance (Serialise tx, Serialise s) => Serialise (Block tx s)
+instance (Serialise tx, Serialise s) => Serialise (Block tx s) where
+    encode Block{..} =
+        Serialise.encode (blockHeader, blockHash, blockData)
+    decode = do
+        (blockHeader, blockHash, blockData) <- Serialise.decode
+        if headerHash blockHeader /= blockHash
+           then fail "Error decoding block: hash does not match data"
+           else pure Block{..}
 
 instance Bifunctor Block where
     first f b = b { blockData = f <$> blockData b }
@@ -152,29 +167,32 @@ instance Bifoldable Block where
         b = blockSeal (blockHeader blk)
 
 instance (Serialise s, ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
-    toJSON b@Block{..} = object
-        [ "hash"   .= blockHash b
+    toJSON Block{..} = object
+        [ "hash"   .= blockHash
         , "header" .= blockHeader
         , "data"   .= blockData
         ]
 
-instance (FromJSON s, FromJSON tx) => FromJSON (Block tx s) where
+instance (Serialise s, FromJSON s, FromJSON tx) => FromJSON (Block tx s) where
   parseJSON = withObject "Block" $ \o -> do
         blockHeader <- o .: "header"
         blockData   <- o .: "data"
+        blockHash   <- o .: "hash"
 
-        pure Block{..}
+        if headerHash blockHeader /= blockHash
+           then fail "Error decoding block: hash does not match data"
+           else pure Block{..}
 
 validateBlock :: Block tx s -> Either Text (Block tx s)
 validateBlock = Right
 
 mkBlock
-    :: Foldable t
+    :: (Foldable t, Serialise s)
     => BlockHeader s
     -> t tx
     -> Block tx s
 mkBlock header txs =
-    Block header (Seq.fromList (toList txs))
+    Block header (headerHash header) (Seq.fromList (toList txs))
 
 emptyGenesisBlock :: Timestamp -> Block tx ()
 emptyGenesisBlock blockTimestamp =
@@ -191,7 +209,7 @@ emptyGenesisFromState blockTimestamp st =
 
 -- | Construct a sealed genesis block.
 genesisBlock
-    :: (Serialise tx, Crypto.Hashable st)
+    :: (Serialise s, Serialise tx, Crypto.Hashable st)
     => [tx] -> st -> s -> Timestamp -> Block tx s
 genesisBlock txs st seal t =
     mkBlock header txs
@@ -207,8 +225,11 @@ isGenesisBlock :: Block tx s -> Bool
 isGenesisBlock Block{..} =
     blockPrevHash blockHeader == Crypto.zeroHash
 
-blockHash :: Serialise s => Block tx s -> BlockHash
-blockHash blk = headerHash (blockHeader blk)
+sealBlock :: Serialise s => s -> Block tx a -> Block tx s
+sealBlock seal blk =
+    blk' { blockHash = headerHash (blockHeader blk') }
+  where
+    blk' = blk $> seal
 
 blockScore :: Block tx s -> Integer
 blockScore = blockDifficulty . blockHeader
