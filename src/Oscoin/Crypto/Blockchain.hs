@@ -25,7 +25,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
 import           Control.Monad (guard)
-import           Data.Bifunctor (Bifunctor(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -37,14 +36,10 @@ import           Numeric.Natural
 
 
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
-    deriving (Show, Functor, Traversable, Foldable)
+    deriving (Show)
 
 instance Semigroup (Blockchain tx s) where
     (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)
-
-instance Bifunctor Blockchain where
-    first f = Blockchain . map (first f) . fromBlockchain
-    second f = Blockchain . map (second f) . fromBlockchain
 
 instance IsList (Blockchain tx s) where
     type Item (Blockchain tx s) = Block tx s

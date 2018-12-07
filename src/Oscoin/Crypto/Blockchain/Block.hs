@@ -35,9 +35,6 @@ import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
-import           Data.Bifoldable (Bifoldable(..))
-import           Data.Bifunctor (Bifunctor(..))
-import           Data.Bitraversable (Bitraversable(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
@@ -130,11 +127,15 @@ type BlockHash = Crypto.Hash
 type StateHash = Crypto.Hash
 
 -- | Block. @tx@ is the type of transaction stored in this block.
+--
+-- Nb. There is no instance for 'Functor' on 'Block' because updating the @s@
+-- parameter would require the side-effect of updating the 'BlockHash' for
+-- the update to be valid. Instead, use the 'sealBlock' function.
 data Block tx s = Block
     { blockHeader :: BlockHeader s
     , blockHash   :: BlockHash
     , blockData   :: Seq tx
-    } deriving (Show, Generic, Functor, Foldable, Traversable)
+    } deriving (Show, Generic)
 
 deriving instance (Eq tx, Eq s) => Eq (Block tx s)
 deriving instance (Ord tx, Ord s) => Ord (Block tx s)
@@ -147,24 +148,6 @@ instance (Serialise tx, Serialise s) => Serialise (Block tx s) where
         if headerHash blockHeader /= blockHash
            then fail "Error decoding block: hash does not match data"
            else pure Block{..}
-
-instance Bifunctor Block where
-    first f b = b { blockData = f <$> blockData b }
-    second f b = b { blockHeader = f <$> blockHeader b }
-
-instance Bitraversable Block where
-    bitraverse f g blk = go <$> traverse f (blockData blk)
-                            <*> g (blockSeal $ blockHeader blk)
-      where
-        go a b = blk { blockHeader = h b, blockData = a }
-        h a = (blockHeader blk) { blockSeal = a }
-
-instance Bifoldable Block where
-    bifoldMap f g blk =
-        mappend (foldMap f a) (g b)
-      where
-        a = blockData blk
-        b = blockSeal (blockHeader blk)
 
 instance (Serialise s, ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
     toJSON Block{..} = object
@@ -229,7 +212,7 @@ sealBlock :: Serialise s => s -> Block tx a -> Block tx s
 sealBlock seal blk =
     blk' { blockHash = headerHash (blockHeader blk') }
   where
-    blk' = blk $> seal
+    blk' = blk { blockHeader = (blockHeader blk) { blockSeal = seal } }
 
 blockScore :: Block tx s -> Integer
 blockScore = blockDifficulty . blockHeader
