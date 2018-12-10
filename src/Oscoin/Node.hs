@@ -50,7 +50,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 
 withNode
-    :: (Ord s, Ord tx, Hashable tx)
+    :: (Hashable tx)
     => Config
     -> i
     -> Mempool.Handle tx
@@ -77,9 +77,7 @@ miner
        , MonadClock         m
        , Serialise tx
        , Hashable  tx
-       , Ord       tx
        , Serialise s
-       , Ord       s
        , Hashable  st
        )
     => NodeT tx st s i m a
@@ -104,8 +102,6 @@ mineBlock
        , Serialise s
        , Hashable tx
        , Hashable st
-       , Ord  tx
-       , Ord  s
        )
     => NodeT tx st s i m (Maybe (Block tx s))
 mineBlock = do
@@ -117,8 +113,6 @@ storage
     :: ( MonadIO m
        , Hashable  tx
        , Hashable  st
-       , Ord       tx
-       , Ord       s
        )
     => Evaluator st tx o
     -> Storage tx s (NodeT tx st s i m)
@@ -138,7 +132,7 @@ getPath sh p = queryM (sh, p)
 
 -- | Get a value from the latest state.
 getPathLatest
-    :: (Ord s, Ord tx, Hashable tx, MonadIO m, Query st, Hashable st)
+    :: (Hashable tx, MonadIO m, Query st, Hashable st)
     => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
 getPathLatest path = do
     stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip
@@ -146,5 +140,5 @@ getPathLatest path = do
     for result $ \v ->
         pure (stateHash, v)
 
-getBlocks :: (Hashable tx, Ord tx, Ord s, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
+getBlocks :: (Hashable tx, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
 getBlocks = BlockStore.getBlocks

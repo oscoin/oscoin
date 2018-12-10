@@ -123,7 +123,7 @@ instance Monad m => MonadMempool DummyTx (TestNodeT s m) where
     {-# INLINE delTxs #-}
     {-# INLINE numTxs #-}
 
-instance (Ord s, Monad m) => MonadBlockStore DummyTx s (TestNodeT s m) where
+instance (Monad m) => MonadBlockStore DummyTx s (TestNodeT s m) where
     storeBlock  blk  = modify' (over tnsBlockstoreL (BlockStore.insert blk))
     lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
     lookupTx    txh  = BlockStore.lookupTx txh <$> gets tnsBlockstore

@@ -30,7 +30,7 @@ import           Text.Show (Show(..))
 -- | Store of 'Block's and 'Blockchain's.
 data BlockStore tx s = BlockStore
     { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
-    , bsOrphans :: Set (Block tx s)                -- ^ Orphan blocks.
+    , bsOrphans :: Map BlockHash (Block tx s)      -- ^ Orphan blocks.
     , bsScoreFn :: ScoringFunction tx s            -- ^ Chain scoring function.
     }
 
@@ -54,7 +54,7 @@ initWithChain :: Blockchain tx s -> BlockStore tx s
 initWithChain  chain =
     BlockStore
         { bsChains  = Map.singleton (blockHash $ genesis chain) chain
-        , bsOrphans = Set.empty
+        , bsOrphans = mempty
         , bsScoreFn = comparing height
         }
 
@@ -81,23 +81,24 @@ getGenesisBlock BlockStore{bsChains} =
     -- Nb. since all blockchains share the same genesis block, we can just pick
     -- any.
 
-insert :: (Ord s, Ord tx) => Block tx s -> BlockStore tx s -> BlockStore tx s
+insert :: Block tx s -> BlockStore tx s -> BlockStore tx s
 insert blk bs@BlockStore{..} =
-    linkBlocks $ bs { bsOrphans = Set.insert blk bsOrphans }
+    linkBlocks $ bs { bsOrphans = Map.insert (blockHash blk) blk bsOrphans }
 
-fromOrphans :: (Ord tx, Ord s, Foldable t) => t (Block tx s) -> Block tx s -> BlockStore tx s
+fromOrphans :: (Foldable t) => t (Block tx s) -> Block tx s -> BlockStore tx s
 fromOrphans (toList -> blks) gen =
-    linkBlocks $ (genesisBlockStore gen) { bsOrphans = Set.fromList blks }
+    linkBlocks $ (genesisBlockStore gen) { bsOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
 
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock :: BlockHash -> BlockStore tx s -> Maybe (Block tx s)
-lookupBlock h (Map.elems . bsChains -> chains) =
-    List.find ((== h) . blockHash) (foldMap blocks chains)
+lookupBlock h BlockStore{..} =
+        Map.lookup h bsOrphans
+    <|> List.find ((== h) . blockHash) (foldMap blocks $ Map.elems bsChains)
 
 orphans :: BlockStore tx s -> Set BlockHash
 orphans BlockStore{bsOrphans} =
-    let parentHashes   = Set.map (blockPrevHash . blockHeader) bsOrphans
-        danglingHashes = Set.map blockHash bsOrphans
+    let parentHashes   = Set.fromList $ map (blockPrevHash . blockHeader) (Map.elems bsOrphans)
+        danglingHashes = Map.keysSet bsOrphans
      in Set.difference parentHashes danglingHashes
 
 -- | Lookup a transaction in the 'BlockStore'. Only considers transactions in
@@ -112,17 +113,17 @@ chainStateHash =
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.
-linkBlocks :: forall tx s. (Ord tx, Ord s) => BlockStore tx s -> BlockStore tx s
+linkBlocks :: BlockStore tx s -> BlockStore tx s
 linkBlocks bs' =
-    go (Set.elems (bsOrphans bs')) bs'
+    go (Map.elems (bsOrphans bs')) bs'
   where
     go [] bs =
         bs
     go (blk:blks) bs@BlockStore{bsChains, bsOrphans} =
         case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
             Just chain ->
-                let store = Set.delete blk bsOrphans
-                 in go (Set.elems store) $
+                let store = Map.delete (blockHash blk) bsOrphans
+                 in go (Map.elems store) $
                     bs { bsOrphans  = store
                        , bsChains   = Map.insert (blockHash blk)
                                                  (blk |> chain)

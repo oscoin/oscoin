@@ -24,7 +24,7 @@ new bs = Handle <$> newTVar bs
 newIO :: BlockStore tx s -> IO (Handle tx s)
 newIO bs = Handle <$> newTVarIO bs
 
-put :: (Ord tx, Ord s) => Handle tx s -> Block tx s -> STM ()
+put :: Handle tx s -> Block tx s -> STM ()
 put (Handle tvar) = modifyTVar' tvar . insert
 
 for :: Handle tx s -> (BlockStore tx s -> a) -> STM a

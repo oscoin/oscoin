@@ -85,7 +85,7 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadIO m, Ord s, Ord tx, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
+instance (Monad m, MonadIO m, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
     storeBlock blk = do
         bs <- asks hBlockStore
         liftIO . atomically $ BlockStore.put bs blk

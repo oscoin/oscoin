@@ -28,7 +28,7 @@ getAllTransactions = do
     mp <- node Node.getMempool
     respond ok200 $ body (Ok mp)
 
-getTransaction :: (Ord s) => Hashed RadTx -> ApiAction s i ()
+getTransaction :: Hashed RadTx -> ApiAction s i ()
 getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
         Nothing -> respond notFound404 $ errBody "Transaction not found"
@@ -65,13 +65,13 @@ submitTransaction = do
         then pure tx
         else respond badRequest400 $ errBody "Invalid transaction signature"
 
-getBestChain :: (ToJSON s, Ord s, Serialise s) => ApiAction s i a
+getBestChain :: (ToJSON s, Serialise s) => ApiAction s i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
     blks <- node $ Node.getBlocks n
     respond ok200 $ body (Ok blks)
 
-getBlock :: (ToJSON s, Ord s, Serialise s) => BlockHash -> ApiAction s i a
+getBlock :: (ToJSON s, Serialise s) => BlockHash -> ApiAction s i a
 getBlock h = do
     result <- node $ BlockStore.lookupBlock h
     case result of
@@ -80,7 +80,7 @@ getBlock h = do
         Nothing ->
             respond notFound404 noBody
 
-getStatePath :: (Ord s) => Key -> ApiAction s i ()
+getStatePath :: Key -> ApiAction s i ()
 getStatePath _chain = do
     path <- listParam "q"
     result' <- node $ Node.getPathLatest path

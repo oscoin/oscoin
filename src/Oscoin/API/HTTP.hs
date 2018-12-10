@@ -24,10 +24,10 @@ import           Web.Spock
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (ToJSON)
 
-run :: (ToJSON s, Ord s, Serialise s) => Int -> Environment -> Node.Handle RadTx Rad.Env s i -> IO ()
+run :: (ToJSON s, Serialise s) => Int -> Environment -> Node.Handle RadTx Rad.Env s i -> IO ()
 run port env hdl = runApi (api env) port hdl
 
-app :: (ToJSON s, Ord s, Serialise s) => Environment -> Node.Handle RadTx Rad.Env s i -> IO Wai.Application
+app :: (ToJSON s, Serialise s) => Environment -> Node.Handle RadTx Rad.Env s i -> IO Wai.Application
 app env hdl = spockAsApp $ mkMiddleware (api env) hdl
 
 -- | Policy for static file serving.
@@ -38,7 +38,7 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api :: (ToJSON s, Ord s, Serialise s) => Environment -> Api s i ()
+api :: (ToJSON s, Serialise s) => Environment -> Api s i ()
 api env = do
     middleware $ loggingMiddleware env
                . Wai.staticPolicy staticFilePolicy
