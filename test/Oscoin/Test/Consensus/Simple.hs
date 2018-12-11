@@ -6,8 +6,8 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
-import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 import           Oscoin.Crypto.Blockchain.Block (sealBlock)
+import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Storage.Receipt
@@ -77,8 +77,7 @@ instance TestableNode PoA SimpleNode SimpleNodeState where
     testableTick tick = do
         position <- ask
         blk <- mineBlock (simpleConsensus position) identityEval tick
-        reqs <- reconcileSimple tick
-        pure $ maybeToList (BlockMsg <$> blk) <> (ReqBlockMsg <$> reqs)
+        pure $ maybeToList (BlockMsg <$> blk)
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode

@@ -7,7 +7,6 @@ module Oscoin.Consensus.Simple
     , PoA
     , MonadLastTime(..)
     , mineSimple
-    , reconcileSimple
 
     , blockTime
     , chainScore
@@ -18,9 +17,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHash, BlockHeader(..))
-import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
+import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..))
 import           Oscoin.Time
 
 
@@ -63,21 +60,6 @@ mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
     else
         pure Nothing
 
-reconcileSimple
-    :: ( MonadBlockStore tx () m
-       , MonadLastTime         m
-       )
-    => Timestamp
-    -> m [BlockHash]
-reconcileSimple tick = do
-    lastAsk <- getLastAskTick
-    if shouldReconcile lastAsk tick
-    then do
-        setLastAskTick tick
-        toList <$> getOrphans
-    else
-        pure []
-
 chainScore :: Blockchain tx s -> Int
 chainScore bc =
     (bigMagicNumber * h) - steps
@@ -87,9 +69,6 @@ chainScore bc =
     timestamp      = blockTimestamp $ blockHeader lastBlock
     steps          = fromIntegral $ sinceEpoch timestamp `div` blockTime
     bigMagicNumber = 2526041640 -- some loser in 2050 has to deal with this bug
-
-shouldReconcile :: Timestamp -> Timestamp -> Bool
-shouldReconcile lastAsk at = at `timeDiff` lastAsk >= blockTime
 
 shouldCutBlock :: Position -> Timestamp -> Timestamp -> Bool
 shouldCutBlock (outOffset, total) lastBlk at = beenAWhile && ourTurn
