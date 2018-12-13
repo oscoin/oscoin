@@ -14,7 +14,6 @@ import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
 import           Oscoin.Time
 
-import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
 
@@ -76,8 +75,7 @@ instance HasTestNodeState PoA SimpleNodeState where
 instance TestableNode PoA SimpleNode SimpleNodeState where
     testableTick tick = do
         position <- ask
-        blk <- mineBlock (simpleConsensus position) identityEval tick
-        pure $ maybeToList (BlockMsg <$> blk)
+        mineBlock (simpleConsensus position) identityEval tick
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode

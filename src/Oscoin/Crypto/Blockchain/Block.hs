@@ -31,6 +31,8 @@ import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
+import qualified Codec.Serialise.Decoding as Serialise
+import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
 import           Data.Aeson
@@ -142,12 +144,26 @@ deriving instance (Ord tx, Ord s) => Ord (Block tx s)
 
 instance (Serialise tx, Serialise s) => Serialise (Block tx s) where
     encode Block{..} =
-        Serialise.encode (blockHeader, blockHash, blockData)
+           Serialise.encodeListLen 4
+        <> Serialise.encodeWord 0
+        <> Serialise.encode blockHeader
+        <> Serialise.encode blockHash
+        <> Serialise.encode blockData
+
     decode = do
-        (blockHeader, blockHash, blockData) <- Serialise.decode
-        if headerHash blockHeader /= blockHash
-           then fail "Error decoding block: hash does not match data"
-           else pure Block{..}
+        Serialise.decodeListLenOf 4
+        tag <- Serialise.decodeWord
+        case tag of
+            0 -> do
+                !blockHeader <- Serialise.decode
+                !blockHash   <- Serialise.decode
+                !blockData   <- Serialise.decode
+
+                if headerHash blockHeader /= blockHash
+                   then fail "Error decoding block: hash does not match data"
+                   else pure Block{..}
+            _ ->
+                fail "Error decoding block: unknown tag"
 
 instance (Serialise s, ToJSON s, ToJSON tx) => ToJSON (Block tx s) where
     toJSON Block{..} = object

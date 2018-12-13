@@ -1,6 +1,7 @@
 module Oscoin.Time
     ( Timestamp
     , Duration
+    , prettyDuration
     , sinceEpoch
     , fromEpoch
     , timeAdd
@@ -38,6 +39,15 @@ newtype Timestamp = Timestamp Int64 deriving
 
 deriving instance ToField Timestamp
 deriving instance FromField Timestamp
+
+prettyDuration :: Duration -> Text
+prettyDuration d
+    | d >= hours        = show (d `div` hours)        <> "h"
+    | d >= minutes      = show (d `div` minutes)      <> "m"
+    | d >= seconds      = show (d `div` seconds)      <> "s"
+    | d >= milliseconds = show (d `div` milliseconds) <> "ms"
+    | d >= microseconds = show (d `div` microseconds) <> "us"
+    | otherwise         = show (d `div` nanoseconds)  <> "ns"
 
 -- | UNIX epoch, yo.
 epoch :: Timestamp

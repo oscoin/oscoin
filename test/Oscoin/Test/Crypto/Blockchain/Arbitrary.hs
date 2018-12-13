@@ -25,6 +25,9 @@ import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
+instance (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Arbitrary (Block tx s) where
+    arbitrary = arbitraryBlock
+
 arbitraryBlockchain :: (Arbitrary tx, Serialise tx) => Gen (Blockchain tx ())
 arbitraryBlockchain = do
     chain <- pure $ fromGenesis $ emptyGenesisBlock epoch

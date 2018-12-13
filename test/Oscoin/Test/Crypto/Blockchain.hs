@@ -10,7 +10,10 @@ import           Oscoin.Crypto.Hash
                  (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
 import           Oscoin.Time
 
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary ()
+
 import           Codec.Serialise (Serialise)
+import qualified Codec.Serialise as Serialise
 import qualified Data.Aeson as Aeson
 
 import           Test.QuickCheck
@@ -19,13 +22,15 @@ import           Test.QuickCheck.Instances.Text ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-
 testBlockchain :: TestTree
-testBlockchain = testGroup "Blockchain.Eval"
+testBlockchain = testGroup "Blockchain"
     [ testBuildBlock
     , testProperty "JSON Receipt" $ do
         receipt <- arbitraryReceipt
         pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
+    , testProperty "Block: deserialise . serialise == id" $
+        \(blk :: Block ByteString ByteString) ->
+            (Serialise.deserialise . Serialise.serialise) blk == blk
     ]
 
 testBuildBlock :: TestTree

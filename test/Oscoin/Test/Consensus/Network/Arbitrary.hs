@@ -9,7 +9,6 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 
-import           Oscoin.Test.Consensus.Class (Msg(..))
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
 import           Oscoin.Time
@@ -22,44 +21,66 @@ import           Data.Traversable (for)
 import           System.Random
 import           Test.QuickCheck
 
--- | Smaller tests for computationally complex generators.
-kidSize :: Int
-kidSize = 13
+-- | Maximum number of nodes.
+maxNodes :: Int
+maxNodes = 13
 
-arbitraryTxMsg :: (Arbitrary tx) => Gen (Msg tx s)
+-- | Maximum number of scheduled messages.
+maxScheduled :: Int
+maxScheduled = 16
+
+-- | Minimum message latency.
+minLatency :: Duration -> Duration
+minLatency blockTime = blockTime `div` 3
+
+-- | Maximum message latency.
+maxLatency :: Duration -> Duration
+maxLatency blockTime = 3 * blockTime
+
+-- | Simulation duration.
+simDuration :: Duration -> Duration
+simDuration blockTime = 36 * blockTime
+
+arbitraryTxMsg :: Gen (Msg s)
 arbitraryTxMsg = TxMsg <$> arbitrary
 
+-- | A 'TestNetwork' with some latency, and all messages are delivered.
 arbitraryHealthyNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitraryHealthyNetwork blockTime = do
     net  <- arbitrarySynchronousNetwork blockTime
     gen  <- mkStdGen <$> arbitrary :: Gen StdGen
 
     pure net
-        { tnLatencies = randomRs (1 * seconds , 1 * seconds + 2 * blockTime) gen }
+        { tnLatencies = randomRs ( minLatency blockTime
+                                 , maxLatency blockTime
+                                 ) gen }
 
+-- | A 'TestNetwork' with no message latency.
 arbitrarySynchronousNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitrarySynchronousNetwork blockTime = do
-    addrs <- Set.fromList <$> resize kidSize (listOf arbitrary)
-        `suchThat` (\as -> nub as == as && odd (length as)) :: Gen (Set DummyNodeId)
+    addrs <- resize maxNodes (listOf1 arbitrary)
+        `suchThat` (\as -> nub as == as) :: Gen [DummyNodeId]
 
-    let nodes    = zip (toList addrs) (repeat ())
-    let duration = max (fromIntegral (length addrs * 3) * blockTime) (30 * seconds)
+    let duration = simDuration blockTime
 
-    smsgs <- listOf1 $ do
+    smsgs <- resize maxScheduled <$> listOf1 $ do
         (sender, msg) <- liftA2 (,) arbitrary arbitraryTxMsg
-        dests <- sublistOf (toList addrs) :: Gen [DummyNodeId]
+        dests <- sublistOf addrs :: Gen [DummyNodeId]
         for dests $ \d -> do
             at <- choose (epoch, fromEpoch (duration `div` 2)) :: Gen Timestamp
             pure $ ScheduledMessage at d sender msg
 
-    let ticks = foreach nodes $ \(addr, _) ->
-         [ScheduledTick (fromEpoch sec) addr | sec <- [0, 1 * seconds .. duration]]
+    let ticks = foreach addrs $ \addr ->
+         [ScheduledTick (fromEpoch sec) addr | sec <- [0, blockTime .. duration]]
 
     rng <- mkStdGen <$> arbitrary
 
+    let scheduled = Set.fromList $ concat (smsgs ++ ticks)
+
     pure TestNetwork
-        { tnNodes      = Map.fromList nodes
-        , tnMsgs       = Set.fromList (concat (smsgs ++ ticks))
+        { tnNodes      = Map.fromList $ zip addrs (repeat ())
+        , tnScheduled  = scheduled
+        , tnMsgs       = mempty
         , tnPartitions = Map.empty
         , tnLog        = []
         , tnLatencies  = repeat 0
@@ -69,20 +90,20 @@ arbitrarySynchronousNetwork blockTime = do
         , tnLastTick   = fromEpoch duration
         }
 
+-- | A 'TestNetwork' with some latency, where some messages are dropped.
 arbitraryPartitionedNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
 arbitraryPartitionedNetwork blockTime = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork blockTime
     partition           <- arbitraryPartition (Map.keys tnNodes)
 
-    let firstTick = scheduledTick $ minimum tnMsgs
-    let lastTick  = scheduledTick $ maximum tnMsgs
+    let firstTick = scheduledTick $ minimum tnScheduled
+    let lastTick  = scheduledTick $ maximum tnScheduled
 
     partitionAt <- choose (firstTick, fromEpoch $ sinceEpoch lastTick `div` 4 )
     healAt <- choose (partitionAt, fromEpoch $ sinceEpoch lastTick `div` 3)
 
-    let partheal = Set.fromList [Partition partitionAt partition, Heal healAt]
-    pure net { tnMsgs = tnMsgs <> partheal }
-
+    let msgs = Set.fromList [Partition partitionAt partition, Heal healAt]
+    pure net { tnScheduled = tnScheduled <> msgs }
 
 arbitraryPartition :: Ord addr => [addr] -> Gen (Map addr (Set addr))
 arbitraryPartition addrs =
@@ -147,18 +168,17 @@ instance (Ord s) => Arbitrary (TestNetwork s ()) where
     arbitrary = arbitraryPartitionedNetwork 1 -- TODO: use size for epochLength?
 
     shrink tn =
-        lessMsgs ++ lessNodes
+        lessNodes ++ lessMsgs
       where
-        msgs'     = shrinkScheduledMsgs (tnMsgs tn)
-        nodes'    = shrinkList shrinkNothing (Map.toList $ tnNodes tn)
-        lessMsgs  = [tn { tnMsgs = ms } | ms <- msgs']
-        lessNodes = filter (odd . length . tnNodes)
-                  $ filter (not . null . tnNodes)
-                  $ [filterNetwork tn { tnNodes = Map.fromList ns } | ns <- nodes']
+        msgs'     = shrinkScheduledMsgs (tnScheduled tn)
+        nodes'    = reverse . tailDef [] . tails . Map.toList $ tnNodes tn
+        lessMsgs  = [tn { tnScheduled = ms } | ms <- msgs']
+        lessNodes = filter (not . null . tnNodes)
+                  $ catMaybes [filterNetwork tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
 shrinkScheduledMsgs :: Ord s => Set (Scheduled s) -> [Set (Scheduled s)]
 shrinkScheduledMsgs msgs =
-    mempty : [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
+    [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
   where
     shrinkedMsgs =
         shrinkMapBy
@@ -167,11 +187,17 @@ shrinkScheduledMsgs msgs =
             (shrinkList shrinkNothing)
             (Set.filter isMsg msgs)
 
-filterNetwork :: TestNetwork s a -> TestNetwork s a
+-- | Filter messages where the sender is not part of the network. Used after
+-- shrinking the node list.
+filterNetwork :: TestNetwork s a -> Maybe (TestNetwork s a)
 filterNetwork tn@TestNetwork{..} =
-    tn { tnMsgs = Set.filter f tnMsgs }
+    if null scheduled
+       then Nothing
+       else Just tn { tnScheduled = scheduled }
   where
-    f msg = all (`Map.member` tnNodes) (scheduledReceivers msg)
+    scheduled = Set.filter condition tnScheduled
+    condition msg =
+        maybe True (`Map.member` tnNodes) (scheduledReceiver msg)
 
 --------------------------------------------------------------------------------
 

@@ -27,7 +27,9 @@ import           Oscoin.Storage.Block
                  (genesisBlockStore, getBlocks, insert, orphans)
 
 import           Codec.Serialise (Serialise)
-import           Data.List (foldr1, isPrefixOf, sort, unlines)
+import           Data.List (foldr1, sort)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import           Test.QuickCheck.Instances ()
@@ -42,6 +44,10 @@ tests =
             propNetworkNodesConverge @Simple.PoA @SimpleNodeState
                                      testableInit
                                      (arbitraryPartitionedNetwork Simple.blockTime)
+        , testProperty "Nodes converge (nakamoto)" $
+            propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
+                                     testableInit
+                                     (arbitraryPartitionedNetwork Nakamoto.blockTime)
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
@@ -89,7 +95,7 @@ propNetworkNodesConverge tnInit genNetworks =
                 -- although this can also be solved properly by waiting for networks to
                 -- converge.
                 chainLength     = length (longestChain tn')
-                -- We therefore expect the messaging complexity to be between O(n) and O(n^2).
+                score           = similarityScore falloff (nodePrefixes tn')
 
                 --
                 -- Properties to be tested
@@ -98,58 +104,94 @@ propNetworkNodesConverge tnInit genNetworks =
                 -- to have agreed on blocks beyond the genesis, which all nodes start
                 -- with.
                 propChainGrowth    = chainLength > 1
-                -- Ensure that most runs end with *all* nodes sharing a common prefix.
-                -- The reason we can't have the stronger guarantee is that with
-                -- network delay, it's possible that a test run involving network partitions
-                -- is unable to converge in time.
-                propUnanimtyPrefix = nodeCount == 1 || nodePrefixesMatch tn'
                 -- Ensure that nodes are replicating client transactions in their blocks.
                 -- It's not enough to check that blocks are replicated, since empty
                 -- blocks are considered valid.
                 propReplication    = not . null $ replicatedTxs
-                -- Ensure that a >50% majority of nodes share a common prefix.
-                propMajorityPrefix = majorityNodePrefixesMatch tn'
 
-             in cover propReplication     70 "replicated any data"
-              . cover propChainGrowth     75 "have more than one block"
-              . cover propUnanimtyPrefix  75 "have a common prefix"
-              . counterexample (prettyCounterexample tn' replicatedTxs)
-              $ propMajorityPrefix
+                propLowConvergence   = nodeCount == 1 || score >= 0.45
+                propMajConvergence   = nodeCount == 1 || score >= 0.5
+                propHighConvergence  = nodeCount == 1 || score >= 0.8
+                propSuperConvergence = nodeCount == 1 || score >= 0.9
+
+             in cover propReplication      70 "replicated any data"
+              . cover propChainGrowth      75 "have more than one block"
+              . cover propSuperConvergence 70 "have super convergence"
+              . cover propHighConvergence  80 "have high convergence"
+              . cover propMajConvergence   95 "have majority convergence"
+              . counterexample (T.unpack $ prettyCounterexample tn' replicatedTxs score)
+              $ propLowConvergence
+
+-- | Counts how many times each item figures in the list.
+frequencies :: Ord a => [a] -> [(a, Int)]
+frequencies xs = Map.toList $ Map.fromListWith (+) [(x, 1) | x <- xs]
+
+-- | Similarity score is a floating point number between @0@ and @1@ which
+-- represents how similar the input prefixes are with regards to each other.
+--
+-- The function is biased in such a way that *less* partitions score higher
+-- than *more* partitions, all else being equal.
+--
+-- Takes a falloff function which is applied to the columns in the input. This
+-- is useful to encode the idea that elements towards the end of the prefixes
+-- should weigh less on the final score, than elements at the head.
+similarityScore :: Ord a => (Float -> Float) -> [[a]] -> Float
+similarityScore f xs =
+    sum actual / sum ideal
+  where
+    -- Distribution of weights by column. Uses the function @f@ to weight
+    -- each column by its position in the list.
+    dist    = [f (x / fromIntegral ncols) | x <- [0..]]
+
+    actual  = zipWith (*) dist (map uniformity cols)
+    ideal   = take ncols dist
+
+    -- Columns and rows
+    cols    = transpose xs
+    ncols   = length cols
+    nrows   = length xs
+
+    -- Measures how uniform a list is.
+    --
+    -- > uniformity [1,1,1]
+    -- 1.0
+    --
+    -- > uniformity [1,2,3]
+    -- 0.33
+    --
+    uniformity :: Ord a => [a] -> Float
+    uniformity col =
+        1.0 / fromIntegral (groups + penalty)
+      where
+        -- The number of distinct groups of values.
+        groups  = length (frequencies col)
+        -- If rows are missing, this penalty will be greater than zero.
+        penalty = nrows - length col
+
+-- | Exponential fall-off function, such that as @x@ reaches @1.0@, @falloff x@
+-- reaches @0.0@.
+falloff :: Float -> Float
+falloff x = -x ** 4 + 1
 
 -- | Return a pretty-printed TestNetwork for counter-examples.
-prettyCounterexample :: (Ord s, Serialise s, TestableNode s m a) => TestNetwork s a -> [DummyTx] -> String
-prettyCounterexample tn@TestNetwork{..} txsReplicated =
-    prettyLog ++ prettyInfo ++ prettyNodes ++ prettyStats
+prettyCounterexample :: (Ord s, TestableNode s m a) => TestNetwork s a -> [DummyTx] -> Float -> Text
+prettyCounterexample tn@TestNetwork{..} txsReplicated score =
+    prettyLog <> prettyInfo <> prettyNodes <> prettyStats
   where
-    prettyLog    = unlines $  " log:" : reverse ["  " ++ show l | l <- reverse $ sort tnLog]
-    prettyNodes  = unlines $ [" nodes:", "  " ++ show (length tnNodes)]
-    prettyInfo   = unlines $ [" info:", unlines ["  " ++ show (testableNodeAddr n) ++ ": " ++ T.unpack (testableShow n) | n <- toList tnNodes]]
-    prettyStats  = unlines $ [" msgs sent: "      ++ show tnMsgCount,
-                              " txs replicated: " ++ show (length txsReplicated),
-                              " common prefix: "  ++ show (length $ longestCommonPrefix $ nodePrefixes tn) ]
-
-nodePrefixesMatch :: (Serialise s, TestableNode s m a) => TestNetwork s a -> Bool
-nodePrefixesMatch tn =
-    (>= length (shortestChain tn) - 3) . length . longestCommonPrefix $ nodePrefixes tn
-
-shortestChain :: (TestableNode s m a) => TestNetwork s a -> [BlockHash]
-shortestChain tn = minimumBy (comparing length) (nodePrefixes tn)
+    prettyLog    = T.unlines $  " log:" : prettyMsgs tnLog
+    prettyNodes  = T.unlines $ [" nodes:", "  " <> show (length tnNodes)]
+    prettyInfo   = T.unlines $ [" info:", T.unlines ["  " <> show (testableNodeAddr n) <> ": " <> testableShow n | n <- toList tnNodes]]
+    prettyStats  = T.unlines $ [" msgs sent: "      <> show tnMsgCount,
+                                " txs replicated: " <> show (length txsReplicated),
+                                " common prefix: "  <> show (length $ longestCommonPrefix $ nodePrefixes tn),
+                                " convergence: "    <> show (score * 100) <> "%",
+                                " last tick: "      <> prettyDuration (sinceEpoch tnLastTick),
+                                " latencies: "      <> T.unwords (map prettyDuration $ take 10 tnLatencies) <> " ...",
+                                " scheduled:\n"     <> T.unlines (prettyMsgs (Set.filter (not . isTick) tnScheduled))]
+    prettyMsgs ms = reverse ["  " <> prettyScheduled l | l <- reverse $ sort $ toList ms]
 
 longestChain :: (TestableNode s m a) => TestNetwork s a -> [BlockHash]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
-
--- | A 50%+ majority of nodes in the network have a common prefix.
-majorityNodePrefixesMatch :: (Serialise s, TestableNode s m a) => TestNetwork s a -> Bool
-majorityNodePrefixesMatch tn@TestNetwork{..} =
-    length ns > length tnNodes - length ns
-  where
-    pre = longestCommonPrefix $ nodePrefixes tn
-    ns  = filter (nodeHasPrefix pre) (toList tnNodes)
-
--- | A node has the given prefix in its longest chain.
-nodeHasPrefix :: (TestableNode s m a) => [BlockHash] -> a -> Bool
-nodeHasPrefix p node =
-    p `isPrefixOf` reverse (testableLongestChain node)
 
 -- | The longest chain prefixes of all nodes in the network.
 nodePrefixes :: (TestableNode s m a) => TestNetwork s a -> [[BlockHash]]

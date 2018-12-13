@@ -16,7 +16,6 @@ import           Oscoin.Storage.Block.Class (MonadBlockStore)
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore)
 
-import           Oscoin.Test.Consensus.Class
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
 
@@ -76,12 +75,10 @@ instance HasTestNodeState PoW NakamotoNodeState where
     testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
 
 instance TestableNode PoW NakamotoNode NakamotoNodeState where
-    testableTick tick = do
-        blk <- mineBlock nakConsensus dummyEval tick
-        pure $ maybeToList (BlockMsg <$> blk)
-    testableInit = initNakamotoNodes
-    testableRun  = runNakamotoNode
-    testableScore = const Nakamoto.chainScore
+    testableTick    = mineBlock nakConsensus dummyEval
+    testableInit    = initNakamotoNodes
+    testableRun     = runNakamotoNode
+    testableScore   = const Nakamoto.chainScore
 
 nakamotoNode :: DummyNodeId -> NakamotoNodeState
 nakamotoNode nid = NakamotoNodeState
