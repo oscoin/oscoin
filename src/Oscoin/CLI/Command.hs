@@ -19,11 +19,13 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
+import           Oscoin.P2P (NodeAddr(..), mkNodeId)
 import           Oscoin.Time (Timestamp)
 
 
 import           Crypto.Random.Types (MonadRandom)
 import qualified Data.Yaml as Yaml
+import           Network.Socket (HostName, PortNumber)
 import           Numeric.Natural
 
 import           Radicle.Conversion
@@ -53,6 +55,7 @@ data Command =
     | RevisionMerge RevisionId
     | GenerateKeyPair
     | GenesisCreate [FilePath]
+    | NodeSeed HostName PortNumber
     deriving (Show)
 
 dispatchCommand :: MonadCLI m => Command -> m Result
@@ -78,6 +81,15 @@ dispatchCommand (GenesisCreate files) = do
                 printGenesisYaml signed
             | otherwise ->
                 pure $ ResultError (mconcat errs)
+
+dispatchCommand (NodeSeed h p) = do
+    (pk, _) <- readKeyPair
+    putLine . decodeUtf8 . Yaml.encode $
+        NodeAddr { nodeId   = mkNodeId pk
+                 , nodeHost = h
+                 , nodePort = p
+                 }
+    pure ResultOk
 
 dispatchCommand cmd = pure $
     ResultError $ "Command `" <> show cmd <> "` not yet implemented"

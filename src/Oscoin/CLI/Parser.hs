@@ -26,8 +26,9 @@ mainParserInfo =
 mainParser :: Parser Command
 mainParser = subparser
     (  command "revision" (revisionParser `withInfo` "Revision commands")
-    <> command "keypair"  (keyPairParser `withInfo` "Key pair commands")
-    <> command "genesis"  (genesisParser `withInfo` "Genesis commands")
+    <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
+    <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
+    <> command "node"     (nodeParser     `withInfo` "Node commands")
     )
 
 revisionParser :: Parser Command
@@ -48,6 +49,26 @@ confirmationsOption = option auto
     <> showDefault
     <> metavar "N"
     )
+
+nodeParser :: Parser Command
+nodeParser = subparser $
+    command "seed" (nodeSeed `withInfo` "Show the current node seed")
+  where
+    nodeSeed = NodeSeed <$> nodeSeedHost <*> nodeSeedPort
+    nodeSeedHost = option str
+        (  long "host"
+        <> help "seed host"
+        <> value "127.0.0.1"
+        <> showDefault
+        <> metavar "HOST"
+        )
+    nodeSeedPort = option auto
+        (  long "port"
+        <> help "seed port"
+        <> value 6942
+        <> showDefault
+        <> metavar "PORT"
+        )
 
 keyPairParser :: Parser Command
 keyPairParser = subparser
