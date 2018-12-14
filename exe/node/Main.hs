@@ -67,7 +67,7 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
         <*> option str
             ( long "seeds"
            <> help "Path to YAML file describing gossip seed nodes"
-           <> value "node/gossip-seeds.yaml"
+           <> value "exe/node/gossip-seeds.yaml"
             )
         <*> option str
             ( long "genesis"
