@@ -34,6 +34,8 @@ import qualified Radicle.Extended as Rad
 class (MonadRandom m, API.MonadClient m, MonadKeyStore m) => MonadCLI m where
     -- | Sleep for given number of milliseconds
     sleep :: Int -> m ()
+    -- | Print text to stdout
+    putString :: Text -> m ()
     -- | Print text to stdout and add a newline
     putLine :: Text -> m ()
     -- | Wraps an action with a spinner
@@ -84,7 +86,7 @@ dispatchCommand (GenesisCreate files) = do
 
 dispatchCommand (NodeSeed h p) = do
     (pk, _) <- readKeyPair
-    putLine . decodeUtf8 . Yaml.encode $
+    putString . decodeUtf8 . Yaml.encode $
         NodeAddr { nodeId   = mkNodeId pk
                  , nodeHost = h
                  , nodePort = p

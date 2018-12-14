@@ -41,6 +41,7 @@ instance MonadRandom m => MonadRandom (CommandRunnerT m) where
 instance (MonadKeyStore m, MonadIO m, MonadMask m, MonadRandom m) => MonadCLI (CommandRunnerT m) where
     sleep milliseconds = liftIO $ threadDelay (1000 * milliseconds)
     putLine = liftIO . putStrLn
+    putString = liftIO . putStr
     withSpinner = Spinner.withSpinner
     progress = Spinner.progress
     readRadFile path = do
