@@ -91,7 +91,10 @@ miner = do
         else do
             time <- currentTick
             blk <- hoist liftIO $ Consensus.mineBlock hConsensus hEval time
-            for_ blk $ lift . P2P.broadcast . P2P.BlockMsg
+
+            for_ blk $ \b -> do
+                lift   $ P2P.broadcast $ P2P.BlockMsg b
+                liftIO $ Log.info (cfgLogger hConfig) ("mined block " % formatHash) (blockHash b)
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
