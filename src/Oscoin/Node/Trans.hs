@@ -50,8 +50,9 @@ runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
 data Config = Config
-    { cfgEnv    :: Environment
-    , cfgLogger :: Log.Logger
+    { cfgEnv           :: Environment
+    , cfgLogger        :: Log.Logger
+    , cfgNoEmptyBlocks :: Bool
     }
 
 -- | Node handle.

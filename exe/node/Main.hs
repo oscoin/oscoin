@@ -33,12 +33,13 @@ import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Args = Args
-    { host       :: HostName
-    , gossipPort :: PortNumber
-    , apiPort    :: PortNumber
-    , seeds      :: FilePath
-    , genesis    :: FilePath
-    , difficulty :: Maybe Difficulty
+    { host          :: HostName
+    , gossipPort    :: PortNumber
+    , apiPort       :: PortNumber
+    , seeds         :: FilePath
+    , genesis       :: FilePath
+    , difficulty    :: Maybe Difficulty
+    , noEmptyBlocks :: Bool
     } deriving (Generic, Show)
 
 args :: ParserInfo Args
@@ -80,6 +81,11 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
              <> help "Mining difficulty"
               )
             )
+        <*> switch
+            ( long "no-empty-blocks"
+           <> help "Do not generate empty blocks"
+           <> showDefault
+            )
 
 
 main :: IO ()
@@ -98,7 +104,7 @@ main = do
     seeds'   <- Yaml.decodeFileThrow seeds
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig Development lgr)
+        withNode   (mkNodeConfig Development lgr noEmptyBlocks)
                    nid
                    mem
                    stStore
@@ -117,9 +123,10 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr = Node.Config
+    mkNodeConfig env lgr neb = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
+        , Node.cfgNoEmptyBlocks = neb
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner

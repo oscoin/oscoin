@@ -131,7 +131,7 @@ nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, states
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
-    let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger }
+    let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger, Node.cfgNoEmptyBlocks = False }
 
     mph <- atomically $ do
         mp <- Mempool.new
