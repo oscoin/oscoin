@@ -13,7 +13,8 @@ import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Revision
 import           Oscoin.CLI.Spinner hiding (progress, withSpinner)
 import           Oscoin.Consensus.Mining (mineGenesis)
-import           Oscoin.Consensus.Nakamoto (minDifficulty, mineNakamoto)
+import           Oscoin.Consensus.Nakamoto (mineNakamoto)
+import           Oscoin.Crypto.Blockchain.Block (Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -56,7 +57,7 @@ data Command =
     | RevisionList
     | RevisionMerge RevisionId
     | GenerateKeyPair
-    | GenesisCreate [FilePath]
+    | GenesisCreate [FilePath] Difficulty
     | NodeSeed HostName PortNumber
     deriving (Show)
 
@@ -70,9 +71,9 @@ dispatchCommand GenerateKeyPair = do
     writeKeyPair kp
     pure $ ResultOk
 
-dispatchCommand (GenesisCreate []) =
-    printGenesisYaml []
-dispatchCommand (GenesisCreate files) = do
+dispatchCommand (GenesisCreate [] d) =
+    printGenesisYaml [] d
+dispatchCommand (GenesisCreate files d) = do
     results <-
         for files $
             readRadFile >=> traverse signTransaction
@@ -80,7 +81,7 @@ dispatchCommand (GenesisCreate files) = do
     case partitionEithers results of
         (errs, signed)
             | null errs ->
-                printGenesisYaml signed
+                printGenesisYaml signed d
             | otherwise ->
                 pure $ ResultError (mconcat errs)
 
@@ -97,9 +98,9 @@ dispatchCommand cmd = pure $
     ResultError $ "Command `" <> show cmd <> "` not yet implemented"
 
 -- | Mine a genesis block from a list of inputs and print it as YAML to
--- the console.
-printGenesisYaml :: MonadCLI m => [API.RadTx] -> m Result
-printGenesisYaml txs = do
+-- the console. Takes the target difficulty.
+printGenesisYaml :: MonadCLI m => [API.RadTx] -> Difficulty -> m Result
+printGenesisYaml txs diffi = do
     time <- getTime
 
     case buildGenesis Rad.txEval time txs Rad.pureEnv of
@@ -107,7 +108,7 @@ printGenesisYaml txs = do
             pure $ ResultError (fromEvalError err)
         Right blk -> do
             result <- mineGenesis
-                (mineNakamoto (const minDifficulty)) blk
+                (mineNakamoto (const diffi)) blk
 
             case result of
                 Left err  ->

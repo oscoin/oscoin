@@ -5,8 +5,11 @@ module Oscoin.CLI.Parser
 
 import           Oscoin.Prelude hiding (option)
 
+import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
+
 import           Oscoin.CLI.Command
 
+import qualified Data.Text as T
 import           Numeric.Natural
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
@@ -79,12 +82,18 @@ keyPairParser = subparser
 
 genesisParser :: Parser Command
 genesisParser =
-    GenesisCreate <$> genesisOptions
+    GenesisCreate <$> genesisFrom <*> genesisDifficulty
   where
-    genesisOptions = many $ option str
+    genesisFrom = many $ option str
         (  long "from"
         <> help ".rad input file"
         <> metavar "FILE"
+        )
+    genesisDifficulty = option (maybeReader (parseDifficulty . T.pack))
+        (  long "difficulty"
+        <> help "target difficulty"
+        <> metavar "TARGET"
+        <> value minDifficulty
         )
 
 withInfo :: Parser a -> String -> ParserInfo a

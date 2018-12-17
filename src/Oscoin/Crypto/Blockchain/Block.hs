@@ -7,6 +7,8 @@ module Oscoin.Crypto.Blockchain.Block
     , Difficulty(..)
     , minDifficulty
     , easyDifficulty
+    , parseDifficulty
+    , prettyDifficulty
 
     , Height
     , Depth
@@ -54,20 +56,30 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
 import           Numeric.Natural
+import           Text.Show (Show(..))
 
 -- | Block difficulty.
 newtype Difficulty = Difficulty { fromDifficulty :: Integer }
     deriving (Show, Read, Eq, Ord, Num, Enum, Real, Integral, Serialise)
 
 instance ToJSON Difficulty where
-    toJSON (Difficulty i) =
-        toJSON $ BaseN.encodeBase16 (i2osp i)
+    toJSON = toJSON . prettyDifficulty
 
 instance FromJSON Difficulty where
     parseJSON = withText "Difficulty" $ \t ->
-        case BaseN.decodeBase16 $ encodeUtf8 t of
-            Just d  -> pure $ Difficulty (os2ip d)
+        case parseDifficulty t of
+            Just d  -> pure d
             Nothing -> fail "Error decoding difficulty"
+
+prettyDifficulty :: Difficulty -> Text
+prettyDifficulty =
+     BaseN.encodedText . BaseN.encodeBase16 . i2osp . fromDifficulty
+
+parseDifficulty :: Text -> Maybe Difficulty
+parseDifficulty t =
+    case BaseN.decodeBase16 $ encodeUtf8 t of
+        Just d  -> Just $ Difficulty (os2ip d)
+        Nothing -> Nothing
 
 -- | The minimum difficulty.
 minDifficulty :: Difficulty
