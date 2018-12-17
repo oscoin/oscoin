@@ -3,7 +3,11 @@ module Oscoin.Crypto.Blockchain.Block
     , BlockHash
     , BlockHeader(..)
     , StateHash
-    , Difficulty
+
+    , Difficulty(..)
+    , minDifficulty
+    , easyDifficulty
+
     , Height
     , Depth
     , Score
@@ -35,15 +39,45 @@ import qualified Codec.Serialise.Decoding as Serialise
 import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
+import           Crypto.Number.Serialize (i2osp, os2ip)
 import           Data.Aeson
-                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+                 ( FromJSON(..)
+                 , ToJSON(..)
+                 , object
+                 , withObject
+                 , withText
+                 , (.:)
+                 , (.=)
+                 )
+import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
 import           Numeric.Natural
 
 -- | Block difficulty.
-type Difficulty = Integer
+newtype Difficulty = Difficulty { fromDifficulty :: Integer }
+    deriving (Show, Read, Eq, Ord, Num, Enum, Real, Integral, Serialise)
+
+instance ToJSON Difficulty where
+    toJSON (Difficulty i) =
+        toJSON $ BaseN.encodeBase16 (i2osp i)
+
+instance FromJSON Difficulty where
+    parseJSON = withText "Difficulty" $ \t ->
+        case BaseN.decodeBase16 $ encodeUtf8 t of
+            Just d  -> pure $ Difficulty (os2ip d)
+            Nothing -> fail "Error decoding difficulty"
+
+-- | The minimum difficulty.
+minDifficulty :: Difficulty
+minDifficulty =
+    0xEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+-- | An easy difficulty. About 24s per block on a single core.
+easyDifficulty :: Difficulty
+easyDifficulty =
+    0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | Block height.
 type Height = Integer
@@ -231,7 +265,7 @@ sealBlock seal blk =
     blk' = blk { blockHeader = (blockHeader blk) { blockSeal = seal } }
 
 blockScore :: Block tx s -> Integer
-blockScore = blockDifficulty . blockHeader
+blockScore = fromDifficulty . blockDifficulty . blockHeader
 
 hashState :: Crypto.Hashable st => st -> StateHash
 hashState = Crypto.fromHashed . Crypto.hash

@@ -30,6 +30,9 @@ fromFieldSerial f =
 deriving instance FromField PoW
 deriving instance ToField   PoW
 
+deriving instance FromField Difficulty
+deriving instance ToField   Difficulty
+
 instance FromField s => FromRow (BlockHeader s) where
     fromRow = BlockHeader
         <$> fieldWith fromPrevHashField

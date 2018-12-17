@@ -31,6 +31,12 @@ testBlockchain = testGroup "Blockchain"
     , testProperty "Block: deserialise . serialise == id" $
         \(blk :: Block ByteString ByteString) ->
             (Serialise.deserialise . Serialise.serialise) blk == blk
+    , testProperty "Block: decode . encode == id (JSON)" $
+        \(blk :: Block String String) ->
+            (Aeson.decode . Aeson.encode) blk == Just blk
+    , testProperty "Difficulty: decode . encode == id (JSON)" $
+        \((Positive d) :: Positive Difficulty) ->
+            (Aeson.decode . Aeson.encode) d == Just d
     ]
 
 testBuildBlock :: TestTree

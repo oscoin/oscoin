@@ -17,6 +17,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -26,16 +27,6 @@ import qualified Data.List.NonEmpty as NonEmpty
 
 blockTime :: Duration
 blockTime = 1 * seconds
-
--- | The minimum difficulty.
-minDifficulty :: Difficulty
-minDifficulty =
-    0xEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-
--- | An easy difficulty. About 24s per block on a single core.
-easyDifficulty :: Difficulty
-easyDifficulty =
-    0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | The default difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty
@@ -90,7 +81,7 @@ hasPoW header =
     difficulty header < blockDifficulty header
 
 difficulty :: BlockHeader PoW -> Difficulty
-difficulty = os2ip . headerHash
+difficulty = Difficulty . os2ip . headerHash
 
 -- | Number of blocks to consider in Nakamoto consensus. Roughly 2 weeks.
 difficultyBlocks :: Depth
@@ -119,4 +110,4 @@ chainDifficulty (NonEmpty.fromList -> blks) =
             actualElapsed     = blockTimestamp rangeEnd `timeDiff` blockTimestamp rangeStart
             targetElapsed     = fromIntegral $ blocksConsidered * blockTimeSeconds
             currentDifficulty = blockDifficulty rangeEnd
-         in currentDifficulty * targetElapsed `div` toInteger actualElapsed
+         in currentDifficulty * targetElapsed `div` Difficulty (toInteger actualElapsed)

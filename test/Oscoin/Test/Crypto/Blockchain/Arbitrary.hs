@@ -25,6 +25,9 @@ import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
+instance Arbitrary Difficulty where
+    arbitrary = Difficulty <$> arbitrary
+
 instance (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Arbitrary (Block tx s) where
     arbitrary = arbitraryBlock
 
@@ -66,7 +69,7 @@ arbitraryValidBlockWith prevHeader txs = do
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- arbitrary
-    blockDiffi <- choose (1, 3)
+    blockDiffi <- Difficulty <$> choose (1, 3)
     let header = emptyHeader
                { blockPrevHash   = headerHash prevHeader
                , blockDataHash   = hashTxs txs
