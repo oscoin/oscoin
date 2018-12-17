@@ -53,10 +53,10 @@ emptyPoW = PoW 0
 
 instance Serialise PoW
 
-nakamotoConsensus :: (Monad m) => Maybe Difficulty -> Consensus tx PoW m
-nakamotoConsensus difi = Consensus
+nakamotoConsensus :: (Monad m) => Consensus tx PoW m
+nakamotoConsensus = Consensus
     { cScore = comparing chainScore
-    , cMiner = mineNakamoto $ maybe chainDifficulty const difi
+    , cMiner = mineNakamoto chainDifficulty
     }
 
 mineNakamoto
@@ -83,7 +83,8 @@ hasPoW header =
 difficulty :: BlockHeader PoW -> Difficulty
 difficulty = Difficulty . os2ip . headerHash
 
--- | Number of blocks to consider in Nakamoto consensus. Roughly 2 weeks.
+-- | Number of blocks to consider for difficulty calculation. Roughly 2 weeks
+-- withh a 10 min block time.
 difficultyBlocks :: Depth
 difficultyBlocks = 2016
 
@@ -91,23 +92,23 @@ difficultyBlocks = 2016
 chainDifficulty :: [Block tx PoW] -> Difficulty
 chainDifficulty [] =
     minGenesisDifficulty
-chainDifficulty (NonEmpty.fromList -> blks) =
-    computedDifficulty . NonEmpty.fromList $ NonEmpty.take blocksConsidered blks
+chainDifficulty (NonEmpty.fromList -> blks)
+    | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 =
+        Difficulty $ fromDifficulty currentDifficulty
+                   * fromIntegral targetElapsed
+                   `div` toInteger actualElapsed
+    | otherwise =
+        prevDifficulty
   where
-    blocksConsidered  = timePeriodMinutes `div` blockTimeMinutes
-    timePeriodMinutes = timePeriodDays * 24 * 60
-    timePeriodDays    = 2 * 7 -- Two weeks.
-    blockTimeMinutes  = 10
-    blockTimeSeconds  = blockTimeMinutes * 60
-    oldDifficulty     = blockDifficulty . blockHeader $ NonEmpty.last blks
+    blocksConsidered  = fromIntegral difficultyBlocks
+    prevDifficulty    = blockDifficulty . blockHeader $ NonEmpty.head blks
 
-    computedDifficulty range
-        | NonEmpty.length range < blocksConsidered = oldDifficulty
-        | otherwise =
-        let rangeStart        = blockHeader . NonEmpty.last
-                              $ NonEmpty.head blks :| NonEmpty.tail range
-            rangeEnd          = blockHeader $ NonEmpty.head blks
-            actualElapsed     = blockTimestamp rangeEnd `timeDiff` blockTimestamp rangeStart
-            targetElapsed     = fromIntegral $ blocksConsidered * blockTimeSeconds
-            currentDifficulty = blockDifficulty rangeEnd
-         in currentDifficulty * targetElapsed `div` Difficulty (toInteger actualElapsed)
+    range             = NonEmpty.fromList $ NonEmpty.take blocksConsidered blks
+
+    rangeStart        = blockHeader $ NonEmpty.last range
+    rangeEnd          = blockHeader $ NonEmpty.head range
+
+    actualElapsed     = blockTimestamp rangeEnd `timeDiff` blockTimestamp rangeStart
+    targetElapsed     = fromIntegral blocksConsidered * blockTime
+
+    currentDifficulty = blockDifficulty rangeEnd

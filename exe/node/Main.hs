@@ -6,7 +6,7 @@ import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Crypto.Blockchain (Difficulty, fromGenesis)
+import           Oscoin.Crypto.Blockchain (fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
@@ -38,7 +38,6 @@ data Args = Args
     , apiPort       :: PortNumber
     , seeds         :: FilePath
     , genesis       :: FilePath
-    , difficulty    :: Maybe Difficulty
     , noEmptyBlocks :: Bool
     } deriving (Generic, Show)
 
@@ -75,12 +74,6 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> help "Path to genesis file"
            <> value "data/genesis.yaml"
             )
-        <*> optional
-            ( option auto
-              ( long "difficulty"
-             <> help "Mining difficulty"
-              )
-            )
         <*> switch
             ( long "no-empty-blocks"
            <> help "Do not generate empty blocks"
@@ -92,7 +85,7 @@ main :: IO ()
 main = do
     Args{..} <- execParser args
 
-    let consensus = Consensus.nakamotoConsensus (Just Nakamoto.minDifficulty)
+    let consensus = Consensus.nakamotoConsensus
 
     keys     <- readKeyPair
     nid      <- pure (mkNodeId $ fst keys)
