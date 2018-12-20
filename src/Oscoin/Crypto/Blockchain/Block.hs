@@ -19,7 +19,6 @@ module Oscoin.Crypto.Blockchain.Block
     , emptyGenesisFromState
     , genesisBlock
     , isGenesisBlock
-    , validateBlock
     , headerHash
     , withHeader
     , blockScore
@@ -229,9 +228,6 @@ instance (Serialise s, FromJSON s, FromJSON tx) => FromJSON (Block tx s) where
         if headerHash blockHeader /= blockHash
            then fail "Error decoding block: hash does not match data"
            else pure Block{..}
-
-validateBlock :: Block tx s -> Either Text (Block tx s)
-validateBlock = Right
 
 mkBlock
     :: (Foldable t, Serialise s)

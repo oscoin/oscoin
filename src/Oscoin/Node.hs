@@ -19,7 +19,7 @@ module Oscoin.Node
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Consensus(..))
+import           Oscoin.Consensus (Consensus(..), Validate)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
 import           Oscoin.Crypto.Blockchain.Block
@@ -118,9 +118,10 @@ storage
        , Hashable  st
        )
     => Evaluator st tx o
+    -> Validate tx s
     -> Storage tx s (NodeT tx st s i m)
-storage eval = Storage
-    { storageApplyBlock  = Storage.applyBlock eval
+storage eval validate = Storage
+    { storageApplyBlock  = Storage.applyBlock eval validate
     , storageApplyTx     = Storage.applyTx
     , storageLookupBlock = Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx

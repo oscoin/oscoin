@@ -11,6 +11,7 @@ module Oscoin.Consensus.Nakamoto
     , chainDifficulty
     , chainScore
     , blockTime
+    , validateBlock
     ) where
 
 import           Oscoin.Prelude
@@ -50,11 +51,43 @@ newtype PoW = PoW Nonce
 emptyPoW :: PoW
 emptyPoW = PoW 0
 
-nakamotoConsensus :: (Monad m) => Consensus tx PoW m
+nakamotoConsensus :: (Monad m, Serialise tx) => Consensus tx PoW m
 nakamotoConsensus = Consensus
     { cScore = comparing chainScore
     , cMiner = mineNakamoto chainDifficulty
+    , cValidate = validateBlock
     }
+
+validateBlock :: Serialise tx => Validate tx PoW
+validateBlock [] blk =
+    validateBlock' blk
+validateBlock prefix@(parent:_) blk
+    | blockPrevHash (blockHeader blk) /= blockHash parent =
+        Left "Invalid parent hash"
+    | blockDifficulty (blockHeader blk) /= chainDifficulty prefix =
+        Left "Invalid target difficulty"
+    | t < t' =
+        Left "Block timestamp is in the past"
+    | t - t' > 2 * hours =
+        Left "Block timestamp is more than two hours in the future"
+    | otherwise =
+        validateBlock' blk
+  where
+    t  = ts blk
+    t' = ts parent
+    ts = sinceEpoch . blockTimestamp . blockHeader
+
+validateBlock'
+    :: Serialise tx
+    => Block tx PoW   -- ^ Block to validate.
+    -> Either Text () -- ^ Either a validation error, or success.
+validateBlock' Block{..}
+    | hashTxs blockData /= blockDataHash blockHeader =
+        Left "Invalid data hash"
+    | not (hasPoW blockHeader) =
+        Left "Invalid proof of work"
+    | otherwise =
+        Right ()
 
 mineNakamoto
     :: forall m. Monad m

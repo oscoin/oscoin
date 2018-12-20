@@ -123,4 +123,4 @@ main = do
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
-    storage nod   = hoistStorage (runNodeT nod) (Node.storage Rad.txEval)
+    storage nod   = hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock)

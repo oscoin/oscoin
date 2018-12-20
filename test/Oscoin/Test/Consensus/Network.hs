@@ -23,6 +23,7 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 
+import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain
                  ( Blockchain
                  , blocks
@@ -137,6 +138,7 @@ data TestNetwork s a = TestNetwork
     -- gets delivered.
     , tnRng        :: StdGen
     , tnEval       :: DummyEval
+    , tnValidate   :: DummyValidate s
     , tnMsgCount   :: Int
     -- ^ Number of messages delivered in the network
     , tnLastTick   :: Timestamp
@@ -144,6 +146,9 @@ data TestNetwork s a = TestNetwork
 
 -- | Test evaluator.
 type DummyEval = Evaluator DummyState DummyTx ()
+
+-- | Test block validator.
+type DummyValidate s = Validate DummyTx s
 
 -- | Network partitions is a map of node id to a set of node ids _not_
 -- reachable from that node id.
@@ -193,9 +198,9 @@ deliver
     -> Maybe (Msg s)
     -> TestNetwork s a
     -> TestNetwork s a
-deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnEval}
+deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnValidate, tnEval}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage to tnEval) msg
+        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage to tnValidate tnEval) msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -211,14 +216,14 @@ applyTick t =
 
 -- | Apply a message to the node state. Returns a list of messages to send back
 -- to the network.
-applyMessage :: (TestableNode s m a) => DummyNodeId -> DummyEval -> Msg s -> m [Msg s]
-applyMessage _ _ msg@(TxMsg tx) = do
+applyMessage :: (TestableNode s m a) => DummyNodeId -> DummyValidate s -> DummyEval -> Msg s -> m [Msg s]
+applyMessage _ _ _ msg@(TxMsg tx) = do
     result <- Storage.applyTx tx
     pure $ case result of
         Storage.Applied -> [msg]
         _               -> []
-applyMessage to eval msg@(BlockMsg blk) = do
-    result          <- Storage.applyBlock eval blk
+applyMessage to validate eval msg@(BlockMsg blk) = do
+    result          <- Storage.applyBlock eval validate blk
     parentMissing   <- isNothing <$> Storage.lookupBlock parentHash
 
     -- If the parent block is missing, request it from the network.
@@ -229,11 +234,11 @@ applyMessage to eval msg@(BlockMsg blk) = do
         _ -> []
   where
     parentHash = blockPrevHash $ blockHeader blk
-applyMessage _ _ (ReqBlockMsg from bh) = do
+applyMessage _ _ _ (ReqBlockMsg from bh) = do
     mblk <- Storage.lookupBlock bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
-applyMessage to eval (ResBlockMsg _ blk) =
-    applyMessage to eval (BlockMsg blk)
+applyMessage to validate eval (ResBlockMsg _ blk) =
+    applyMessage to validate eval (BlockMsg blk)
 
 -- | Schedules a list of messages to be delivered by the simulation to a set
 -- of random nodes at some point in the future.

@@ -20,6 +20,7 @@ import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Storage.State.Class as StateStore
 
+import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, evalBlock)
 import           Oscoin.Crypto.Hash (Hashed)
@@ -58,27 +59,29 @@ applyBlock
        , MonadMempool    tx   m
        )
     => Evaluator st tx o
+    -> Validate     tx s
     -> Block        tx s
     -> m ApplyResult
-applyBlock eval blk = do
+applyBlock eval validate blk = do
     novel <- isNovelBlock (blockHash blk)
-    if | novel ->
-        case validateBlock blk of
+    if | novel -> do
+        blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
+        case validate blks blk of
             Left  _    -> pure Error
-            Right blk' -> do
-                BlockStore.storeBlock blk'
-                Mempool.delTxs (blockData blk')
+            Right () -> do
+                BlockStore.storeBlock blk
+                Mempool.delTxs (blockData blk)
 
                 -- Try to find the parent state of the block, and if found,
                 -- save a new state in the state store.
                 result <- runMaybeT $ do
                     prevBlock <- MaybeT $ BlockStore.lookupBlock
-                        (blockPrevHash $ blockHeader blk')
+                        (blockPrevHash $ blockHeader blk)
 
                     prevState <- MaybeT $ StateStore.lookupState
                         (blockStateHash $ blockHeader prevBlock)
 
-                    case evalBlock eval prevState blk' of
+                    case evalBlock eval prevState blk of
                         Left _err ->
                             pure Error
                         Right st' -> do

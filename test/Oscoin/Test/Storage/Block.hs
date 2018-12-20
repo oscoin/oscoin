@@ -60,9 +60,11 @@ defaultGenesis =
 
 withMemDB :: (Handle RadTx DummySeal -> IO a) -> IO a
 withMemDB action =
-    bracket (open ":memory:" blockScore >>= initialize defaultGenesis)
+    bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
             close
             action
+  where
+    blockValidate _ _ = Right ()
 
 testStoreLookupBlock :: Handle RadTx DummySeal -> Assertion
 testStoreLookupBlock h = do

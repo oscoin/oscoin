@@ -22,7 +22,8 @@ module Oscoin.Storage.Block.SQLite.Internal
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (blocks, validateBlockchain)
+import           Oscoin.Consensus (Validate, validateBlockchain)
+import           Oscoin.Crypto.Blockchain (blocks)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -51,6 +52,7 @@ data Handle tx s = Handle
     { hConn    :: Connection               -- ^ Connection to on-disk storage for non-orphan blocks.
     , hOrphans :: TVar (Set (Block tx s))  -- ^ In-memory storage for orphans.
     , hScoreFn :: Block tx s -> Score      -- ^ Block scoring function.
+    , hValidFn :: Validate tx s            -- ^ Block validation function.
     }
 
 -- | Check whether a given block hash exists.
@@ -82,9 +84,8 @@ longestOrphanChain Handle{..} =
     -- Sorts all orphan blocks by timestamp, and checks all subsequences for
     -- validity. Then choses the subsequence with the highest score as the
     -- result.
-      blocks
-    . maximumBy (comparing score)
-    . filter (isRight . validateBlockchain)
+      longest
+    . filter (isRight . validateBlockchain hValidFn)
     . map fromList
     . tailDef []
     . subsequences
@@ -92,6 +93,9 @@ longestOrphanChain Handle{..} =
     . Set.toList <$> readTVarIO hOrphans
   where
     score = sum . map hScoreFn . blocks
+
+    longest [] = []
+    longest xs = blocks $ maximumBy (comparing score) xs
 
 -- | Get the transactions belonging to a block.
 getBlockTxs :: FromRow tx => Connection -> BlockHash -> IO [tx]

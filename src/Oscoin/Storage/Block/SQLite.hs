@@ -18,6 +18,7 @@ module Oscoin.Storage.Block.SQLite
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -49,11 +50,12 @@ import           Codec.Serialise (Serialise)
 import qualified Data.Set as Set
 
 -- | Open a connection to the block store.
-open :: (Ord s, Ord tx) => String -> (Block tx s -> Score) -> IO (Handle tx s)
-open path score =
+open :: (Ord s, Ord tx) => String -> (Block tx s -> Score) -> Validate tx s -> IO (Handle tx s)
+open path score validate =
     Handle <$> (Sql.open path >>= setupConnection)
            <*> newTVarIO mempty
            <*> pure score
+           <*> pure validate
   where
     setupConnection conn = do
         enableForeignKeys conn
@@ -65,8 +67,8 @@ open path score =
 close :: Handle tx s -> IO ()
 close Handle{..} = Sql.close hConn
 
-withBlockStore :: (Ord s, Ord tx) => String -> (Block tx s -> Score) -> (Handle tx s -> IO b) -> IO b
-withBlockStore path score = bracket (open path score) close
+withBlockStore :: (Ord s, Ord tx) => String -> (Block tx s -> Score) -> Validate tx s -> (Handle tx s -> IO b) -> IO b
+withBlockStore path score validate = bracket (open path score validate) close
 
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.

@@ -19,6 +19,7 @@ import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
 
+import           Codec.Serialise (Serialise)
 import qualified Data.Hashable as Hashable
 import qualified Data.Map.Strict as Map
 import           Lens.Micro
@@ -26,11 +27,12 @@ import           System.Random
 
 type NakamotoConsensus tx m = Consensus tx PoW (NakamotoT tx m)
 
-nakConsensus :: Monad m => NakamotoConsensus tx m
+nakConsensus :: (Serialise tx, Monad m) => NakamotoConsensus tx m
 nakConsensus = Consensus
     { cScore = comparing Nakamoto.chainScore
     , cMiner = \_chain hdr -> do gen <- state split
                                  pure $ mineBlockRandom gen hdr
+    , cValidate = Nakamoto.validateBlock
     }
 
 newtype NakamotoT tx m a =

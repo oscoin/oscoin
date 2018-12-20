@@ -11,7 +11,6 @@ module Oscoin.Crypto.Blockchain
     , takeBlocks
     , height
     , lookupTx
-    , validateBlockchain
     , showBlockDigest
     , showChainDigest
 
@@ -89,24 +88,6 @@ lookupTx h (blocks -> chain) = listToMaybe $ do
     tx <- toList $ blockData block
     guard (Crypto.hash tx == h)
     pure $ TxLookup tx (blockHash block) i
-
-validateBlockchain :: Blockchain tx s -> Either Text (Blockchain tx s)
-validateBlockchain (Blockchain (blk :| [])) = do
-    blk' <- validateBlock blk
-    pure $ fromList [blk']
-validateBlockchain (Blockchain (blk :| blk' : blks))
-    | blockPrevHash (blockHeader blk) /= blockHash blk' =
-        Left "previous hash does not match"
-    | t < t' =
-        Left "block timestamp is in the past"
-    | t - t' > 2 * hours =
-        Left "block timestamp should be less than two hours in future"
-    | otherwise =
-        validateBlock blk *> validateBlockchain (Blockchain (blk' :| blks))
-  where
-    t  = ts blk
-    t' = ts blk'
-    ts = sinceEpoch . blockTimestamp . blockHeader
 
 showChainDigest :: Blockchain tx s -> Text
 showChainDigest =
