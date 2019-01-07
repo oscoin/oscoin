@@ -48,12 +48,12 @@ library:
     - filepath
     - focus
     - formatting
+    - gossip
     - hashable
     - http-api-data
     - http-client
     - http-media
     - http-types
-    - list-t
     - memory
     - microlens
     - microlens-mtl
@@ -68,16 +68,13 @@ library:
     - safe-exceptions
     - semigroups
     - serialise
-    - splitmix
     - sqlite-simple
     - stm >=2.4.5.0
     - stm-containers
     - tagged
     - text
-    - time
     - transformers
     - typed-process
-    - unordered-containers
     - wai
     - wai-extra
     - wai-middleware-static
@@ -128,7 +125,6 @@ tests:
       - Diff
       - QuickCheck
       - aeson
-      - algebraic-graphs
       - async
       - binary
       - bytestring
@@ -159,8 +155,6 @@ tests:
       - safe-exceptions
       - scientific
       - serialise
-      - splitmix
-      - stm
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1
@@ -170,7 +164,6 @@ tests:
       - temporary
       - text
       - transformers
-      - unordered-containers
       - wai
       - wai-extra
 

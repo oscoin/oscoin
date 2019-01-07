@@ -27,8 +27,8 @@ import           Oscoin.P2P.Types
 import qualified Network.Gossip.HyParView as Membership
 import qualified Network.Gossip.HyParView.Periodic as Periodic
 import qualified Network.Gossip.IO.Peer as Gossip
-import qualified Network.Gossip.IO.Run as Gossip
-import qualified Network.Gossip.IO.Socket as Gossip
+import qualified Network.Gossip.IO.Run as Gossip.Run
+import qualified Network.Gossip.IO.Socket as Gossip.Socket
 import qualified Network.Gossip.IO.Wire as Gossip
 import qualified Network.Gossip.Plumtree as Bcast
 
@@ -37,23 +37,23 @@ import qualified Codec.Serialise as CBOR
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 import           Network.Socket (SockAddr, Socket)
 
-type Wire = Gossip.WireMessage (Gossip.ProtocolMessage (Gossip.Peer NodeId))
+type Wire = Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer NodeId))
 
-newtype GossipT m a = GossipT (ReaderT (Gossip.Env NodeId) m a)
+newtype GossipT m a = GossipT (ReaderT (Gossip.Run.Env NodeId) m a)
     deriving ( Functor
              , Applicative
              , Alternative
              , Monad
              , MonadIO
              , MonadTrans
-             , MonadReader (Gossip.Env NodeId)
+             , MonadReader (Gossip.Run.Env NodeId)
              )
 
 instance MonadIO m => MonadBroadcast (GossipT m) where
     broadcast msg = do
         env <- ask
         liftIO $
-            uncurry (Gossip.broadcast env)
+            uncurry (Gossip.Run.broadcast env)
                 . bimap toStrict toStrict . (,CBOR.serialise msg)
                 $ case msg of
                     BlockMsg blk -> CBOR.serialise $ blockHash blk
@@ -62,7 +62,7 @@ instance MonadIO m => MonadBroadcast (GossipT m) where
 
 instance MonadClock m => MonadClock (GossipT m)
 
-runGossipT :: Gossip.Env NodeId -> GossipT m a -> m a
+runGossipT :: Gossip.Run.Env NodeId -> GossipT m a -> m a
 runGossipT r (GossipT ma) = runReaderT ma r
 
 -- | Start listening to gossip and pass the gossip handle to the runner.
@@ -82,13 +82,13 @@ withGossip
     -- ^ Initial peers to connect to
     -> Storage tx s IO
     -> Handshake e NodeId Wire o
-    -> (Gossip.Env NodeId -> IO a)
+    -> (Gossip.Run.Env NodeId -> IO a)
     -> IO a
 withGossip _logger selfAddr peerAddrs Storage{..} handshake run = do
     (self:peers) <-
         for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
             Gossip.knownPeer nodeId nodeHost nodePort
-    Gossip.withGossip
+    Gossip.Run.withGossip
         self
         Membership.defaultConfig
         Periodic.defaultConfig
@@ -110,11 +110,11 @@ wrapHandshake
        , Serialise o
        )
     => Handshake e NodeId Wire o
-    -> Gossip.HandshakeRole
+    -> Gossip.Socket.HandshakeRole
     -> Socket
     -> SockAddr
     -> Maybe NodeId
-    -> IO (Gossip.Connection NodeId Wire)
+    -> IO (Gossip.Socket.Connection NodeId Wire)
 wrapHandshake handshake role sock addr psk = do
     hres <-
         runHandshakeT (Transport.framed sock) $
@@ -125,18 +125,18 @@ wrapHandshake handshake role sock addr psk = do
             mutex <- newMVar ()
             let transp = Transport.streamingEnvelope (hrPreSend r) (hrPostRecv r)
                        $ Transport.streaming sock
-            pure Gossip.Connection
-                { Gossip.connPeer = Gossip.Peer
+            pure Gossip.Socket.Connection
+                { Gossip.Socket.connPeer = Gossip.Peer
                     { Gossip.peerNodeId = hrPeerId r
                     , Gossip.peerAddr   = addr
                     }
-                , Gossip.connSend  = withMVar mutex . const . Transport.streamingSend transp
-                , Gossip.connRecv  = Transport.streamingRecv transp
-                , Gossip.connClose = pure ()
+                , Gossip.Socket.connSend  = withMVar mutex . const . Transport.streamingSend transp
+                , Gossip.Socket.connRecv  = Transport.streamingRecv transp
+                , Gossip.Socket.connClose = pure ()
                 }
   where
-    mapHandshakeRole Gossip.Acceptor  = Acceptor
-    mapHandshakeRole Gossip.Connector = Connector
+    mapHandshakeRole Gossip.Socket.Acceptor  = Acceptor
+    mapHandshakeRole Gossip.Socket.Connector = Connector
 
 wrapApply
     :: ( Serialise       s

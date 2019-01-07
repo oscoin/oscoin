@@ -20,5 +20,8 @@ extra-deps:
 - git: https://github.com/oscoin/avl-auth
   commit: 2508d2c44b87354f6c1e4fda619b43f2f0705c77
 
+- git: https://github.com/oscoin/gossip
+  commit: 3307ec12e30288c21ef20030be871ba3e518b58b
+
 ghc-options:
   "$locals": -fhide-source-paths
