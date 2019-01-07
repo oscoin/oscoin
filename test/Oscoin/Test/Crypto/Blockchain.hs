@@ -4,13 +4,15 @@ module Oscoin.Test.Crypto.Blockchain
 
 import           Oscoin.Prelude
 
+import           Oscoin.Consensus
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Hash
                  (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
 import           Oscoin.Time
 
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary ()
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
@@ -25,6 +27,7 @@ import           Test.Tasty.QuickCheck
 testBlockchain :: TestTree
 testBlockchain = testGroup "Blockchain"
     [ testBuildBlock
+    , testValidateBlock
     , testProperty "JSON Receipt" $ do
         receipt <- arbitraryReceipt
         pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
@@ -40,6 +43,14 @@ testBlockchain = testGroup "Blockchain"
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
         \(d :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) d == Just d
+    ]
+
+testValidateBlock :: TestTree
+testValidateBlock = testGroup "Nakamoto: validateBlockchain"
+    [ testProperty "Valid blockchains validate" $
+        forAll (arbitraryNakamotoBlockchain @Text) $
+            \blks -> let result = validateBlockchain Nakamoto.validateBlock blks
+                     in counterexample (show result) (result == Right ())
     ]
 
 testBuildBlock :: TestTree
