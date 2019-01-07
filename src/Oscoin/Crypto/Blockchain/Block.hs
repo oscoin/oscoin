@@ -85,7 +85,7 @@ parseDifficulty t =
 -- | The minimum difficulty.
 minDifficulty :: Difficulty
 minDifficulty =
-    0xEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | An easy difficulty. About 24s per block on a single core.
 easyDifficulty :: Difficulty
