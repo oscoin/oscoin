@@ -37,6 +37,9 @@ testBlockchain = testGroup "Blockchain"
     , testProperty "Difficulty: decode . encode == id (JSON)" $
         \((Positive d) :: Positive Difficulty) ->
             (Aeson.decode . Aeson.encode) d == Just d
+    , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
+        \((Positive d) :: Positive Difficulty) ->
+            (parseDifficulty. prettyDifficulty) d == Just d
     ]
 
 testBuildBlock :: TestTree
