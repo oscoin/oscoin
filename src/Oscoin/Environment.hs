@@ -9,8 +9,8 @@ data Environment = Production | Development | Testing
 allEnvironments :: [Environment]
 allEnvironments = [minBound .. maxBound]
 
--- | Renders the 'Environment' in a human-readable format.
-prettyEnvironment :: Environment -> Text
-prettyEnvironment Development = "development"
-prettyEnvironment Production  = "production"
-prettyEnvironment Testing     = "testing"
+-- | Renders the 'Environment' into 'Text'.
+toText :: Environment -> Text
+toText Development = "development"
+toText Production  = "production"
+toText Testing     = "testing"

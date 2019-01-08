@@ -25,7 +25,7 @@ import           Oscoin.Time
 import           Codec.Serialise (Serialise, serialise)
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Aeson (FromJSON, ToJSON)
-import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List.NonEmpty as NonEmpty
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.ToField (ToField)
@@ -94,7 +94,7 @@ validateBlock' config block@Block{..}
     | not (hasPoW blockHeader) =
         Left $ InvalidBlockDifficulty (difficulty blockHeader)
                                       (blockTargetDifficulty blockHeader)
-    | actualSize <- BS.length (serialise block)
+    | actualSize <- LBS.length (serialise block)
     , actualSize > fromIntegral (Consensus.maxBlockSize config) =
         Left $ BlockExceededMaximumSize (fromIntegral actualSize)
     | otherwise =

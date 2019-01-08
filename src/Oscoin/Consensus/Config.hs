@@ -41,7 +41,7 @@ getConfig env = do
     blob <- Yaml.decodeFileThrow configFile
 
     -- The lookup is done by using the environment as a lookup key.
-    case HM.lookup (prettyEnvironment env) (blob :: Yaml.Object) of
+    case HM.lookup (toText env) (blob :: Yaml.Object) of
          Nothing -> die $  T.pack $ show env
                         <> " not found. Possible values: "
                         <> intercalate "," (map show allEnvironments)
