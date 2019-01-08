@@ -215,4 +215,4 @@ withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
 withDifficulty d blk =
     blk { blockHeader = header, blockHash = headerHash header }
   where
-    header = (blockHeader blk) { blockDifficulty = d }
+    header = (blockHeader blk) { blockTargetDifficulty = d }

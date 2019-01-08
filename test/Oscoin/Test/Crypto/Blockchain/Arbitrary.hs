@@ -75,12 +75,12 @@ arbitraryValidNakamotoBlock prefix@(parent:|_) | prevHeader <- blockHeader paren
     blockSeal  <- arbitrary
     blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
     let header = emptyHeader
-               { blockPrevHash   = headerHash prevHeader
-               , blockDataHash   = hashTxs txs
-               , blockStateHash  = hashState blockState
+               { blockPrevHash         = headerHash prevHeader
+               , blockDataHash         = hashTxs txs
+               , blockStateHash        = hashState blockState
                , blockSeal
-               , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
-               , blockDifficulty = blockDiffi
+               , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
+               , blockTargetDifficulty = blockDiffi
                }
     pure $ mkBlock header txs
 
@@ -108,7 +108,7 @@ arbitraryBlockWith txs = do
                , blockStateHash  = stateHash
                , blockSeal
                , blockTimestamp  = timestamp
-               , blockDifficulty = diffi
+               , blockTargetDifficulty = diffi
                }
     pure $ mkBlock header txs
 
@@ -124,12 +124,12 @@ arbitraryValidBlockWith prevHeader txs = do
     blockSeal  <- arbitrary
     blockDiffi <- Difficulty <$> choose (1, 3)
     let header = emptyHeader
-               { blockPrevHash   = headerHash prevHeader
-               , blockDataHash   = hashTxs txs
-               , blockStateHash  = hashState blockState
+               { blockPrevHash         = headerHash prevHeader
+               , blockDataHash         = hashTxs txs
+               , blockStateHash        = hashState blockState
                , blockSeal
-               , blockTimestamp  = blockTimestamp prevHeader `timeAdd` elapsed
-               , blockDifficulty = blockDifficulty prevHeader + blockDiffi
+               , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
+               , blockTargetDifficulty = blockTargetDifficulty prevHeader + blockDiffi
                }
     pure $ mkBlock header txs
 

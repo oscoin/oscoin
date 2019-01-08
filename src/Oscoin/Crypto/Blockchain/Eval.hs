@@ -181,11 +181,11 @@ mkUnsealedBlock parent blockTimestamp txs blockState = mkBlock header txs
   where
     header =
          BlockHeader
-            { blockPrevHash     = parent
-            , blockDataHash     = hashTxs txs
-            , blockStateHash    = Crypto.fromHashed (Crypto.hash blockState)
-            , blockSeal         = ()
-            , blockDifficulty   = 0
+            { blockPrevHash          = parent
+            , blockDataHash          = hashTxs txs
+            , blockStateHash         = Crypto.fromHashed (Crypto.hash blockState)
+            , blockSeal              = ()
+            , blockTargetDifficulty  = 0
             , blockTimestamp
             }
 

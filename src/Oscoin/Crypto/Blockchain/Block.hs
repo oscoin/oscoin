@@ -110,12 +110,12 @@ type Score = Integer
 
 -- | Block header.
 data BlockHeader s = BlockHeader
-    { blockPrevHash   :: Crypto.Hash
-    , blockDataHash   :: Crypto.Hash
-    , blockStateHash  :: Crypto.Hash
-    , blockTimestamp  :: Timestamp
-    , blockDifficulty :: TargetDifficulty
-    , blockSeal       :: s
+    { blockPrevHash         :: Crypto.Hash
+    , blockDataHash         :: Crypto.Hash
+    , blockStateHash        :: Crypto.Hash
+    , blockTimestamp        :: Timestamp
+    , blockTargetDifficulty :: Difficulty
+    , blockSeal             :: s
     } deriving (Show, Generic, Functor, Foldable, Traversable)
 
 deriving instance Ord s => Ord (BlockHeader s)
@@ -128,22 +128,22 @@ instance Serialise s => Crypto.Hashable (BlockHeader s) where
 
 instance ToJSON s => ToJSON (BlockHeader s) where
     toJSON BlockHeader{..} = object
-        [ "parentHash" .= blockPrevHash
-        , "timestamp"  .= blockTimestamp
-        , "dataHash"   .= blockDataHash
-        , "stateHash"  .= blockStateHash
-        , "seal"       .= blockSeal
-        , "difficulty" .= blockDifficulty
+        [ "parentHash"       .= blockPrevHash
+        , "timestamp"        .= blockTimestamp
+        , "dataHash"         .= blockDataHash
+        , "stateHash"        .= blockStateHash
+        , "seal"             .= blockSeal
+        , "targetDifficulty" .= blockTargetDifficulty
         ]
 
 instance FromJSON s => FromJSON (BlockHeader s) where
   parseJSON = withObject "BlockHeader" $ \o -> do
-        blockPrevHash   <- o .: "parentHash"
-        blockTimestamp  <- o .: "timestamp"
-        blockDataHash   <- o .: "dataHash"
-        blockStateHash  <- o .: "stateHash"
-        blockSeal       <- o .: "seal"
-        blockDifficulty <- o .: "difficulty"
+        blockPrevHash         <- o .: "parentHash"
+        blockTimestamp        <- o .: "timestamp"
+        blockDataHash         <- o .: "dataHash"
+        blockStateHash        <- o .: "stateHash"
+        blockSeal             <- o .: "seal"
+        blockTargetDifficulty <- o .: "targetDifficulty"
 
         pure BlockHeader{..}
 
@@ -155,7 +155,7 @@ emptyHeader = BlockHeader
     , blockStateHash = Crypto.zeroHash
     , blockSeal = ()
     , blockTimestamp = epoch
-    , blockDifficulty = 0
+    , blockTargetDifficulty = 0
     }
 
 headerHash :: Serialise s => BlockHeader s -> BlockHash
@@ -282,7 +282,7 @@ sealBlock seal blk =
     blk' = blk { blockHeader = (blockHeader blk) { blockSeal = seal } }
 
 blockScore :: Block tx s -> Integer
-blockScore = fromDifficulty . blockDifficulty . blockHeader
+blockScore = fromDifficulty . blockTargetDifficulty . blockHeader
 
 hashState :: Crypto.Hashable st => st -> StateHash
 hashState = Crypto.fromHashed . Crypto.hash
