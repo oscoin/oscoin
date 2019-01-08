@@ -26,7 +26,7 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 instance Arbitrary Difficulty where
-    arbitrary = Difficulty <$> arbitrary
+    arbitrary = Difficulty . getPositive <$> arbitrary
 
 instance (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Arbitrary (Block tx s) where
     arbitrary = arbitraryBlock

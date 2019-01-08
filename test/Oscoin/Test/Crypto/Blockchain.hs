@@ -35,10 +35,10 @@ testBlockchain = testGroup "Blockchain"
         \(blk :: Block String String) ->
             (Aeson.decode . Aeson.encode) blk == Just blk
     , testProperty "Difficulty: decode . encode == id (JSON)" $
-        \((Positive d) :: Positive Difficulty) ->
+        \(d :: Difficulty) ->
             (Aeson.decode . Aeson.encode) d == Just d
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
-        \((Positive d) :: Positive Difficulty) ->
+        \(d :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) d == Just d
     ]
 
