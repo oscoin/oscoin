@@ -19,7 +19,7 @@ import           GHC.Exts (IsList(fromList))
 
 -- | Validate a 'Blockchain' with the given validation function. Returns 'Right'
 -- when valid.
-validateBlockchain :: Validate tx s -> Blockchain tx s -> Either Text ()
+validateBlockchain :: Validate tx s -> Blockchain tx s -> Either ValidationError ()
 validateBlockchain validateBlock (Blockchain (blk :| [])) =
     validateBlock [] blk
 validateBlockchain validateBlock (Blockchain (blk :| blks)) =

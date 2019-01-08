@@ -9,6 +9,7 @@ module Oscoin.Crypto.Blockchain.Block
     , easyDifficulty
     , parseDifficulty
     , prettyDifficulty
+    , TargetDifficulty
 
     , Height
     , Depth
@@ -92,6 +93,12 @@ easyDifficulty :: Difficulty
 easyDifficulty =
     0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
+-- | Minimum difficulty a 'Block' must have to be considered valid.
+--
+-- Invariant: 'Difficulty' must always be lower (harder) than 'TargetDifficulty' for
+-- valid blocks.
+type TargetDifficulty = Difficulty
+
 -- | Block height.
 type Height = Integer
 
@@ -107,7 +114,7 @@ data BlockHeader s = BlockHeader
     , blockDataHash   :: Crypto.Hash
     , blockStateHash  :: Crypto.Hash
     , blockTimestamp  :: Timestamp
-    , blockDifficulty :: Difficulty
+    , blockDifficulty :: TargetDifficulty
     , blockSeal       :: s
     } deriving (Show, Generic, Functor, Foldable, Traversable)
 

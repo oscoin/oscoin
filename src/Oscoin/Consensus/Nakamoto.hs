@@ -62,14 +62,17 @@ validateBlock :: Serialise tx => Validate tx PoW
 validateBlock [] blk =
     validateBlock' blk
 validateBlock prefix@(parent:_) blk
-    | blockPrevHash (blockHeader blk) /= blockHash parent =
-        Left "Invalid parent hash"
-    | blockDifficulty (blockHeader blk) /= chainDifficulty prefix =
-        Left "Invalid target difficulty"
+    | h <- blockPrevHash (blockHeader blk)
+    , h /= blockHash parent =
+        Left $ InvalidParentHash h
+    | actual <- blockDifficulty (blockHeader blk)
+    , expected <- chainDifficulty prefix
+    , actual /= expected =
+        Left $ InvalidTargetDifficulty expected actual
     | t < t' =
-        Left "Block timestamp is in the past"
+        Left $ InvalidBlockTimestamp $ t - t'
     | t - t' > 2 * hours =
-        Left "Block timestamp is more than two hours in the future"
+        Left $ InvalidBlockTimestamp $ t' - t
     | otherwise =
         validateBlock' blk
   where
@@ -79,13 +82,15 @@ validateBlock prefix@(parent:_) blk
 
 validateBlock'
     :: Serialise tx
-    => Block tx PoW   -- ^ Block to validate.
-    -> Either Text () -- ^ Either a validation error, or success.
+    => Block tx PoW              -- ^ Block to validate.
+    -> Either ValidationError () -- ^ Either a validation error, or success.
 validateBlock' Block{..}
-    | hashTxs blockData /= blockDataHash blockHeader =
-        Left "Invalid data hash"
+    | h <- blockDataHash blockHeader
+    , h /= hashTxs blockData =
+        Left $ InvalidDataHash h
     | not (hasPoW blockHeader) =
-        Left "Invalid proof of work"
+        Left $ InvalidBlockDifficulty (difficulty blockHeader)
+                                      (blockDifficulty blockHeader)
     | otherwise =
         Right ()
 
