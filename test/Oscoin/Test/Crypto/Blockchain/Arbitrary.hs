@@ -12,11 +12,11 @@ module Oscoin.Test.Crypto.Blockchain.Arbitrary
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Consensus.Mining (mineGenesis)
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock)
+import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Time
