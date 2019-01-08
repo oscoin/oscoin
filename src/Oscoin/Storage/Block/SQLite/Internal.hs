@@ -174,7 +174,7 @@ storeBlock' Handle{..} blk@Block{blockHeader = BlockHeader{..}, blockData} = do
           , blockParent
           , blockDataHash
           , blockStateHash
-          , blockDifficulty
+          , blockTargetDifficulty
           , blockSeal
           , hScoreFn blk
           )

@@ -65,7 +65,7 @@ validateBlock prefix@(parent:_) blk
     | h <- blockPrevHash (blockHeader blk)
     , h /= blockHash parent =
         Left $ InvalidParentHash h
-    | actual <- blockDifficulty (blockHeader blk)
+    | actual <- blockTargetDifficulty (blockHeader blk)
     , expected <- chainDifficulty prefix
     , actual /= expected =
         Left $ InvalidTargetDifficulty expected actual
@@ -90,7 +90,7 @@ validateBlock' Block{..}
         Left $ InvalidDataHash h
     | not (hasPoW blockHeader) =
         Left $ InvalidBlockDifficulty (difficulty blockHeader)
-                                      (blockDifficulty blockHeader)
+                                      (blockTargetDifficulty blockHeader)
     | otherwise =
         Right ()
 
@@ -100,7 +100,7 @@ mineNakamoto
     -> Miner PoW m
 mineNakamoto difiFn getBlocks bh = do
     blks <- getBlocks difficultyBlocks
-    go $ bh { blockDifficulty = difiFn blks } $> PoW 0
+    go $ bh { blockTargetDifficulty = difiFn blks } $> PoW 0
   where
     go :: BlockHeader PoW -> m (Maybe (BlockHeader PoW))
     go hdr@BlockHeader { blockSeal = PoW nonce }
@@ -113,7 +113,7 @@ chainScore = fromIntegral . height
 
 hasPoW :: BlockHeader PoW -> Bool
 hasPoW header =
-    difficulty header < blockDifficulty header
+    difficulty header < blockTargetDifficulty header
 
 difficulty :: BlockHeader PoW -> Difficulty
 difficulty = Difficulty . os2ip . headerHash
@@ -136,7 +136,7 @@ chainDifficulty (NonEmpty.fromList -> blks)
         prevDifficulty
   where
     blocksConsidered  = fromIntegral difficultyBlocks
-    prevDifficulty    = blockDifficulty . blockHeader $ NonEmpty.head blks
+    prevDifficulty    = blockTargetDifficulty . blockHeader $ NonEmpty.head blks
 
     range             = NonEmpty.fromList $ NonEmpty.take blocksConsidered blks
 
@@ -146,4 +146,4 @@ chainDifficulty (NonEmpty.fromList -> blks)
     actualElapsed     = blockTimestamp rangeEnd `timeDiff` blockTimestamp rangeStart
     targetElapsed     = fromIntegral blocksConsidered * blockTime
 
-    currentDifficulty = blockDifficulty rangeEnd
+    currentDifficulty = blockTargetDifficulty rangeEnd
