@@ -1,13 +1,12 @@
--- | Loads all the protocol-related config values from a static file.
-{-# LANGUAGE TemplateHaskell #-}
-module Oscoin.ProtocolConfig (
-      ProtocolConfig(..)
-    , getProtocolConfig
+-- | Loads all the consensus-related config values from a static file.
+module Oscoin.Consensus.Config (
+      Config(..)
+    , getConfig
     ) where
 
 import           Oscoin.Prelude
 
-import           Data.Aeson.TH
+import           Data.Aeson
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
@@ -20,26 +19,29 @@ configPath :: FilePath
 configPath = "data/config.yaml"
 
 
-data ProtocolConfig = ProtocolConfig {
+data Config = Config {
       maxBlockSize :: !Int
     -- ^ The maximum block size in MB.
     } deriving Show
 
-deriveFromJSON defaultOptions ''ProtocolConfig
+instance FromJSON Config where
+    parseJSON = withObject "Config" $ \o -> do
+        maxBlockSize <- o .: "maxBlockSize"
+        pure Config{..}
 
 -- | Lookup the maximum size for a block (in MBs).
 -- TODO(adn): Use a proper unit of measure.
-getProtocolConfig :: Environment -> IO ProtocolConfig
-getProtocolConfig env = do
+getConfig :: Environment -> IO Config
+getConfig env = do
 
     -- First, parse the yaml file as a 'Value' blob, the access the relevant
     -- environment subsection and only at that point try to reify the blob
-    -- back into a 'ProtocolConfig' data structure.
+    -- back into a 'Config' data structure.
     configFile <- getDataFileName configPath
     blob <- Yaml.decodeFileThrow configFile
 
     -- The lookup is done by using the environment as a lookup key.
-    case HM.lookup (toLookupKey env) (blob :: Yaml.Object) of
+    case HM.lookup (prettyEnvironment env) (blob :: Yaml.Object) of
          Nothing -> die $  T.pack $ show env
                         <> " not found. Possible values: "
                         <> intercalate "," (map show allEnvironments)
@@ -47,12 +49,6 @@ getProtocolConfig env = do
              case Yaml.parseEither (const (Yaml.parseJSON configMap)) () of
                   Left err -> die (T.pack err)
                   Right cp -> pure cp
-
-  where
-    toLookupKey :: Environment -> Text
-    toLookupKey Development = "development"
-    toLookupKey Production  = "production"
-    toLookupKey Testing     = "testing"
 
 
 

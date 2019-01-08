@@ -8,9 +8,9 @@ module Oscoin.Consensus.Types
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Time (Duration)
 
 -- | Represents an abstract consensus protocol.
@@ -22,7 +22,7 @@ data Consensus tx s m = Consensus
 
 -- | Block validation function.
 type Validate tx s =
-       ProtocolConfig
+       Consensus.Config
     -> [Block tx s]                -- ^ Ancestors of block to be validated.
     -> Block tx s                  -- ^ Block to be validated.
     -> Either ValidationError ()   -- ^ Either an error or @()@.

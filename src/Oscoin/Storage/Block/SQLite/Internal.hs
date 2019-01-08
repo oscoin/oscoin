@@ -23,6 +23,7 @@ module Oscoin.Storage.Block.SQLite.Internal
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Validate, validateBlockchain)
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain (blocks)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
@@ -32,7 +33,6 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHash
                  , isGenesisBlock
                  )
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Time (Timestamp)
 
 import           Database.SQLite.Simple ((:.)(..), Connection, Only(..))
@@ -54,7 +54,7 @@ data Handle tx s = Handle
     , hOrphans  :: TVar (Set (Block tx s))  -- ^ In-memory storage for orphans.
     , hScoreFn  :: Block tx s -> Score      -- ^ Block scoring function.
     , hValidFn  :: Validate tx s            -- ^ Block validation function.
-    , hProtoCfg :: ProtocolConfig           -- ^ Static protocol configuration.
+    , hProtoCfg :: Consensus.Config         -- ^ Static protocol configuration.
     }
 
 -- | Check whether a given block hash exists.

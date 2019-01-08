@@ -22,6 +22,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus (Consensus(..), Validate)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHeader(..), Depth, StateHash, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -35,7 +36,6 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.Node.Trans
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 
@@ -120,10 +120,10 @@ storage
        )
     => Evaluator st tx o
     -> Validate tx s
-    -> ProtocolConfig
+    -> Consensus.Config
     -> Storage tx s (NodeT tx st s i m)
-storage eval validate protocolConfig = Storage
-    { storageApplyBlock  = Storage.applyBlock eval validate protocolConfig
+storage eval validate config = Storage
+    { storageApplyBlock  = Storage.applyBlock eval validate config
     , storageApplyTx     = Storage.applyTx
     , storageLookupBlock = Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx

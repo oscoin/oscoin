@@ -13,19 +13,19 @@ import           Oscoin.Consensus.Nakamoto (nakamotoConsensus)
 import           Oscoin.Consensus.Simple (simpleConsensus)
 import           Oscoin.Consensus.Types
 
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 
 import           GHC.Exts (IsList(fromList))
 
 -- | Validate a 'Blockchain' with the given validation function. Returns 'Right'
 -- when valid.
-validateBlockchain :: ProtocolConfig
+validateBlockchain :: Consensus.Config
                    -> Validate tx s
                    -> Blockchain tx s
                    -> Either ValidationError ()
-validateBlockchain protocolConfig validateBlock (Blockchain (blk :| [])) =
-    validateBlock protocolConfig [] blk
-validateBlockchain protocolConfig validateBlock (Blockchain (blk :| blks)) =
-    validateBlock protocolConfig blks blk *>
-    validateBlockchain protocolConfig validateBlock (fromList blks)
+validateBlockchain config validateBlock (Blockchain (blk :| [])) =
+    validateBlock config [] blk
+validateBlockchain config validateBlock (Blockchain (blk :| blks)) =
+    validateBlock config blks blk *>
+    validateBlockchain config validateBlock (fromList blks)

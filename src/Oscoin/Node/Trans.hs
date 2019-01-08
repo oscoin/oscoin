@@ -11,6 +11,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Consensus)
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block (StateHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable)
@@ -20,7 +21,6 @@ import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..), getBlocks)
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -51,10 +51,10 @@ runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
 data Config = Config
-    { cfgEnv            :: Environment
-    , cfgLogger         :: Log.Logger
-    , cfgNoEmptyBlocks  :: Bool
-    , cfgProtocolConfig :: ProtocolConfig
+    { cfgEnv             :: Environment
+    , cfgLogger          :: Log.Logger
+    , cfgNoEmptyBlocks   :: Bool
+    , cfgConsensusConfig :: Consensus.Config
     }
 
 -- | Node handle.

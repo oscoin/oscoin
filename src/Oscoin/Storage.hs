@@ -21,13 +21,13 @@ import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Storage.State.Class as StateStore
 
 import           Oscoin.Consensus (Validate)
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, evalBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.ProtocolConfig (ProtocolConfig)
 
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -61,14 +61,14 @@ applyBlock
        )
     => Evaluator st tx o
     -> Validate     tx s
-    -> ProtocolConfig
+    -> Consensus.Config
     -> Block        tx s
     -> m ApplyResult
-applyBlock eval validate protocolConfig blk = do
+applyBlock eval validate config blk = do
     novel <- isNovelBlock (blockHash blk)
     if | novel -> do
         blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
-        case validate protocolConfig blks blk of
+        case validate config blks blk of
             Left  _    -> pure Error
             Right () -> do
                 BlockStore.storeBlock blk

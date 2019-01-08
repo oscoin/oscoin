@@ -16,10 +16,10 @@ module Oscoin.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
-import           Oscoin.ProtocolConfig (ProtocolConfig(..))
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise, serialise)
@@ -61,9 +61,9 @@ nakamotoConsensus = Consensus
     }
 
 validateBlock :: Serialise tx => Validate tx PoW
-validateBlock protocolConfig [] blk =
-    validateBlock' protocolConfig blk
-validateBlock protocolConfig prefix@(parent:_) blk
+validateBlock config [] blk =
+    validateBlock' config blk
+validateBlock config prefix@(parent:_) blk
     | h <- blockPrevHash (blockHeader blk)
     , h /= blockHash parent =
         Left $ InvalidParentHash h
@@ -76,7 +76,7 @@ validateBlock protocolConfig prefix@(parent:_) blk
     | t - t' > 2 * hours =
         Left $ InvalidBlockTimestamp $ t' - t
     | otherwise =
-        validateBlock' protocolConfig blk
+        validateBlock' config blk
   where
     t  = ts blk
     t' = ts parent
@@ -84,10 +84,10 @@ validateBlock protocolConfig prefix@(parent:_) blk
 
 validateBlock'
     :: Serialise tx
-    => ProtocolConfig            -- ^ Static, protocol-related configuration.
+    => Consensus.Config          -- ^ Static, protocol-related configuration.
     -> Block tx PoW              -- ^ Block to validate.
     -> Either ValidationError () -- ^ Either a validation error, or success.
-validateBlock' protocolConfig block@Block{..}
+validateBlock' config block@Block{..}
     | h <- blockDataHash blockHeader
     , h /= hashTxs blockData =
         Left $ InvalidDataHash h
@@ -95,7 +95,7 @@ validateBlock' protocolConfig block@Block{..}
         Left $ InvalidBlockDifficulty (difficulty blockHeader)
                                       (blockTargetDifficulty blockHeader)
     | actualSize <- BS.length (serialise block)
-    , actualSize > fromIntegral (maxBlockSize protocolConfig) =
+    , actualSize > fromIntegral (Consensus.maxBlockSize config) =
         Left $ BlockExceededMaximumSize (fromIntegral actualSize)
     | otherwise =
         Right ()

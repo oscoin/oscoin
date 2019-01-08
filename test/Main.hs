@@ -2,8 +2,8 @@ module Main (main) where
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Environment (Environment(Testing))
-import           Oscoin.ProtocolConfig (getProtocolConfig)
 
 import qualified Control.Concurrent.Tests as Concurrent
 import qualified Crypto.Test.Hash.Multi as Multihash
@@ -13,9 +13,9 @@ import           Test.Tasty
 
 main :: IO ()
 main = do
-    protocolConfig <- getProtocolConfig Testing
+    config <- Consensus.getConfig Testing
     defaultMain $ testGroup "All"
-        [ Oscoin.tests protocolConfig
+        [ Oscoin.tests config
         , Multihash.tests
         , Concurrent.tests
         , Conduit.tests
