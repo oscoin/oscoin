@@ -31,6 +31,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Oscoin.Storage.Block.SQLite.Internal
 
+import           Paths_oscoin
+
 import           Control.Concurrent.STM
 
 import           Database.SQLite.Simple ((:.)(..), Only(..))
@@ -70,7 +72,8 @@ withBlockStore path score = bracket (open path score) close
 -- multiple times.
 initialize :: (ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
 initialize gen h@Handle{hConn} =
-    readFile "data/blockstore.sql" >>=
+    getDataFileName "data/blockstore.sql" >>=
+        readFile >>=
         Sql3.exec (Sql.connectionHandle hConn) >>
             storeBlock' h gen >>
                 pure h
