@@ -20,6 +20,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
+import           Oscoin.ProtocolConfig (getProtocolConfig, maxBlockSize)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -86,18 +87,20 @@ main = do
     Args{..} <- execParser args
 
     let consensus = Consensus.nakamotoConsensus
+    let env       = Development
 
-    keys     <- readKeyPair
-    nid      <- pure (mkNodeId $ fst keys)
-    mem      <- Mempool.newIO
-    gen      <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
-    genState <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
-    stStore  <- StateStore.fromStateM genState
-    blkStore <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
-    seeds'   <- Yaml.decodeFileThrow seeds
+    keys        <- readKeyPair
+    nid         <- pure (mkNodeId $ fst keys)
+    mem         <- Mempool.newIO
+    gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
+    genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
+    stStore     <- StateStore.fromStateM genState
+    blkStore    <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
+    seeds'      <- Yaml.decodeFileThrow seeds
+    protoConfig <- getProtocolConfig env
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig Development lgr noEmptyBlocks)
+        withNode   (mkNodeConfig env lgr noEmptyBlocks protoConfig)
                    nid
                    mem
                    stStore
@@ -116,10 +119,11 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr neb = Node.Config
+    mkNodeConfig env lgr neb protocolConfig = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
         , Node.cfgNoEmptyBlocks = neb
+        , Node.cfgMaxBlockSize = maxBlockSize protocolConfig
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner

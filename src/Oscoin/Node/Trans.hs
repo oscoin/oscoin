@@ -53,6 +53,7 @@ data Config = Config
     { cfgEnv           :: Environment
     , cfgLogger        :: Log.Logger
     , cfgNoEmptyBlocks :: Bool
+    , cfgMaxBlockSize  :: Int -- TODO(adn): Annotate with a unit of measure.
     }
 
 -- | Node handle.

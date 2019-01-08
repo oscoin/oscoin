@@ -12,6 +12,7 @@ dependencies:
 
 data-files:
   - data/blockstore.sql
+  - data/config.yaml
   - data/rad/prelude.rad
   - data/genesis.yaml
 
@@ -76,6 +77,7 @@ library:
     - text
     - transformers
     - typed-process
+    - unordered-containers
     - wai
     - wai-extra
     - wai-middleware-static
