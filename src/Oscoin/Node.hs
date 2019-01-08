@@ -35,6 +35,7 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.Node.Trans
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 
@@ -119,9 +120,10 @@ storage
        )
     => Evaluator st tx o
     -> Validate tx s
+    -> ProtocolConfig
     -> Storage tx s (NodeT tx st s i m)
-storage eval validate = Storage
-    { storageApplyBlock  = Storage.applyBlock eval validate
+storage eval validate protocolConfig = Storage
+    { storageApplyBlock  = Storage.applyBlock eval validate protocolConfig
     , storageApplyTx     = Storage.applyTx
     , storageLookupBlock = Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx

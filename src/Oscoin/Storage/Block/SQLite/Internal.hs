@@ -32,6 +32,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHash
                  , isGenesisBlock
                  )
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Time (Timestamp)
 
 import           Database.SQLite.Simple ((:.)(..), Connection, Only(..))
@@ -49,10 +50,11 @@ import           GHC.Exts (IsList(fromList))
 
 -- | A handle to an on-disk block store.
 data Handle tx s = Handle
-    { hConn    :: Connection               -- ^ Connection to on-disk storage for non-orphan blocks.
-    , hOrphans :: TVar (Set (Block tx s))  -- ^ In-memory storage for orphans.
-    , hScoreFn :: Block tx s -> Score      -- ^ Block scoring function.
-    , hValidFn :: Validate tx s            -- ^ Block validation function.
+    { hConn     :: Connection               -- ^ Connection to on-disk storage for non-orphan blocks.
+    , hOrphans  :: TVar (Set (Block tx s))  -- ^ In-memory storage for orphans.
+    , hScoreFn  :: Block tx s -> Score      -- ^ Block scoring function.
+    , hValidFn  :: Validate tx s            -- ^ Block validation function.
+    , hProtoCfg :: ProtocolConfig           -- ^ Static protocol configuration.
     }
 
 -- | Check whether a given block hash exists.
@@ -85,7 +87,7 @@ longestOrphanChain Handle{..} =
     -- validity. Then choses the subsequence with the highest score as the
     -- result.
       longest
-    . filter (isRight . validateBlockchain hValidFn)
+    . filter (isRight . validateBlockchain hProtoCfg hValidFn)
     . map fromList
     . tailDef []
     . subsequences

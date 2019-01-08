@@ -19,11 +19,13 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
+import           Oscoin.ProtocolConfig (ProtocolConfig(..))
 import           Oscoin.Time
 
-import           Codec.Serialise (Serialise)
+import           Codec.Serialise (Serialise, serialise)
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Aeson (FromJSON, ToJSON)
+import qualified Data.ByteString.Lazy as BS
 import qualified Data.List.NonEmpty as NonEmpty
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.ToField (ToField)
@@ -59,9 +61,9 @@ nakamotoConsensus = Consensus
     }
 
 validateBlock :: Serialise tx => Validate tx PoW
-validateBlock [] blk =
-    validateBlock' blk
-validateBlock prefix@(parent:_) blk
+validateBlock protocolConfig [] blk =
+    validateBlock' protocolConfig blk
+validateBlock protocolConfig prefix@(parent:_) blk
     | h <- blockPrevHash (blockHeader blk)
     , h /= blockHash parent =
         Left $ InvalidParentHash h
@@ -74,7 +76,7 @@ validateBlock prefix@(parent:_) blk
     | t - t' > 2 * hours =
         Left $ InvalidBlockTimestamp $ t' - t
     | otherwise =
-        validateBlock' blk
+        validateBlock' protocolConfig blk
   where
     t  = ts blk
     t' = ts parent
@@ -82,15 +84,19 @@ validateBlock prefix@(parent:_) blk
 
 validateBlock'
     :: Serialise tx
-    => Block tx PoW              -- ^ Block to validate.
+    => ProtocolConfig            -- ^ Static, protocol-related configuration.
+    -> Block tx PoW              -- ^ Block to validate.
     -> Either ValidationError () -- ^ Either a validation error, or success.
-validateBlock' Block{..}
+validateBlock' protocolConfig block@Block{..}
     | h <- blockDataHash blockHeader
     , h /= hashTxs blockData =
         Left $ InvalidDataHash h
     | not (hasPoW blockHeader) =
         Left $ InvalidBlockDifficulty (difficulty blockHeader)
                                       (blockTargetDifficulty blockHeader)
+    | actualSize <- BS.length (serialise block)
+    , actualSize > fromIntegral (maxBlockSize protocolConfig) =
+        Left $ BlockExceededMaximumSize (fromIntegral actualSize)
     | otherwise =
         Right ()
 

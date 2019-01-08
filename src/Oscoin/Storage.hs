@@ -27,6 +27,7 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -60,13 +61,14 @@ applyBlock
        )
     => Evaluator st tx o
     -> Validate     tx s
+    -> ProtocolConfig
     -> Block        tx s
     -> m ApplyResult
-applyBlock eval validate blk = do
+applyBlock eval validate protocolConfig blk = do
     novel <- isNovelBlock (blockHash blk)
     if | novel -> do
         blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
-        case validate blks blk of
+        case validate protocolConfig blks blk of
             Left  _    -> pure Error
             Right () -> do
                 BlockStore.storeBlock blk

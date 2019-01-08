@@ -14,13 +14,18 @@ import           Oscoin.Consensus.Simple (simpleConsensus)
 import           Oscoin.Consensus.Types
 
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 
 import           GHC.Exts (IsList(fromList))
 
 -- | Validate a 'Blockchain' with the given validation function. Returns 'Right'
 -- when valid.
-validateBlockchain :: Validate tx s -> Blockchain tx s -> Either ValidationError ()
-validateBlockchain validateBlock (Blockchain (blk :| [])) =
-    validateBlock [] blk
-validateBlockchain validateBlock (Blockchain (blk :| blks)) =
-    validateBlock blks blk *> validateBlockchain validateBlock (fromList blks)
+validateBlockchain :: ProtocolConfig
+                   -> Validate tx s
+                   -> Blockchain tx s
+                   -> Either ValidationError ()
+validateBlockchain protocolConfig validateBlock (Blockchain (blk :| [])) =
+    validateBlock protocolConfig [] blk
+validateBlockchain protocolConfig validateBlock (Blockchain (blk :| blks)) =
+    validateBlock protocolConfig blks blk *>
+    validateBlockchain protocolConfig validateBlock (fromList blks)

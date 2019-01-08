@@ -15,7 +15,7 @@ trivialConsensus :: (Monad m) => s -> Consensus tx s m
 trivialConsensus seal = Consensus
     { cScore = comparing chainScore
     , cMiner = mineBlock seal
-    , cValidate = \_ _ -> Right ()
+    , cValidate = \_ _ _ -> Right ()
     }
 
 chainScore :: Blockchain tx s -> Int

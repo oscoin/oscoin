@@ -13,6 +13,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Storage.Block (BlockStore(..))
 import qualified Oscoin.Storage.Block as BlockStore
 
@@ -40,8 +41,8 @@ import           Data.Default (def)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map as Map
 
-tests :: TestTree
-tests = testGroup "Oscoin"
+tests :: ProtocolConfig -> TestTree
+tests protocolConfig = testGroup "Oscoin"
     [ testGroup      "API.HTTP"                       HTTP.tests
     -- ^ Testing HTTP API constructing HTTP requests manually
     , testGroup      "API"                            API.tests
@@ -53,10 +54,10 @@ tests = testGroup "Oscoin"
     , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
-    , testGroup      "Consensus"                      Consensus.tests
+    , testGroup      "Consensus"                      (Consensus.tests protocolConfig)
     , testGroup      "P2P"                            P2P.tests
     , testGroup      "Storage"                        BlockStore.tests
-    , testBlockchain
+    , testBlockchain protocolConfig
     ]
 
 testOscoinCrypto :: Assertion

@@ -20,7 +20,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
-import           Oscoin.ProtocolConfig (getProtocolConfig, maxBlockSize)
+import           Oscoin.ProtocolConfig (getProtocolConfig)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -113,7 +113,7 @@ main = do
                                 , P2P.nodePort = gossipPort
                                 }
                    seeds'
-                   (storage nod)
+                   (storage nod protoConfig)
                    (Handshake.simpleHandshake keys)               $ \gos ->
             Async.runConcurrently $
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
@@ -123,8 +123,9 @@ main = do
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
         , Node.cfgNoEmptyBlocks = neb
-        , Node.cfgMaxBlockSize = maxBlockSize protocolConfig
+        , Node.cfgProtocolConfig = protocolConfig
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
-    storage nod   = hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock)
+    storage nod protocolConfig =
+        hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock protocolConfig)

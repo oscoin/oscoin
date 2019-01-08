@@ -49,7 +49,7 @@ import           Oscoin.Environment
 import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.ProtocolConfig (getProtocolConfig, maxBlockSize)
+import           Oscoin.ProtocolConfig (getProtocolConfig)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
@@ -137,7 +137,7 @@ withNode NodeState{..} k = do
     let cfg = Node.Config { Node.cfgEnv = env
                           , Node.cfgLogger = Log.noLogger
                           , Node.cfgNoEmptyBlocks = False
-                          , Node.cfgMaxBlockSize = maxBlockSize protocolConfig
+                          , Node.cfgProtocolConfig = protocolConfig
                           }
 
     mph <- atomically $ do

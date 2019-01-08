@@ -10,6 +10,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Time (Duration)
 
 -- | Represents an abstract consensus protocol.
@@ -21,7 +22,8 @@ data Consensus tx s m = Consensus
 
 -- | Block validation function.
 type Validate tx s =
-       [Block tx s]                -- ^ Ancestors of block to be validated.
+       ProtocolConfig
+    -> [Block tx s]                -- ^ Ancestors of block to be validated.
     -> Block tx s                  -- ^ Block to be validated.
     -> Either ValidationError ()   -- ^ Either an error or @()@.
 
@@ -37,6 +39,8 @@ data ValidationError =
     | InvalidBlockTimestamp   Duration
     -- ^ Negative duration means the block is in the past, positive means too
     -- far in the future
+    | BlockExceededMaximumSize Int
+    -- ^ The block exceeded the maximum block size.
     deriving (Eq, Show)
 
 -- | Chain scoring function.

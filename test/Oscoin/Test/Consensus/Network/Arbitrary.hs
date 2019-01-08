@@ -86,7 +86,7 @@ arbitrarySynchronousNetwork blockTime = do
         , tnLatencies  = repeat 0
         , tnRng        = rng
         , tnEval       = identityEval
-        , tnValidate   = \_ _ -> Right ()
+        , tnValidate   = \_ _ _ -> Right ()
         , tnMsgCount   = 0
         , tnLastTick   = fromEpoch duration
         }

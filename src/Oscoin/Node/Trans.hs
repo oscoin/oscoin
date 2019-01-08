@@ -20,6 +20,7 @@ import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..), getBlocks)
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -50,10 +51,10 @@ runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
 data Config = Config
-    { cfgEnv           :: Environment
-    , cfgLogger        :: Log.Logger
-    , cfgNoEmptyBlocks :: Bool
-    , cfgMaxBlockSize  :: Int -- TODO(adn): Annotate with a unit of measure.
+    { cfgEnv            :: Environment
+    , cfgLogger         :: Log.Logger
+    , cfgNoEmptyBlocks  :: Bool
+    , cfgProtocolConfig :: ProtocolConfig
     }
 
 -- | Node handle.

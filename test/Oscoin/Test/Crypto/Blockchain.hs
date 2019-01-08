@@ -10,6 +10,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Hash
                  (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
+import           Oscoin.ProtocolConfig (ProtocolConfig)
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
@@ -24,10 +25,10 @@ import           Test.QuickCheck.Instances.Text ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-testBlockchain :: TestTree
-testBlockchain = testGroup "Blockchain"
+testBlockchain :: ProtocolConfig -> TestTree
+testBlockchain protocolConfig = testGroup "Blockchain"
     [ testBuildBlock
-    , testValidateBlock
+    , testValidateBlock protocolConfig
     , testProperty "JSON Receipt" $ do
         receipt <- arbitraryReceipt
         pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
@@ -45,11 +46,11 @@ testBlockchain = testGroup "Blockchain"
             (parseDifficulty. prettyDifficulty) d == Just d
     ]
 
-testValidateBlock :: TestTree
-testValidateBlock = testGroup "Nakamoto: validateBlockchain"
+testValidateBlock :: ProtocolConfig -> TestTree
+testValidateBlock protocolConfig = testGroup "Nakamoto: validateBlockchain"
     [ testProperty "Valid blockchains validate" $
         forAll (arbitraryNakamotoBlockchain @Text) $
-            \blks -> let result = validateBlockchain Nakamoto.validateBlock blks
+            \blks -> let result = validateBlockchain protocolConfig Nakamoto.validateBlock blks
                      in counterexample (show result) (result == Right ())
     ]
 
