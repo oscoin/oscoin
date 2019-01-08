@@ -16,7 +16,16 @@ import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 
 import           Codec.Serialise (Serialise)
-import           Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, (.:))
+import           Data.Aeson
+                 ( FromJSON
+                 , ToJSON
+                 , object
+                 , parseJSON
+                 , toJSON
+                 , withObject
+                 , (.:)
+                 , (.=)
+                 )
 import           Data.Hashable (Hashable(..))
 import           Network.Socket (HostName, PortNumber)
 
@@ -41,6 +50,13 @@ instance FromJSON NodeAddr where
         nodeHost <- o .: "host"
         nodePort <- toEnum <$> o .: "port"
         pure NodeAddr{..}
+
+instance ToJSON NodeAddr where
+    toJSON NodeAddr{..} = object
+        [ "nodeId" .= nodeId
+        , "host"   .= nodeHost
+        , "port"   .= fromEnum nodePort
+        ]
 
 data Msg tx s =
       BlockMsg (Block tx s)

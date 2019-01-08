@@ -13,17 +13,20 @@ import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Revision
 import           Oscoin.CLI.Spinner hiding (progress, withSpinner)
 import           Oscoin.Consensus.Mining (mineGenesis)
-import           Oscoin.Consensus.Nakamoto (minDifficulty, mineNakamoto)
+import           Oscoin.Consensus.Nakamoto (mineNakamoto)
+import           Oscoin.Crypto.Blockchain.Block (Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
+import           Oscoin.P2P (NodeAddr(..), mkNodeId)
 import           Oscoin.Time (Timestamp)
 
 
 import           Crypto.Random.Types (MonadRandom)
 import qualified Data.Yaml as Yaml
+import           Network.Socket (HostName, PortNumber)
 import           Numeric.Natural
 
 import           Radicle.Conversion
@@ -32,6 +35,8 @@ import qualified Radicle.Extended as Rad
 class (MonadRandom m, API.MonadClient m, MonadKeyStore m) => MonadCLI m where
     -- | Sleep for given number of milliseconds
     sleep :: Int -> m ()
+    -- | Print text to stdout
+    putString :: Text -> m ()
     -- | Print text to stdout and add a newline
     putLine :: Text -> m ()
     -- | Wraps an action with a spinner
@@ -52,7 +57,8 @@ data Command =
     | RevisionList
     | RevisionMerge RevisionId
     | GenerateKeyPair
-    | GenesisCreate [FilePath]
+    | GenesisCreate [FilePath] Difficulty
+    | NodeSeed HostName PortNumber
     deriving (Show)
 
 dispatchCommand :: MonadCLI m => Command -> m Result
@@ -65,9 +71,9 @@ dispatchCommand GenerateKeyPair = do
     writeKeyPair kp
     pure $ ResultOk
 
-dispatchCommand (GenesisCreate []) =
-    printGenesisYaml []
-dispatchCommand (GenesisCreate files) = do
+dispatchCommand (GenesisCreate [] d) =
+    printGenesisYaml [] d
+dispatchCommand (GenesisCreate files d) = do
     results <-
         for files $
             readRadFile >=> traverse signTransaction
@@ -75,17 +81,26 @@ dispatchCommand (GenesisCreate files) = do
     case partitionEithers results of
         (errs, signed)
             | null errs ->
-                printGenesisYaml signed
+                printGenesisYaml signed d
             | otherwise ->
                 pure $ ResultError (mconcat errs)
+
+dispatchCommand (NodeSeed h p) = do
+    (pk, _) <- readKeyPair
+    putString . decodeUtf8 . Yaml.encode $
+        NodeAddr { nodeId   = mkNodeId pk
+                 , nodeHost = h
+                 , nodePort = p
+                 }
+    pure ResultOk
 
 dispatchCommand cmd = pure $
     ResultError $ "Command `" <> show cmd <> "` not yet implemented"
 
 -- | Mine a genesis block from a list of inputs and print it as YAML to
--- the console.
-printGenesisYaml :: MonadCLI m => [API.RadTx] -> m Result
-printGenesisYaml txs = do
+-- the console. Takes the target difficulty.
+printGenesisYaml :: MonadCLI m => [API.RadTx] -> Difficulty -> m Result
+printGenesisYaml txs diffi = do
     time <- getTime
 
     case buildGenesis Rad.txEval time txs Rad.pureEnv of
@@ -93,7 +108,7 @@ printGenesisYaml txs = do
             pure $ ResultError (fromEvalError err)
         Right blk -> do
             result <- mineGenesis
-                (mineNakamoto (const minDifficulty)) blk
+                (mineNakamoto (const diffi)) blk
 
             case result of
                 Left err  ->

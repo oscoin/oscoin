@@ -6,7 +6,7 @@ import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Crypto.Blockchain (Difficulty, fromGenesis)
+import           Oscoin.Crypto.Blockchain (fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
@@ -33,12 +33,12 @@ import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Args = Args
-    { host       :: HostName
-    , gossipPort :: PortNumber
-    , apiPort    :: PortNumber
-    , seeds      :: FilePath
-    , genesis    :: FilePath
-    , difficulty :: Maybe Difficulty
+    { host          :: HostName
+    , gossipPort    :: PortNumber
+    , apiPort       :: PortNumber
+    , seeds         :: FilePath
+    , genesis       :: FilePath
+    , noEmptyBlocks :: Bool
     } deriving (Generic, Show)
 
 args :: ParserInfo Args
@@ -67,18 +67,17 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
         <*> option str
             ( long "seeds"
            <> help "Path to YAML file describing gossip seed nodes"
-           <> value "node/gossip-seeds.yaml"
+           <> value "exe/node/gossip-seeds.yaml"
             )
         <*> option str
             ( long "genesis"
            <> help "Path to genesis file"
            <> value "data/genesis.yaml"
             )
-        <*> optional
-            ( option auto
-              ( long "difficulty"
-             <> help "Mining difficulty"
-              )
+        <*> switch
+            ( long "no-empty-blocks"
+           <> help "Do not generate empty blocks"
+           <> showDefault
             )
 
 
@@ -86,7 +85,7 @@ main :: IO ()
 main = do
     Args{..} <- execParser args
 
-    let consensus = Consensus.nakamotoConsensus (Just Nakamoto.minDifficulty)
+    let consensus = Consensus.nakamotoConsensus
 
     keys     <- readKeyPair
     nid      <- pure (mkNodeId $ fst keys)
@@ -98,7 +97,7 @@ main = do
     seeds'   <- Yaml.decodeFileThrow seeds
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig Development lgr)
+        withNode   (mkNodeConfig Development lgr noEmptyBlocks)
                    nid
                    mem
                    stStore
@@ -117,9 +116,10 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr = Node.Config
+    mkNodeConfig env lgr neb = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
+        , Node.cfgNoEmptyBlocks = neb
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner

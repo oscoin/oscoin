@@ -83,7 +83,8 @@ data TestCommandState = TestCommandState
 
 instance MonadCLI TestCommandRunner where
     sleep _ = pure ()
-    putLine t = modify $ \s -> s { commandOutput = commandOutput s <> t <> "\n" }
+    putLine t = putStr (t <> "\n")
+    putString t = modify $ \s -> s { commandOutput = commandOutput s <> t }
     withSpinner _ _ = (newTestSpinner >>=)
     progress _ _ = pure ()
     readRadFile _ = pure $ Left "can't read file in tests"

@@ -97,7 +97,7 @@ testFork1 h = do
     blk <- generate $ arbitraryValidBlockWith (blockHeader gen) []
     storeBlock h blk
 
-    blk' <- withDifficulty (blockScore blk + 1)
+    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
         <$> generate (arbitraryValidBlockWith (blockHeader gen) [])
     storeBlock h blk'
 
@@ -121,7 +121,7 @@ testFork2 h@Handle{..} = do
     storeBlock h blk
 
     -- The first conflicting block we add doesn't have enough score.
-    blk1 <- withDifficulty (blockScore blk - 1)
+    blk1 <- withDifficulty (Difficulty $ blockScore blk - 1)
         <$> generate (arbitraryValidBlockWith (blockHeader gen) [])
     storeBlock h blk1
 

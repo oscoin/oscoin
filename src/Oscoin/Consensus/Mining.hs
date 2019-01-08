@@ -37,7 +37,7 @@ mineBlock
     -> Timestamp
     -> m (Maybe (Block tx s))
 mineBlock Consensus{cMiner} eval time = do
-    txs   <- (map . map) snd Mempool.getTxs
+    txs <- (map . map) snd Mempool.getTxs
     parent <- BlockStore.getTip
     maybeState <- StateStore.lookupState $ blockStateHash $ blockHeader parent
     case maybeState of

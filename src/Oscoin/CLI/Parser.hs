@@ -5,8 +5,11 @@ module Oscoin.CLI.Parser
 
 import           Oscoin.Prelude hiding (option)
 
+import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
+
 import           Oscoin.CLI.Command
 
+import qualified Data.Text as T
 import           Numeric.Natural
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
@@ -26,8 +29,9 @@ mainParserInfo =
 mainParser :: Parser Command
 mainParser = subparser
     (  command "revision" (revisionParser `withInfo` "Revision commands")
-    <> command "keypair"  (keyPairParser `withInfo` "Key pair commands")
-    <> command "genesis"  (genesisParser `withInfo` "Genesis commands")
+    <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
+    <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
+    <> command "node"     (nodeParser     `withInfo` "Node commands")
     )
 
 revisionParser :: Parser Command
@@ -49,6 +53,26 @@ confirmationsOption = option auto
     <> metavar "N"
     )
 
+nodeParser :: Parser Command
+nodeParser = subparser $
+    command "seed" (nodeSeed `withInfo` "Show the current node seed")
+  where
+    nodeSeed = NodeSeed <$> nodeSeedHost <*> nodeSeedPort
+    nodeSeedHost = option str
+        (  long "host"
+        <> help "seed host"
+        <> value "127.0.0.1"
+        <> showDefault
+        <> metavar "HOST"
+        )
+    nodeSeedPort = option auto
+        (  long "port"
+        <> help "seed port"
+        <> value 6942
+        <> showDefault
+        <> metavar "PORT"
+        )
+
 keyPairParser :: Parser Command
 keyPairParser = subparser
     $ command "generate" $ keyPairGenerate `withInfo`
@@ -58,12 +82,18 @@ keyPairParser = subparser
 
 genesisParser :: Parser Command
 genesisParser =
-    GenesisCreate <$> genesisOptions
+    GenesisCreate <$> genesisFrom <*> genesisDifficulty
   where
-    genesisOptions = many $ option str
+    genesisFrom = many $ option str
         (  long "from"
         <> help ".rad input file"
         <> metavar "FILE"
+        )
+    genesisDifficulty = option (maybeReader (parseDifficulty . T.pack))
+        (  long "difficulty"
+        <> help "target difficulty"
+        <> metavar "TARGET"
+        <> value minDifficulty
         )
 
 withInfo :: Parser a -> String -> ParserInfo a

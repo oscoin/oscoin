@@ -1,28 +1,10 @@
-hash: 2Drjgb7do7AEG6asKoAiRUNRKpk5q1FTPm8SFgXQAoYH6TuZ2K
-
+hash: 2Drjgb4FuNLsUmy6kn6zZcu2dpWiTy3Tp4Ex1FJUJyJh8wCpov
+data: []
 header:
-  dataHash: 2DrjgbHHoU7gSap3EayPYtAs9BUC5FMvP1RgA5pkc5LbWioSNg
-  stateHash: 2DrjgbLkzH8ztHUGE9fojCLz3rJ9n7cTT6uik46StsfMbootki
-  difficulty: 108555083659983933209597798445644913612440610624038028786991485007418559037439
-  timestamp: 1539765146033047423
+  dataHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
+  stateHash: 2Drjgb6ZHrriuZFxfp1ciyA5UKF6q18VM9unh7Gd5btJMZf1hE
+  seal: 200214
+  difficulty: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  timestamp: 1545053853619604990
   parentHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
-  nonce: 0
 
-data:
-- chainId: 0
-  ctx: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
-  pubkey: gwCCAYMAwlgg/////////////////////////////////////v///C+GAAAHgwDCWCB5vmZ++dy7rFWgYpXOhwsHApv82y3OKNlZ8oFbFvgXmMJYIEg62ncmo8RlXaT7/A4RCKj9F7RIpoVUGZxH0I/7ENS4wlgg/////////////////////rqu3OavSKA7v9JejNA2QUEBgwDCWCCyx7uyf6DMXANBC2d7XntBnKNgJlCL3ICybBdqegWRFsJYICoF+Hb3Ye58tGJI046gzpSRQudwg2dtlgaFo+cx9OVm
-  nonce: 0
-  message:
-    msg: |-
-      (do
-        (def modify-ref (fn [r f] (write-ref r (f (read-ref r)))))
-        (def revisions (ref (dict)))
-        (def
-          create-revision
-          (fn
-            [rev]
-            (do
-              (modify-ref revisions (fn [rs] (insert (lookup :id rev) rev rs)))
-              :ok))))
-    sig: gwDCWCDq4WTgupP9fDgPiqHhZbTw7DPjyoxNVNgCHwN4y0slRMJYILj4IVMOdM8RdorrZkHcaYjLoET7iC6yIUz8eOyq67yU

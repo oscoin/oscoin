@@ -4,7 +4,6 @@ module Database.SQLite.Simple.Orphans where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Nakamoto (PoW(..))
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -26,9 +25,6 @@ fromFieldSerial f =
     case fieldData f of
         SQLBlob bs -> Ok $ CBOR.deserialise (LBS.fromStrict bs)
         _          -> returnError ConversionFailed f "couldn't convert from CBOR"
-
-deriving instance FromField PoW
-deriving instance ToField   PoW
 
 instance FromField s => FromRow (BlockHeader s) where
     fromRow = BlockHeader

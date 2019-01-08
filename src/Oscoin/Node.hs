@@ -82,16 +82,19 @@ miner
        )
     => NodeT tx st s i m a
 miner = do
-    Handle{hEval, hConsensus} <- ask
+    Handle{hEval, hConsensus, hConfig} <- ask
     forever $ do
         nTxs <- numTxs
-        if nTxs == 0
+        if nTxs == 0 && cfgNoEmptyBlocks hConfig
         then
             liftIO $ threadDelay $ 1000 * 1000
         else do
             time <- currentTick
             blk <- hoist liftIO $ Consensus.mineBlock hConsensus hEval time
-            for_ blk $ lift . P2P.broadcast . P2P.BlockMsg
+
+            for_ blk $ \b -> do
+                lift   $ P2P.broadcast $ P2P.BlockMsg b
+                liftIO $ Log.info (cfgLogger hConfig) ("mined block " % formatHash) (blockHash b)
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
