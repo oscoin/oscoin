@@ -5,8 +5,6 @@ import           Oscoin.Prelude
 import qualified Control.Concurrent.Tests as Concurrent
 import qualified Crypto.Test.Hash.Multi as Multihash
 import qualified Data.Conduit.Tests as Conduit
-import qualified Network.Gossip.Test.Broadcast as Broadcast
-import qualified Network.Gossip.Test.Membership as Membership
 import qualified Oscoin.Tests as Oscoin
 import           Test.Tasty
 
@@ -16,6 +14,4 @@ main = defaultMain $ testGroup "All"
     , Multihash.tests
     , Concurrent.tests
     , Conduit.tests
-    , Broadcast.tests
-    , Membership.tests
     ]
