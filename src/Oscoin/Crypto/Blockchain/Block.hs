@@ -54,13 +54,15 @@ import           Data.Aeson
 import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
+import           Database.SQLite.Simple.FromField (FromField)
+import           Database.SQLite.Simple.ToField (ToField)
 import           GHC.Generics (Generic)
 import           Numeric.Natural
 import           Text.Show (Show(..))
 
 -- | Block difficulty.
 newtype Difficulty = Difficulty { fromDifficulty :: Integer }
-    deriving (Show, Read, Eq, Ord, Num, Enum, Real, Integral, Serialise)
+    deriving (Show, Read, Eq, Ord, Num, Enum, Real, Integral, Serialise, FromField, ToField)
 
 instance ToJSON Difficulty where
     toJSON = toJSON . prettyDifficulty

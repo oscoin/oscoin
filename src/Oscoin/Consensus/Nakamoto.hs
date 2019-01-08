@@ -24,6 +24,8 @@ import           Codec.Serialise (Serialise)
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.List.NonEmpty as NonEmpty
+import           Database.SQLite.Simple.FromField (FromField)
+import           Database.SQLite.Simple.ToField (ToField)
 
 blockTime :: Duration
 blockTime = 1 * seconds
@@ -42,16 +44,11 @@ type Nonce = Word32
 
 -- | A PoW seal.
 newtype PoW = PoW Nonce
-    deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON PoW
-instance FromJSON PoW
+    deriving (Eq, Ord, Show, Generic, FromField, ToField, ToJSON, FromJSON, Serialise)
 
 -- | An empty (zero nonce) proof-of-work.
 emptyPoW :: PoW
 emptyPoW = PoW 0
-
-instance Serialise PoW
 
 nakamotoConsensus :: (Monad m) => Consensus tx PoW m
 nakamotoConsensus = Consensus
