@@ -5,6 +5,7 @@ module Oscoin.Tests
 import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), genesis, height, tip, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
@@ -40,8 +41,8 @@ import           Data.Default (def)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map as Map
 
-tests :: TestTree
-tests = testGroup "Oscoin"
+tests :: Consensus.Config -> TestTree
+tests config = testGroup "Oscoin"
     [ testGroup      "API.HTTP"                       HTTP.tests
     -- ^ Testing HTTP API constructing HTTP requests manually
     , testGroup      "API"                            API.tests
@@ -53,10 +54,10 @@ tests = testGroup "Oscoin"
     , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
-    , testGroup      "Consensus"                      Consensus.tests
+    , testGroup      "Consensus"                      (Consensus.tests config)
     , testGroup      "P2P"                            P2P.tests
     , testGroup      "Storage"                        BlockStore.tests
-    , testBlockchain
+    , testBlockchain config
     ]
 
 testOscoinCrypto :: Assertion

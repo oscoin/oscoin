@@ -37,6 +37,8 @@ data ValidationError =
     | InvalidBlockTimestamp   Duration
     -- ^ Negative duration means the block is in the past, positive means too
     -- far in the future
+    | InvalidBlockSize Int
+    -- ^ The block exceeded the maximum block size.
     deriving (Eq, Show)
 
 -- | Chain scoring function.

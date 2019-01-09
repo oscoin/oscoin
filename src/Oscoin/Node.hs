@@ -22,6 +22,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus (Consensus(..), Validate)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHeader(..), Depth, StateHash, blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -116,12 +117,15 @@ storage
     :: ( MonadIO m
        , Hashable  tx
        , Hashable  st
+       , Serialise tx
+       , Serialise s
        )
     => Evaluator st tx o
     -> Validate tx s
+    -> Consensus.Config
     -> Storage tx s (NodeT tx st s i m)
-storage eval validate = Storage
-    { storageApplyBlock  = Storage.applyBlock eval validate
+storage eval validate config = Storage
+    { storageApplyBlock  = Storage.applyBlock eval validate config
     , storageApplyTx     = Storage.applyTx
     , storageLookupBlock = Storage.lookupBlock
     , storageLookupTx    = Storage.lookupTx

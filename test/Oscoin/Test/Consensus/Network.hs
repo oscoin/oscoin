@@ -24,6 +24,7 @@ import           Oscoin.Prelude hiding (log, show)
 import           Oscoin.Test.Consensus.Node
 
 import           Oscoin.Consensus (Validate)
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
                  ( Blockchain
                  , blocks
@@ -170,20 +171,26 @@ prettyPartitions parts =
     T.pack $ show $ Map.toList parts
 
 -- | Run the network simulation.
-runNetwork :: (Ord s, Serialise s, TestableNode s m a) => TestNetwork s a -> TestNetwork s a
-runNetwork tn@TestNetwork{tnScheduled} =
-    runNetwork' tn { tnMsgs = tnScheduled }
+runNetwork :: (Ord s, Serialise s, TestableNode s m a)
+           => Consensus.Config
+           -> TestNetwork s a
+           -> TestNetwork s a
+runNetwork config tn@TestNetwork{tnScheduled} =
+    runNetwork' config tn { tnMsgs = tnScheduled }
 
 -- | Takes the next scheduled event from 'tnMsgs' and applies it to the
 -- network.
-runNetwork' :: (Ord s, Serialise s, TestableNode s m a) => TestNetwork s a -> TestNetwork s a
-runNetwork' tn@TestNetwork{tnMsgs, tnLastTick}
+runNetwork' :: (Ord s, Serialise s, TestableNode s m a)
+            => Consensus.Config
+            -> TestNetwork s a
+            -> TestNetwork s a
+runNetwork' config tn@TestNetwork{tnMsgs, tnLastTick}
     | Just (nextMessage, remainingMessages) <- Set.minView tnMsgs
     , scheduledTick nextMessage <= tnLastTick =
         let tn' = tn { tnMsgs = remainingMessages }
-        in runNetwork' $ case nextMessage of
-            ScheduledTick    tick to           -> deliver tick to Nothing    tn'
-            ScheduledMessage tick to _from msg -> deliver tick to (Just msg) tn'
+        in runNetwork' config $ case nextMessage of
+            ScheduledTick    tick to           -> deliver config tick to Nothing    tn'
+            ScheduledMessage tick to _from msg -> deliver config tick to (Just msg) tn'
             Partition _ ps                     -> tn' { tnPartitions = ps     }
             Heal _                             -> tn' { tnPartitions = mempty }
 
@@ -192,15 +199,16 @@ runNetwork' tn@TestNetwork{tnMsgs, tnLastTick}
 -- | Deliver a message to the given node and update the network. The delivery
 -- may trigger new outgoing messages to be sent.
 deliver
-    :: (Ord s, TestableNode s m a)
-    => Timestamp
+    :: (Ord s, Serialise s, TestableNode s m a)
+    => Consensus.Config
+    -> Timestamp
     -> DummyNodeId
     -> Maybe (Msg s)
     -> TestNetwork s a
     -> TestNetwork s a
-deliver tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnValidate, tnEval}
+deliver config tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnValidate, tnEval}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage to tnValidate tnEval) msg
+        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage config to tnValidate tnEval) msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -216,14 +224,20 @@ applyTick t =
 
 -- | Apply a message to the node state. Returns a list of messages to send back
 -- to the network.
-applyMessage :: (TestableNode s m a) => DummyNodeId -> DummyValidate s -> DummyEval -> Msg s -> m [Msg s]
-applyMessage _ _ _ msg@(TxMsg tx) = do
+applyMessage :: (TestableNode s m a, Serialise s)
+             => Consensus.Config
+             -> DummyNodeId
+             -> DummyValidate s
+             -> DummyEval
+             -> Msg s
+             -> m [Msg s]
+applyMessage _ _ _ _ msg@(TxMsg tx) = do
     result <- Storage.applyTx tx
     pure $ case result of
         Storage.Applied -> [msg]
         _               -> []
-applyMessage to validate eval msg@(BlockMsg blk) = do
-    result          <- Storage.applyBlock eval validate blk
+applyMessage config to validate eval msg@(BlockMsg blk) = do
+    result          <- Storage.applyBlock eval validate config blk
     parentMissing   <- isNothing <$> Storage.lookupBlock parentHash
 
     -- If the parent block is missing, request it from the network.
@@ -234,11 +248,11 @@ applyMessage to validate eval msg@(BlockMsg blk) = do
         _ -> []
   where
     parentHash = blockPrevHash $ blockHeader blk
-applyMessage _ _ _ (ReqBlockMsg from bh) = do
+applyMessage _ _ _ _ (ReqBlockMsg from bh) = do
     mblk <- Storage.lookupBlock bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
-applyMessage to validate eval (ResBlockMsg _ blk) =
-    applyMessage to validate eval (BlockMsg blk)
+applyMessage config to validate eval (ResBlockMsg _ blk) =
+    applyMessage config to validate eval (BlockMsg blk)
 
 -- | Schedules a list of messages to be delivered by the simulation to a set
 -- of random nodes at some point in the future.

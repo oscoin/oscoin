@@ -36,6 +36,7 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block
@@ -131,7 +132,13 @@ nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, states
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
-    let cfg = Node.Config { Node.cfgEnv = Testing , Node.cfgLogger = Log.noLogger, Node.cfgNoEmptyBlocks = False }
+    let env = Testing
+    config <- Consensus.getConfig env
+    let cfg = Node.Config { Node.cfgEnv = env
+                          , Node.cfgLogger = Log.noLogger
+                          , Node.cfgNoEmptyBlocks = False
+                          , Node.cfgConsensusConfig = config
+                          }
 
     mph <- atomically $ do
         mp <- Mempool.new

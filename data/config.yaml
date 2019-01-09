@@ -1,0 +1,14 @@
+
+# & is an anchor and <<: *anchor merges the archored map into the new one.
+# See: https://medium.com/@kinghuang/docker-compose-anchors-aliases-extensions-a1e4105d70bd
+
+production: &defaults
+    maxBlockSize: 1000000 # 1 MB
+
+development:
+    <<: *defaults
+    maxBlockSize: 512000  # 512kb
+
+testing:
+    <<: *defaults
+    maxBlockSize: 128000  # 128kb

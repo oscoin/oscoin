@@ -5,6 +5,7 @@ module Oscoin.Test.Crypto.Blockchain
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus
+import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
@@ -24,10 +25,10 @@ import           Test.QuickCheck.Instances.Text ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-testBlockchain :: TestTree
-testBlockchain = testGroup "Blockchain"
+testBlockchain :: Consensus.Config -> TestTree
+testBlockchain config = testGroup "Blockchain"
     [ testBuildBlock
-    , testValidateBlock
+    , testValidateBlock config
     , testProperty "JSON Receipt" $ do
         receipt <- arbitraryReceipt
         pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
@@ -45,13 +46,21 @@ testBlockchain = testGroup "Blockchain"
             (parseDifficulty. prettyDifficulty) d == Just d
     ]
 
-testValidateBlock :: TestTree
-testValidateBlock = testGroup "Nakamoto: validateBlockchain"
+testValidateBlock :: Consensus.Config -> TestTree
+testValidateBlock config = testGroup "Nakamoto: validateBlockchain"
     [ testProperty "Valid blockchains validate" $
         forAll (arbitraryNakamotoBlockchain @Text) $
             \blks -> let result = validateBlockchain Nakamoto.validateBlock blks
                      in counterexample (show result) (result == Right ())
+    , testProperty "Blocks bigger than the maximum size won't validate" $
+        forAll (arbitrary @(Block Text Nakamoto.PoW)) $
+          \block -> let result = validateBlockSize config { Consensus.maxBlockSize = 1 } block
+                    in counterexample (show result) (hasExceededMaxSize result)
     ]
+
+hasExceededMaxSize :: Either ValidationError a -> Bool
+hasExceededMaxSize (Left (InvalidBlockSize _)) = True
+hasExceededMaxSize _                           = False
 
 testBuildBlock :: TestTree
 testBuildBlock = testGroup "buildBlock"

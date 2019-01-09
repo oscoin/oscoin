@@ -5,6 +5,7 @@ import           Oscoin.Prelude hiding (option)
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
 import qualified Oscoin.Consensus as Consensus
+import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain (fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block)
@@ -86,18 +87,20 @@ main = do
     Args{..} <- execParser args
 
     let consensus = Consensus.nakamotoConsensus
+    let env       = Development
 
-    keys     <- readKeyPair
-    nid      <- pure (mkNodeId $ fst keys)
-    mem      <- Mempool.newIO
-    gen      <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
-    genState <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
-    stStore  <- StateStore.fromStateM genState
-    blkStore <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
-    seeds'   <- Yaml.decodeFileThrow seeds
+    keys        <- readKeyPair
+    nid         <- pure (mkNodeId $ fst keys)
+    mem         <- Mempool.newIO
+    gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
+    genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
+    stStore     <- StateStore.fromStateM genState
+    blkStore    <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
+    seeds'      <- Yaml.decodeFileThrow seeds
+    config      <- Consensus.getConfig env
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig Development lgr noEmptyBlocks)
+        withNode   (mkNodeConfig env lgr noEmptyBlocks config)
                    nid
                    mem
                    stStore
@@ -110,17 +113,19 @@ main = do
                                 , P2P.nodePort = gossipPort
                                 }
                    seeds'
-                   (storage nod)
+                   (storage nod config)
                    (Handshake.simpleHandshake keys)               $ \gos ->
             Async.runConcurrently $
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr neb = Node.Config
+    mkNodeConfig env lgr neb config = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
         , Node.cfgNoEmptyBlocks = neb
+        , Node.cfgConsensusConfig = config
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
-    storage nod   = hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock)
+    storage nod config =
+        hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock config)

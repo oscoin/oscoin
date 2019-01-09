@@ -11,6 +11,7 @@ import           Oscoin.Test.Consensus.Node (DummyTx)
 import           Oscoin.Test.Consensus.Simple
 import           Oscoin.Time
 
+import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain (blockHash, tip, unsafeToBlockchain)
@@ -37,27 +38,31 @@ import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
-tests :: [TestTree]
-tests =
+tests :: Consensus.Config -> [TestTree]
+tests config =
     [ testGroup "With Partitions"
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @Simple.PoA @SimpleNodeState
                                      testableInit
                                      (arbitraryPartitionedNetwork Simple.blockTime)
+                                     config
         , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
                                      testableInit
                                      (arbitraryPartitionedNetwork Nakamoto.blockTime)
+                                     config
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
             propNetworkNodesConverge @Simple.PoA @SimpleNodeState
                                      testableInit
                                      (arbitraryHealthyNetwork Simple.blockTime)
+                                     config
         , testProperty "Nodes converge (nakamoto)" $
             propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
                                      testableInit
                                      (arbitraryHealthyNetwork Nakamoto.blockTime)
+                                     config
         ]
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
@@ -79,11 +84,12 @@ propNetworkNodesConverge
      . (Serialise s, Ord s, TestableNode s m a)
     => (TestNetwork s () -> TestNetwork s a) -- ^ Network initialization function
     -> Gen (TestNetwork s ())                -- ^ TestNetwork generator
+    -> Consensus.Config                      -- ^ Static protocol configuration.
     -> Property
-propNetworkNodesConverge tnInit genNetworks =
+propNetworkNodesConverge tnInit genNetworks config =
     forAllShrink genNetworks shrink $ \tn ->
         networkNonTrivial tn ==>
-            let tn'             = runNetwork (tnInit tn)
+            let tn'             = runNetwork config (tnInit tn)
 
                 -- Nb.: All nodes have to know all txs, thus the coverage
                 -- condition only needs to check one node.
