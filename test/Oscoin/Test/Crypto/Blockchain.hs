@@ -7,7 +7,6 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Consensus.Types (hasExceededMaxSize)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
 import           Oscoin.Crypto.Hash
@@ -58,6 +57,10 @@ testValidateBlock config = testGroup "Nakamoto: validateBlockchain"
           \block -> let result = validateBlockSize config { Consensus.maxBlockSize = 1 } block
                     in counterexample (show result) (hasExceededMaxSize result)
     ]
+
+hasExceededMaxSize :: Either ValidationError a -> Bool
+hasExceededMaxSize (Left (InvalidBlockSize _)) = True
+hasExceededMaxSize _                           = False
 
 testBuildBlock :: TestTree
 testBuildBlock = testGroup "buildBlock"

@@ -21,7 +21,7 @@ configPath = "data/config.yaml"
 
 data Config = Config {
       maxBlockSize :: !Int
-    -- ^ The maximum block size in MB.
+    -- ^ The maximum block size (in bytes).
     } deriving Show
 
 instance FromJSON Config where
@@ -29,7 +29,7 @@ instance FromJSON Config where
         maxBlockSize <- o .: "maxBlockSize"
         pure Config{..}
 
--- | Lookup the maximum size for a block (in MBs).
+-- | Lookup the maximum size for a block (in bytes).
 -- TODO(adn): Use a proper unit of measure.
 getConfig :: Environment -> IO Config
 getConfig env = do

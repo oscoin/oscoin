@@ -97,7 +97,7 @@ main = do
     stStore     <- StateStore.fromStateM genState
     blkStore    <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
     seeds'      <- Yaml.decodeFileThrow seeds
-    config <- Consensus.getConfig env
+    config      <- Consensus.getConfig env
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
         withNode   (mkNodeConfig env lgr noEmptyBlocks config)

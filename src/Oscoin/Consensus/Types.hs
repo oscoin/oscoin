@@ -4,8 +4,6 @@ module Oscoin.Consensus.Types
     , Validate
     , ValidationError(..)
     , Miner
-    -- * Useful combinators and predicates
-    , hasExceededMaxSize
     ) where
 
 import           Oscoin.Prelude
@@ -39,15 +37,9 @@ data ValidationError =
     | InvalidBlockTimestamp   Duration
     -- ^ Negative duration means the block is in the past, positive means too
     -- far in the future
-    | BlockExceededMaximumSize Int
+    | InvalidBlockSize Int
     -- ^ The block exceeded the maximum block size.
     deriving (Eq, Show)
-
--- | Returns @True@ if the 'ValidationError' is 'BlockExceededMaximumSize',
--- without inspecting further its content.
-hasExceededMaxSize :: Either ValidationError a -> Bool
-hasExceededMaxSize (Left (BlockExceededMaximumSize _)) = True
-hasExceededMaxSize _                                   = False
 
 -- | Chain scoring function.
 type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering

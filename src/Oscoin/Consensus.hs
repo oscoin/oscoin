@@ -42,5 +42,5 @@ validateBlockSize :: (Serialise tx, Serialise s)
 validateBlockSize config block
     | actualSize <- LBS.length (serialise block)
     , actualSize > fromIntegral (Consensus.maxBlockSize config) =
-        Left $ BlockExceededMaximumSize (fromIntegral actualSize)
+        Left $ InvalidBlockSize (fromIntegral actualSize)
     | otherwise = Right ()
