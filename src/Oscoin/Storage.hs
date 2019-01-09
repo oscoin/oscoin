@@ -20,7 +20,7 @@ import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Storage.State.Class as StateStore
 
-import           Oscoin.Consensus (Validate)
+import           Oscoin.Consensus (Validate, validateBlockSize)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, evalBlock)
@@ -29,6 +29,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
+import           Codec.Serialise (Serialise)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
 -- | Package up the storage operations in a dictionary
@@ -58,6 +59,8 @@ applyBlock
     :: ( MonadBlockStore tx s m
        , MonadStateStore st   m
        , MonadMempool    tx   m
+       , Serialise       tx
+       , Serialise       s
        )
     => Evaluator st tx o
     -> Validate     tx s
@@ -68,7 +71,7 @@ applyBlock eval validate config blk = do
     novel <- isNovelBlock (blockHash blk)
     if | novel -> do
         blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
-        case validate config blks blk of
+        case validateBlockSize config blk >>= const (validate blks blk) of
             Left  _    -> pure Error
             Right () -> do
                 BlockStore.storeBlock blk

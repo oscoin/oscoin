@@ -4,7 +4,6 @@ module Oscoin.Test.Storage.Block
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
                  ( Blockchain(..)
                  , blocks
@@ -15,7 +14,6 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
-import           Oscoin.Environment (Environment(Testing))
 import           Oscoin.Storage.Block.SQLite
 import           Oscoin.Storage.Block.SQLite.Internal
 import qualified Oscoin.Time as Time
@@ -61,13 +59,12 @@ defaultGenesis =
     sealBlock mempty (emptyGenesisBlock Time.epoch)
 
 withMemDB :: (Handle RadTx DummySeal -> IO a) -> IO a
-withMemDB action = do
-    cfg <- Consensus.getConfig Testing -- It doesn't matter as it's not used by 'blockValidate'.
-    bracket (open ":memory:" blockScore blockValidate cfg >>= initialize defaultGenesis)
+withMemDB action =
+    bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
             close
             action
   where
-    blockValidate _ _ _ = Right ()
+    blockValidate _ _ = Right ()
 
 testStoreLookupBlock :: Handle RadTx DummySeal -> Assertion
 testStoreLookupBlock h = do

@@ -45,7 +45,7 @@ simpleConsensus
 simpleConsensus position = Consensus
     { cScore = comparing chainScore
     , cMiner = mineSimple position
-    , cValidate = \_ _ _ -> Right ()
+    , cValidate = \_ _ -> Right ()
     }
 
 mineSimple

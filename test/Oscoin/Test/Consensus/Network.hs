@@ -199,7 +199,7 @@ runNetwork' config tn@TestNetwork{tnMsgs, tnLastTick}
 -- | Deliver a message to the given node and update the network. The delivery
 -- may trigger new outgoing messages to be sent.
 deliver
-    :: (Ord s, TestableNode s m a)
+    :: (Ord s, Serialise s, TestableNode s m a)
     => Consensus.Config
     -> Timestamp
     -> DummyNodeId
@@ -224,7 +224,7 @@ applyTick t =
 
 -- | Apply a message to the node state. Returns a list of messages to send back
 -- to the network.
-applyMessage :: TestableNode s m a
+applyMessage :: (TestableNode s m a, Serialise s)
              => Consensus.Config
              -> DummyNodeId
              -> DummyValidate s

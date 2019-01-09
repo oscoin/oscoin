@@ -4,11 +4,12 @@ module Oscoin.Consensus.Types
     , Validate
     , ValidationError(..)
     , Miner
+    -- * Useful combinators and predicates
+    , hasExceededMaxSize
     ) where
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time (Duration)
@@ -22,8 +23,7 @@ data Consensus tx s m = Consensus
 
 -- | Block validation function.
 type Validate tx s =
-       Consensus.Config
-    -> [Block tx s]                -- ^ Ancestors of block to be validated.
+       [Block tx s]                -- ^ Ancestors of block to be validated.
     -> Block tx s                  -- ^ Block to be validated.
     -> Either ValidationError ()   -- ^ Either an error or @()@.
 
@@ -42,6 +42,12 @@ data ValidationError =
     | BlockExceededMaximumSize Int
     -- ^ The block exceeded the maximum block size.
     deriving (Eq, Show)
+
+-- | Returns @True@ if the 'ValidationError' is 'BlockExceededMaximumSize',
+-- without inspecting further its content.
+hasExceededMaxSize :: Either ValidationError a -> Bool
+hasExceededMaxSize (Left (BlockExceededMaximumSize _)) = True
+hasExceededMaxSize _                                   = False
 
 -- | Chain scoring function.
 type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering

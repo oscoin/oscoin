@@ -32,8 +32,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Oscoin.Storage.Block.SQLite.Internal
 
-import qualified Oscoin.Consensus.Config as Consensus
-
 import           Paths_oscoin
 
 import           Control.Concurrent.STM
@@ -56,14 +54,12 @@ open :: (Ord s, Ord tx)
      => String
      -> (Block tx s -> Score)
      -> Validate tx s
-     -> Consensus.Config
      -> IO (Handle tx s)
-open path score validate config =
+open path score validate =
     Handle <$> (Sql.open path >>= setupConnection)
            <*> newTVarIO mempty
            <*> pure score
            <*> pure validate
-           <*> pure config
   where
     setupConnection conn = do
         enableForeignKeys conn
@@ -79,11 +75,10 @@ withBlockStore :: (Ord s, Ord tx)
                => String
                -> (Block tx s -> Score)
                -> Validate tx s
-               -> Consensus.Config
                -> (Handle tx s -> IO b)
                -> IO b
-withBlockStore path score validate config =
-    bracket (open path score validate config) close
+withBlockStore path score validate =
+    bracket (open path score validate) close
 
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.

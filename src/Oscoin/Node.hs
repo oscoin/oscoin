@@ -117,6 +117,8 @@ storage
     :: ( MonadIO m
        , Hashable  tx
        , Hashable  st
+       , Serialise tx
+       , Serialise s
        )
     => Evaluator st tx o
     -> Validate tx s
