@@ -46,6 +46,8 @@ library:
     - directory
     - direct-sqlite
     - dlist
+    - ekg
+    - ekg-core
     - fast-logger
     - filepath
     - focus
