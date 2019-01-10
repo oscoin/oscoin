@@ -1,14 +1,16 @@
-module Oscoin.Metrics
+module Oscoin.Telemetry.Metrics
     ( MetricsStore     -- opaque
     , MonotonicCounter -- opaque
     , Gauge            -- opaque
     , Histogram        -- opaque
     , Buckets          -- opaque
     , HistogramSample(..)
+    , Action(..)
 
     -- * Initialisation
-    , newEmptyMetricsStore
+    , newMetricsStore
     , forkEkgServer
+    , updateMetricsStore
 
     -- * Operations on histograms
     , newHistogram
@@ -35,10 +37,10 @@ import           Oscoin.Prelude
 import qualified Prelude
 
 import           Control.Concurrent.STM
-import           Data.ByteString (ByteString)
-import           GHC.Natural
-
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as M
+import           GHC.Natural
+import           Network.Socket (HostName, PortNumber)
 
 import qualified System.Metrics as EKG
 import qualified System.Metrics.Counter as EKG.Counter
@@ -74,26 +76,40 @@ type UpperInclusiveBound = Double
 newtype Buckets = Buckets (Map UpperInclusiveBound Double)
     deriving (Show, Eq, Ord)
 
+data Action =
+      CounterIncrease  Text
+    | CounterAdd       Text Natural
+    | GaugeIncrease    Text
+    | GaugeAdd         Text Int64
+    | HistogramObserve Text Buckets Double
+    -- ^ Observe a value for an 'Histogram'. It also passes the
+    -- defaults 'Buckets' to be used in case this is the first time we update
+    -- this histogram.
+
 -- | An opaque 'MetricsStore'.
-data MetricsStore event = MetricsStore {
-    _msEKGStore       :: EKG.Store
+data MetricsStore = MetricsStore {
+    _msEKGStore   :: EKG.Store
   -- ^ Used to store metric types which have a 1:1 correspondance with EKG
-  -- types. Opaque to the user.
-  , _msHistogramStore :: TVar (Map event Histogram)
-  -- ^ Used to store metric types which does not have a 1:1 EKG correspondence
-  -- (like an 'Histogram') but that could potentially be converted to EKG
-  -- types with a bit of labour, at the call site.
+  -- types and that can be ultimately displayed in the EKG dashboard.
+  , _msHistograms :: TVar (Map Text Histogram)
+  -- ^ Used to store 'Histogram' metrics, as well as to retrieve and update them.
+  , _msCounters   :: TVar (Map Text MonotonicCounter)
+  -- ^ Used to store 'Counter' metrics, as well as to retrieve and update them.
+  , _msGauges     :: TVar (Map Text Gauge)
+  -- ^ Used to store 'Gauge' metrics, as well as to retrieve and update them.
   }
 
 {------------------------------------------------------------------------------
   Operations on histograms
 ------------------------------------------------------------------------------}
 
+-- | Creates a new 'Histogram' given the initial 'Buckets'.
 newHistogram :: Buckets -> IO Histogram
 newHistogram buckets =
     Histogram <$> newCounter
               <*> newTVarIO 0.0
               <*> newTVarIO buckets
+
 
 -- | Sample the current value out of an 'Histogram'.
 readHistogram :: Histogram -> IO HistogramSample
@@ -102,8 +118,9 @@ readHistogram Histogram{..} = do
     (hsSum, hsBuckets) <- atomically $ do
         hsSum     <- readTVar _histCount
         hsBuckets <- readTVar _histBuckets
-        return (hsSum, hsBuckets)
-    return $ HistogramSample{..}
+        pure (hsSum, hsBuckets)
+    pure $ HistogramSample{..}
+
 
 -- | Observes (i.e. adds) a new value to the histogram.
 observeHistogram :: Histogram -> Double -> IO ()
@@ -186,14 +203,91 @@ addToGauge (Gauge ekgGauge) = EKG.Gauge.add ekgGauge
 ------------------------------------------------------------------------------}
 
 -- | Creates a new, empty 'MetricsStore'.
-newEmptyMetricsStore :: Ord e => IO (MetricsStore e)
-newEmptyMetricsStore = MetricsStore <$> EKG.newStore
-                                    <*> newTVarIO mempty
+newMetricsStore :: IO MetricsStore
+newMetricsStore = MetricsStore <$> EKG.newStore
+                               <*> newTVarIO mempty
+                               <*> newTVarIO mempty
+                               <*> newTVarIO mempty
 
 -- | Forks a new EKG server and hooks it to the provided @host:port@.
-forkEkgServer :: MetricsStore e  -- ^ A 'MetricsStore'.
-              -> ByteString      -- ^ The desired host.
-              -> Int             -- ^ The desired port.
+forkEkgServer :: MetricsStore  -- ^ A 'MetricsStore'.
+              -> HostName      -- ^ The desired host.
+              -> PortNumber    -- ^ The desired port.
               -> IO ()
-forkEkgServer ms host port =
-    void $ EKG.forkServerWith (_msEKGStore ms) host port
+forkEkgServer ms host port = do
+    let store = _msEKGStore ms
+    EKG.registerGcMetrics store
+    void $ EKG.forkServerWith store (C8.pack host) (fromIntegral port)
+
+withMetric :: Text
+           -- ^ The label to lookup.
+           -> TVar (Map Text w)
+           -- ^ A collection of metrics
+           -> IO w
+           -- ^ An action to create and register the metric if not there.
+           -> (w -> IO ())
+           -- ^ An action to update the metric
+           -> IO ()
+withMetric label metrics newMetric action = do
+    mbMetric <- M.lookup label <$> atomically (readTVar metrics)
+    case mbMetric of
+         Nothing -> do
+             c <- newMetric
+             atomically $ modifyTVar' metrics (M.insert label c)
+             action c
+         Just c -> action c
+
+-- | Modifies the 'MonotonicCounter' with the supplied action.
+-- Creates the counter if the input label doesn't point to an existing
+-- counter.
+withCounter :: Text
+            -> MetricsStore
+            -> (MonotonicCounter -> IO ())
+            -> IO ()
+withCounter label MetricsStore{..} action =
+    let createAndRegister = do
+            c@(MonotonicCounter ekgCounter) <- newCounter
+            EKG.registerCounter label (EKG.Counter.read ekgCounter) _msEKGStore
+            pure c
+    in withMetric label _msCounters createAndRegister action
+
+-- | Modifies the 'Gauge' with the supplied action.
+-- Creates the gauge if the input label doesn't point to an existing
+-- one.
+withGauge :: Text
+          -> MetricsStore
+          -> (Gauge -> IO ())
+          -> IO ()
+withGauge label MetricsStore{..} action =
+    let createAndRegister = do
+            c@(Gauge ekgGauge) <- newGauge
+            EKG.registerGauge label (EKG.Gauge.read ekgGauge) _msEKGStore
+            pure c
+    in withMetric label _msGauges createAndRegister action
+
+-- | Modifies the 'Histogram with the supplied action.
+-- Creates the histogram if the input label doesn't point to an existing
+-- one.
+withHistogram :: Text
+              -> MetricsStore
+              -> Buckets
+              -> (Histogram -> IO ())
+              -> IO ()
+withHistogram label MetricsStore{..} defaultBuckets action =
+    -- There is no 'Histogram' type for EKG, so we cannot directly
+    -- register it.
+    withMetric label _msHistograms (newHistogram defaultBuckets) action
+
+-- | Update the 'MetricsStore' with the given 'Action'.
+updateMetricsStore :: MetricsStore -> Action -> IO ()
+updateMetricsStore metricsStore action = case action of
+    CounterIncrease label ->
+        withCounter label metricsStore incCounter
+    CounterAdd label value -> do
+        withCounter label metricsStore (flip addToCounter value)
+    GaugeIncrease label -> do
+        withGauge label metricsStore incGauge
+    GaugeAdd label value -> do
+        withGauge label metricsStore (flip addToGauge value)
+    HistogramObserve label buckets value -> do
+        withHistogram label metricsStore buckets (flip observeHistogram value)

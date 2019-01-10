@@ -4,7 +4,7 @@ module Oscoin.Test.Metrics
 
 import           Oscoin.Prelude
 
-import           Oscoin.Metrics
+import           Oscoin.Telemetry.Metrics
 
 import           Test.Tasty
 import           Test.Tasty.HUnit

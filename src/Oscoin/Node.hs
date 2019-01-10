@@ -38,6 +38,8 @@ import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
+import           Oscoin.Telemetry (Metadata(..), NotableEvent(..), Value(..))
+import qualified Oscoin.Telemetry as Telemetry
 
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -84,6 +86,7 @@ miner
     => NodeT tx st s i m a
 miner = do
     Handle{hEval, hConsensus, hConfig} <- ask
+    let store = cfgTelemetryStore hConfig
     forever $ do
         nTxs <- numTxs
         if nTxs == 0 && cfgNoEmptyBlocks hConfig
@@ -95,7 +98,9 @@ miner = do
 
             for_ blk $ \b -> do
                 lift   $ P2P.broadcast $ P2P.BlockMsg b
-                liftIO $ Log.info (cfgLogger hConfig) ("mined block " % formatHash) (blockHash b)
+                liftIO $ do
+                    Telemetry.emit store BlockMinedEvent ["blockHash" :=> H (blockHash b)]
+                    Log.info (cfgLogger hConfig) ("mined block " % formatHash) (blockHash b)
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
