@@ -1,6 +1,9 @@
 module Oscoin.CLI.Parser
     ( execParser
     , execParserPure
+
+    -- * Re-usable parsers
+    , keyPathParser
     ) where
 
 import           Oscoin.Prelude hiding (option)
@@ -26,13 +29,24 @@ mainParserInfo =
     info (helper <*> mainParser)
     $ progDesc "Oscoin CLI"
 
+
 mainParser :: Parser Command
-mainParser = subparser
-    (  command "revision" (revisionParser `withInfo` "Revision commands")
+mainParser =
+    subparser (
+       command "revision" (revisionParser `withInfo` "Revision commands")
     <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
     <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
     <> command "node"     (nodeParser     `withInfo` "Node commands")
     )
+
+keyPathParser :: Parser (Maybe FilePath)
+keyPathParser = optional (option str (
+                             long "keys"
+                          <> help ("The optional path to the folder containing the oscoin keys. " <>
+                                   "If not specified, defaults to a path inside the Xdg directory.")
+                          <> metavar "KEY-PATH (e.g. ~/.config/oscoin)"
+                          ))
+
 
 revisionParser :: Parser Command
 revisionParser = subparser
@@ -40,7 +54,7 @@ revisionParser = subparser
     <> command "list"   (revisionList `withInfo` "List revisions")
     <> command "merge"  (revisionMerge `withInfo` "Merge a revision")
     where
-        revisionCreate = RevisionCreate <$> confirmationsOption
+        revisionCreate = RevisionCreate <$> keyPathParser <*> confirmationsOption
         revisionList  = pure RevisionList
         revisionMerge = RevisionMerge <$> argument auto (metavar "REV-ID")
 
@@ -57,7 +71,7 @@ nodeParser :: Parser Command
 nodeParser = subparser $
     command "seed" (nodeSeed `withInfo` "Show the current node seed")
   where
-    nodeSeed = NodeSeed <$> nodeSeedHost <*> nodeSeedPort
+    nodeSeed = NodeSeed <$> keyPathParser <*> nodeSeedHost <*> nodeSeedPort
     nodeSeedHost = option str
         (  long "host"
         <> help "seed host"
@@ -78,11 +92,11 @@ keyPairParser = subparser
     $ command "generate" $ keyPairGenerate `withInfo`
         "Generate keypair to use with the other commands"
     where
-        keyPairGenerate = pure GenerateKeyPair
+        keyPairGenerate = GenerateKeyPair <$> keyPathParser
 
 genesisParser :: Parser Command
 genesisParser =
-    GenesisCreate <$> genesisFrom <*> genesisDifficulty
+    GenesisCreate <$> keyPathParser <*> genesisFrom <*> genesisDifficulty
   where
     genesisFrom = many $ option str
         (  long "from"

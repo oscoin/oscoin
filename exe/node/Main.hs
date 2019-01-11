@@ -4,6 +4,7 @@ import           Oscoin.Prelude hiding (option)
 
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
+import           Oscoin.CLI.Parser (keyPathParser)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
@@ -40,6 +41,7 @@ data Args = Args
     , seeds         :: FilePath
     , genesis       :: FilePath
     , noEmptyBlocks :: Bool
+    , keysPath      :: Maybe FilePath
     } deriving (Generic, Show)
 
 args :: ParserInfo Args
@@ -80,6 +82,7 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> help "Do not generate empty blocks"
            <> showDefault
             )
+        <*> keyPathParser
 
 
 main :: IO ()
@@ -89,7 +92,7 @@ main = do
     let consensus = Consensus.nakamotoConsensus
     let env       = Development
 
-    keys        <- readKeyPair
+    keys        <- readKeyPair keysPath
     nid         <- pure (mkNodeId $ fst keys)
     mem         <- Mempool.newIO
     gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)

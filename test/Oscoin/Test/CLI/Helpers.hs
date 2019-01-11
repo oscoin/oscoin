@@ -95,8 +95,8 @@ instance MonadRandom TestCommandRunner where
     getRandomBytes = liftIO . getRandomBytes
 
 instance MonadKeyStore TestCommandRunner where
-    writeKeyPair kp = modify (\s -> s { storedKeyPair = Just kp  })
-    readKeyPair = do
+    writeKeyPair _ kp = modify (\s -> s { storedKeyPair = Just kp  })
+    readKeyPair _ = do
         TestCommandState{..} <- get
         case storedKeyPair of
             Just kp -> pure $ kp

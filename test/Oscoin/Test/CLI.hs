@@ -51,9 +51,9 @@ testKeyStore = testCase "file keystore read/write" $
         assertFileNotExists pkPath
 
         kp <- Crypto.generateKeyPair
-        writeKeyPair kp
+        writeKeyPair Nothing kp
         assertFileExists skPath
         assertFileExists pkPath
 
-        kp' <- readKeyPair
+        kp' <- readKeyPair Nothing
         kp @=? kp'

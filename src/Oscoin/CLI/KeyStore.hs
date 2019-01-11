@@ -19,46 +19,49 @@ import           System.FilePath
 
 
 class Monad m => MonadKeyStore m where
-    writeKeyPair :: Crypto.KeyPair -> m ()
+    writeKeyPair :: Maybe FilePath -> Crypto.KeyPair -> m ()
 
     default writeKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => Crypto.KeyPair -> m ()
-    writeKeyPair = lift . writeKeyPair
+        => Maybe FilePath -> Crypto.KeyPair -> m ()
+    writeKeyPair mbFilePath = lift . writeKeyPair mbFilePath
 
-    readKeyPair :: m Crypto.KeyPair
+    readKeyPair :: Maybe FilePath -> m Crypto.KeyPair
     default readKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => m Crypto.KeyPair
-    readKeyPair = lift readKeyPair
+        => Maybe FilePath -> m Crypto.KeyPair
+    readKeyPair = lift . readKeyPair
 
 
-getConfigPath :: MonadIO m => FilePath -> m FilePath
-getConfigPath path = liftIO $ getXdgDirectory XdgConfig $ "oscoin" </> path
+-- | Get the configuration path for the keys, but first looking at a
+-- user-specified directory and falling back to the xdg directory otherwise.
+getConfigPath :: MonadIO m => Maybe FilePath -> m FilePath
+getConfigPath Nothing         = liftIO . getXdgDirectory XdgConfig $ "oscoin"
+getConfigPath (Just userPath) = pure userPath
 
-getSecretKeyPath :: IO FilePath
-getSecretKeyPath = getConfigPath "id.key"
+getSecretKeyPath :: Maybe FilePath -> IO FilePath
+getSecretKeyPath mbFilePath = flip (</>) "id.key" <$> getConfigPath mbFilePath
 
-getPublicKeyPath :: IO FilePath
-getPublicKeyPath = getConfigPath "id.pub"
+getPublicKeyPath :: Maybe FilePath -> IO FilePath
+getPublicKeyPath mbFilePath = flip (</>) "id.pub" <$> getConfigPath mbFilePath
 
-ensureConfigDir :: MonadIO m => m ()
-ensureConfigDir = do
-    configDir <- getConfigPath ""
+ensureConfigDir :: MonadIO m => Maybe FilePath -> m ()
+ensureConfigDir mbUserPath = do
+    configDir <- getConfigPath mbUserPath
     liftIO $ createDirectoryIfMissing True configDir
 
 instance MonadKeyStore IO where
-    writeKeyPair (pk, sk) =  do
-        ensureConfigDir
-        skPath <- getSecretKeyPath
+    writeKeyPair mbUserPath (pk, sk) =  do
+        ensureConfigDir mbUserPath
+        skPath <- getSecretKeyPath mbUserPath
         LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
-        pkPath <- getPublicKeyPath
+        pkPath <- getPublicKeyPath mbUserPath
         LBS.writeFile pkPath $ serialise pk
 
-    readKeyPair = do
-        skPath <- getSecretKeyPath
+    readKeyPair mbUserPath = do
+        skPath <- getSecretKeyPath mbUserPath
         sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
-        pkPath <- getPublicKeyPath
+        pkPath <- getPublicKeyPath mbUserPath
         pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
         pure (pk, sk)
       where
