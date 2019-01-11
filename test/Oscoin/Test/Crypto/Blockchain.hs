@@ -18,6 +18,8 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
 import qualified Data.Aeson as Aeson
+import           Data.Binary.Put (putWord32le, runPut)
+import qualified Data.ByteString.Lazy as LBS
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances.ByteString ()
@@ -44,6 +46,15 @@ testBlockchain config = testGroup "Blockchain"
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
         \(d :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) d == Just d
+    , testProperty "Difficulty (compact): decode . encode == id" $
+        \(d :: Difficulty) ->
+            ( decodeDifficultyCompact
+            . readWord32LE
+            . LBS.toStrict
+            . runPut
+            . putWord32le
+            . encodeDifficultyCompact
+            ) d == (d, False)
     ]
 
 testValidateBlock :: Consensus.Config -> TestTree
