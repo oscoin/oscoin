@@ -17,8 +17,8 @@ tests =
 
 testStartsOK :: Assertion
 testStartsOK = withSandbox "oscoin" ["--api-port", "9999"] defaultSandboxOptions $
-    \stdoutAsFile -> do
+    \stdoutHandle _stdErrHandle -> do
         -- TODO(adn) In the future we want a better handshake string here.
-        actual <- withFile stdoutAsFile ReadWriteMode $ \h -> C8.hGet h 100
+        actual <- C8.hGet stdoutHandle 100
         assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
                    ("genesis is" `C8.isInfixOf` actual)
