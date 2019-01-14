@@ -53,7 +53,10 @@ runCLIWithState
     :: [String] -> (TestCommandState -> TestCommandState) -> IO TestCommandState
 runCLIWithState args setupState = do
     storedKeyPair <- Crypto.generateKeyPair
-    cmd <- case execParserPure args of
+    -- We don't seem to care about overriding the location of the keys for
+    -- the 'TestCommandState', as the 'HOME' env var is overwritten with a
+    -- throwaway temporary directory.
+    (_mbKeysPath, cmd) <- case execParserPure args of
         Options.Success cmd -> pure $ cmd
         Options.CompletionInvoked _ -> assertFailure "Unexpected CLI completion invoked"
         Options.Failure failure ->
@@ -95,8 +98,9 @@ instance MonadRandom TestCommandRunner where
     getRandomBytes = liftIO . getRandomBytes
 
 instance MonadKeyStore TestCommandRunner where
-    writeKeyPair _ kp = modify (\s -> s { storedKeyPair = Just kp  })
-    readKeyPair _ = do
+    keysPath = pure Nothing
+    writeKeyPair kp = modify (\s -> s { storedKeyPair = Just kp  })
+    readKeyPair = do
         TestCommandState{..} <- get
         case storedKeyPair of
             Just kp -> pure $ kp

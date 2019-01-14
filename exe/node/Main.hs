@@ -92,7 +92,7 @@ main = do
     let consensus = Consensus.nakamotoConsensus
     let env       = Development
 
-    keys        <- readKeyPair keysPath
+    keys        <- runReaderT readKeyPair keysPath
     nid         <- pure (mkNodeId $ fst keys)
     mem         <- Mempool.newIO
     gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)

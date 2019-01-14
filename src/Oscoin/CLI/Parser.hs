@@ -18,21 +18,22 @@ import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
 
-execParser :: IO Command
+execParser :: IO (Maybe FilePath, Command)
 execParser = Options.execParser mainParserInfo
 
-execParserPure :: [String] -> ParserResult Command
+execParserPure :: [String] -> ParserResult (Maybe FilePath, Command)
 execParserPure = Options.execParserPure defaultPrefs mainParserInfo
 
-mainParserInfo :: ParserInfo Command
+mainParserInfo :: ParserInfo (Maybe FilePath, Command)
 mainParserInfo =
     info (helper <*> mainParser)
     $ progDesc "Oscoin CLI"
 
 
-mainParser :: Parser Command
+mainParser :: Parser (Maybe FilePath, Command)
 mainParser =
-    subparser (
+    (,) <$> keyPathParser
+        <*> subparser (
        command "revision" (revisionParser `withInfo` "Revision commands")
     <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
     <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
@@ -54,7 +55,7 @@ revisionParser = subparser
     <> command "list"   (revisionList `withInfo` "List revisions")
     <> command "merge"  (revisionMerge `withInfo` "Merge a revision")
     where
-        revisionCreate = RevisionCreate <$> keyPathParser <*> confirmationsOption
+        revisionCreate = RevisionCreate <$> confirmationsOption
         revisionList  = pure RevisionList
         revisionMerge = RevisionMerge <$> argument auto (metavar "REV-ID")
 
@@ -71,7 +72,7 @@ nodeParser :: Parser Command
 nodeParser = subparser $
     command "seed" (nodeSeed `withInfo` "Show the current node seed")
   where
-    nodeSeed = NodeSeed <$> keyPathParser <*> nodeSeedHost <*> nodeSeedPort
+    nodeSeed = NodeSeed <$> nodeSeedHost <*> nodeSeedPort
     nodeSeedHost = option str
         (  long "host"
         <> help "seed host"
@@ -92,11 +93,11 @@ keyPairParser = subparser
     $ command "generate" $ keyPairGenerate `withInfo`
         "Generate keypair to use with the other commands"
     where
-        keyPairGenerate = GenerateKeyPair <$> keyPathParser
+        keyPairGenerate = pure GenerateKeyPair
 
 genesisParser :: Parser Command
 genesisParser =
-    GenesisCreate <$> keyPathParser <*> genesisFrom <*> genesisDifficulty
+    GenesisCreate <$> genesisFrom <*> genesisDifficulty
   where
     genesisFrom = many $ option str
         (  long "from"

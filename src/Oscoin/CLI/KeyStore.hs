@@ -19,18 +19,26 @@ import           System.FilePath
 
 
 class Monad m => MonadKeyStore m where
-    writeKeyPair :: Maybe FilePath -> Crypto.KeyPair -> m ()
+
+    keysPath     :: m (Maybe FilePath)
+
+    default keysPath
+        :: (MonadKeyStore m', MonadTrans t, m ~ t m')
+        => m (Maybe FilePath)
+    keysPath = lift keysPath
+
+    writeKeyPair :: Crypto.KeyPair -> m ()
 
     default writeKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => Maybe FilePath -> Crypto.KeyPair -> m ()
-    writeKeyPair mbFilePath = lift . writeKeyPair mbFilePath
+        => Crypto.KeyPair -> m ()
+    writeKeyPair = lift . writeKeyPair
 
-    readKeyPair :: Maybe FilePath -> m Crypto.KeyPair
+    readKeyPair :: m Crypto.KeyPair
     default readKeyPair
         :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => Maybe FilePath -> m Crypto.KeyPair
-    readKeyPair = lift . readKeyPair
+        => m Crypto.KeyPair
+    readKeyPair = lift readKeyPair
 
 
 -- | Get the configuration path for the keys, but first looking at a
@@ -50,20 +58,25 @@ ensureConfigDir mbUserPath = do
     configDir <- getConfigPath mbUserPath
     liftIO $ createDirectoryIfMissing True configDir
 
-instance MonadKeyStore IO where
-    writeKeyPair mbUserPath (pk, sk) =  do
+instance MonadKeyStore (ReaderT (Maybe FilePath) IO) where
+    keysPath = ask
+    writeKeyPair (pk, sk) =  do
+        mbUserPath <- keysPath
         ensureConfigDir mbUserPath
-        skPath <- getSecretKeyPath mbUserPath
-        LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
-        pkPath <- getPublicKeyPath mbUserPath
-        LBS.writeFile pkPath $ serialise pk
+        liftIO $ do
+            skPath <- getSecretKeyPath mbUserPath
+            LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
+            pkPath <- getPublicKeyPath mbUserPath
+            LBS.writeFile pkPath $ serialise pk
 
-    readKeyPair mbUserPath = do
-        skPath <- getSecretKeyPath mbUserPath
-        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
-        pkPath <- getPublicKeyPath mbUserPath
-        pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
-        pure (pk, sk)
+    readKeyPair = do
+        mbUserPath <- keysPath
+        liftIO $ do
+            skPath <- getSecretKeyPath mbUserPath
+            sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
+            pkPath <- getPublicKeyPath mbUserPath
+            pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
+            pure (pk, sk)
       where
         fromRightThrow = either throwM pure
         -- Avoiding lazy IO

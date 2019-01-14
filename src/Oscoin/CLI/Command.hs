@@ -53,30 +53,30 @@ data Result
     | ResultError Text
 
 data Command =
-      RevisionCreate (Maybe FilePath) Natural
+      RevisionCreate Natural
     | RevisionList
     | RevisionMerge RevisionId
-    | GenerateKeyPair (Maybe FilePath)
-    | GenesisCreate (Maybe FilePath) [FilePath] Difficulty
-    | NodeSeed (Maybe FilePath) HostName PortNumber
+    | GenerateKeyPair
+    | GenesisCreate [FilePath] Difficulty
+    | NodeSeed HostName PortNumber
     deriving (Show)
 
 dispatchCommand :: MonadCLI m => Command -> m Result
-dispatchCommand (RevisionCreate mbKeysPath confirmations) =
-    submitTransaction mbKeysPath createRevision confirmations
+dispatchCommand (RevisionCreate confirmations) =
+    submitTransaction createRevision confirmations
     where createRevision = Rad.fnApply "create-revision" [toRad emptyRevision]
 
-dispatchCommand (GenerateKeyPair mbKeysPath) = do
+dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
-    writeKeyPair mbKeysPath kp
+    writeKeyPair kp
     pure $ ResultOk
 
-dispatchCommand (GenesisCreate _ [] d) =
+dispatchCommand (GenesisCreate [] d) =
     printGenesisYaml [] d
-dispatchCommand (GenesisCreate mbKeysPath files d) = do
+dispatchCommand (GenesisCreate files d) = do
     results <-
         for files $
-            readRadFile >=> traverse (signTransaction mbKeysPath)
+            readRadFile >=> traverse signTransaction
 
     case partitionEithers results of
         (errs, signed)
@@ -85,8 +85,8 @@ dispatchCommand (GenesisCreate mbKeysPath files d) = do
             | otherwise ->
                 pure $ ResultError (mconcat errs)
 
-dispatchCommand (NodeSeed mbKeysPath h p) = do
-    (pk, _) <- readKeyPair mbKeysPath
+dispatchCommand (NodeSeed h p) = do
+    (pk, _) <- readKeyPair
     putString . decodeUtf8 . Yaml.encode $
         NodeAddr { nodeId   = mkNodeId pk
                  , nodeHost = h
@@ -135,18 +135,17 @@ waitConfirmations n delay txHash = withSpinner (msg 0) 100 go where
 
 -- | Submits a Radicle value to the API as signed transaction.
 submitTransaction :: MonadCLI m
-                  => Maybe FilePath
-                  -> Rad.Value
+                  => Rad.Value
                   -> Natural
                   -> m Result
-submitTransaction mbKeysPath rval confirmations = do
-    tx <- signTransaction mbKeysPath rval
+submitTransaction rval confirmations = do
+    tx <- signTransaction rval
     API.submitTransaction tx >>= \case
         API.Err err -> pure $ ResultError err
         API.Ok (API.TxSubmitResponse txHash) -> waitConfirmations confirmations 500 txHash
 
-signTransaction :: MonadCLI m => Maybe FilePath -> Rad.Value -> m API.RadTx
-signTransaction mbKeysPath v = do
-    (pk, sk) <- readKeyPair mbKeysPath
+signTransaction :: MonadCLI m => Rad.Value -> m API.RadTx
+signTransaction v = do
+    (pk, sk) <- readKeyPair
     msg      <- Crypto.sign sk v
     pure $ mkTx msg pk
