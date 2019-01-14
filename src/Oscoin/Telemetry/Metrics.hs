@@ -4,6 +4,7 @@ module Oscoin.Telemetry.Metrics
     , Gauge            -- opaque
     , Histogram        -- opaque
     , Buckets          -- opaque
+    , Labels           -- opaque
     , HistogramSample(..)
     , Action(..)
 
@@ -11,6 +12,8 @@ module Oscoin.Telemetry.Metrics
     , newMetricsStore
     , forkEkgServer
     , updateMetricsStore
+    , labelsFromList
+    , noLabels
 
     -- * Operations on histograms
     , newHistogram
@@ -42,81 +45,43 @@ import qualified Data.Map.Strict as M
 import           GHC.Natural
 import           Network.Socket (HostName, PortNumber)
 
+import           Oscoin.Telemetry.Metrics.Internal
+
 import qualified System.Metrics as EKG
 import qualified System.Metrics.Counter as EKG.Counter
 import qualified System.Metrics.Gauge as EKG.Gauge
 import qualified System.Remote.Monitoring as EKG
 
+
 {------------------------------------------------------------------------------
-  Main types
+  Operations on labels
 ------------------------------------------------------------------------------}
 
--- | A counter which is monotonically increasing by design.
-newtype MonotonicCounter = MonotonicCounter EKG.Counter.Counter
-newtype Gauge            = Gauge EKG.Gauge.Gauge
+labelsFromList :: [(Text, Text)] -> Labels
+labelsFromList = Labels . M.fromList
 
--- | An histogram type modeled after Prometheus' one. It allows sampling the
--- phi-percentile for a given  number of buckets.
-data Histogram = Histogram {
-    _histTotal   :: MonotonicCounter
-  , _histCount   :: TVar Double
-  , _histBuckets :: TVar Buckets
-  }
-
--- | A \"snapshot\" of an 'Histogram' at a certain point in time.
-data HistogramSample = HistogramSample {
-    hsTotal   :: Int64
-  , hsSum     :: Double
-  , hsBuckets :: Buckets
-  } deriving (Show, Eq, Ord)
-
-
-type UpperInclusiveBound = Double
-
-newtype Buckets = Buckets (Map UpperInclusiveBound Double)
-    deriving (Show, Eq, Ord)
-
-data Action =
-      CounterIncrease  Text
-    | CounterAdd       Text Natural
-    | GaugeIncrease    Text
-    | GaugeAdd         Text Int64
-    | HistogramObserve Text Buckets Double
-    -- ^ Observe a value for an 'Histogram'. It also passes the
-    -- defaults 'Buckets' to be used in case this is the first time we update
-    -- this histogram.
-
--- | An opaque 'MetricsStore'.
-data MetricsStore = MetricsStore {
-    _msEKGStore   :: EKG.Store
-  -- ^ Used to store metric types which have a 1:1 correspondance with EKG
-  -- types and that can be ultimately displayed in the EKG dashboard.
-  , _msHistograms :: TVar (Map Text Histogram)
-  -- ^ Used to store 'Histogram' metrics, as well as to retrieve and update them.
-  , _msCounters   :: TVar (Map Text MonotonicCounter)
-  -- ^ Used to store 'Counter' metrics, as well as to retrieve and update them.
-  , _msGauges     :: TVar (Map Text Gauge)
-  -- ^ Used to store 'Gauge' metrics, as well as to retrieve and update them.
-  }
+noLabels :: Labels
+noLabels = Labels mempty
 
 {------------------------------------------------------------------------------
   Operations on histograms
 ------------------------------------------------------------------------------}
 
 -- | Creates a new 'Histogram' given the initial 'Buckets'.
-newHistogram :: Buckets -> IO Histogram
-newHistogram buckets =
-    Histogram <$> newCounter
+newHistogram :: Labels -> Buckets -> IO Histogram
+newHistogram labels buckets =
+    Histogram <$> newCounter noLabels
               <*> newTVarIO 0.0
               <*> newTVarIO buckets
+              <*> pure labels
 
 
 -- | Sample the current value out of an 'Histogram'.
 readHistogram :: Histogram -> IO HistogramSample
 readHistogram Histogram{..} = do
-    hsTotal       <- readCounter _histTotal
+    hsCount       <- readCounter _histCount
     (hsSum, hsBuckets) <- atomically $ do
-        hsSum     <- readTVar _histCount
+        hsSum     <- readTVar _histSum
         hsBuckets <- readTVar _histBuckets
         pure (hsSum, hsBuckets)
     pure $ HistogramSample{..}
@@ -125,9 +90,9 @@ readHistogram Histogram{..} = do
 -- | Observes (i.e. adds) a new value to the histogram.
 observeHistogram :: Histogram -> Double -> IO ()
 observeHistogram Histogram{..} measure = do
-    incCounter _histTotal -- Increment the total number of observations
+    incCounter _histCount -- Increment the total number of observations
     atomically $ do
-        modifyTVar' _histCount (+ measure)
+        modifyTVar' _histSum (+ measure)
         modifyTVar' _histBuckets updateBuckets
     where
       -- Stolen from <http://hackage.haskell.org/package/prometheus-2.1.0/docs/src/System.Metrics.Prometheus.Metric.Histogram.html#observe>
@@ -162,20 +127,20 @@ readBuckets (Buckets buckets) = M.toList buckets
 ------------------------------------------------------------------------------}
 
 -- | Creates a new 'MonotonicCounter'.
-newCounter :: IO MonotonicCounter
-newCounter = MonotonicCounter <$> EKG.Counter.new
+newCounter :: Labels -> IO MonotonicCounter
+newCounter labels = MonotonicCounter <$> EKG.Counter.new <*> pure labels
 
 -- | Reads the current value of a 'MonotonicCounter'.
 readCounter :: MonotonicCounter -> IO Int64
-readCounter (MonotonicCounter ekgCounter) = EKG.Counter.read ekgCounter
+readCounter (MonotonicCounter ekgCounter _) = EKG.Counter.read ekgCounter
 
 -- | Increase the value of the 'MonotonicCounter' by one.
 incCounter :: MonotonicCounter -> IO ()
-incCounter (MonotonicCounter ekgCounter) = EKG.Counter.inc ekgCounter
+incCounter (MonotonicCounter ekgCounter _) = EKG.Counter.inc ekgCounter
 
 -- | Adds 'x' to the 'MonotonicCounter'.
 addToCounter :: MonotonicCounter -> Natural -> IO ()
-addToCounter (MonotonicCounter ekgCounter) x =
+addToCounter (MonotonicCounter ekgCounter _) x =
     EKG.Counter.add ekgCounter (fromIntegral x)
 
 {------------------------------------------------------------------------------
@@ -183,20 +148,20 @@ addToCounter (MonotonicCounter ekgCounter) x =
 ------------------------------------------------------------------------------}
 
 -- | Creates a new 'Gauge'.
-newGauge :: IO Gauge
-newGauge = Gauge <$> EKG.Gauge.new
+newGauge :: Labels -> IO Gauge
+newGauge labels = Gauge <$> EKG.Gauge.new <*> pure labels
 
 -- | Reads the current value of a 'Gauge'.
 readGauge :: Gauge -> IO Int64
-readGauge (Gauge ekgGauge) = EKG.Gauge.read ekgGauge
+readGauge (Gauge ekgGauge _) = EKG.Gauge.read ekgGauge
 
 -- | Increase the value of the 'Gauge' by one.
 incGauge :: Gauge -> IO ()
-incGauge (Gauge ekgGauge) = EKG.Gauge.inc ekgGauge
+incGauge (Gauge ekgGauge _) = EKG.Gauge.inc ekgGauge
 
 -- | Adds 'x' to the 'Gauge'.
 addToGauge :: Gauge -> Int64 -> IO ()
-addToGauge (Gauge ekgGauge) = EKG.Gauge.add ekgGauge
+addToGauge (Gauge ekgGauge _) = EKG.Gauge.add ekgGauge
 
 {------------------------------------------------------------------------------
   Operations on the MetricsStore.
@@ -241,53 +206,57 @@ withMetric label metrics newMetric action = do
 -- Creates the counter if the input label doesn't point to an existing
 -- counter.
 withCounter :: Text
+            -> Labels
+            -- ^ Some stock labels to add if the counter doesn't exist yet.
             -> MetricsStore
             -> (MonotonicCounter -> IO ())
             -> IO ()
-withCounter label MetricsStore{..} action =
+withCounter metric labels MetricsStore{..} action =
     let createAndRegister = do
-            c@(MonotonicCounter ekgCounter) <- newCounter
-            EKG.registerCounter label (EKG.Counter.read ekgCounter) _msEKGStore
+            c@(MonotonicCounter ekgCounter _) <- newCounter labels
+            EKG.registerCounter metric (EKG.Counter.read ekgCounter) _msEKGStore
             pure c
-    in withMetric label _msCounters createAndRegister action
+    in withMetric metric _msCounters createAndRegister action
 
 -- | Modifies the 'Gauge' with the supplied action.
 -- Creates the gauge if the input label doesn't point to an existing
 -- one.
 withGauge :: Text
+          -> Labels
           -> MetricsStore
           -> (Gauge -> IO ())
           -> IO ()
-withGauge label MetricsStore{..} action =
+withGauge metric labels MetricsStore{..} action =
     let createAndRegister = do
-            c@(Gauge ekgGauge) <- newGauge
-            EKG.registerGauge label (EKG.Gauge.read ekgGauge) _msEKGStore
+            c@(Gauge ekgGauge _) <- newGauge labels
+            EKG.registerGauge metric (EKG.Gauge.read ekgGauge) _msEKGStore
             pure c
-    in withMetric label _msGauges createAndRegister action
+    in withMetric metric _msGauges createAndRegister action
 
 -- | Modifies the 'Histogram with the supplied action.
 -- Creates the histogram if the input label doesn't point to an existing
 -- one.
 withHistogram :: Text
-              -> MetricsStore
+              -> Labels
               -> Buckets
+              -> MetricsStore
               -> (Histogram -> IO ())
               -> IO ()
-withHistogram label MetricsStore{..} defaultBuckets action =
+withHistogram metric labels defaultBuckets MetricsStore{..} action =
     -- There is no 'Histogram' type for EKG, so we cannot directly
     -- register it.
-    withMetric label _msHistograms (newHistogram defaultBuckets) action
+    withMetric metric _msHistograms (newHistogram labels defaultBuckets) action
 
 -- | Update the 'MetricsStore' with the given 'Action'.
 updateMetricsStore :: MetricsStore -> Action -> IO ()
 updateMetricsStore metricsStore action = case action of
-    CounterIncrease label ->
-        withCounter label metricsStore incCounter
-    CounterAdd label value -> do
-        withCounter label metricsStore (flip addToCounter value)
-    GaugeIncrease label -> do
-        withGauge label metricsStore incGauge
-    GaugeAdd label value -> do
-        withGauge label metricsStore (flip addToGauge value)
-    HistogramObserve label buckets value -> do
-        withHistogram label metricsStore buckets (flip observeHistogram value)
+    CounterIncrease metric labels ->
+        withCounter metric labels metricsStore incCounter
+    CounterAdd metric labels value ->
+        withCounter metric labels metricsStore (`addToCounter` value)
+    GaugeIncrease metric labels ->
+        withGauge metric labels metricsStore incGauge
+    GaugeAdd metric labels value ->
+        withGauge metric labels metricsStore (`addToGauge` value)
+    HistogramObserve metric labels buckets value ->
+        withHistogram metric labels buckets metricsStore (`observeHistogram` value)

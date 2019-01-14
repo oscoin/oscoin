@@ -27,10 +27,10 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import qualified Oscoin.Test.Metrics as Metrics
 import qualified Oscoin.Test.P2P as P2P
 import qualified Oscoin.Test.Storage.Block as BlockStore
 import           Oscoin.Test.Storage.Block.Arbitrary ()
+import qualified Oscoin.Test.Telemetry as Telemetry
 
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
@@ -59,7 +59,7 @@ tests config = testGroup "Oscoin"
     , testGroup      "P2P"                            P2P.tests
     , testGroup      "Storage"                        BlockStore.tests
     , testBlockchain config
-    , testGroup      "Metrics"                        Metrics.tests
+    , testGroup      "Telemetry"                      Telemetry.tests
     ]
 
 testOscoinCrypto :: Assertion

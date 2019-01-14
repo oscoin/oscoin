@@ -216,3 +216,4 @@ ghc-options:
   - -Wredundant-constraints
   - -fno-print-expanded-synonyms
   - -funbox-small-strict-fields
+  - -with-rtsopts=-T
