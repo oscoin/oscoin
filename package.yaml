@@ -152,6 +152,7 @@ tests:
       - optparse-applicative
       - oscoin
       - quickcheck-instances
+      - process
       - radicle
       - random
       - random-shuffle

@@ -19,6 +19,14 @@ import           System.FilePath
 
 
 class Monad m => MonadKeyStore m where
+
+    keysPath     :: m (Maybe FilePath)
+
+    default keysPath
+        :: (MonadKeyStore m', MonadTrans t, m ~ t m')
+        => m (Maybe FilePath)
+    keysPath = lift keysPath
+
     writeKeyPair :: Crypto.KeyPair -> m ()
 
     default writeKeyPair
@@ -33,34 +41,42 @@ class Monad m => MonadKeyStore m where
     readKeyPair = lift readKeyPair
 
 
-getConfigPath :: MonadIO m => FilePath -> m FilePath
-getConfigPath path = liftIO $ getXdgDirectory XdgConfig $ "oscoin" </> path
+-- | Get the configuration path for the keys, but first looking at a
+-- user-specified directory and falling back to the xdg directory otherwise.
+getConfigPath :: MonadIO m => Maybe FilePath -> m FilePath
+getConfigPath Nothing         = liftIO . getXdgDirectory XdgConfig $ "oscoin"
+getConfigPath (Just userPath) = pure userPath
 
-getSecretKeyPath :: IO FilePath
-getSecretKeyPath = getConfigPath "id.key"
+getSecretKeyPath :: Maybe FilePath -> IO FilePath
+getSecretKeyPath mbFilePath = flip (</>) "id.key" <$> getConfigPath mbFilePath
 
-getPublicKeyPath :: IO FilePath
-getPublicKeyPath = getConfigPath "id.pub"
+getPublicKeyPath :: Maybe FilePath -> IO FilePath
+getPublicKeyPath mbFilePath = flip (</>) "id.pub" <$> getConfigPath mbFilePath
 
-ensureConfigDir :: MonadIO m => m ()
-ensureConfigDir = do
-    configDir <- getConfigPath ""
+ensureConfigDir :: MonadIO m => Maybe FilePath -> m ()
+ensureConfigDir mbUserPath = do
+    configDir <- getConfigPath mbUserPath
     liftIO $ createDirectoryIfMissing True configDir
 
-instance MonadKeyStore IO where
+instance MonadKeyStore (ReaderT (Maybe FilePath) IO) where
+    keysPath = ask
     writeKeyPair (pk, sk) =  do
-        ensureConfigDir
-        skPath <- getSecretKeyPath
-        LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
-        pkPath <- getPublicKeyPath
-        LBS.writeFile pkPath $ serialise pk
+        mbUserPath <- keysPath
+        ensureConfigDir mbUserPath
+        liftIO $ do
+            skPath <- getSecretKeyPath mbUserPath
+            LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
+            pkPath <- getPublicKeyPath mbUserPath
+            LBS.writeFile pkPath $ serialise pk
 
     readKeyPair = do
-        skPath <- getSecretKeyPath
-        sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
-        pkPath <- getPublicKeyPath
-        pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
-        pure (pk, sk)
+        mbUserPath <- keysPath
+        liftIO $ do
+            skPath <- getSecretKeyPath mbUserPath
+            sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
+            pkPath <- getPublicKeyPath mbUserPath
+            pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
+            pure (pk, sk)
       where
         fromRightThrow = either throwM pure
         -- Avoiding lazy IO

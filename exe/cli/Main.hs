@@ -6,8 +6,8 @@ import           Oscoin.CLI
 
 main :: IO ()
 main = do
-    cmd <- execParser
-    result <- runCommand cmd
+    (mbKeysPath, cmd) <- execParser
+    result <- runCommand mbKeysPath cmd
     case result of
         ResultOk      -> pure ()
         ResultError e -> die e

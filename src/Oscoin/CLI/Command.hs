@@ -134,7 +134,10 @@ waitConfirmations n delay txHash = withSpinner (msg 0) 100 go where
         other -> pure $ ResultError $ "Unexpected response: " <> show other
 
 -- | Submits a Radicle value to the API as signed transaction.
-submitTransaction :: MonadCLI m => Rad.Value -> Natural -> m Result
+submitTransaction :: MonadCLI m
+                  => Rad.Value
+                  -> Natural
+                  -> m Result
 submitTransaction rval confirmations = do
     tx <- signTransaction rval
     API.submitTransaction tx >>= \case

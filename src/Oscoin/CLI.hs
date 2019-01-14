@@ -15,6 +15,7 @@ import           Oscoin.CLI.Parser (execParser, execParserPure)
 import           Oscoin.CLI.Revision
 import qualified Oscoin.CLI.Spinner as Spinner
 import           Oscoin.CLI.User
+import           Oscoin.Crypto.Orphans ()
 import           Oscoin.Prelude
 import qualified Oscoin.Time as Time
 
@@ -26,8 +27,8 @@ import qualified Radicle.Extended as Rad
 
 type CommandRunner a = CommandRunnerT IO a
 
-runCommand :: Command -> IO Result
-runCommand cmd =
+runCommand :: Maybe FilePath -> Command -> IO Result
+runCommand mbKeysPath cmd = flip runReaderT mbKeysPath $
     runHttpClientT "http://127.0.0.1:8477" $ runCommandRunnerT $ dispatchCommand cmd
 
 newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: HttpClientT m a }

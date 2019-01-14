@@ -1,6 +1,9 @@
 module Oscoin.CLI.Parser
     ( execParser
     , execParserPure
+
+    -- * Re-usable parsers
+    , keyPathParser
     ) where
 
 import           Oscoin.Prelude hiding (option)
@@ -15,24 +18,36 @@ import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
 
-execParser :: IO Command
+execParser :: IO (Maybe FilePath, Command)
 execParser = Options.execParser mainParserInfo
 
-execParserPure :: [String] -> ParserResult Command
+execParserPure :: [String] -> ParserResult (Maybe FilePath, Command)
 execParserPure = Options.execParserPure defaultPrefs mainParserInfo
 
-mainParserInfo :: ParserInfo Command
+mainParserInfo :: ParserInfo (Maybe FilePath, Command)
 mainParserInfo =
     info (helper <*> mainParser)
     $ progDesc "Oscoin CLI"
 
-mainParser :: Parser Command
-mainParser = subparser
-    (  command "revision" (revisionParser `withInfo` "Revision commands")
+
+mainParser :: Parser (Maybe FilePath, Command)
+mainParser =
+    (,) <$> keyPathParser
+        <*> subparser (
+       command "revision" (revisionParser `withInfo` "Revision commands")
     <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
     <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
     <> command "node"     (nodeParser     `withInfo` "Node commands")
     )
+
+keyPathParser :: Parser (Maybe FilePath)
+keyPathParser = optional (option str (
+                             long "keys"
+                          <> help ("The optional path to the folder containing the oscoin keys. " <>
+                                   "If not specified, defaults to a path inside the Xdg directory.")
+                          <> metavar "KEY-PATH (e.g. ~/.config/oscoin)"
+                          ))
+
 
 revisionParser :: Parser Command
 revisionParser = subparser
