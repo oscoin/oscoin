@@ -62,8 +62,7 @@ toActions = \case
 
 -- | For a 'BlockMinedEvent', we want to increment the total counter of
 -- mined blocks as well as log some interesting info about the input block.
--- TODO(adn): Consider the 'Metadata'.
+-- TODO(adn): Consider the 'Metadata' and perhaps log the event.
 handleBlockMinedEvent :: [Metadata] -> TelemetryStore -> IO ()
 handleBlockMinedEvent _metadata TelemetryStore{..} =
     forM_ (toActions BlockMinedEvent) (updateMetricsStore telemetryMetrics)
-

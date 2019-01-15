@@ -25,13 +25,15 @@ module Oscoin.Telemetry.Metrics
     -- * Operations on a MonotonicCounter
     , newCounter
     , incCounter
-    , addToCounter
+    , addCounter
     , readCounter
 
     -- * Operations on a Gauge
     , newGauge
     , incGauge
-    , addToGauge
+    , decGauge
+    , setGauge
+    , addGauge
     , readGauge
 
     ) where
@@ -43,6 +45,7 @@ import           Control.Concurrent.STM
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as M
 import           GHC.Natural
+import qualified GHC.Stats as GHC
 import           Network.Socket (HostName, PortNumber)
 
 import           Oscoin.Telemetry.Metrics.Internal
@@ -128,20 +131,17 @@ readBuckets (Buckets buckets) = M.toList buckets
 
 -- | Creates a new 'MonotonicCounter'.
 newCounter :: Labels -> IO MonotonicCounter
-newCounter labels = MonotonicCounter <$> EKG.Counter.new <*> pure labels
-
--- | Reads the current value of a 'MonotonicCounter'.
-readCounter :: MonotonicCounter -> IO Int64
-readCounter (MonotonicCounter ekgCounter _) = EKG.Counter.read ekgCounter
-
--- | Increase the value of the 'MonotonicCounter' by one.
-incCounter :: MonotonicCounter -> IO ()
-incCounter (MonotonicCounter ekgCounter _) = EKG.Counter.inc ekgCounter
-
--- | Adds 'x' to the 'MonotonicCounter'.
-addToCounter :: MonotonicCounter -> Natural -> IO ()
-addToCounter (MonotonicCounter ekgCounter _) x =
-    EKG.Counter.add ekgCounter (fromIntegral x)
+newCounter labels = do
+    -- The fact we are using EKG under the hood is purely an implementation
+    -- detail the user shouldn't care about.
+    ekgCounter <- EKG.Counter.new
+    pure MonotonicCounter {
+          _counterInternal = ekgCounter
+        , _counterLabels   = labels
+        , incCounter       = EKG.Counter.inc ekgCounter
+        , readCounter      = EKG.Counter.read ekgCounter
+        , addCounter       = EKG.Counter.add ekgCounter . fromIntegral
+    }
 
 {------------------------------------------------------------------------------
   Operations on gauges
@@ -149,30 +149,96 @@ addToCounter (MonotonicCounter ekgCounter _) x =
 
 -- | Creates a new 'Gauge'.
 newGauge :: Labels -> IO Gauge
-newGauge labels = Gauge <$> EKG.Gauge.new <*> pure labels
-
--- | Reads the current value of a 'Gauge'.
-readGauge :: Gauge -> IO Int64
-readGauge (Gauge ekgGauge _) = EKG.Gauge.read ekgGauge
-
--- | Increase the value of the 'Gauge' by one.
-incGauge :: Gauge -> IO ()
-incGauge (Gauge ekgGauge _) = EKG.Gauge.inc ekgGauge
-
--- | Adds 'x' to the 'Gauge'.
-addToGauge :: Gauge -> Int64 -> IO ()
-addToGauge (Gauge ekgGauge _) = EKG.Gauge.add ekgGauge
+newGauge labels = do
+    -- The fact we are using EKG under the hood is purely an implementation
+    -- detail the user shouldn't care about.
+    ekgGauge <- EKG.Gauge.new
+    pure Gauge {
+          _gaugeInternal = ekgGauge
+        , _gaugeLabels   = labels
+        , incGauge       = EKG.Gauge.inc ekgGauge
+        , decGauge       = EKG.Gauge.dec ekgGauge
+        , setGauge       = EKG.Gauge.set ekgGauge
+        , addGauge       = EKG.Gauge.add ekgGauge
+        , readGauge      = EKG.Gauge.read ekgGauge
+    }
 
 {------------------------------------------------------------------------------
   Operations on the MetricsStore.
 ------------------------------------------------------------------------------}
 
--- | Creates a new, empty 'MetricsStore'.
-newMetricsStore :: IO MetricsStore
-newMetricsStore = MetricsStore <$> EKG.newStore
-                               <*> newTVarIO mempty
-                               <*> newTVarIO mempty
-                               <*> newTVarIO mempty
+-- | Creates a new 'MetricsStore' with a set of predefined system metrics.
+newMetricsStore :: Labels -> IO MetricsStore
+newMetricsStore predefinedLabels = do
+    ekgStore <- EKG.newStore
+    gcStatsEnabled <- GHC.getRTSStatsEnabled
+    predefinedCounters <-
+        if not gcStatsEnabled
+             then pure mempty
+             else
+                foldM (mkCounter ekgStore) mempty [
+                    ("rts.gc.bytes_allocated"         , fromIntegral . GHC.allocated_bytes)
+                  , ("rts.gc.num_gcs"                 , fromIntegral . GHC.gcs)
+                  , ("rts.gc.num_bytes_usage_samples" , fromIntegral . GHC.major_gcs)
+                  , ("rts.gc.cumulative_bytes_used"   , fromIntegral . GHC.cumulative_live_bytes)
+                  , ("rts.gc.bytes_copied"            , fromIntegral . GHC.copied_bytes)
+                  , ("rts.gc.mutator_cpu_ms"          , nsToMs . GHC.mutator_cpu_ns)
+                  , ("rts.gc.mutator_wall_ms"         , nsToMs . GHC.mutator_elapsed_ns)
+                  , ("rts.gc.gc_cpu_ms"               , nsToMs . GHC.gc_cpu_ns)
+                  , ("rts.gc.gc_wall_ms"              , nsToMs . GHC.gc_elapsed_ns)
+                  , ("rts.gc.cpu_ms"                  , nsToMs . GHC.cpu_ns)
+                  , ("rts.gc.wall_ms"                 , nsToMs . GHC.elapsed_ns)
+                  ]
+    predefinedGauges   <-
+        if not gcStatsEnabled
+             then pure mempty
+             else
+               foldM (mkGauge ekgStore) mempty [
+                   ("rts.gc.max_bytes_used"           , fromIntegral . GHC.max_live_bytes)
+                 , ("rts.gc.current_bytes_used"       , fromIntegral . GHC.gcdetails_live_bytes . GHC.gc)
+                 , ("rts.gc.current_bytes_slop"       , fromIntegral . GHC.gcdetails_slop_bytes . GHC.gc)
+                 , ("rts.gc.max_bytes_slop"           , fromIntegral . GHC.max_slop_bytes)
+                 , ("rts.gc.peak_megabytes_allocated" , fromIntegral . (`quot` (1024*1024)) . GHC.max_mem_in_use_bytes)
+                 , ("rts.gc.par_tot_bytes_copied"     , fromIntegral . GHC.par_copied_bytes)
+                 , ("rts.gc.par_avg_bytes_copied"     , fromIntegral . GHC.par_copied_bytes)
+                 , ("rts.gc.par_max_bytes_copied"     , fromIntegral . GHC.cumulative_par_max_copied_bytes)
+                 ]
+    MetricsStore <$> pure ekgStore
+                 <*> newTVarIO mempty
+                 <*> newTVarIO predefinedCounters
+                 <*> newTVarIO predefinedGauges
+                 <*> pure predefinedLabels
+    where
+      -- | Convert nanoseconds to milliseconds.
+      nsToMs :: Int64 -> Int64
+      nsToMs s = round (realToFrac s / (1000000.0 :: Double))
+
+      mkCounter :: EKG.Store
+                -> Map Text MonotonicCounter
+                -> (Text, GHC.RTSStats -> Int64)
+                -> IO (Map Text MonotonicCounter)
+      mkCounter ekgStore !acc (metric, readValue) = do
+            c <- newCounter predefinedLabels
+            let c' = c { readCounter = do
+                             val <- readValue <$> GHC.getRTSStats
+                             -- Crucially, we also update this counter every time
+                             -- we are requested for a new value, as the user won't
+                             -- even know this counter exist in the first place and
+                             -- thus cannot update it.
+                             addCounter c' (fromIntegral val)
+                             pure val
+                       }
+            EKG.registerCounter metric (readCounter c') ekgStore
+            pure $ M.insert metric c' acc
+
+      mkGauge :: EKG.Store
+              -> Map Text Gauge
+              -> (Text, GHC.RTSStats -> Int64)
+              -> IO (Map Text Gauge)
+      mkGauge ekgStore !acc (metric, readValue) = do
+            g <- newGauge predefinedLabels
+            EKG.registerGauge metric (readValue <$> GHC.getRTSStats) ekgStore
+            pure $ M.insert metric g acc
 
 -- | Forks a new EKG server and hooks it to the provided @host:port@.
 forkEkgServer :: MetricsStore  -- ^ A 'MetricsStore'.
@@ -181,11 +247,10 @@ forkEkgServer :: MetricsStore  -- ^ A 'MetricsStore'.
               -> IO ()
 forkEkgServer ms host port = do
     let store = _msEKGStore ms
-    EKG.registerGcMetrics store
     void $ EKG.forkServerWith store (C8.pack host) (fromIntegral port)
 
 withMetric :: Text
-           -- ^ The label to lookup.
+           -- ^ The metric to lookup.
            -> TVar (Map Text w)
            -- ^ A collection of metrics
            -> IO w
@@ -193,12 +258,12 @@ withMetric :: Text
            -> (w -> IO ())
            -- ^ An action to update the metric
            -> IO ()
-withMetric label metrics newMetric action = do
-    mbMetric <- M.lookup label <$> atomically (readTVar metrics)
+withMetric metric allMetrics newMetric action = do
+    mbMetric <- M.lookup metric <$> atomically (readTVar allMetrics)
     case mbMetric of
          Nothing -> do
              c <- newMetric
-             atomically $ modifyTVar' metrics (M.insert label c)
+             atomically $ modifyTVar' allMetrics (M.insert metric c)
              action c
          Just c -> action c
 
@@ -207,15 +272,15 @@ withMetric label metrics newMetric action = do
 -- counter.
 withCounter :: Text
             -> Labels
-            -- ^ Some stock labels to add if the counter doesn't exist yet.
             -> MetricsStore
             -> (MonotonicCounter -> IO ())
             -> IO ()
-withCounter metric labels MetricsStore{..} action =
-    let createAndRegister = do
-            c@(MonotonicCounter ekgCounter _) <- newCounter labels
-            EKG.registerCounter metric (EKG.Counter.read ekgCounter) _msEKGStore
-            pure c
+withCounter metric extraLabels MetricsStore{..} action =
+    let labels = _msPredefinedLabels <> extraLabels
+        createAndRegister = do
+           c <- newCounter labels
+           EKG.registerCounter metric (readCounter c) _msEKGStore
+           pure c
     in withMetric metric _msCounters createAndRegister action
 
 -- | Modifies the 'Gauge' with the supplied action.
@@ -226,11 +291,12 @@ withGauge :: Text
           -> MetricsStore
           -> (Gauge -> IO ())
           -> IO ()
-withGauge metric labels MetricsStore{..} action =
-    let createAndRegister = do
-            c@(Gauge ekgGauge _) <- newGauge labels
-            EKG.registerGauge metric (EKG.Gauge.read ekgGauge) _msEKGStore
-            pure c
+withGauge metric extraLabels MetricsStore{..} action =
+    let labels = _msPredefinedLabels <> extraLabels
+        createAndRegister = do
+           g <- newGauge labels
+           EKG.registerGauge metric (readGauge g) _msEKGStore
+           pure g
     in withMetric metric _msGauges createAndRegister action
 
 -- | Modifies the 'Histogram with the supplied action.
@@ -242,21 +308,26 @@ withHistogram :: Text
               -> MetricsStore
               -> (Histogram -> IO ())
               -> IO ()
-withHistogram metric labels defaultBuckets MetricsStore{..} action =
+withHistogram metric extraLabels defaultBuckets MetricsStore{..} action =
     -- There is no 'Histogram' type for EKG, so we cannot directly
     -- register it.
-    withMetric metric _msHistograms (newHistogram labels defaultBuckets) action
+    let labels = _msPredefinedLabels <> extraLabels
+    in withMetric metric _msHistograms (newHistogram labels defaultBuckets) action
 
 -- | Update the 'MetricsStore' with the given 'Action'.
 updateMetricsStore :: MetricsStore -> Action -> IO ()
 updateMetricsStore metricsStore action = case action of
-    CounterIncrease metric labels ->
-        withCounter metric labels metricsStore incCounter
-    CounterAdd metric labels value ->
-        withCounter metric labels metricsStore (`addToCounter` value)
-    GaugeIncrease metric labels ->
-        withGauge metric labels metricsStore incGauge
-    GaugeAdd metric labels value ->
-        withGauge metric labels metricsStore (`addToGauge` value)
-    HistogramObserve metric labels buckets value ->
-        withHistogram metric labels buckets metricsStore (`observeHistogram` value)
+    CounterIncrease metric extraLabels ->
+        withCounter metric extraLabels metricsStore incCounter
+    CounterAdd metric extraLabels value ->
+        withCounter metric extraLabels metricsStore (`addCounter` value)
+    GaugeIncrease metric extraLabels ->
+        withGauge metric extraLabels metricsStore incGauge
+    GaugeDecrease metric extraLabels ->
+        withGauge metric extraLabels metricsStore decGauge
+    GaugeSet metric extraLabels value ->
+        withGauge metric extraLabels metricsStore (`setGauge` value)
+    GaugeAdd metric extraLabels value ->
+        withGauge metric extraLabels metricsStore (`addGauge` value)
+    HistogramObserve metric extraLabels buckets value ->
+        withHistogram metric extraLabels buckets metricsStore (`observeHistogram` value)

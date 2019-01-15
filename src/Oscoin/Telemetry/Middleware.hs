@@ -83,16 +83,16 @@ newline :: BL.Builder
 newline = BL.char8 '\n'
 
 renderCounter :: Builder -> (Text, MonotonicCounter) -> IO Builder
-renderCounter !acc (metric, counter@(MonotonicCounter _ labels)) = do
+renderCounter !acc (metric, counter) = do
     sample <- readCounter counter
-    let labeled = withLabels metric labels
+    let labeled = withLabels metric (_counterLabels counter)
         entry = sformat (stext % " " % int % "\n") labeled sample
     pure $ acc <> toB entry
 
 renderGauge :: Builder -> (Text, Gauge) -> IO Builder
-renderGauge !acc (metric, gauge@(Gauge _ labels)) = do
+renderGauge !acc (metric, gauge) = do
     sample <- readGauge gauge
-    let labeled = withLabels metric labels
+    let labeled = withLabels metric (_gaugeLabels gauge)
         entry   = sformat (stext % " " % float % "\n") labeled sample
     pure $ acc <> toB entry
 

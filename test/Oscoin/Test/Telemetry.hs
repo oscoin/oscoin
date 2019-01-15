@@ -65,7 +65,7 @@ testRenderCounter :: Assertion
 testRenderCounter = do
     let label = "foo.bar.baz"
     counter <- newCounter exampleLabels
-    addToCounter counter 10
+    addCounter counter 10
     have <- toLazyByteString <$> renderCounter mempty (label, counter)
     toS have @?= ("foo_bar_baz{env=\"staging\",host=\"localhost\"} 10\n" :: Text)
 
@@ -73,7 +73,7 @@ testRenderGauge :: Assertion
 testRenderGauge = do
     let label = "metric_without_timestamp_and_labels"
     gauge <- newGauge exampleLabels
-    addToGauge gauge 12
+    addGauge gauge 12
     have <- toLazyByteString <$> renderGauge mempty (label, gauge)
     let want = "metric_without_timestamp_and_labels{env=\"staging\",host=\"localhost\"} 12.0\n"
     toS have @?= (want :: Text)

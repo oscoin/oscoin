@@ -99,6 +99,8 @@ executables:
       - oscoin
       - semigroups
       - yaml
+    ghc-options:
+      - -with-rtsopts=-T
 
   oscoin-cli:
     main: exe/cli/Main.hs
@@ -216,4 +218,3 @@ ghc-options:
   - -Wredundant-constraints
   - -fno-print-expanded-synonyms
   - -funbox-small-strict-fields
-  - -with-rtsopts=-T

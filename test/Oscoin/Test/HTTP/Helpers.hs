@@ -137,7 +137,7 @@ withNode NodeState{..} k = do
     let env    = Testing
         logger = Log.noLogger
     config <- Consensus.getConfig env
-    metricsStore <- Metrics.newMetricsStore
+    metricsStore <- Metrics.newMetricsStore Metrics.noLabels
     let store = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env
                           , Node.cfgLogger = logger
