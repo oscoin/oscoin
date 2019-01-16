@@ -38,7 +38,7 @@ import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
-import           Oscoin.Telemetry (NotableEvent(..), Value(..))
+import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 
 import qualified Oscoin.Storage.Block.Class as BlockStore
@@ -98,9 +98,7 @@ miner = do
 
             for_ blk $ \b -> do
                 lift   $ P2P.broadcast $ P2P.BlockMsg b
-                liftIO $ do
-                    Telemetry.emit store BlockMinedEvent [("blockHash", H $ blockHash b)]
-                    Log.info (cfgLogger hConfig) ("mined block " % formatHash) (blockHash b)
+                liftIO $ Telemetry.emit store (BlockMinedEvent (blockHash b))
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.

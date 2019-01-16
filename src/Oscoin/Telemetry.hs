@@ -1,8 +1,6 @@
 module Oscoin.Telemetry
     ( -- * Types
       TelemetryStore -- opaque
-    , Metadata
-    , Value(..)
 
     -- * API
     , newTelemetryStore
@@ -13,11 +11,13 @@ module Oscoin.Telemetry
 
 import           Oscoin.Prelude
 
-import           Oscoin.Logging
+import           GHC.Stack as GHC
 
+import           Oscoin.Crypto.Hash (formatHash)
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Logging as Log
 import           Oscoin.Telemetry.Events
-import           Oscoin.Telemetry.Internal
-                 (Metadata, TelemetryStore(..), Value(..))
+import           Oscoin.Telemetry.Internal (TelemetryStore(..))
 import           Oscoin.Telemetry.Metrics
 
 {------------------------------------------------------------------------------
@@ -28,18 +28,16 @@ import           Oscoin.Telemetry.Metrics
 newTelemetryStore :: Logger -> MetricsStore -> TelemetryStore
 newTelemetryStore = TelemetryStore
 
--- | Single /facade/ to the telemetry API. Given a 'NotableEvent' and a list
--- of 'Metadata' for that particular event, dispatch the updates to the metrics
--- and logging systems.
+-- | Single /facade/ to the telemetry API. Given a 'NotableEvent',
+-- dispatch the updates to the metrics and logging systems.
 ---
---- >>> emit telemetryStore BlockMinedEvent [("blockSize", I 100)]
+--- >>> emit telemetryStore (BlockMinedEvent (blockHash b)
 --
--- NOTE(adn): This function for now just updates the 'MetricsStore', but
--- in the future it should also log stuff.
-emit :: TelemetryStore -> NotableEvent -> [Metadata] -> IO ()
-emit telemetryStore evt metadata =
+emit :: HasCallStack => TelemetryStore -> NotableEvent -> IO ()
+emit telemetryStore evt = GHC.withFrozenCallStack $
     case evt of
-        BlockMinedEvent   -> handleBlockMinedEvent metadata telemetryStore
+        BlockMinedEvent blockHash ->
+            handleBlockMinedEvent telemetryStore blockHash
         BlockAppliedEvent -> pure ()
         TxSentEvent       -> pure ()
         TxReceivedEvent   -> pure ()
@@ -50,7 +48,7 @@ emit telemetryStore evt metadata =
 -- need to modify in the code each time a new 'NotableEvent' is added.
 toActions :: NotableEvent -> [Action]
 toActions = \case
-    BlockMinedEvent -> [
+    BlockMinedEvent _ -> [
         CounterIncrease "oscoin.block_mined.total" noLabels
       ]
     BlockAppliedEvent -> [
@@ -62,7 +60,10 @@ toActions = \case
 
 -- | For a 'BlockMinedEvent', we want to increment the total counter of
 -- mined blocks as well as log some interesting info about the input block.
--- TODO(adn): Consider the 'Metadata' and perhaps log the event.
-handleBlockMinedEvent :: [Metadata] -> TelemetryStore -> IO ()
-handleBlockMinedEvent _metadata TelemetryStore{..} =
-    forM_ (toActions BlockMinedEvent) (updateMetricsStore telemetryMetrics)
+handleBlockMinedEvent :: HasCallStack
+                      => TelemetryStore
+                      -> Crypto.Hash
+                      -> IO ()
+handleBlockMinedEvent TelemetryStore{..} bHash = do
+    forM_ (toActions (BlockMinedEvent bHash)) (updateMetricsStore telemetryMetrics)
+    Log.info telemetryLogger ("mined block " % formatHash) bHash
