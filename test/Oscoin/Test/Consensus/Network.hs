@@ -234,15 +234,15 @@ applyMessage :: (TestableNode s m a, Serialise s)
 applyMessage _ _ _ _ msg@(TxMsg tx) = do
     result <- Storage.applyTx tx
     pure $ case result of
-        Storage.Applied -> [msg]
-        _               -> []
+        (_telemetryEvents, Storage.Applied) -> [msg]
+        _                                   -> []
 applyMessage config to validate eval msg@(BlockMsg blk) = do
     result          <- Storage.applyBlock eval validate config blk
     parentMissing   <- isNothing <$> Storage.lookupBlock parentHash
 
     -- If the parent block is missing, request it from the network.
     pure $ case result of
-        Storage.Applied
+        (_events, Storage.Applied)
             | parentMissing -> [msg, ReqBlockMsg to parentHash]
             | otherwise     -> [msg]
         _ -> []

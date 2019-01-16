@@ -15,9 +15,9 @@ import           Oscoin.Clock (MonadClock)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHash, blockHash, blockHeader, blockPrevHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Logging (Logger)
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
+import           Oscoin.Telemetry (NotableEvent(..), TelemetryStore, emit)
 
 import           Oscoin.P2P.Class
 import           Oscoin.P2P.Handshake
@@ -75,7 +75,7 @@ withGossip
        , Exception e
        , Serialise o
        )
-    => Logger
+    => TelemetryStore
     -> NodeAddr
     -- ^ Node identity (\"self\")
     -> [NodeAddr]
@@ -84,7 +84,7 @@ withGossip
     -> Handshake e NodeId Wire o
     -> (Gossip.Run.Env NodeId -> IO a)
     -> IO a
-withGossip _logger selfAddr peerAddrs Storage{..} handshake run = do
+withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
     (self:peers) <-
         for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
             Gossip.knownPeer nodeId nodeHost nodePort
@@ -94,7 +94,7 @@ withGossip _logger selfAddr peerAddrs Storage{..} handshake run = do
         Periodic.defaultConfig
         scheduleInterval
         (wrapHandshake handshake)
-        (wrapApply  storageLookupBlock storageApplyBlock storageApplyTx)
+        (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
         (wrapLookup storageLookupBlock storageLookupTx)
         (nodeHost selfAddr)
         (nodePort selfAddr)
@@ -143,18 +143,23 @@ wrapApply
        , Serialise       tx
        , Crypto.Hashable tx
        )
-    => (BlockHash   -> IO (Maybe (Block tx s)))
-    -> (Block tx s  -> IO Storage.ApplyResult)
-    -> (tx          -> IO Storage.ApplyResult)
+    => TelemetryStore
+    -> (BlockHash   -> IO (Maybe (Block tx s)))
+    -> (Block tx s  -> IO ([NotableEvent], Storage.ApplyResult))
+    -> (tx          -> IO ([NotableEvent], Storage.ApplyResult))
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
-wrapApply lookupBlock applyBlock applyTx mid payload =
+wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
     case fromGossip mid payload of
         Left  _   -> pure Bcast.Error -- TODO(kim): log error here (can't do anything about it)
         Right msg -> map (uncurry convertApplyResult) $
             case msg of
-                TxMsg    tx  -> (,) Nothing <$> applyTx tx
+                TxMsg    tx  -> do
+                    (events, result) <- applyTx tx
+                    forM_ (TxReceivedEvent (Crypto.hash tx) : events)
+                          (emit telemetryStore)
+                    (,) Nothing <$> pure result
                 BlockMsg blk ->
                     let
                         parentHash = blockPrevHash $ blockHeader blk
@@ -165,7 +170,11 @@ wrapApply lookupBlock applyBlock applyTx mid payload =
                      in
                         liftA2 (,)
                                (missing <$> lookupBlock parentHash)
-                               (applyBlock blk)
+                               (do (events, result) <- applyBlock blk
+                                   forM_ (BlockReceivedEvent (blockHash blk) : events)
+                                         (emit telemetryStore)
+                                   pure result
+                               )
   where
     convertApplyResult missing = \case
         Storage.Applied -> Bcast.Applied missing

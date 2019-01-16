@@ -28,14 +28,16 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
+import           Oscoin.Telemetry (NotableEvent(..))
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Data.Foldable (toList)
 
 -- | Package up the storage operations in a dictionary
 data Storage tx s f = Storage
-    { storageApplyBlock  :: Block tx s  -> f ApplyResult
-    , storageApplyTx     :: tx          -> f ApplyResult
+    { storageApplyBlock  :: Block tx s  -> f ([NotableEvent], ApplyResult)
+    , storageApplyTx     :: tx          -> f ([NotableEvent], ApplyResult)
     , storageLookupBlock :: BlockHash   -> f (Maybe (Block tx s))
     , storageLookupTx    :: Hashed tx   -> f (Maybe tx)
     }
@@ -59,6 +61,7 @@ applyBlock
     :: ( MonadBlockStore tx s m
        , MonadStateStore st   m
        , MonadMempool    tx   m
+       , Crypto.Hashable tx
        , Serialise       tx
        , Serialise       s
        )
@@ -66,16 +69,18 @@ applyBlock
     -> Validate     tx s
     -> Consensus.Config
     -> Block        tx s
-    -> m ApplyResult
+    -> m ([NotableEvent], ApplyResult)
 applyBlock eval validate config blk = do
-    novel <- isNovelBlock (blockHash blk)
+    let blkHash = blockHash blk
+    novel <- isNovelBlock blkHash
     if | novel -> do
         blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
         case validateBlockSize config blk >>= const (validate blks blk) of
-            Left  _    -> pure Error
+            Left err -> pure ([BlockValidationFailedEvent blkHash err], Error)
             Right () -> do
+                let txs = blockData blk
                 BlockStore.storeBlock blk
-                Mempool.delTxs (blockData blk)
+                Mempool.delTxs txs
 
                 -- Try to find the parent state of the block, and if found,
                 -- save a new state in the state store.
@@ -87,18 +92,21 @@ applyBlock eval validate config blk = do
                         (blockStateHash $ blockHeader prevBlock)
 
                     case evalBlock eval prevState blk of
-                        Left _err ->
-                            pure Error
+                        Left err ->
+                            pure ([BlockEvaluationFailedEvent blkHash err], Error)
                         Right st' -> do
                             lift $ StateStore.storeState st'
-                            pure Applied
+                            let events = [ BlockAppliedEvent blkHash
+                                         , TxsRemovedFromMempoolEvent (toList txs)
+                                         ]
+                            pure (events, Applied)
 
                 -- Nb. If either the parent block wasn't found, or the parent state,
                 -- the block is considered an "orphan", and we consider it
                 -- 'Applied' anyway.
-                pure $ maybe Applied identity result
+                pure $ maybe ([BlockOrphanEvent blkHash], Applied) identity result
 
-       | otherwise -> pure Stale
+       | otherwise -> pure ([BlockStaleEvent blkHash], Stale)
 
 applyTx
     :: ( MonadBlockStore tx s m
@@ -106,11 +114,12 @@ applyTx
        , Crypto.Hashable tx
        )
     => tx
-    -> m ApplyResult
+    -> m ([NotableEvent], ApplyResult)
 applyTx tx = do
-    novel <- isNovelTx (Crypto.hash tx)
-    if | novel     -> Mempool.addTxs [tx] $> Applied
-       | otherwise -> pure Stale
+    let txHash = Crypto.hash tx
+    novel <- isNovelTx txHash
+    if | novel     -> Mempool.addTxs [tx] $> ([TxAppliedEvent txHash], Applied)
+       | otherwise -> pure ([TxStaleEvent txHash], Stale)
 
 lookupBlock :: MonadBlockStore tx s m => BlockHash -> m (Maybe (Block tx s))
 lookupBlock = BlockStore.lookupBlock

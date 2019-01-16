@@ -32,6 +32,7 @@ import           Oscoin.Telemetry.Metrics
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
+import           Lens.Micro
 import           Network.Socket (HostName, PortNumber)
 
 import           Options.Applicative
@@ -123,14 +124,15 @@ main = do
     forkEkgServer metricsStore ekgHost ekgPort
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig environment lgr metricsStore noEmptyBlocks config)
-                   nid
-                   mem
-                   stStore
-                   blkStore
-                   Rad.txEval
-                   consensus                                      $ \nod ->
-        withGossip lgr
+        let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
+        in withNode (mkNodeConfig environment telemetryStore noEmptyBlocks config)
+                    nid
+                    mem
+                    stStore
+                    blkStore
+                    Rad.txEval
+                    consensus                                      $ \nod ->
+        withGossip telemetryStore
                    P2P.NodeAddr { P2P.nodeId   = nid
                                 , P2P.nodeHost = host
                                 , P2P.nodePort = gossipPort
@@ -142,10 +144,10 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) environment nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr metricsStore neb config = Node.Config
+    mkNodeConfig env telemetryStore neb config = Node.Config
         { Node.cfgEnv = env
-        , Node.cfgLogger = lgr
-        , Node.cfgTelemetryStore = Telemetry.newTelemetryStore lgr metricsStore
+        , Node.cfgLogger = telemetryStore ^. Log.loggerL
+        , Node.cfgTelemetryStore = telemetryStore
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
         }
