@@ -39,7 +39,6 @@ module Oscoin.Telemetry.Metrics
     ) where
 
 import           Oscoin.Prelude
-import qualified Prelude
 
 import           Control.Concurrent.STM
 import qualified Data.ByteString.Char8 as C8
@@ -49,6 +48,7 @@ import qualified GHC.Stats as GHC
 import           Network.Socket (HostName, PortNumber)
 
 import           Oscoin.Telemetry.Metrics.Internal
+import           Oscoin.Time (milliseconds)
 
 import qualified System.Metrics as EKG
 import qualified System.Metrics.Counter as EKG.Counter
@@ -114,7 +114,7 @@ linearBuckets :: Double      -- ^ Starting value
               -> Natural     -- ^ Number of buckets to create
               -> Buckets
 linearBuckets start step (fromIntegral -> bucketNumber)
-  | bucketNumber == 0 = Prelude.error "linearBuckets: you must create at least 1 bucket."
+  | bucketNumber == 0 = panic "linearBuckets: you must create at least 1 bucket."
   | otherwise = Buckets $
       foldl' (\acc k -> M.insert k 0.0 acc)
              mempty
@@ -211,7 +211,7 @@ newMetricsStore predefinedLabels = do
     where
       -- | Convert nanoseconds to milliseconds.
       nsToMs :: Int64 -> Int64
-      nsToMs s = round (realToFrac s / (1000000.0 :: Double))
+      nsToMs s = round (realToFrac s / (fromIntegral milliseconds :: Double))
 
       mkCounter :: EKG.Store
                 -> Map Text MonotonicCounter
@@ -259,7 +259,7 @@ withMetric :: Text
            -- ^ An action to update the metric
            -> IO ()
 withMetric metric allMetrics newMetric action = do
-    mbMetric <- M.lookup metric <$> atomically (readTVar allMetrics)
+    mbMetric <- M.lookup metric <$> readTVarIO allMetrics
     case mbMetric of
          Nothing -> do
              c <- newMetric
