@@ -2,12 +2,14 @@ module Oscoin.API.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
+import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
@@ -15,6 +17,8 @@ import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.State.Tree (Key)
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
+import           Oscoin.Telemetry (telemetryStoreL)
+import           Oscoin.Telemetry as Telemetry
 
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (ToJSON)
@@ -49,12 +53,14 @@ getTransaction txId = do
                 result <- BlockStore.lookupTx id
                 pure $ fromTxLookup <$> result
 
-
 submitTransaction :: ApiAction s i a
 submitTransaction = do
     tx <- getVerifiedTxBody
     receipt <- node $ do
+        store <- view telemetryStoreL
         Mempool.addTxs [tx]
+        forM_ [TxsAddedToMempoolEvent [tx], TxSentEvent (Crypto.hash tx)] $
+            liftIO . Telemetry.emit store
         pure $ TxSubmitResponse (hash tx)
 
     respond accepted202 $ body (Ok receipt)
