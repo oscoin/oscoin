@@ -66,6 +66,7 @@ library:
     - network
     - optparse-applicative
     - prettyprinter
+    - pretty-terminal
     - protolude
     - radicle
     - random

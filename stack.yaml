@@ -14,6 +14,7 @@ extra-deps:
 - Spock-0.13.0.0
 - Spock-core-0.13.0.0
 - formatting-6.3.7 # Handy to have a Buildable [a] instance
+- pretty-terminal-0.1.0.0
 
 - git: http://git.oscoin.io/radicle
   commit: 12707c83663909d303e4daf1806f22a779be7598

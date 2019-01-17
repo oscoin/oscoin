@@ -121,7 +121,9 @@ main = do
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText env)]
     forkEkgServer metricsStore ekgHost ekgPort
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
+    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug
+                                     , Log.cfgStyle = Log.styleFromEnvironment env
+                                     } $ \lgr ->
         let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
         in withNode (mkNodeConfig env telemetryStore noEmptyBlocks config)
                     nid
