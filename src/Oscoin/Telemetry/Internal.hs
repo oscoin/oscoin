@@ -4,7 +4,7 @@ module Oscoin.Telemetry.Internal
     ) where
 
 import           Lens.Micro
-import           Oscoin.Logging
+import           Oscoin.Telemetry.Logging
 import           Oscoin.Telemetry.Metrics
 
 data TelemetryStore = TelemetryStore {

@@ -47,13 +47,13 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
-import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
+import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Telemetry.Metrics as Metrics
 import           Oscoin.Time
 
@@ -140,7 +140,6 @@ withNode NodeState{..} k = do
     metricsStore <- Metrics.newMetricsStore Metrics.noLabels
     let store = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env
-                          , Node.cfgLogger = logger
                           , Node.cfgTelemetryStore = store
                           , Node.cfgNoEmptyBlocks = False
                           , Node.cfgConsensusConfig = config

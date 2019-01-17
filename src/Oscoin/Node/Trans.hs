@@ -17,7 +17,6 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Data.Query
 import           Oscoin.Environment
-import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
@@ -54,7 +53,6 @@ runNodeT env (NodeT ma) = runReaderT ma env
 -- | Node static config.
 data Config = Config
     { cfgEnv             :: Environment
-    , cfgLogger          :: Log.Logger
     , cfgTelemetryStore  :: Telemetry.TelemetryStore
     , cfgNoEmptyBlocks   :: Bool
     , cfgConsensusConfig :: Consensus.Config

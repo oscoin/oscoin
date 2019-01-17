@@ -29,8 +29,6 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Environment as Env
-import           Oscoin.Logging (stext, (%))
-import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -41,6 +39,8 @@ import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Logging (stext, (%))
+import qualified Oscoin.Telemetry.Logging as Log
 
 import qualified Oscoin.Storage.Block.Class as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
@@ -52,6 +52,7 @@ import qualified Radicle.Extended as Rad
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
+import           Lens.Micro ((^.))
 
 withNode
     :: (Hashable tx)
@@ -70,8 +71,11 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     open = do
         hReceiptStore <- ReceiptStore.newHandle
         gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
-        Log.info (cfgLogger hConfig) ("running in " % stext % " mode") (Env.toText $ cfgEnv hConfig)
-        Log.info (cfgLogger hConfig) ("genesis is " % formatHash) (blockHash gen)
+        Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
+                 ("running in " % stext % " mode") (Env.toText $ cfgEnv hConfig)
+        Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
+                 ("genesis is " % formatHash)
+                 (blockHash gen)
         pure Handle{..}
 
     close = const $ pure ()

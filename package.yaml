@@ -95,7 +95,6 @@ executables:
     dependencies:
       - async
       - network
-      - microlens
       - optparse-applicative
       - oscoin
       - semigroups

@@ -27,12 +27,13 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Logging (withStdLogger)
+import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
-import           Lens.Micro
 import           Network.Socket (HostName, PortNumber)
 
 import           Options.Applicative
@@ -146,7 +147,6 @@ main = do
   where
     mkNodeConfig env telemetryStore neb config = Node.Config
         { Node.cfgEnv = env
-        , Node.cfgLogger = telemetryStore ^. Log.loggerL
         , Node.cfgTelemetryStore = telemetryStore
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
