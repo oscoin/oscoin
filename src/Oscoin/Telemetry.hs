@@ -21,9 +21,9 @@ import           Lens.Micro
 
 import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Logging as Log
 import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (TelemetryStore(..))
+import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
 {------------------------------------------------------------------------------

@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 -- | Minimalistic logging library with a @printf()@-style interface.
 --
 -- >>> :{
@@ -17,7 +15,7 @@
 --     info lgr ("Concurrently " % fthreadId) tid
 --  :}
 -- Concurrently thread="ThreadId 2196" at="I" loc="interactive:Ghci5:71:39"
-module Oscoin.Logging
+module Oscoin.Telemetry.Logging
     ( -- * Types
       Logger
     , HasLogger (..)
