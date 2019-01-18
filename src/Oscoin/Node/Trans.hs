@@ -28,6 +28,7 @@ import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import qualified Oscoin.Telemetry as Telemetry
 
 import qualified Radicle.Extended as Rad
 
@@ -53,6 +54,7 @@ runNodeT env (NodeT ma) = runReaderT ma env
 data Config = Config
     { cfgEnv             :: Environment
     , cfgLogger          :: Log.Logger
+    , cfgTelemetryStore  :: Telemetry.TelemetryStore
     , cfgNoEmptyBlocks   :: Bool
     , cfgConsensusConfig :: Consensus.Config
     }

@@ -53,6 +53,8 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
+import qualified Oscoin.Telemetry as Telemetry
+import qualified Oscoin.Telemetry.Metrics as Metrics
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId, DummySeal)
@@ -132,10 +134,14 @@ nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, states
 
 withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
 withNode NodeState{..} k = do
-    let env = Testing
+    let env    = Testing
+        logger = Log.noLogger
     config <- Consensus.getConfig env
+    metricsStore <- Metrics.newMetricsStore Metrics.noLabels
+    let store = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env
-                          , Node.cfgLogger = Log.noLogger
+                          , Node.cfgLogger = logger
+                          , Node.cfgTelemetryStore = store
                           , Node.cfgNoEmptyBlocks = False
                           , Node.cfgConsensusConfig = config
                           }

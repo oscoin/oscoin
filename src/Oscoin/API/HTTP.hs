@@ -10,6 +10,9 @@ import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
+import qualified Oscoin.Node.Trans as Node.Trans
+import           Oscoin.Telemetry (TelemetryStore)
+import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
 
 import qualified Oscoin.API.HTTP.Handlers as Handlers
 import           Oscoin.API.HTTP.Internal
@@ -25,10 +28,14 @@ import           Codec.Serialise (Serialise)
 import           Data.Aeson (ToJSON)
 
 run :: (ToJSON s, Serialise s) => Int -> Environment -> Node.Handle RadTx Rad.Env s i -> IO ()
-run port env hdl = runApi (api env) port hdl
+run port env hdl =
+    let telemetryStore = Node.cfgTelemetryStore . Node.Trans.hConfig $ hdl
+    in runApi (api env telemetryStore) port hdl
 
 app :: (ToJSON s, Serialise s) => Environment -> Node.Handle RadTx Rad.Env s i -> IO Wai.Application
-app env hdl = spockAsApp $ mkMiddleware (api env) hdl
+app env hdl =
+    let telemetryStore = Node.cfgTelemetryStore . Node.Trans.hConfig $ hdl
+    in spockAsApp $ mkMiddleware (api env telemetryStore) hdl
 
 -- | Policy for static file serving.
 staticFilePolicy :: Wai.Policy
@@ -38,9 +45,10 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api :: (ToJSON s, Serialise s) => Environment -> Api s i ()
-api env = do
+api :: (ToJSON s, Serialise s) => Environment -> TelemetryStore -> Api s i ()
+api env telemetryStore = do
     middleware $ loggingMiddleware env
+               . telemetryMiddleware telemetryStore
                . Wai.staticPolicy staticFilePolicy
 
     -- / ----------------------------------------------------------------------

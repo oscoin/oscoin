@@ -13,7 +13,7 @@ import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
-import           Oscoin.Environment (Environment(Development))
+import           Oscoin.Environment (Environment(Development), toText)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
@@ -26,6 +26,8 @@ import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
+import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml
@@ -42,6 +44,8 @@ data Args = Args
     , genesis       :: FilePath
     , noEmptyBlocks :: Bool
     , keysPath      :: Maybe FilePath
+    , ekgHost       :: HostName
+    , ekgPort       :: PortNumber
     } deriving (Generic, Show)
 
 args :: ParserInfo Args
@@ -83,6 +87,18 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> showDefault
             )
         <*> keyPathParser
+        <*> option str
+            ( long "ekg-host"
+           <> help "Host name to bind to for the EKG server"
+           <> value "0.0.0.0"
+           <> showDefault
+            )
+        <*> option auto
+            ( long "ekg-port"
+           <> help "Port number to bind to for the EKG server"
+           <> value 8090
+           <> showDefault
+            )
 
 
 main :: IO ()
@@ -102,8 +118,11 @@ main = do
     seeds'      <- Yaml.decodeFileThrow seeds
     config      <- Consensus.getConfig env
 
+    metricsStore <- newMetricsStore $ labelsFromList [("env", toText env)]
+    forkEkgServer metricsStore ekgHost ekgPort
+
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig env lgr noEmptyBlocks config)
+        withNode   (mkNodeConfig env lgr metricsStore noEmptyBlocks config)
                    nid
                    mem
                    stStore
@@ -122,9 +141,10 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr neb config = Node.Config
+    mkNodeConfig env lgr metricsStore neb config = Node.Config
         { Node.cfgEnv = env
         , Node.cfgLogger = lgr
+        , Node.cfgTelemetryStore = Telemetry.newTelemetryStore lgr metricsStore
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
         }
