@@ -66,6 +66,7 @@ library:
     - network
     - optparse-applicative
     - prettyprinter
+    - pretty-terminal
     - protolude
     - radicle
     - random
@@ -95,7 +96,6 @@ executables:
     dependencies:
       - async
       - network
-      - microlens
       - optparse-applicative
       - oscoin
       - semigroups

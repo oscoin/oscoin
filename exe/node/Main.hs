@@ -14,8 +14,6 @@ import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Environment (Environment(Development), toText)
-import           Oscoin.Logging (withStdLogger)
-import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -27,12 +25,13 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Logging (withStdLogger)
+import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
 import qualified Data.Yaml as Yaml
 import           GHC.Generics (Generic)
-import           Lens.Micro
 import           Network.Socket (HostName, PortNumber)
 
 import           Options.Applicative
@@ -122,7 +121,9 @@ main = do
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText env)]
     forkEkgServer metricsStore ekgHost ekgPort
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
+    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug
+                                     , Log.cfgStyle = Log.styleFromEnvironment env
+                                     } $ \lgr ->
         let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
         in withNode (mkNodeConfig env telemetryStore noEmptyBlocks config)
                     nid
@@ -145,7 +146,6 @@ main = do
   where
     mkNodeConfig env telemetryStore neb config = Node.Config
         { Node.cfgEnv = env
-        , Node.cfgLogger = telemetryStore ^. Log.loggerL
         , Node.cfgTelemetryStore = telemetryStore
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
