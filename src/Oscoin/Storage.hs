@@ -36,8 +36,8 @@ import           Data.Foldable (toList)
 
 -- | Package up the storage operations in a dictionary
 data Storage tx s f = Storage
-    { storageApplyBlock  :: Block tx s  -> f ([NotableEvent], ApplyResult)
-    , storageApplyTx     :: tx          -> f ([NotableEvent], ApplyResult)
+    { storageApplyBlock  :: Block tx s  -> f ApplyResult
+    , storageApplyTx     :: tx          -> f ApplyResult
     , storageLookupBlock :: BlockHash   -> f (Maybe (Block tx s))
     , storageLookupTx    :: Hashed tx   -> f (Maybe tx)
     }
@@ -52,10 +52,9 @@ hoistStorage f s = s
     }
 
 data ApplyResult =
-      Applied
-    | Stale
-    | Error -- TODO(kim): figure out informative error types
-    deriving Eq
+      Applied [NotableEvent]
+    | Stale   [NotableEvent]
+    | Error   [NotableEvent] -- TODO(kim): figure out informative error types
 
 applyBlock
     :: ( MonadBlockStore tx s m
@@ -69,14 +68,14 @@ applyBlock
     -> Validate     tx s
     -> Consensus.Config
     -> Block        tx s
-    -> m ([NotableEvent], ApplyResult)
+    -> m ApplyResult
 applyBlock eval validate config blk = do
     let blkHash = blockHash blk
     novel <- isNovelBlock blkHash
     if | novel -> do
         blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
         case validateBlockSize config blk >>= const (validate blks blk) of
-            Left err -> pure ([BlockValidationFailedEvent blkHash err], Error)
+            Left err -> pure $ Error [BlockValidationFailedEvent blkHash err]
             Right () -> do
                 let txs = blockData blk
                 BlockStore.storeBlock blk
@@ -93,20 +92,20 @@ applyBlock eval validate config blk = do
 
                     case evalBlock eval prevState blk of
                         Left err ->
-                            pure ([BlockEvaluationFailedEvent blkHash err], Error)
+                            pure $ Error [BlockEvaluationFailedEvent blkHash err]
                         Right st' -> do
                             lift $ StateStore.storeState st'
                             let events = [ BlockAppliedEvent blkHash
                                          , TxsRemovedFromMempoolEvent (toList txs)
                                          ]
-                            pure (events, Applied)
+                            pure $ Applied events
 
                 -- Nb. If either the parent block wasn't found, or the parent state,
                 -- the block is considered an "orphan", and we consider it
                 -- 'Applied' anyway.
-                pure $ maybe ([BlockOrphanEvent blkHash], Applied) identity result
+                pure $ maybe (Applied [BlockOrphanEvent blkHash]) identity result
 
-       | otherwise -> pure ([BlockStaleEvent blkHash], Stale)
+       | otherwise -> pure $ Stale [BlockStaleEvent blkHash]
 
 applyTx
     :: ( MonadBlockStore tx s m
@@ -114,12 +113,12 @@ applyTx
        , Crypto.Hashable tx
        )
     => tx
-    -> m ([NotableEvent], ApplyResult)
+    -> m ApplyResult
 applyTx tx = do
     let txHash = Crypto.hash tx
     novel <- isNovelTx txHash
-    if | novel     -> Mempool.addTxs [tx] $> ([TxAppliedEvent txHash], Applied)
-       | otherwise -> pure ([TxStaleEvent txHash], Stale)
+    if | novel     -> Mempool.addTxs [tx] $> Applied [TxAppliedEvent txHash]
+       | otherwise -> pure $ Stale [TxStaleEvent txHash]
 
 lookupBlock :: MonadBlockStore tx s m => BlockHash -> m (Maybe (Block tx s))
 lookupBlock = BlockStore.lookupBlock

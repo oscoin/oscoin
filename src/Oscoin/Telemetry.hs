@@ -47,56 +47,51 @@ newTelemetryStore = TelemetryStore
 --- >>> emit telemetryStore (BlockMinedEvent (blockHash b))
 --
 emit :: HasCallStack => TelemetryStore -> NotableEvent -> IO ()
-emit TelemetryStore{..} evt = GHC.withFrozenCallStack $ do
-    forM_ (toActions evt) (updateMetricsStore telemetryMetrics)
+emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
+    forM_ (toActions evt) (lift . updateMetricsStore telemetryMetrics)
     case evt of
         BlockReceivedEvent blockHash ->
-            Log.debug telemetryLogger ("received block " % formatHash) blockHash
+            Log.debugM ("received block " % formatHash) blockHash
         BlockMinedEvent blockHash ->
-            Log.info telemetryLogger ("mined block " % formatHash) blockHash
+            Log.withNamespace "node" $
+                Log.infoM ("mined block " % formatHash) blockHash
         BlockAppliedEvent blockHash ->
-            Log.debug telemetryLogger ("applied block " % formatHash) blockHash
+            Log.debugM ("applied block " % formatHash) blockHash
         BlockStaleEvent   blockHash ->
-            -- TODO(adn) Perhaps we want a 'warning' logging level here?
-            -- Think about implementing it as part of oscoin#337.
-            Log.info telemetryLogger ("stale block " % formatHash) blockHash
+            Log.infoM ("stale block " % formatHash) blockHash
         BlockApplyErrorEvent blockHash ->
-            Log.err telemetryLogger ("block application failed" % formatHash) blockHash
+            Log.errM ("block application failed" % formatHash) blockHash
         BlockOrphanEvent  blockHash ->
-            -- TODO(adn) 'warning' logging level here?
-            Log.info telemetryLogger ("orphan block " % formatHash) blockHash
+            Log.infoM ("orphan block " % formatHash) blockHash
         BlockValidationFailedEvent  blockHash _validationError ->
-            Log.err telemetryLogger
-                    ("block failed validation " % formatHash) blockHash
+            Log.errM ("block failed validation " % formatHash) blockHash
         BlockEvaluationFailedEvent  blockHash _evalError ->
-            Log.err telemetryLogger
-                    ("block failed evaluation " % formatHash) blockHash
+            Log.errM ("block failed evaluation " % formatHash) blockHash
         TxSentEvent txHash ->
-            Log.info telemetryLogger
-                     ("tx sent " % formatHash)
-                     (Crypto.fromHashed txHash)
+            Log.withNamespace "p2p" $
+                Log.infoM ("tx sent " % formatHash) (Crypto.fromHashed txHash)
+        TxSubmittedEvent txHash ->
+            Log.withNamespace "http-api" $
+                Log.infoM ("tx submitted " % formatHash) (Crypto.fromHashed txHash)
         TxReceivedEvent txHash ->
-            Log.debug telemetryLogger
-                      ("tx received " % formatHash)
-                      (Crypto.fromHashed txHash)
+            Log.debugM ("tx received " % formatHash) (Crypto.fromHashed txHash)
         TxStaleEvent txHash ->
-            Log.info telemetryLogger
-                     ("tx wasn't applied as it was stale " % formatHash)
-                     (Crypto.fromHashed txHash)
-        TxAppliedEvent txHash ->
-            Log.debug telemetryLogger
-                      ("tx was correctly applied " % formatHash)
+            Log.infoM ("tx wasn't applied as it was stale " % formatHash)
                       (Crypto.fromHashed txHash)
+        TxAppliedEvent txHash ->
+            Log.debugM ("tx was correctly applied " % formatHash)
+                       (Crypto.fromHashed txHash)
         TxsAddedToMempoolEvent txs ->
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
-            in Log.debug telemetryLogger
-                         ("txs added to the mempool " % listOf formatHash)
-                         hashes
+            in Log.debugM ("txs added to the mempool " % listOf formatHash)
+                          hashes
         TxsRemovedFromMempoolEvent txs ->
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
-            in Log.debug telemetryLogger
-                         ("txs removed from the mempool " % listOf formatHash)
-                         hashes
+            in Log.debugM ("txs removed from the mempool " % listOf formatHash)
+                          hashes
+  where
+    withLogger :: ReaderT Log.Logger IO a -> IO a
+    withLogger = flip runReaderT telemetryLogger
 
 -- | Maps each 'NotableEvent' to a set of 'Action's. The big pattern-matching
 -- block is by design. Despite the repetition (once in 'emit' and once in
@@ -140,6 +135,9 @@ toActions = \case
      ]
     TxSentEvent _ -> [
         CounterIncrease "oscoin.storage.txs_sent.total" noLabels
+     ]
+    TxSubmittedEvent _ -> [
+        CounterIncrease "oscoin.api.http_requests.total" noLabels
      ]
     TxReceivedEvent _ -> [
         CounterIncrease "oscoin.storage.txs_received.total" noLabels

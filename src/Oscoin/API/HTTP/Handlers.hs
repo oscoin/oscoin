@@ -59,7 +59,7 @@ submitTransaction = do
     receipt <- node $ do
         store <- view telemetryStoreL
         Mempool.addTxs [tx]
-        forM_ [TxsAddedToMempoolEvent [tx], TxSentEvent (Crypto.hash tx)] $
+        forM_ [TxsAddedToMempoolEvent [tx], TxSubmittedEvent (Crypto.hash tx)] $
             liftIO . Telemetry.emit store
         pure $ TxSubmitResponse (hash tx)
 
