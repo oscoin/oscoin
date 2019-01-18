@@ -145,8 +145,8 @@ wrapApply
        )
     => TelemetryStore
     -> (BlockHash   -> IO (Maybe (Block tx s)))
-    -> (Block tx s  -> IO ([NotableEvent], Storage.ApplyResult))
-    -> (tx          -> IO ([NotableEvent], Storage.ApplyResult))
+    -> (Block tx s  -> IO Storage.ApplyResult)
+    -> (tx          -> IO Storage.ApplyResult)
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
@@ -156,8 +156,8 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
         Right msg -> map (uncurry convertApplyResult) $
             case msg of
                 TxMsg    tx  -> do
-                    (events, result) <- applyTx tx
-                    forM_ (TxReceivedEvent (Crypto.hash tx) : events)
+                    result <- applyTx tx
+                    forM_ (TxReceivedEvent (Crypto.hash tx) : telemetryEvents result)
                           (emit telemetryStore)
                     (,) Nothing <$> pure result
                 BlockMsg blk ->
@@ -170,16 +170,20 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
                      in
                         liftA2 (,)
                                (missing <$> lookupBlock parentHash)
-                               (do (events, result) <- applyBlock blk
-                                   forM_ (BlockReceivedEvent (blockHash blk) : events)
+                               (do result <- applyBlock blk
+                                   forM_ (BlockReceivedEvent (blockHash blk) : telemetryEvents result)
                                          (emit telemetryStore)
                                    pure result
                                )
   where
+    telemetryEvents = \case
+        Storage.Applied evts -> evts
+        Storage.Stale evts   -> evts
+        Storage.Error evts   -> evts
     convertApplyResult missing = \case
-        Storage.Applied -> Bcast.Applied missing
-        Storage.Stale   -> Bcast.Stale   missing
-        Storage.Error   -> Bcast.Error
+        Storage.Applied _ -> Bcast.Applied missing
+        Storage.Stale   _ -> Bcast.Stale   missing
+        Storage.Error   _ -> Bcast.Error
 
 wrapLookup
     :: (Serialise tx, Serialise s)

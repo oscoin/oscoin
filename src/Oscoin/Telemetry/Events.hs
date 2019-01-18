@@ -28,6 +28,9 @@ data NotableEvent where
     -- ^ Triggered every time a 'Block' fails to evaluate.
     TxSentEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
     -- ^ Triggered every time a transaction is successfully sent.
+    TxSubmittedEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    -- ^ Triggered every time a transaction is successfully submitted via
+    -- the HTTP API.
     TxReceivedEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
     -- ^ Triggered every time a new tx is received at the network level.
     TxStaleEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
