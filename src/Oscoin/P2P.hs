@@ -152,7 +152,9 @@ wrapApply
     -> IO Bcast.ApplyResult
 wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
     case fromGossip mid payload of
-        Left  _   -> pure Bcast.Error -- TODO(kim): log error here (can't do anything about it)
+        Left conversionError -> do
+            emit telemetryStore (Peer2PeerErrorEvent conversionError)
+            pure Bcast.Error
         Right msg -> map (uncurry convertApplyResult) $
             case msg of
                 TxMsg    tx  -> do
@@ -196,10 +198,6 @@ wrapLookup lookupBlock lookupTx mid =
         Right (BlockId i) -> map (toStrict . CBOR.serialise) <$> lookupBlock i
         Right (TxId txId) -> map (toStrict . CBOR.serialise) <$> lookupTx txId
         Left _ -> pure Nothing
-
-data ConversionError =
-      DeserialiseFailure CBOR.DeserialiseFailure
-    | IdPayloadMismatch
 
 fromGossip
     :: (Serialise s, Serialise tx, Crypto.Hashable tx)

@@ -142,7 +142,7 @@ main = do
                    (storage nod config)
                    (Handshake.simpleHandshake keys)               $ \gos ->
             Async.runConcurrently $
-                     Async.Concurrently (HTTP.run (fromIntegral apiPort) environment nod)
+                     Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
                   <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env telemetryStore neb config = Node.Config

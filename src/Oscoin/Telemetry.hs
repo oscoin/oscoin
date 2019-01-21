@@ -21,6 +21,7 @@ import           Lens.Micro
 
 import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.P2P.Types (fmtLogConversionError)
 import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (TelemetryStore(..))
 import           Oscoin.Telemetry.Logging as Log
@@ -89,6 +90,8 @@ emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
             in Log.debugM ("txs removed from the mempool " % listOf formatHash)
                           hashes
+        Peer2PeerErrorEvent conversionError ->
+            Log.errM ("P2P error " % fmtLogConversionError) conversionError
         HttpApiRequest _req _status ->
             Log.withNamespace "http-api" $
                 Log.infoM "todo"
@@ -156,6 +159,12 @@ toActions = \case
      ]
     TxsRemovedFromMempoolEvent txs -> [
         GaugeAdd "oscoin.mempool.txs.total" noLabels (- fromIntegral (length txs))
+     ]
+    Peer2PeerErrorEvent _ -> [
+        -- FIXME(adn) Here is an example where we would like to have the
+        -- same metric but with different labels (one for each erorr), so that
+        -- we could aggregate this properly with something like Prometheus.
+        CounterIncrease "oscoin.p2p.errors.total" noLabels
      ]
     HttpApiRequest _req _status -> [
         CounterIncrease "oscoin.api.http_requests.total" noLabels
