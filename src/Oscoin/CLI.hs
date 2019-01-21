@@ -3,6 +3,7 @@ module Oscoin.CLI
     , module Oscoin.CLI.User
     , module Oscoin.CLI.Command
     , module Oscoin.CLI.Parser
+    , CLI(..)
     , CommandRunner
     , runCommand
     ) where
@@ -11,7 +12,7 @@ import qualified Oscoin.API.Client as API
 import           Oscoin.API.HTTP.Client (HttpClientT, runHttpClientT)
 import           Oscoin.CLI.Command
 import           Oscoin.CLI.KeyStore
-import           Oscoin.CLI.Parser (execParser, execParserPure)
+import           Oscoin.CLI.Parser (CLI(..), execParser, execParserPure)
 import           Oscoin.CLI.Revision
 import qualified Oscoin.CLI.Spinner as Spinner
 import           Oscoin.CLI.User

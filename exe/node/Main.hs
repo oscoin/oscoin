@@ -4,7 +4,7 @@ import           Oscoin.Prelude hiding (option)
 
 import qualified Oscoin.API.HTTP as HTTP
 import           Oscoin.CLI.KeyStore (readKeyPair)
-import           Oscoin.CLI.Parser (keyPathParser)
+import           Oscoin.CLI.Parser (environmentParser, keyPathParser)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
@@ -13,7 +13,7 @@ import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
-import           Oscoin.Environment (Environment(Development), toText)
+import           Oscoin.Environment (Environment, toText)
 import           Oscoin.Logging (withStdLogger)
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
@@ -44,6 +44,7 @@ data Args = Args
     , genesis       :: FilePath
     , noEmptyBlocks :: Bool
     , keysPath      :: Maybe FilePath
+    , environment   :: Environment
     , ekgHost       :: HostName
     , ekgPort       :: PortNumber
     } deriving (Generic, Show)
@@ -87,6 +88,7 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> showDefault
             )
         <*> keyPathParser
+        <*> environmentParser
         <*> option str
             ( long "ekg-host"
            <> help "Host name to bind to for the EKG server"
@@ -106,7 +108,6 @@ main = do
     Args{..} <- execParser args
 
     let consensus = Consensus.nakamotoConsensus
-    let env       = Development
 
     keys        <- runReaderT readKeyPair keysPath
     nid         <- pure (mkNodeId $ fst keys)
@@ -116,13 +117,13 @@ main = do
     stStore     <- StateStore.fromStateM genState
     blkStore    <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
     seeds'      <- Yaml.decodeFileThrow seeds
-    config      <- Consensus.getConfig env
+    config      <- Consensus.getConfig environment
 
-    metricsStore <- newMetricsStore $ labelsFromList [("env", toText env)]
+    metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
     forkEkgServer metricsStore ekgHost ekgPort
 
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig env lgr metricsStore noEmptyBlocks config)
+        withNode   (mkNodeConfig environment lgr metricsStore noEmptyBlocks config)
                    nid
                    mem
                    stStore
@@ -138,7 +139,7 @@ main = do
                    (storage nod config)
                    (Handshake.simpleHandshake keys)               $ \gos ->
             Async.runConcurrently $
-                     Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
+                     Async.Concurrently (HTTP.run (fromIntegral apiPort) environment nod)
                   <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env lgr metricsStore neb config = Node.Config

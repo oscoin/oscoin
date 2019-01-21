@@ -28,7 +28,8 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable, formatHash)
 import           Oscoin.Data.Query
-import           Oscoin.Logging ((%))
+import qualified Oscoin.Environment as Env
+import           Oscoin.Logging (stext, (%))
 import qualified Oscoin.Logging as Log
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
@@ -69,6 +70,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     open = do
         hReceiptStore <- ReceiptStore.newHandle
         gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
+        Log.info (cfgLogger hConfig) ("running in " % stext % " mode") (Env.toText $ cfgEnv hConfig)
         Log.info (cfgLogger hConfig) ("genesis is " % formatHash) (blockHash gen)
         pure Handle{..}
 

@@ -27,6 +27,7 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
+import qualified Oscoin.Test.Environment as Environment
 import qualified Oscoin.Test.P2P as P2P
 import qualified Oscoin.Test.Storage.Block as BlockStore
 import           Oscoin.Test.Storage.Block.Arbitrary ()
@@ -60,6 +61,7 @@ tests config = testGroup "Oscoin"
     , testGroup      "Storage"                        BlockStore.tests
     , testBlockchain config
     , testGroup      "Telemetry"                      Telemetry.tests
+    , testGroup      "Environment"                    Environment.tests
     ]
 
 testOscoinCrypto :: Assertion
