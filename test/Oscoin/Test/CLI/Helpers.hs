@@ -56,8 +56,8 @@ runCLIWithState args setupState = do
     -- We don't seem to care about overriding the location of the keys for
     -- the 'TestCommandState', as the 'HOME' env var is overwritten with a
     -- throwaway temporary directory.
-    (_mbKeysPath, cmd) <- case execParserPure args of
-        Options.Success cmd -> pure $ cmd
+    cli <- case execParserPure args of
+        Options.Success cli -> pure cli
         Options.CompletionInvoked _ -> assertFailure "Unexpected CLI completion invoked"
         Options.Failure failure ->
             let failureMessage = fst $ Options.renderFailure failure ""
@@ -67,7 +67,7 @@ runCLIWithState args setupState = do
                                         , commandOutput = ""
                                         }
     (result, cliState) <- runStateT
-        (modify setupState >> fromTestCommandRunner (dispatchCommand cmd))
+        (modify setupState >> fromTestCommandRunner (dispatchCommand $ cliCommand cli))
         initialState
     assertResultOk result
     pure cliState

@@ -1,9 +1,11 @@
 module Oscoin.CLI.Parser
-    ( execParser
+    ( CLI(..)
+    , execParser
     , execParserPure
 
-    -- * Re-usable parsers
+    -- * Exposed parsers
     , keyPathParser
+    , environmentParser
     ) where
 
 import           Oscoin.Prelude hiding (option)
@@ -11,28 +13,36 @@ import           Oscoin.Prelude hiding (option)
 import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
 
 import           Oscoin.CLI.Command
+import           Oscoin.Environment (Environment)
+import qualified Oscoin.Environment as Env
 
 import qualified Data.Text as T
 import           Numeric.Natural
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
+data CLI = CLI
+    { cliKeyPath     :: Maybe FilePath
+    , cliEnvironment :: Environment
+    , cliCommand     :: Command
+    }
 
-execParser :: IO (Maybe FilePath, Command)
+execParser :: IO CLI
 execParser = Options.execParser mainParserInfo
 
-execParserPure :: [String] -> ParserResult (Maybe FilePath, Command)
+execParserPure :: [String] -> ParserResult CLI
 execParserPure = Options.execParserPure defaultPrefs mainParserInfo
 
-mainParserInfo :: ParserInfo (Maybe FilePath, Command)
+mainParserInfo :: ParserInfo CLI
 mainParserInfo =
     info (helper <*> mainParser)
     $ progDesc "Oscoin CLI"
 
 
-mainParser :: Parser (Maybe FilePath, Command)
+mainParser :: Parser CLI
 mainParser =
-    (,) <$> keyPathParser
+    CLI <$> keyPathParser
+        <*> environmentParser
         <*> subparser (
        command "revision" (revisionParser `withInfo` "Revision commands")
     <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
@@ -47,6 +57,19 @@ keyPathParser = optional (option str (
                                    "If not specified, defaults to a path inside the Xdg directory.")
                           <> metavar "KEY-PATH (e.g. ~/.config/oscoin)"
                           ))
+
+environmentParser :: Parser Environment
+environmentParser = option (maybeReader (Env.fromText . toS)) (
+                             long "environment"
+                          <> short 'e'
+                          <> help ("The environment this node is running in." <>
+                                   " One between " <>
+                                       intercalate "," (map (toS . Env.toText) Env.allEnvironments) <>
+                                   ".")
+                          <> metavar "ENV"
+                          <> value Env.Development
+                          <> showDefaultWith (toS . Env.toText)
+                    )
 
 
 revisionParser :: Parser Command
