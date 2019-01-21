@@ -8,10 +8,8 @@ import           Oscoin.Prelude hiding (get)
 import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Data.RadicleTx as Rad
-import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Trans as Node.Trans
-import           Oscoin.Telemetry (TelemetryStore)
 import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
 
 import qualified Oscoin.API.HTTP.Handlers as Handlers
@@ -27,15 +25,21 @@ import           Web.Spock
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (ToJSON)
 
-run :: (ToJSON s, Serialise s) => Int -> Environment -> Node.Handle RadTx Rad.Env s i -> IO ()
-run port env hdl =
+withTelemetryMiddleware :: Node.Handle tx e s i
+                        -> (Wai.Middleware -> IO a)
+                        -> IO a
+withTelemetryMiddleware hdl action = do
     let telemetryStore = Node.cfgTelemetryStore . Node.Trans.hConfig $ hdl
-    in runApi (api env telemetryStore) port hdl
+    action (telemetryMiddleware telemetryStore)
 
-app :: (ToJSON s, Serialise s) => Environment -> Node.Handle RadTx Rad.Env s i -> IO Wai.Application
-app env hdl =
-    let telemetryStore = Node.cfgTelemetryStore . Node.Trans.hConfig $ hdl
-    in spockAsApp $ mkMiddleware (api env telemetryStore) hdl
+run :: (ToJSON s, Serialise s) => Int -> Node.Handle RadTx Rad.Env s i -> IO ()
+run port hdl =
+    withTelemetryMiddleware hdl $ \mdlware -> runApi (api mdlware) port hdl
+
+app :: (ToJSON s, Serialise s) => Node.Handle RadTx Rad.Env s i -> IO Wai.Application
+app hdl =
+    withTelemetryMiddleware hdl $ \mdlware ->
+        spockAsApp $ mkMiddleware (api mdlware) hdl
 
 -- | Policy for static file serving.
 staticFilePolicy :: Wai.Policy
@@ -45,10 +49,9 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api :: (ToJSON s, Serialise s) => Environment -> TelemetryStore -> Api s i ()
-api env telemetryStore = do
-    middleware $ loggingMiddleware env
-               . telemetryMiddleware telemetryStore
+api :: (ToJSON s, Serialise s) => Wai.Middleware -> Api s i ()
+api mdlware = do
+    middleware $ mdlware
                . Wai.staticPolicy staticFilePolicy
 
     -- / ----------------------------------------------------------------------

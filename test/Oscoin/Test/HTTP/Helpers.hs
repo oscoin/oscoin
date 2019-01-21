@@ -206,7 +206,7 @@ addRadicleRef name value (Rad.Env env) =
 runSession :: NodeState -> Session () -> Assertion
 runSession nst (Session sess) =
     withNode nst $ \nh -> do
-        app <- API.app Testing nh
+        app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
 -- | Run a 'Session' so that the blockchain state is the given
@@ -215,7 +215,7 @@ runSessionEnv :: Rad.Env -> Session () -> Assertion
 runSessionEnv env (Session sess) = do
     let nst = nodeState [] (fromGenesis $ genesisBlock [] env "" epoch) env
     withNode nst $ \nh -> do
-        app <- API.app Testing nh
+        app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
 

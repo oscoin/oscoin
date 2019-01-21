@@ -6,6 +6,9 @@ import qualified Oscoin.Consensus.Types as Consensus
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import qualified Oscoin.Crypto.Hash as Crypto
 
+import           Network.HTTP.Types as HTTP
+import           Network.Wai as HTTP
+
 -- | A \"NotableEvent\" is an event which is worthwhile observing, logging
 -- and measuring.
 data NotableEvent where
@@ -41,3 +44,5 @@ data NotableEvent where
     -- ^ Triggered every time a new rad transaction was added to the mempool.
     TxsRemovedFromMempoolEvent :: forall tx. Crypto.Hashable tx => [tx] -> NotableEvent
     -- ^ Triggered every time a new rad transaction was removed from the mempool.
+    HttpApiRequest :: HTTP.Request -> HTTP.Status -> NotableEvent
+    -- ^ Triggered every time a new HTTP request is issued to the node's API.

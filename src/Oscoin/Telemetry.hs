@@ -89,6 +89,9 @@ emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
             in Log.debugM ("txs removed from the mempool " % listOf formatHash)
                           hashes
+        HttpApiRequest _req _status ->
+            Log.withNamespace "http-api" $
+                Log.infoM "todo"
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
@@ -153,6 +156,9 @@ toActions = \case
      ]
     TxsRemovedFromMempoolEvent txs -> [
         GaugeAdd "oscoin.mempool.txs.total" noLabels (- fromIntegral (length txs))
+     ]
+    HttpApiRequest _req _status -> [
+        CounterIncrease "oscoin.api.http_requests.total" noLabels
      ]
 
 
