@@ -54,7 +54,7 @@ hoistStorage f s = s
 data ApplyResult =
       Applied [NotableEvent]
     | Stale   [NotableEvent]
-    | Error   [NotableEvent] -- TODO(kim): figure out informative error types
+    | Error   [NotableEvent]
 
 applyBlock
     :: ( MonadBlockStore tx s m

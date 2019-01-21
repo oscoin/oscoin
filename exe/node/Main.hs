@@ -14,8 +14,6 @@ import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Environment (Environment, toText)
-import           Oscoin.Logging (withStdLogger)
-import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -124,8 +122,8 @@ main = do
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
     forkEkgServer metricsStore ekgHost ekgPort
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug
-                                     , Log.cfgStyle = Log.styleFromEnvironment env
+    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
+                                     , Log.cfgStyle = Log.styleFromEnvironment environment
                                      } $ \lgr ->
         let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
         in withNode (mkNodeConfig environment telemetryStore noEmptyBlocks config)
