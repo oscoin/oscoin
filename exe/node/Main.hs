@@ -14,8 +14,6 @@ import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Environment (Environment(Development), toText)
-import           Oscoin.Logging (withStdLogger)
-import qualified Oscoin.Logging as Log
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -27,6 +25,8 @@ import qualified Oscoin.Storage.Block as BlockStore
 import qualified Oscoin.Storage.Block.STM as BlockStore
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Logging (withStdLogger)
+import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
@@ -121,15 +121,18 @@ main = do
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText env)]
     forkEkgServer metricsStore ekgHost ekgPort
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug } $ \lgr ->
-        withNode   (mkNodeConfig env lgr metricsStore noEmptyBlocks config)
-                   nid
-                   mem
-                   stStore
-                   blkStore
-                   Rad.txEval
-                   consensus                                      $ \nod ->
-        withGossip lgr
+    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug
+                                     , Log.cfgStyle = Log.styleFromEnvironment env
+                                     } $ \lgr ->
+        let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
+        in withNode (mkNodeConfig env telemetryStore noEmptyBlocks config)
+                    nid
+                    mem
+                    stStore
+                    blkStore
+                    Rad.txEval
+                    consensus                                      $ \nod ->
+        withGossip telemetryStore
                    P2P.NodeAddr { P2P.nodeId   = nid
                                 , P2P.nodeHost = host
                                 , P2P.nodePort = gossipPort
@@ -141,10 +144,9 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) Development nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env lgr metricsStore neb config = Node.Config
+    mkNodeConfig env telemetryStore neb config = Node.Config
         { Node.cfgEnv = env
-        , Node.cfgLogger = lgr
-        , Node.cfgTelemetryStore = Telemetry.newTelemetryStore lgr metricsStore
+        , Node.cfgTelemetryStore = telemetryStore
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
         }
