@@ -13,11 +13,14 @@ module Oscoin.Telemetry
 
 import           Oscoin.Prelude
 
+import qualified Data.Text as T
 import           Data.Text.Lazy.Builder (Builder)
 import           Formatting
 import           Formatting.Buildable as F
 import           GHC.Stack as GHC
 import           Lens.Micro
+import           Network.HTTP.Types as HTTP
+import           Network.Wai as HTTP
 
 import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -26,6 +29,7 @@ import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (TelemetryStore(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
+import           Oscoin.Time as Time
 
 {------------------------------------------------------------------------------
   Typeclasses
@@ -95,10 +99,22 @@ emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             in Log.debugM "txs removed from the mempool"
                           (ftag "tx_hashes" % listOf formatHash) hashes
         Peer2PeerErrorEvent conversionError ->
-            Log.errM "P2P error" fmtLogConversionError conversionError
-        HttpApiRequest _req _status ->
-            Log.withNamespace "http-api" $
-                Log.infoM "todo" (now mempty)
+            Log.withNamespace "p2p" $
+                Log.errM "P2P error" fmtLogConversionError conversionError
+        HttpApiRequest req status duration ->
+            let fmt = ftag "status" % fmtStatus % " " %
+                      ftag "method" % fmtMethod % " " %
+                      ftag "path"   % fmtPath   % " " %
+                      ftag "params" % fmtParams % " " %
+                      ftag "service" % fmtDuration
+            in Log.withNamespace "http-api" $
+                Log.infoM ""
+                          fmt
+                          status
+                          (HTTP.requestMethod req)
+                          (HTTP.pathInfo req)
+                          (HTTP.queryString req)
+                          duration
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
@@ -170,7 +186,7 @@ toActions = \case
         -- we could aggregate this properly with something like Prometheus.
         CounterIncrease "oscoin.p2p.errors.total" noLabels
      ]
-    HttpApiRequest _req _status -> [
+    HttpApiRequest _req _status _duration -> [
         CounterIncrease "oscoin.api.http_requests.total" noLabels
      ]
 
@@ -186,3 +202,18 @@ listOf formatElement = later (F.build . map (bprint formatElement))
 
 formatBlockHash :: Format r (Crypto.Hash -> r)
 formatBlockHash = ftag "block_hash" % formatHash
+
+fmtStatus :: Format r (HTTP.Status -> r)
+fmtStatus = mapf HTTP.statusCode int
+
+fmtMethod :: Format r (HTTP.Method -> r)
+fmtMethod = mapf toS string
+
+fmtPath :: Format r ([Text] -> r)
+fmtPath = mapf (mappend (T.singleton '/') . T.intercalate "/") stext
+
+fmtParams :: Format r (HTTP.Query -> r)
+fmtParams = mapf (T.pack . toS . HTTP.renderQuery False) fquoted
+
+fmtDuration :: Format r (Duration -> r)
+fmtDuration = mapf Time.prettyDuration stext

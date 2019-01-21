@@ -33,6 +33,8 @@ import           Oscoin.Telemetry.Metrics
                  , readHistogram
                  )
 import           Oscoin.Telemetry.Metrics.Internal as Internal
+import           Oscoin.Time (timeDiff)
+import qualified Oscoin.Time as Time
 
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
@@ -42,9 +44,12 @@ telemetryMiddleware store = loggingMiddleware store
                           . telemetryApiMiddleware store
 
 loggingMiddleware :: TelemetryStore -> Wai.Middleware
-loggingMiddleware telemetryStore app req respond =
+loggingMiddleware telemetryStore app req respond = do
+    t0 <- Time.now
     app req $ \res -> do
-        emit telemetryStore (HttpApiRequest req (Wai.responseStatus res))
+        t1 <- Time.now
+        let evt = HttpApiRequest req (Wai.responseStatus res) (t1 `timeDiff` t0)
+        emit telemetryStore evt
         respond res
 
 -- | Exposes the 'TelemetryStore' metrics using @Prometheus@ 's

@@ -82,7 +82,6 @@ library:
     - typed-process
     - unordered-containers
     - wai
-    - wai-extra
     - wai-middleware-static
     - writer-cps-mtl
     - yaml

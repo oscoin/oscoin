@@ -14,7 +14,6 @@ module Oscoin.API.HTTP.Internal
     , trailingSlashPolicy
     , indexPolicy
     , mkMiddleware
-    , loggingMiddleware
 
     , errBody
     , respond
@@ -32,7 +31,6 @@ import           Oscoin.Prelude hiding (State, state)
 
 import           Oscoin.API.Types
 import qualified Oscoin.Data.RadicleTx as RadicleTx
-import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 
 import           Codec.Serialise (Serialise)
@@ -51,7 +49,6 @@ import qualified Network.HTTP.Media as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
-import qualified Network.Wai.Middleware.RequestLogger as Wai
 import qualified Network.Wai.Middleware.Static as Wai
 import           Web.HttpApiData (FromHttpApiData, parseQueryParam)
 import           Web.Spock
@@ -221,11 +218,6 @@ mkMiddleware app hdl = do
   where
     connBuilder = ConnBuilder (pure hdl) (const pass) (PoolCfg 1 1 30)
     state       = mkState
-
-loggingMiddleware :: Environment -> Wai.Middleware
-loggingMiddleware Production  = Wai.logStdout
-loggingMiddleware Development = Wai.logStdoutDev
-loggingMiddleware Testing     = identity
 
 -- | Static Policy to serve index.html files from directories.
 indexPolicy :: String -> Wai.Policy
