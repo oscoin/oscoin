@@ -39,7 +39,7 @@ import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
-import           Oscoin.Telemetry.Logging (stext, (%))
+import           Oscoin.Telemetry.Logging (ftag, stext, (%))
 import qualified Oscoin.Telemetry.Logging as Log
 
 import qualified Oscoin.Storage.Block.Class as BlockStore
@@ -72,10 +72,11 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
         hReceiptStore <- ReceiptStore.newHandle
         gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
         Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
-                 ("running in " % stext % " mode") (Env.toText $ cfgEnv hConfig)
+                 "running in"
+                 (ftag "env" % stext) (Env.toText $ cfgEnv hConfig)
         Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
-                 ("genesis is " % formatHash)
-                 (blockHash gen)
+                 "genesis is"
+                 (ftag "block_hash" % formatHash) (blockHash gen)
         pure Handle{..}
 
     close = const $ pure ()

@@ -22,6 +22,7 @@ module Oscoin.Telemetry.Logging
     , MonadLogger
     , Severity (..)
     , Namespace
+    , LogMsg
 
     -- * Configuration
     , Config (..)
@@ -129,6 +130,13 @@ data Severity =
 -- quite match, eg. logging in library code may be namespaced to that library's
 -- name.
 newtype Namespace = Namespace { fromNamespace :: Text }
+    deriving IsString
+
+-- | The actual message being logged.
+--
+-- This gives the extra flexibility of splitting the message with any
+-- additional context worth logging separately (i.e. outside the 'msg' tag).
+newtype LogMsg = LogMsg { fromLogMsg :: Text }
     deriving IsString
 
 -- | A style formatter
@@ -240,10 +248,10 @@ setNamespace ns = set logNamespace ns
 
 -- IO --------------------------------------------------------------------------
 
-logIO :: Logger -> Severity -> Maybe SrcLoc -> Format (IO ()) a -> a
-logIO Logger{..} sev loc fmt
+logIO :: Logger -> Severity -> Maybe SrcLoc -> LogMsg -> Format (IO ()) a -> a
+logIO Logger{..} sev loc msg fmt
   | sev < _logLvl = F.runFormat fmt (const $ pure ())
-  | otherwise     = F.runFormat (fmsg sev loc _logNs _logStyle fmt) $
+  | otherwise     = F.runFormat (fmsg sev loc _logNs _logStyle msg fmt) $
                         _logOut . FL.toLogStr . LTB.toLazyText
 
 -- | Log at 'Debug'. The 'SrcLoc' of the call site is automatically added to the
@@ -251,28 +259,29 @@ logIO Logger{..} sev loc fmt
 --
 -- >>> :{
 -- withStdLogger defaultConfig $ \lgr -> do
---     debug lgr "not printed"
---     info lgr "informative"
+--     debug lgr "not printed" (now mempty)
+--     info lgr "informative"  (now mempty)
 -- :}
--- informative level="I" loc="interactive:Ghci11:45:66"
-debug :: HasCallStack => Logger -> Format (IO ()) a -> a
+-- msg="informative" level="I" loc="interactive:Ghci11:45:66"
+debug :: HasCallStack => Logger -> LogMsg -> Format (IO ()) a -> a
 debug lgr = logIO lgr Debug getLoc
 {-# INLINE debug #-}
 
 -- | Like 'debug', but at 'Info'
-info :: HasCallStack => Logger -> Format (IO ()) a -> a
+info :: HasCallStack => Logger -> LogMsg -> Format (IO ()) a -> a
 info lgr = logIO lgr Info getLoc
 {-# INLINE info #-}
 
 -- | Like 'debug', but at 'Err'
-err :: HasCallStack => Logger -> Format (IO ()) a -> a
+err :: HasCallStack => Logger -> LogMsg -> Format (IO ()) a -> a
 err lgr = logIO lgr Err getLoc
 {-# INLINE err #-}
 
 -- | Convenience to log an arbitrary 'Exception', at severity 'Err', with
 -- 'CallStack'
 logException :: (Exception e, HasCallStack) => Logger -> e -> IO ()
-logException lgr e = err lgr (fexception % " " % fcallstack) e Stack.callStack
+logException lgr e =
+    err lgr "Exception was thrown" (fexception % " " % fcallstack) e Stack.callStack
 
 -- | Run an action and 'logException' if it throws. The exception is rethrown.
 withExceptionLogged
@@ -288,15 +297,16 @@ withExceptionLogged lgr ma =
 logM :: MonadLogger r m
      => Severity
      -> Maybe SrcLoc
+     -> LogMsg
      -> Format (m ()) a
      -> a
-logM sev loc fmt = F.runFormat fmt $ \bldr -> do
+logM sev loc msg fmt = F.runFormat fmt $ \bldr -> do
     Logger{..} <- view loggerL
     if sev < _logLvl then
         pure ()
     else
         liftIO . _logOut . FL.toLogStr $
-            F.format (fmsg sev loc _logNs _logStyle F.builder) bldr
+            F.format (fmsg sev loc _logNs _logStyle msg F.builder) bldr
 
 -- | Log at 'Debug' in a transformer stack which has access to a 'Logger'. The
 -- 'SrcLoc' of the call site is automatically added to the log statement.
@@ -308,17 +318,17 @@ logM sev loc fmt = F.runFormat fmt $ \bldr -> do
 -- :}
 -- oh la la level="I" loc="interactive:Ghci10:43:65"
 -- shhh level="D" loc="interactive:Ghci10:43:85"
-debugM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
+debugM :: (MonadLogger r m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 debugM = logM Debug getLoc
 {-# INLINE debugM #-}
 
 -- | Like 'debugM', but at 'Info'
-infoM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
+infoM :: (MonadLogger r m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 infoM = logM Info getLoc
 {-# INLINE infoM #-}
 
 -- | Like 'debugM', but at 'Err'
-errM :: (MonadLogger r m, HasCallStack) => Format (m ()) a -> a
+errM :: (MonadLogger r m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 errM = logM Err getLoc
 {-# INLINE errM #-}
 
@@ -357,16 +367,17 @@ withExceptionLoggedM ma = view loggerL >>= (`withExceptionLogged` ma)
 
 -- Pure (MonadWriter) ----------------------------------------------------------
 
-data LogRecord = LogRecord Severity (Maybe SrcLoc) LTB.Builder
+data LogRecord = LogRecord Severity (Maybe SrcLoc) LogMsg LTB.Builder
 
 type Logs = DList LogRecord
 
 logP :: MonadWriter Logs m
      => Severity
      -> Maybe SrcLoc
+     -> LogMsg
      -> Format (m ()) a
      -> a
-logP sev loc fmt = F.runFormat fmt $ tell . singleton . LogRecord sev loc
+logP sev loc msg fmt = F.runFormat fmt $ tell . singleton . LogRecord sev loc msg
 
 -- | Log at 'Debug' in a pure (non-IO) monad.
 --
@@ -376,24 +387,25 @@ logP sev loc fmt = F.runFormat fmt $ tell . singleton . LogRecord sev loc
 -- >>> let (_,logs) = runWriter $ infoP "a" *> infoP "b" in withStdLogger defaultConfig (`flush` logs)
 -- a level="I" loc="interactive:Ghci1:19:28"
 -- b level="I" loc="interactive:Ghci1:19:41"
-debugP :: (MonadWriter Logs m, HasCallStack) => Format (m ()) a -> a
+debugP :: (MonadWriter Logs m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 debugP = logP Debug getLoc
 {-# INLINE debugP #-}
 
 -- | Like 'debugP', but a 'Info'
-infoP :: (MonadWriter Logs m, HasCallStack) => Format (m ()) a -> a
+infoP :: (MonadWriter Logs m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 infoP = logP Info getLoc
 {-# INLINE infoP #-}
 
 -- | Like 'debugP', but at 'Err'
-errP :: (MonadWriter Logs m, HasCallStack) => Format (m ()) a -> a
+errP :: (MonadWriter Logs m, HasCallStack) => LogMsg -> Format (m ()) a -> a
 errP = logP Err getLoc
 {-# INLINE errP #-}
 
 -- | Flush a sequence of 'LogRecord's to the given 'Logger's output.
 flush :: Foldable t => Logger -> t LogRecord -> IO ()
 flush lgr =
-    traverse_ $ \(LogRecord sev loc msg) -> logIO lgr sev loc F.builder msg
+    traverse_ $ \(LogRecord sev loc logMsg extraContext) ->
+        logIO lgr sev loc logMsg F.builder extraContext
 
 -- | Like 'flush', but in a transformer stack which has access to a 'Logger'
 flushM :: (MonadLogger r m, Foldable t) => t LogRecord -> m ()
@@ -405,7 +417,7 @@ flushM xs = view loggerL >>= (liftIO . (`flush` xs))
 --
 -- This currently just calls 'show'
 fexception :: Exception e => Format t (e -> t)
-fexception = F.shown
+fexception = F.mapf (LT.pack . displayException) (ftag "exception" % fquoted)
 
 -- | Format a 'CallStack' as a tag @callstack=\"the\\ncall\\nstack\"@
 fcallstack :: Format t (CallStack -> t)
@@ -503,23 +515,25 @@ fmsg :: Severity
      -> Maybe SrcLoc
      -> Maybe Namespace
      -> StyleFormatter
+     -> LogMsg
      -> Format t a
      -> Format t a
-fmsg sev loc ns style fmt = case layoutFormat style of
-    NoLayout ->
-        now' (fsev style) sev
-      % " " % (ftag "msg" % "\"" % fmt % "\"")
-      % fmtNs
-      % fmtLoc floc
-    HumanReadable ->
-        now' (fsev style) sev
-      % " | " % fmt
-      % fmtNs
-      % fmtLoc floc
+fmsg sev loc ns style msg fmt =
+    now' (fsev style) sev
+  % formattedMsg
+  % " " % fmt
+  % fmtNs
+  % fmtLoc floc
   where
     fmtNs    = now' (fmay (" " % fns)) ns
     fmtLoc f = " " % now' (fmay f) loc
     now' f   = F.now . F.bprint f
+    formattedMsg = case layoutFormat style of
+        NoLayout ->
+            " " % ftag "msg" % now' fquoted (fromLogMsg msg)
+        HumanReadable ->
+            " | " % now' stext (fromLogMsg msg)
+
 
 getLoc :: HasCallStack => Maybe SrcLoc
 getLoc = map snd . lastMay $ Stack.getCallStack Stack.callStack

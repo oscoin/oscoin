@@ -45,8 +45,7 @@ loggingMiddleware :: TelemetryStore -> Wai.Middleware
 loggingMiddleware telemetryStore app req respond =
     app req $ \res -> do
         emit telemetryStore (HttpApiRequest req (Wai.responseStatus res))
-        rspRcv <- respond res
-        return rspRcv
+        respond res
 
 -- | Exposes the 'TelemetryStore' metrics using @Prometheus@ 's
 -- < https://prometheus.io/docs/instrumenting/exposition_formats/ exposition format>.
