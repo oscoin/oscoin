@@ -1,3 +1,7 @@
+{- | Simple module to expose a Wai Middleware to deal with the telemetry
+     in the HTTP API.
+-}
+
 module Oscoin.Telemetry.Middleware
     ( telemetryMiddleware
       -- * Internal  functions, testing only
@@ -18,6 +22,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import           Formatting (float, int, sformat, stext, string, (%))
 
+import           Oscoin.Telemetry (NotableEvent(..), emit)
 import           Oscoin.Telemetry.Internal as Internal
 import           Oscoin.Telemetry.Metrics
                  ( labelsFromList
@@ -28,16 +33,31 @@ import           Oscoin.Telemetry.Metrics
                  , readHistogram
                  )
 import           Oscoin.Telemetry.Metrics.Internal as Internal
+import           Oscoin.Time (timeDiff)
+import qualified Oscoin.Time as Time
 
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
+
+telemetryMiddleware :: TelemetryStore -> Wai.Middleware
+telemetryMiddleware store = loggingMiddleware store
+                          . telemetryApiMiddleware store
+
+loggingMiddleware :: TelemetryStore -> Wai.Middleware
+loggingMiddleware telemetryStore app req respond = do
+    t0 <- Time.now
+    app req $ \res -> do
+        t1 <- Time.now
+        let evt = HttpApiRequest req (Wai.responseStatus res) (t1 `timeDiff` t0)
+        emit telemetryStore evt
+        respond res
 
 -- | Exposes the 'TelemetryStore' metrics using @Prometheus@ 's
 -- < https://prometheus.io/docs/instrumenting/exposition_formats/ exposition format>.
 -- However, there is no formal dependency on @Prometheus@ itself as part of this
 -- 'Middleware', which can be re-interpreted to be served, say, as JSON.
-telemetryMiddleware :: TelemetryStore -> Wai.Middleware
-telemetryMiddleware TelemetryStore{..} app req respond =
+telemetryApiMiddleware :: TelemetryStore -> Wai.Middleware
+telemetryApiMiddleware TelemetryStore{telemetryMetrics} app req respond =
     if     Wai.requestMethod req == HTTP.methodGet
         && Wai.pathInfo req == ["metrics"]
     then respondWithMetrics else app req respond
@@ -49,6 +69,7 @@ telemetryMiddleware TelemetryStore{..} app req respond =
             respond $ Wai.responseLBS HTTP.status200 headers (toLazyByteString metrics)
             where
                 headers = [(HTTP.hContentType, "text/plain; version=0.0.4")]
+
 
 -- | Renders the metrics in the exposition format used by Prometheus.
 -- TODO(adn): Support 'Metadata' to be attached as labels.

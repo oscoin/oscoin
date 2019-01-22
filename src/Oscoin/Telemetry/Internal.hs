@@ -3,10 +3,15 @@ module Oscoin.Telemetry.Internal
       TelemetryStore(..)
     ) where
 
-import           Oscoin.Logging
+import           Lens.Micro
+import           Oscoin.Telemetry.Logging
 import           Oscoin.Telemetry.Metrics
 
 data TelemetryStore = TelemetryStore {
       telemetryLogger  :: Logger
     , telemetryMetrics :: MetricsStore
     }
+
+instance HasLogger TelemetryStore where
+    loggerL = lens telemetryLogger (\s telemetryLogger -> s { telemetryLogger })
+

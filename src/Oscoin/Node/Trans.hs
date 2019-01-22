@@ -17,7 +17,6 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashable)
 import           Oscoin.Data.Query
 import           Oscoin.Environment
-import qualified Oscoin.Logging as Log
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
@@ -28,6 +27,7 @@ import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import           Oscoin.Telemetry
 import qualified Oscoin.Telemetry as Telemetry
 
 import qualified Radicle.Extended as Rad
@@ -53,7 +53,6 @@ runNodeT env (NodeT ma) = runReaderT ma env
 -- | Node static config.
 data Config = Config
     { cfgEnv             :: Environment
-    , cfgLogger          :: Log.Logger
     , cfgTelemetryStore  :: Telemetry.TelemetryStore
     , cfgNoEmptyBlocks   :: Bool
     , cfgConsensusConfig :: Consensus.Config
@@ -72,6 +71,9 @@ data Handle tx st s i = Handle
     }
 
 -------------------------------------------------------------------------------
+
+instance Telemetry.HasTelemetry (Handle tx st s i) where
+    telemetryStoreL = to (cfgTelemetryStore . hConfig)
 
 instance ReceiptStore.HasHandle tx Rad.Value (Handle tx st s i) where
     handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })

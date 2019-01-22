@@ -237,8 +237,17 @@ newMetricsStore predefinedLabels = do
               -> IO (Map Text Gauge)
       mkGauge ekgStore !acc (metric, readValue) = do
             g <- newGauge predefinedLabels
-            EKG.registerGauge metric (readValue <$> GHC.getRTSStats) ekgStore
-            pure $ M.insert metric g acc
+            let g' = g { readGauge = do
+                             val <- readValue <$> GHC.getRTSStats
+                             -- Crucially, we also update this counter every time
+                             -- we are requested for a new value, as the user won't
+                             -- even know this counter exist in the first place and
+                             -- thus cannot update it.
+                             setGauge g' (fromIntegral val)
+                             pure val
+                       }
+            EKG.registerGauge metric (readGauge g') ekgStore
+            pure $ M.insert metric g' acc
 
 -- | Forks a new EKG server and hooks it to the provided @host:port@.
 forkEkgServer :: MetricsStore  -- ^ A 'MetricsStore'.
