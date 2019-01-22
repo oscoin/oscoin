@@ -51,7 +51,7 @@ import           Oscoin.Prelude
 import           Control.Concurrent.STM
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
+import qualified Data.Set as Set
 import           GHC.Natural
 import qualified GHC.Stats as GHC
 import           Network.Socket (HostName, PortNumber)
@@ -72,7 +72,7 @@ import qualified System.Remote.Monitoring as EKG
 -- | Creates new 'Labels' out of a list of tuples.
 labelsFromList :: [(Text, Text)] -> Labels
 labelsFromList labels =
-    foldl' (\(Labels acc) (k,v) -> Labels $ S.insert (Label (k,v)) acc)
+    foldl' (\(Labels acc) (k,v) -> Labels $ Set.insert (Label (k,v)) acc)
            mempty
            labels
 
@@ -80,7 +80,7 @@ noLabels :: Labels
 noLabels = Labels mempty
 
 labelsToList :: Labels -> [(Text, Text)]
-labelsToList = map unlabel . S.toDescList . getLabels
+labelsToList = map unlabel . Set.toDescList . getLabels
 
 {------------------------------------------------------------------------------
   Operations on histograms

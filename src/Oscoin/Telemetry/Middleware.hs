@@ -35,14 +35,6 @@ import           Formatting
 import           Oscoin.Telemetry (NotableEvent(..), emit)
 import           Oscoin.Telemetry.Internal as Internal
 import           Oscoin.Telemetry.Metrics
-                 ( labelsFromList
-                 , noLabels
-                 , readBuckets
-                 , readCounter
-                 , readGauge
-                 , readHistogram
-                 )
-import           Oscoin.Telemetry.Metrics
 import qualified Oscoin.Telemetry.Metrics.Internal as Internal
 import           Oscoin.Time (timeDiff)
 import qualified Oscoin.Time as Time
@@ -94,17 +86,17 @@ toPrometheusExpositionFormat Internal.MetricsStore{..} = do
 
     countersBuilder   <-
         if null allCounters
-           then return mempty
+           then pure mempty
            else foldlM renderCounter mempty allCounters
 
     gaugesBuilder     <-
         if null allGauges
-           then return mempty
+           then pure mempty
            else foldlM renderGauge newline allGauges
 
     histogramsBuilder <-
         if null allHistograms
-           then return mempty
+           then pure mempty
            else foldlM renderHistogram newline allHistograms
 
     pure $ countersBuilder
