@@ -8,19 +8,29 @@ module Oscoin.Telemetry.Middleware
     , renderCounter
     , renderGauge
     , renderHistogram
+    , toPrometheusExpositionFormat
     ) where
 
 import           Oscoin.Prelude
 
 import           Control.Concurrent.STM
-import           Data.ByteString.Builder as BL
 import           Data.Foldable (foldlM)
 import           Data.List (foldl')
 import qualified Data.Map.Strict as M
-import           Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import           Formatting (float, int, sformat, stext, string, (%))
+import           Data.Text.Lazy.Builder (Builder, singleton, toLazyText)
+import           Formatting
+                 ( Format
+                 , bprint
+                 , build
+                 , float
+                 , int
+                 , mapf
+                 , sformat
+                 , stext
+                 , string
+                 , (%)
+                 )
 
 import           Oscoin.Telemetry (NotableEvent(..), emit)
 import           Oscoin.Telemetry.Internal as Internal
@@ -32,7 +42,8 @@ import           Oscoin.Telemetry.Metrics
                  , readGauge
                  , readHistogram
                  )
-import           Oscoin.Telemetry.Metrics.Internal as Internal
+import           Oscoin.Telemetry.Metrics
+import qualified Oscoin.Telemetry.Metrics.Internal as Internal
 import           Oscoin.Time (timeDiff)
 import qualified Oscoin.Time as Time
 
@@ -66,7 +77,7 @@ telemetryApiMiddleware TelemetryStore{telemetryMetrics} app req respond =
         respondWithMetrics :: IO Wai.ResponseReceived
         respondWithMetrics = do
             metrics <- toPrometheusExpositionFormat telemetryMetrics
-            respond $ Wai.responseLBS HTTP.status200 headers (toLazyByteString metrics)
+            respond $ Wai.responseLBS HTTP.status200 headers (toS $ toLazyText metrics)
             where
                 headers = [(HTTP.hContentType, "text/plain; version=0.0.4")]
 
@@ -74,78 +85,86 @@ telemetryApiMiddleware TelemetryStore{telemetryMetrics} app req respond =
 -- | Renders the metrics in the exposition format used by Prometheus.
 -- TODO(adn): Support 'Metadata' to be attached as labels.
 toPrometheusExpositionFormat :: MetricsStore -> IO Builder
-toPrometheusExpositionFormat MetricsStore{..} = do
+toPrometheusExpositionFormat Internal.MetricsStore{..} = do
     (allCounters, allGauges, allHistograms) <- atomically $ do
-        c <- readTVar _msCounters
-        g <- readTVar _msGauges
-        h <- readTVar _msHistograms
+        c <- M.toList <$> readTVar _msCounters
+        g <- M.toList <$> readTVar _msGauges
+        h <- M.toList <$> readTVar _msHistograms
         pure (c,g,h)
 
     countersBuilder   <-
-      foldlM renderCounter mempty (M.toList allCounters)
+        if null allCounters
+           then return mempty
+           else foldlM renderCounter mempty allCounters
 
     gaugesBuilder     <-
-      foldlM renderGauge mempty (M.toList allGauges)
+        if null allGauges
+           then return mempty
+           else foldlM renderGauge newline allGauges
 
     histogramsBuilder <-
-      foldlM renderHistogram mempty (M.toList allHistograms)
+        if null allHistograms
+           then return mempty
+           else foldlM renderHistogram newline allHistograms
 
     pure $ countersBuilder
-        <> newline
         <> gaugesBuilder
-        <> newline
         <> histogramsBuilder
 
 
-toB :: Text -> BL.Builder
-toB = BL.byteString . TE.encodeUtf8
+newline :: Builder
+newline = singleton '\n'
 
-newline :: BL.Builder
-newline = BL.char8 '\n'
-
-renderCounter :: Builder -> (Text, MonotonicCounter) -> IO Builder
+renderCounter :: Builder -> (Metric, MonotonicCounter) -> IO Builder
 renderCounter !acc (metric, counter) = do
     sample <- readCounter counter
-    let labeled = withLabels metric (_counterLabels counter)
-        entry = sformat (stext % " " % int % "\n") labeled sample
-    pure $ acc <> toB entry
+    let entry = bprint (fmtMetric % " " % int % "\n") metric sample
+    pure $ acc <> entry
 
-renderGauge :: Builder -> (Text, Gauge) -> IO Builder
+renderGauge :: Builder -> (Metric, Gauge) -> IO Builder
 renderGauge !acc (metric, gauge) = do
     sample <- readGauge gauge
-    let labeled = withLabels metric (_gaugeLabels gauge)
-        entry   = sformat (stext % " " % float % "\n") labeled sample
-    pure $ acc <> toB entry
+    let entry   = bprint (fmtMetric % " " % float % "\n") metric sample
+    pure $ acc <> entry
 
-renderHistogram :: Builder -> (Text, Histogram) -> IO Builder
+renderHistogram :: Builder -> (Metric, Histogram) -> IO Builder
 renderHistogram !acc (metric, histogram) = do
     sample@HistogramSample{..} <- readHistogram histogram
-    let sumMetric   = withLabels (metric <> "_sum") noLabels
-    let countMetric = withLabels (metric <> "_count") noLabels
+    let sumMetric = metric { metricName = metricName metric <> "_sum"
+                           , metricLabels = noLabels
+                           }
+    let countMetric = metric { metricName = metricName metric <> "_count"
+                             , metricLabels = noLabels
+                             }
     pure $ acc
-        <> renderBuckets metric (_histLabels histogram) sample
-        <> toB (
-             sformat (stext % " " % float % "\n") sumMetric hsSum
-          <> sformat (stext % " " % int % "\n") countMetric hsCount
-        )
+        <> renderBuckets metric sample
+        <> bprint (fmtMetric % " " % float % "\n") sumMetric hsSum
+        <> bprint (fmtMetric % " " % int % "\n") countMetric hsCount
 
-renderBuckets :: Text -> Labels -> HistogramSample -> Builder
-renderBuckets metric labels HistogramSample{..} =
-    let b = foldl' (\acc (le,value) ->
-              let metric' =
-                      withLabels (metric <> "_bucket")
-                                 (labels <> labelsFromList [("le", sformat float le)])
-              in  acc
-               <> toB (sformat (stext % " " % float) metric' value)
-               <> BL.char8 '\n'
-           )
-           mempty
-           -- Buckets must be sorted in their upper bounds, in
-           -- increasing order.
-           (sortBy (\(le1,_) (le2,_) -> compare le1 le2) . readBuckets $ hsBuckets)
-        plusInfBucket = withLabels (metric <> "_bucket")
-                                   (labels <> labelsFromList [("le", "+Inf")])
-    in b <> toB (sformat (stext % " " % int % "\n") plusInfBucket hsCount)
+renderBuckets :: Metric -> HistogramSample -> Builder
+renderBuckets metric HistogramSample{..} =
+    let userBuckets = foldl' f mempty sortedBuckets
+    in userBuckets <> bprint (plusInfBucket % " " % int % "\n") metric hsCount
+  where
+    f :: Builder -> (Internal.UpperInclusiveBound, Double) -> Builder
+    f acc (le, value) =
+        let extraLabel = labelsFromList [("le", sformat float le)]
+        in  acc <> bprint (fmtBucket extraLabel % " " % float) metric value <> newline
+
+    fmtBucket :: Labels -> Format r (Metric -> r)
+    fmtBucket extraLabels =
+        mapf (\m -> m { metricName = metricName m <> "_bucket"
+                      , metricLabels = metricLabels m <> extraLabels
+                      }
+             ) fmtMetric
+
+    -- Buckets must be sorted in their upper bounds, in
+    -- increasing order.
+    sortedBuckets :: [(Internal.UpperInclusiveBound, Double)]
+    sortedBuckets =
+        sortBy (\(le1,_) (le2,_) -> compare le1 le2) . readBuckets $ hsBuckets
+
+    plusInfBucket = fmtBucket (labelsFromList [("le", "+Inf")])
 
 -- | Converts a namespace-based metric name into a format more suitable to
 -- @Prometheus@.
@@ -154,15 +173,23 @@ toMetricName = T.replace "." "_"
 
 -- | Renders a metric with one or more label attached.
 --
--- >>> withLabels "oscoin.block_mined" [("env", "staging"), ("size", 100)]
+-- >>> fmtMetric "oscoin.block_mined" [ ("env", "staging")
+--                                     , ("size", 100)
+--                                     , ("env", "production")
+--                                     ]
 -- oscoin_block_mined{env="staging",size="100"}
+-- oscoin_block_mined{env="production",size="100"}
 --
-withLabels :: Text -> Labels -> Text
-withLabels metric (Labels labels)
-  | M.null labels = toMetricName metric
-  | otherwise =
-    let out = T.intercalate ","
-            . map (\(k,v) -> sformat (stext % "=" % string) k (show v))
-            . M.toList
-            $ labels
-    in sformat (stext % "{" % stext % "}") (toMetricName metric) out
+fmtMetric :: Format r (Metric -> r)
+fmtMetric = mapf formatMetric build
+    where
+        formatMetric :: Metric -> Builder
+        formatMetric metric =
+            if metricLabels metric == mempty
+            then bprint stext (toMetricName . metricName $ metric)
+            else let out = T.intercalate ","
+                         . map (\(k,v) -> sformat (stext % "=" % string) k (show v))
+                         . labelsToList
+                         . metricLabels
+                         $ metric
+            in bprint (stext % "{" % stext % "}") (toMetricName . metricName $ metric) out

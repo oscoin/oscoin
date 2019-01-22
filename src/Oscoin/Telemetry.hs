@@ -194,8 +194,11 @@ toActions = \case
         -- we could aggregate this properly with something like Prometheus.
         CounterIncrease "oscoin.p2p.errors.total" noLabels
      ]
-    HttpApiRequest _req _status _duration -> [
-        CounterIncrease "oscoin.api.http_requests.total" noLabels
+    HttpApiRequest req status _duration -> [
+        CounterIncrease "oscoin.api.http_requests.total" $
+            labelsFromList [ ("method", sformat fmtMethod (HTTP.requestMethod req))
+                           , ("status", sformat fmtStatus status)
+                           ]
      ]
 
 

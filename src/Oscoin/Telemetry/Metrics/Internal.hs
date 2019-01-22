@@ -1,6 +1,8 @@
 module Oscoin.Telemetry.Metrics.Internal
     ( MetricsStore(..)
     , MonotonicCounter(..)
+    , Metric(..)
+    , Label(..)
     , Labels(..)
     , Gauge(..)
     , Histogram(..)
@@ -23,13 +25,31 @@ import qualified System.Metrics.Gauge as EKG.Gauge
   Main (internal) types
 ------------------------------------------------------------------------------}
 
-newtype Labels = Labels { getLabels :: Map Text Text }
+-- | A metric identifies a time serie. When embellished with some 'Labels',
+-- it enables a dimensional data model where each combination of labels
+-- identifies a different time serie.
+data Metric = Metric
+    { metricName   :: Text
+    , metricLabels :: Labels
+    } deriving (Show, Eq, Ord)
+
+-- | A label, a key/value pair.
+newtype Label = Label { unlabel :: (Text, Text) }
+    deriving (Eq, Show)
+
+instance Ord Label where
+    compare (Label (name1,v1)) (Label (name2,v2)) =
+        case name1 `compare` name2 of
+          EQ -> v1 `compare` v2
+          x  -> x
+
+-- | A sorted set of labels.
+newtype Labels = Labels { getLabels :: Set Label  }
     deriving (Show, Ord, Eq, Semigroup, Monoid)
 
 -- | A monotonically-increasing counter.
 data MonotonicCounter = MonotonicCounter {
       _counterInternal :: !EKG.Counter.Counter
-    , _counterLabels   :: !Labels
     , incCounter       :: IO ()
     , readCounter      :: IO Int64
     , addCounter       :: Natural -> IO ()
@@ -38,7 +58,6 @@ data MonotonicCounter = MonotonicCounter {
 -- | A 'Gauge', a metric type which value can go up and down.
 data Gauge  = Gauge {
       _gaugeInternal :: !EKG.Gauge.Gauge
-    , _gaugeLabels   :: !Labels
     , incGauge       :: IO ()
     , decGauge       :: IO ()
     , setGauge       :: Int64 -> IO ()
@@ -52,7 +71,6 @@ data Histogram = Histogram {
     _histCount   :: !MonotonicCounter
   , _histSum     :: !(TVar Double)
   , _histBuckets :: !(TVar Buckets)
-  , _histLabels  :: !Labels
   }
 
 -- | A \"snapshot\" of an 'Histogram' at a certain point in time.
@@ -85,11 +103,11 @@ data MetricsStore = MetricsStore {
     _msEKGStore         :: !EKG.Store
   -- ^ Used to store metric types which have a 1:1 correspondance with EKG
   -- types and that can be ultimately displayed in the EKG dashboard.
-  , _msHistograms       :: !(TVar (Map Text Histogram))
+  , _msHistograms       :: !(TVar (Map Metric Histogram))
   -- ^ Used to store 'Histogram' metrics, as well as to retrieve and update them.
-  , _msCounters         :: !(TVar (Map Text MonotonicCounter))
+  , _msCounters         :: !(TVar (Map Metric MonotonicCounter))
   -- ^ Used to store 'Counter' metrics, as well as to retrieve and update them.
-  , _msGauges           :: !(TVar (Map Text Gauge))
+  , _msGauges           :: !(TVar (Map Metric Gauge))
   -- ^ Used to store 'Gauge' metrics, as well as to retrieve and update them.
   , _msPredefinedLabels :: !Labels
   -- ^ A set of predefined (system) labels which will be used for each new
