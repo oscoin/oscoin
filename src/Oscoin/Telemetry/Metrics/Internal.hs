@@ -35,13 +35,7 @@ data Metric = Metric
 
 -- | A label, a key/value pair.
 newtype Label = Label { unlabel :: (Text, Text) }
-    deriving (Eq, Show)
-
-instance Ord Label where
-    compare (Label (name1,v1)) (Label (name2,v2)) =
-        case name1 `compare` name2 of
-          EQ -> v1 `compare` v2
-          x  -> x
+    deriving (Eq, Ord, Show)
 
 -- | A sorted set of labels.
 newtype Labels = Labels { getLabels :: Set Label  }

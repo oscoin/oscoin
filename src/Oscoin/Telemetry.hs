@@ -1,6 +1,6 @@
 module Oscoin.Telemetry
     ( -- * Types
-      TelemetryStore -- opaque
+      Handle -- opaque
     , HasTelemetry(..)
 
     -- * API
@@ -26,7 +26,7 @@ import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import           Oscoin.Telemetry.Events
-import           Oscoin.Telemetry.Internal (TelemetryStore(..))
+import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 import           Oscoin.Time as Time
@@ -36,23 +36,23 @@ import           Oscoin.Time as Time
 ------------------------------------------------------------------------------}
 
 class HasTelemetry a where
-    telemetryStoreL :: SimpleGetter a TelemetryStore
+    telemetryStoreL :: SimpleGetter a Handle
 
 {------------------------------------------------------------------------------
   Single, unified API for both logging and metrics recording.
 ------------------------------------------------------------------------------}
 
--- | Creates a new 'TelemetryStore' from a 'Logger' and a 'MetricStore'.
-newTelemetryStore :: Logger -> MetricsStore -> TelemetryStore
-newTelemetryStore = TelemetryStore
+-- | Creates a new 'Handle' from a 'Logger' and a 'MetricStore'.
+newTelemetryStore :: Logger -> MetricsStore -> Handle
+newTelemetryStore = Handle
 
 -- | Single /facade/ to the telemetry API. Given a 'NotableEvent',
 -- dispatch the updates to the metrics and logging systems.
 ---
 --- >>> emit telemetryStore (BlockMinedEvent (blockHash b))
 --
-emit :: HasCallStack => TelemetryStore -> NotableEvent -> IO ()
-emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
+emit :: HasCallStack => Handle -> NotableEvent -> IO ()
+emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
     forM_ (toActions evt) (lift . updateMetricsStore telemetryMetrics)
     case evt of
         BlockReceivedEvent blockHash ->

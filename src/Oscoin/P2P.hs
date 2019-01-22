@@ -17,7 +17,8 @@ import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
-import           Oscoin.Telemetry (NotableEvent(..), TelemetryStore, emit)
+import           Oscoin.Telemetry (NotableEvent(..), emit)
+import qualified Oscoin.Telemetry as Telemetry
 
 import           Oscoin.P2P.Class
 import           Oscoin.P2P.Handshake
@@ -75,7 +76,7 @@ withGossip
        , Exception e
        , Serialise o
        )
-    => TelemetryStore
+    => Telemetry.Handle
     -> NodeAddr
     -- ^ Node identity (\"self\")
     -> [NodeAddr]
@@ -143,7 +144,7 @@ wrapApply
        , Serialise       tx
        , Crypto.Hashable tx
        )
-    => TelemetryStore
+    => Telemetry.Handle
     -> (BlockHash   -> IO (Maybe (Block tx s)))
     -> (Block tx s  -> IO Storage.ApplyResult)
     -> (tx          -> IO Storage.ApplyResult)

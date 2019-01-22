@@ -138,9 +138,9 @@ withNode NodeState{..} k = do
         logger = Log.noLogger
     config <- Consensus.getConfig env
     metricsStore <- Metrics.newMetricsStore Metrics.noLabels
-    let store = Telemetry.newTelemetryStore logger metricsStore
+    let handle = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env
-                          , Node.cfgTelemetryStore = store
+                          , Node.cfgTelemetry = handle
                           , Node.cfgNoEmptyBlocks = False
                           , Node.cfgConsensusConfig = config
                           }

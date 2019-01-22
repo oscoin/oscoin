@@ -29,8 +29,8 @@ withTelemetryMiddleware :: Node.Handle tx e s i
                         -> (Wai.Middleware -> IO a)
                         -> IO a
 withTelemetryMiddleware hdl action = do
-    let telemetryStore = Node.cfgTelemetryStore . Node.Trans.hConfig $ hdl
-    action (telemetryMiddleware telemetryStore)
+    let handle = Node.cfgTelemetry . Node.Trans.hConfig $ hdl
+    action (telemetryMiddleware handle)
 
 run :: (ToJSON s, Serialise s) => Int -> Node.Handle RadTx Rad.Env s i -> IO ()
 run port hdl =

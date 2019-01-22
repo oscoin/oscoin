@@ -125,15 +125,15 @@ main = do
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
                                      , Log.cfgStyle = Log.styleFromEnvironment environment
                                      } $ \lgr ->
-        let telemetryStore = Telemetry.newTelemetryStore lgr metricsStore
-        in withNode (mkNodeConfig environment telemetryStore noEmptyBlocks config)
+        let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
+        in withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
                     nid
                     mem
                     stStore
                     blkStore
                     Rad.txEval
                     consensus                                      $ \nod ->
-        withGossip telemetryStore
+        withGossip telemetryHandle
                    P2P.NodeAddr { P2P.nodeId   = nid
                                 , P2P.nodeHost = host
                                 , P2P.nodePort = gossipPort
@@ -145,9 +145,9 @@ main = do
                      Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
                   <> Async.Concurrently (miner nod gos)
   where
-    mkNodeConfig env telemetryStore neb config = Node.Config
+    mkNodeConfig env telemetryHandle neb config = Node.Config
         { Node.cfgEnv = env
-        , Node.cfgTelemetryStore = telemetryStore
+        , Node.cfgTelemetry = telemetryHandle
         , Node.cfgNoEmptyBlocks = neb
         , Node.cfgConsensusConfig = config
         }

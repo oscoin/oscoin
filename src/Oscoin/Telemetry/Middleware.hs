@@ -50,11 +50,11 @@ import qualified Oscoin.Time as Time
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
 
-telemetryMiddleware :: TelemetryStore -> Wai.Middleware
+telemetryMiddleware :: Handle -> Wai.Middleware
 telemetryMiddleware store = loggingMiddleware store
                           . telemetryApiMiddleware store
 
-loggingMiddleware :: TelemetryStore -> Wai.Middleware
+loggingMiddleware :: Handle -> Wai.Middleware
 loggingMiddleware telemetryStore app req respond = do
     t0 <- Time.now
     app req $ \res -> do
@@ -63,12 +63,12 @@ loggingMiddleware telemetryStore app req respond = do
         emit telemetryStore evt
         respond res
 
--- | Exposes the 'TelemetryStore' metrics using @Prometheus@ 's
+-- | Exposes the telemetry metrics using @Prometheus@ 's
 -- < https://prometheus.io/docs/instrumenting/exposition_formats/ exposition format>.
 -- However, there is no formal dependency on @Prometheus@ itself as part of this
 -- 'Middleware', which can be re-interpreted to be served, say, as JSON.
-telemetryApiMiddleware :: TelemetryStore -> Wai.Middleware
-telemetryApiMiddleware TelemetryStore{telemetryMetrics} app req respond =
+telemetryApiMiddleware :: Handle -> Wai.Middleware
+telemetryApiMiddleware Handle{telemetryMetrics} app req respond =
     if     Wai.requestMethod req == HTTP.methodGet
         && Wai.pathInfo req == ["metrics"]
     then respondWithMetrics else app req respond

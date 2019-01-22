@@ -1,17 +1,18 @@
 module Oscoin.Telemetry.Internal
     ( -- * Internal types
-      TelemetryStore(..)
+      Handle(..)
     ) where
 
 import           Lens.Micro
 import           Oscoin.Telemetry.Logging
 import           Oscoin.Telemetry.Metrics
 
-data TelemetryStore = TelemetryStore {
+-- | The telemetry stateful 'Handle'.
+data Handle = Handle {
       telemetryLogger  :: Logger
     , telemetryMetrics :: MetricsStore
     }
 
-instance HasLogger TelemetryStore where
+instance HasLogger Handle where
     loggerL = lens telemetryLogger (\s telemetryLogger -> s { telemetryLogger })
 
