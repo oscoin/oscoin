@@ -62,21 +62,23 @@ data Gauge  = Gauge {
 -- | An histogram type modeled after Prometheus' one. It allows sampling the
 -- phi-percentile for a given  number of buckets.
 data Histogram = Histogram {
-    _histCount   :: !MonotonicCounter
-  , _histSum     :: !(TVar Double)
-  , _histBuckets :: !(TVar Buckets)
+    _histSum         :: !(TVar Double)
+  , _histCount       :: !MonotonicCounter
+  , _histBuckets     :: !(Map UpperInclusiveBound MonotonicCounter)
+  , _histUpperBounds :: !Buckets
   }
 
 -- | A \"snapshot\" of an 'Histogram' at a certain point in time.
 data HistogramSample = HistogramSample {
     hsCount   :: !Int64
   , hsSum     :: !Double
-  , hsBuckets :: !Buckets
+  , hsBuckets :: ![(UpperInclusiveBound, Int64)]
   } deriving (Show, Eq, Ord)
 
 type UpperInclusiveBound = Double
 
-newtype Buckets = Buckets (Map UpperInclusiveBound Double)
+-- A /sorted/ set of 'UpperInclusiveBound's.
+newtype Buckets = Buckets { fromBuckets :: Set UpperInclusiveBound }
     deriving (Show, Eq, Ord)
 
 -- | A set of 'Action's that a 'NotableEvent' might trigger.

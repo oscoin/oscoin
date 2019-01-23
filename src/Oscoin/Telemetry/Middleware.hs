@@ -138,10 +138,11 @@ renderBuckets metric HistogramSample{..} =
     let userBuckets = foldl' f mempty sortedBuckets
     in userBuckets <> bprint (plusInfBucket % " " % int % "\n") metric hsCount
   where
-    f :: Builder -> (Internal.UpperInclusiveBound, Double) -> Builder
+    f :: Builder -> (Internal.UpperInclusiveBound, Int64) -> Builder
     f acc (le, value) =
         let extraLabel = labelsFromList [("le", sformat float le)]
-        in  acc <> bprint (fmtBucket extraLabel % " " % float) metric value <> newline
+        in  acc <> bprint (fmtBucket extraLabel % " " % float) metric (fromIntegral value :: Double)
+                <> newline
 
     fmtBucket :: Labels -> Format r (Metric -> r)
     fmtBucket extraLabels =
@@ -152,9 +153,9 @@ renderBuckets metric HistogramSample{..} =
 
     -- Buckets must be sorted in their upper bounds, in
     -- increasing order.
-    sortedBuckets :: [(Internal.UpperInclusiveBound, Double)]
+    sortedBuckets :: [(Internal.UpperInclusiveBound, Int64)]
     sortedBuckets =
-        sortBy (\(le1,_) (le2,_) -> compare le1 le2) . readBuckets $ hsBuckets
+        sortBy (\(le1,_) (le2,_) -> compare le1 le2) $ hsBuckets
 
     plusInfBucket = fmtBucket (labelsFromList [("le", "+Inf")])
 

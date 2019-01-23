@@ -34,12 +34,12 @@ testHistogram = do
     HistogramSample{..} <- readHistogram =<< newExampleHistogram
     hsCount @?= 1000
     hsSum @?= 29969.50000000001
-    readBuckets hsBuckets @?= [
-        (20.0, 192.0)
-      , (25.0, 366.0)
-      , (30.0, 501.0)
-      , (35.0, 638.0)
-      , (40.0, 816.0)
+    hsBuckets @?= [
+        (20.0, 192)
+      , (25.0, 366)
+      , (30.0, 501)
+      , (35.0, 638)
+      , (40.0, 816)
       ]
 
 exampleLabels :: Labels
