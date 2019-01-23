@@ -25,7 +25,6 @@ module Oscoin.Telemetry.Metrics
     , newHistogram
     , readHistogram
     , linearBuckets
-    , readBuckets
     , observeHistogram
 
     -- * Operations on a MonotonicCounter
@@ -88,35 +87,55 @@ labelsToList = map unlabel . Set.toDescList . getLabels
 
 -- | Creates a new 'Histogram' given the initial 'Buckets'.
 newHistogram :: Buckets -> IO Histogram
-newHistogram buckets =
-    Histogram <$> newCounter
-              <*> newTVarIO 0.0
-              <*> newTVarIO buckets
-
+newHistogram upperBounds =
+    Histogram <$> newTVarIO 0.0
+              <*> newCounter
+              <*> buckets
+              <*> pure upperBounds
+  where
+      buckets :: IO (Map UpperInclusiveBound MonotonicCounter)
+      buckets = M.fromList <$>
+          forM (Set.toList . fromBuckets $ upperBounds) (\le -> do
+              c <- newCounter
+              pure (le, c))
 
 -- | Sample the current value out of an 'Histogram'.
 readHistogram :: Histogram -> IO HistogramSample
 readHistogram Histogram{..} = do
     hsCount       <- readCounter _histCount
-    (hsSum, hsBuckets) <- atomically $ do
-        hsSum     <- readTVar _histSum
-        hsBuckets <- readTVar _histBuckets
-        pure (hsSum, hsBuckets)
-    pure $ HistogramSample{..}
-
+    hsSum         <- readTVarIO _histSum
+    hsBuckets     <- readCumulative _histBuckets
+    pure HistogramSample{..}
+  where
+      -- Reads all the buckets in a cumulative fashion, similar to what
+      -- the Go implementation <https://github.com/prometheus/client_golang/blob/master/prometheus/histogram.go#L352-L359 does>
+      readCumulative :: Map UpperInclusiveBound MonotonicCounter
+                     -> IO [(UpperInclusiveBound, Int64)]
+      readCumulative bucketsMap = do
+          let buckets     = M.toList bucketsMap
+          sortOn fst . fst <$>
+              foldM (\(!acc, cumCount) (le,c) -> do
+                       !cumCount' <- (+ cumCount) <$> readCounter c
+                       pure ((le, cumCount') : acc, cumCount')
+                    ) (mempty, 0) buckets
 
 -- | Observes (i.e. adds) a new value to the histogram.
 observeHistogram :: Histogram -> Double -> IO ()
 observeHistogram Histogram{..} measure = do
-    incCounter _histCount -- Increment the total number of observations
-    atomically $ do
-        modifyTVar' _histSum (+ measure)
-        modifyTVar' _histBuckets updateBuckets
+    -- Step 1, search the 'UpperInclusiveBound' this 'measure' falls into
+    case lookupBound (Set.toAscList $ fromBuckets _histUpperBounds) of
+        Nothing -> pure ()
+        Just le ->
+            -- Step 2, increment the total number of observations for that
+            -- bucket
+            incCounter (_histBuckets M.! le)
+    -- Step 3, increment the sum and the counts.
+    incCounter _histCount
+    atomically $ modifyTVar' _histSum (+ measure)
     where
-      -- Stolen from <http://hackage.haskell.org/package/prometheus-2.1.0/docs/src/System.Metrics.Prometheus.Metric.Histogram.html#observe>
-      updateBuckets :: Buckets -> Buckets
-      updateBuckets (Buckets b) = Buckets $ M.mapWithKey updateBucket b
-        where updateBucket key val = bool val (val + 1.0) (measure <= key)
+      lookupBound :: [UpperInclusiveBound] -> Maybe UpperInclusiveBound
+      lookupBound []     = Nothing
+      lookupBound (x:xs) = if measure <= x then Just x else lookupBound xs
 
 {------------------------------------------------------------------------------
   Operations on buckets
@@ -130,15 +149,9 @@ linearBuckets :: Double      -- ^ Starting value
               -> Buckets
 linearBuckets start step (fromIntegral -> bucketNumber)
   | bucketNumber == 0 = panic "linearBuckets: you must create at least 1 bucket."
-  | otherwise = Buckets $
-      foldl' (\acc k -> M.insert k 0.0 acc)
-             mempty
-             [start, start + step .. start + (step * (bucketNumber - 1))]
+  | otherwise =
+      Buckets $ Set.fromList [start, start + step .. start + (step * (bucketNumber - 1))]
 
-
--- | Read the values of the 'Buckets' at the given point in time.
-readBuckets :: Buckets -> [(UpperInclusiveBound, Double)]
-readBuckets (Buckets buckets) = M.toList buckets
 
 {------------------------------------------------------------------------------
   Operations on counters
