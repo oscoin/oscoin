@@ -24,8 +24,11 @@ module Oscoin.Telemetry.Metrics
     -- * Operations on histograms
     , newHistogram
     , readHistogram
-    , linearBuckets
     , observeHistogram
+
+    -- * Ready-to-use buckets
+    , defaultBuckets
+    , linearBuckets
 
     -- * Operations on a MonotonicCounter
     , newCounter
@@ -140,6 +143,13 @@ observeHistogram Histogram{..} measure = do
 {------------------------------------------------------------------------------
   Operations on buckets
 ------------------------------------------------------------------------------}
+
+-- | 'Buckets' suitable to measure the latency (in seconds) of a network
+-- service.  Adapted from the
+-- <https://github.com/prometheus/client_golang/blob/master/prometheus/histogram.go#L61 Go client>
+defaultBuckets :: Buckets
+defaultBuckets = Buckets $
+    Set.fromList [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 10, 2.5, 5.0, 10.0]
 
 -- | Creates linear 'Buckets' from a starting value, a step value and a number
 -- of buckets to create.
@@ -341,10 +351,10 @@ withHistogram :: Metric
               -> MetricsStore
               -> (Histogram -> IO ())
               -> IO ()
-withHistogram metric defaultBuckets MetricsStore{..} action =
+withHistogram metric buckets MetricsStore{..} action =
     -- There is no 'Histogram' type for EKG, so we cannot directly
     -- register it.
-    let onCreation = newHistogram defaultBuckets
+    let onCreation = newHistogram buckets
         labeled = metric { metricLabels = _msPredefinedLabels <> metricLabels metric }
     in withMetric labeled _msHistograms onCreation action
 

@@ -194,11 +194,15 @@ toActions = \case
         -- we could aggregate this properly with something like Prometheus.
         CounterIncrease "oscoin.p2p.errors.total" noLabels
      ]
-    HttpApiRequest req status _duration -> [
+    HttpApiRequest req status duration -> [
         CounterIncrease "oscoin.api.http_requests.total" $
             labelsFromList [ ("method", sformat fmtMethod (HTTP.requestMethod req))
                            , ("status", sformat fmtStatus status)
                            ]
+     , HistogramObserve "oscoin.api.http_requests.seconds"
+                        noLabels
+                        defaultBuckets
+                        (fromIntegral duration / fromIntegral Time.seconds)
      ]
 
 
