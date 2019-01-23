@@ -25,6 +25,7 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances.ByteString ()
 import           Test.QuickCheck.Instances.Text ()
 import           Test.Tasty
+import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
 testBlockchain :: Consensus.Config -> TestTree
@@ -55,6 +56,11 @@ testBlockchain config = testGroup "Blockchain"
             . putWord32le
             . encodeDifficultyCompact
             ) d == (d, False)
+    , testCase "Difficulty (compact): matches Bitcoin format" $ do
+        decodeDifficultyCompact 0x1b0404cb @?=
+            (Difficulty 0x404CB000000000000000000000000000000000000000000000000, False)
+        decodeDifficultyCompact 0x1d00ffff @?=
+            (Difficulty 0xFFFF0000000000000000000000000000000000000000000000000000, False)
     ]
 
 testValidateBlock :: Consensus.Config -> TestTree
