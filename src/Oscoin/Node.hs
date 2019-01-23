@@ -71,10 +71,10 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     open = do
         hReceiptStore <- ReceiptStore.newHandle
         gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
-        Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
+        Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "running in"
                  (ftag "env" % stext) (Env.toText $ cfgEnv hConfig)
-        Log.info (cfgTelemetryStore hConfig ^. Log.loggerL)
+        Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "genesis is"
                  (ftag "block_hash" % formatHash) (blockHash gen)
         pure Handle{..}
@@ -93,7 +93,7 @@ miner
     => NodeT tx st s i m a
 miner = do
     Handle{hEval, hConsensus, hConfig} <- ask
-    let store = cfgTelemetryStore hConfig
+    let telemetryHandle = cfgTelemetry hConfig
     forever $ do
         nTxs <- numTxs
         if nTxs == 0 && cfgNoEmptyBlocks hConfig
@@ -105,7 +105,7 @@ miner = do
 
             for_ blk $ \b -> do
                 lift   $ P2P.broadcast $ P2P.BlockMsg b
-                liftIO $ Telemetry.emit store (BlockMinedEvent (blockHash b))
+                liftIO $ Telemetry.emit telemetryHandle (BlockMinedEvent (blockHash b))
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.

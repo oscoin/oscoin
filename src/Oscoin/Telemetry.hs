@@ -1,6 +1,6 @@
 module Oscoin.Telemetry
     ( -- * Types
-      TelemetryStore -- opaque
+      Handle -- opaque
     , HasTelemetry(..)
 
     -- * API
@@ -26,7 +26,7 @@ import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import           Oscoin.Telemetry.Events
-import           Oscoin.Telemetry.Internal (TelemetryStore(..))
+import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 import           Oscoin.Time as Time
@@ -36,41 +36,45 @@ import           Oscoin.Time as Time
 ------------------------------------------------------------------------------}
 
 class HasTelemetry a where
-    telemetryStoreL :: SimpleGetter a TelemetryStore
+    telemetryStoreL :: SimpleGetter a Handle
 
 {------------------------------------------------------------------------------
   Single, unified API for both logging and metrics recording.
 ------------------------------------------------------------------------------}
 
--- | Creates a new 'TelemetryStore' from a 'Logger' and a 'MetricStore'.
-newTelemetryStore :: Logger -> MetricsStore -> TelemetryStore
-newTelemetryStore = TelemetryStore
+-- | Creates a new 'Handle' from a 'Logger' and a 'MetricStore'.
+newTelemetryStore :: Logger -> MetricsStore -> Handle
+newTelemetryStore = Handle
 
 -- | Single /facade/ to the telemetry API. Given a 'NotableEvent',
 -- dispatch the updates to the metrics and logging systems.
 ---
 --- >>> emit telemetryStore (BlockMinedEvent (blockHash b))
 --
-emit :: HasCallStack => TelemetryStore -> NotableEvent -> IO ()
-emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
+emit :: HasCallStack => Handle -> NotableEvent -> IO ()
+emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
     forM_ (toActions evt) (lift . updateMetricsStore telemetryMetrics)
     case evt of
         BlockReceivedEvent blockHash ->
-            Log.debugM "received block"
-                       (ftag "block_hash" % formatHash) blockHash
+            Log.withNamespace "p2p" $
+                Log.debugM "received block" formatBlockHash blockHash
         BlockMinedEvent blockHash ->
             Log.withNamespace "node" $
                 Log.infoM "mined block" formatBlockHash blockHash
         BlockAppliedEvent blockHash ->
-            Log.debugM "applied block" formatBlockHash blockHash
-        BlockStaleEvent   blockHash ->
-            Log.infoM "stale block" formatBlockHash blockHash
+            Log.withNamespace "storage" $
+                Log.debugM "applied block" formatBlockHash blockHash
+        BlockStaleEvent blockHash ->
+            Log.withNamespace "storage" $
+                Log.infoM "stale block" formatBlockHash blockHash
         BlockApplyErrorEvent blockHash ->
             Log.errM "block application failed" formatBlockHash blockHash
         BlockOrphanEvent  blockHash ->
-            Log.infoM "orphan block" formatBlockHash blockHash
+            Log.withNamespace "storage" $
+                Log.infoM "orphan block" formatBlockHash blockHash
         BlockValidationFailedEvent  blockHash _validationError ->
-            Log.errM "block failed validation" formatBlockHash blockHash
+            Log.withNamespace "storage" $
+                Log.errM "block failed validation" formatBlockHash blockHash
         BlockEvaluationFailedEvent  blockHash _evalError ->
             Log.errM "block failed evaluation" formatBlockHash blockHash
         TxSentEvent txHash ->
@@ -82,22 +86,26 @@ emit TelemetryStore{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                 Log.infoM "tx submitted"
                           (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxReceivedEvent txHash ->
-            Log.debugM "tx received "
-                       (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
+            Log.withNamespace "p2p" $
+                Log.debugM "tx received "
+                           (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxStaleEvent txHash ->
-            Log.infoM "tx wasn't applied as it was stale"
-                      (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
+            Log.withNamespace "storage" $
+                Log.infoM "tx wasn't applied as it was stale"
+                          (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxAppliedEvent txHash ->
-            Log.debugM "tx was correctly applied"
-                       (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
+            Log.withNamespace "storage" $
+                Log.debugM "tx was correctly applied"
+                           (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxsAddedToMempoolEvent txs ->
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
             in Log.debugM "txs added to the mempool"
                           (ftag "tx_hashes" % listOf formatHash) hashes
         TxsRemovedFromMempoolEvent txs ->
             let hashes = map (Crypto.fromHashed . Crypto.hash) txs
-            in Log.debugM "txs removed from the mempool"
-                          (ftag "tx_hashes" % listOf formatHash) hashes
+            in Log.withNamespace "storage" $
+                   Log.debugM "txs removed from the mempool"
+                              (ftag "tx_hashes" % listOf formatHash) hashes
         Peer2PeerErrorEvent conversionError ->
             Log.withNamespace "p2p" $
                 Log.errM "P2P error" fmtLogConversionError conversionError
@@ -186,8 +194,11 @@ toActions = \case
         -- we could aggregate this properly with something like Prometheus.
         CounterIncrease "oscoin.p2p.errors.total" noLabels
      ]
-    HttpApiRequest _req _status _duration -> [
-        CounterIncrease "oscoin.api.http_requests.total" noLabels
+    HttpApiRequest req status _duration -> [
+        CounterIncrease "oscoin.api.http_requests.total" $
+            labelsFromList [ ("method", sformat fmtMethod (HTTP.requestMethod req))
+                           , ("status", sformat fmtStatus status)
+                           ]
      ]
 
 
