@@ -13,6 +13,7 @@ module Oscoin.Crypto.Blockchain.Eval
 
 import           Oscoin.Prelude
 
+
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -20,6 +21,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Codec.Serialise (Serialise)
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
+import qualified Generics.SOP as SOP
 
 
 type EvalResult state output = Either EvalError (output, state)
@@ -31,6 +33,9 @@ identityEval _ s = Right ((), s)
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
+
+instance SOP.Generic EvalError
+instance SOP.HasDatatypeInfo EvalError
 
 instance Serialise EvalError
 

@@ -9,6 +9,7 @@ module Oscoin.Telemetry
 
     -- * Handy re-exports
     , module Oscoin.Telemetry.Events
+
     ) where
 
 import           Oscoin.Prelude
@@ -22,9 +23,13 @@ import           Lens.Micro
 import           Network.HTTP.Types as HTTP
 import           Network.Wai as HTTP
 
+import qualified Oscoin.Consensus.Types as Consensus
+import           Oscoin.Crypto.Blockchain.Block (prettyDifficulty)
+import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.P2P.Types (fmtLogConversionError)
+import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
@@ -57,26 +62,32 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
     case evt of
         BlockReceivedEvent blockHash ->
             Log.withNamespace "p2p" $
-                Log.debugM "received block" formatBlockHash blockHash
+                Log.debugM "received block" fmtBlockHash blockHash
         BlockMinedEvent blockHash ->
             Log.withNamespace "node" $
-                Log.infoM "mined block" formatBlockHash blockHash
+                Log.infoM "mined block" fmtBlockHash blockHash
         BlockAppliedEvent blockHash ->
             Log.withNamespace "storage" $
-                Log.debugM "applied block" formatBlockHash blockHash
+                Log.debugM "applied block" fmtBlockHash blockHash
         BlockStaleEvent blockHash ->
             Log.withNamespace "storage" $
-                Log.infoM "stale block" formatBlockHash blockHash
+                Log.infoM "stale block" fmtBlockHash blockHash
         BlockApplyErrorEvent blockHash ->
-            Log.errM "block application failed" formatBlockHash blockHash
+            Log.errM "block application failed" fmtBlockHash blockHash
         BlockOrphanEvent  blockHash ->
             Log.withNamespace "storage" $
-                Log.infoM "orphan block" formatBlockHash blockHash
-        BlockValidationFailedEvent  blockHash _validationError ->
+                Log.infoM "orphan block" fmtBlockHash blockHash
+        BlockValidationFailedEvent  blockHash validationError ->
             Log.withNamespace "storage" $
-                Log.errM "block failed validation" formatBlockHash blockHash
-        BlockEvaluationFailedEvent  blockHash _evalError ->
-            Log.errM "block failed evaluation" formatBlockHash blockHash
+                Log.errM "block failed validation"
+                         (fmtBlockHash % " " % fmtValidationError)
+                         blockHash
+                         validationError
+        BlockEvaluationFailedEvent blockHash evalError ->
+            Log.errM "block failed evaluation"
+                     (fmtBlockHash % " " % ferror Eval.fromEvalError)
+                     blockHash
+                     evalError
         TxSentEvent txHash ->
             Log.withNamespace "p2p" $
                 Log.infoM "tx sent"
@@ -155,16 +166,11 @@ toActions = \case
     BlockApplyErrorEvent _ -> [
         CounterIncrease "oscoin.blocks_failed_to_apply.total" noLabels
      ]
-    BlockValidationFailedEvent _ _validationError -> [
-        -- NOTE(adn) Do we want an Histogram to categorise the different
-        -- validation errors or at the very least some labels to understand
-        -- which one is which?
-        CounterIncrease "oscoin.blocks_failed_validation.total" noLabels
+    BlockValidationFailedEvent _ validationError -> [
+        CounterIncrease "oscoin.blocks_failed_validation.total" $
+            validationErrorToLabels validationError
      ]
     BlockEvaluationFailedEvent _ _evalError -> [
-        -- NOTE(adn) Do we want an Histogram to categorise the different
-        -- validation errors or at the very least some labels to understand
-        -- which one is which?
         CounterIncrease "oscoin.blocks_failed_evaluation.total" noLabels
      ]
     TxSentEvent _ -> [
@@ -188,11 +194,9 @@ toActions = \case
     TxsRemovedFromMempoolEvent txs -> [
         GaugeAdd "oscoin.mempool.txs.total" noLabels (- fromIntegral (length txs))
      ]
-    Peer2PeerErrorEvent _ -> [
-        -- FIXME(adn) Here is an example where we would like to have the
-        -- same metric but with different labels (one for each erorr), so that
-        -- we could aggregate this properly with something like Prometheus.
-        CounterIncrease "oscoin.p2p.errors.total" noLabels
+    Peer2PeerErrorEvent p2pErr -> [
+        CounterIncrease "oscoin.p2p.errors.total" $ p2pErrorToLabels p2pErr
+
      ]
     HttpApiRequest req status duration -> [
         CounterIncrease "oscoin.api.http_requests.total" $
@@ -215,8 +219,31 @@ toActions = \case
 listOf :: Format Builder (a -> Builder) -> Format r ([a] -> r)
 listOf formatElement = later (F.build . map (bprint formatElement))
 
-formatBlockHash :: Format r (Crypto.Hash -> r)
-formatBlockHash = ftag "block_hash" % formatHash
+{------------------------------------------------------------------------------
+  Formatters
+-------------------------------------------------------------------------------}
+
+fmtBlockHash :: Format r (Crypto.Hash -> r)
+fmtBlockHash = ftag "block_hash" % formatHash
+
+fmtValidationError :: Format r (Consensus.ValidationError -> r)
+fmtValidationError = ferror $ \case
+    Consensus.InvalidParentHash parentHash ->
+        sformat ("Parent hash " % formatHash % " was invalid") parentHash
+    Consensus.InvalidDataHash dataHash ->
+        sformat ("Data hash " % formatHash % " was invalid.") dataHash
+    Consensus.InvalidTargetDifficulty expected actual ->
+        sformat ("Invalid target difficulty: expecting " % stext % " but got " % stext)
+                (prettyDifficulty expected)
+                (prettyDifficulty actual)
+    Consensus.InvalidBlockDifficulty block target  ->
+        sformat ("Block difficulty " % stext % " doesn't match target " % stext)
+                (prettyDifficulty block)
+                (prettyDifficulty target)
+    Consensus.InvalidBlockTimestamp ts    ->
+        sformat ("Block has invalid timestamp of " % stext) (prettyDuration ts)
+    Consensus.InvalidBlockSize blockSize ->
+        sformat ("Block has size" % int % " which exceeded the limit") blockSize
 
 fmtStatus :: Format r (HTTP.Status -> r)
 fmtStatus = mapf HTTP.statusCode int
@@ -232,3 +259,15 @@ fmtParams = mapf (T.pack . toS . HTTP.renderQuery False) fquoted
 
 fmtDuration :: Format r (Duration -> r)
 fmtDuration = mapf Time.prettyDuration stext
+
+{------------------------------------------------------------------------------
+  Labels
+-------------------------------------------------------------------------------}
+
+validationErrorToLabels :: Consensus.ValidationError -> Labels
+validationErrorToLabels validationError = labelsFromList $
+    (:[]) . ("validation_error",) $ gderiveErrorClass validationError
+
+p2pErrorToLabels :: P2P.ConversionError -> Labels
+p2pErrorToLabels p2pError = labelsFromList $
+    (:[]) . ("p2p_error",) $ gderiveErrorClass p2pError

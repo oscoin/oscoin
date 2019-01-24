@@ -79,6 +79,7 @@ module Oscoin.Telemetry.Logging
     , fcallstack
     , fthreadId
     , fprocessId
+    , ferror
 
     -- ** Re-exports from @formatting@
     , (%)
@@ -102,6 +103,7 @@ import qualified Data.Text.Lazy.Builder as LTB
 import qualified Data.Text.Lazy.Encoding as LT
 import           Formatting (Format, (%))
 import qualified Formatting as F
+import qualified Generics.SOP as SOP
 import           GHC.Stack (CallStack, HasCallStack, SrcLoc(..))
 import qualified GHC.Stack as Stack
 import           Lens.Micro (Lens', lens, set)
@@ -113,6 +115,7 @@ import qualified System.Log.FastLogger as FL
 import           System.Posix.Types (CPid, ProcessID)
 
 import           Formatting.Formatters as Export
+import           Oscoin.Telemetry.Logging.Generic as Export
 
 -- | Severity of a log statement
 --
@@ -431,6 +434,16 @@ fthreadId = F.mapf (show :: ThreadId -> Text) (ftag "thread" % fquoted)
 -- | Format a 'ProcessID' as a tag @pid=42@
 fprocessId :: Format t (ProcessID -> t)
 fprocessId = F.mapf (fromIntegral @CPid @Int32) (ftag "pid" % F.int)
+
+-- | When given a function from 'a' to an error message 'Text', it format
+-- a domain-specific error as @error_class=foo_bar error_message=\"The error\"@
+-- where the @error_class@ is generically derived from the data constructors.
+ferror :: (SOP.Generic a, SOP.HasDatatypeInfo a)
+       => (a -> Text) -> Format r (a -> r)
+ferror toErrorMsg =
+       (ftag "error_class"   % F.mapf gderiveErrorClass fquoted % " ")
+    <> (ftag "error_message" % F.mapf toErrorMsg fquoted)
+
 
 class ToEncoding a where
     toEncoding :: a -> Enc.Encoding

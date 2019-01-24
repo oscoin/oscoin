@@ -12,6 +12,8 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time (Duration)
 
+import qualified Generics.SOP as SOP
+
 -- | Represents an abstract consensus protocol.
 data Consensus tx s m = Consensus
     { cScore    :: ChainScore tx s
@@ -39,7 +41,10 @@ data ValidationError =
     -- far in the future
     | InvalidBlockSize Int
     -- ^ The block exceeded the maximum block size.
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
+
+instance SOP.Generic ValidationError
+instance SOP.HasDatatypeInfo ValidationError
 
 -- | Chain scoring function.
 type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering
