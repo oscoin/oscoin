@@ -53,3 +53,10 @@
           # BEGIN debug functions
           - props
           # END debug functions
+- package:
+  - name: oscoin
+  - section:
+    - name: test:documentation
+    - message:
+      - name: Redundant build-depends entry
+      - depends: markdown-unlit
