@@ -34,6 +34,7 @@ import           Data.Aeson
                  )
 import           Data.Hashable (Hashable(..))
 import           Formatting as F
+import qualified Generics.SOP as SOP
 import           Network.Socket (HostName, PortNumber)
 
 newtype NodeId = NodeId { fromNodeId :: PublicKey }
@@ -82,17 +83,15 @@ instance Serialise tx => Serialise (MsgId tx)
 data ConversionError =
       DeserialiseFailure CBOR.DeserialiseFailure
     | IdPayloadMismatch
+    deriving (Generic)
+
+instance SOP.Generic ConversionError
+instance SOP.HasDatatypeInfo ConversionError
 
 -- | Formats the input 'ConversionError' in a form suitable for logging.
 fmtLogConversionError :: Format r (ConversionError -> r)
-fmtLogConversionError =  (Log.ftag "error_class" % F.mapf toErrorClass fquoted)
-                      <> (" " % Log.ftag "error_message" % F.mapf toErrorMsg fquoted)
-
+fmtLogConversionError = Log.ferror toErrorMsg
   where
-      toErrorClass :: ConversionError -> Text
-      toErrorClass (DeserialiseFailure _) = "deserialise_failure"
-      toErrorClass IdPayloadMismatch      = "id_payload_mismatch"
-
-      toErrorMsg :: ConversionError -> Text
-      toErrorMsg (DeserialiseFailure f) = toS $ displayException f
-      toErrorMsg IdPayloadMismatch      = "The payload ID didn't match"
+    toErrorMsg :: ConversionError -> Text
+    toErrorMsg (DeserialiseFailure f) = toS $ displayException f
+    toErrorMsg IdPayloadMismatch      = "The payload ID didn't match"
