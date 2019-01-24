@@ -435,7 +435,7 @@ fthreadId = F.mapf (show :: ThreadId -> Text) (ftag "thread" % fquoted)
 fprocessId :: Format t (ProcessID -> t)
 fprocessId = F.mapf (fromIntegral @CPid @Int32) (ftag "pid" % F.int)
 
--- | When given a function from 'a' to an error message 'Text', it format
+-- | When given a function from 'a' to an error message 'Text', format
 -- a domain-specific error as @error_class=foo_bar error_message=\"The error\"@
 -- where the @error_class@ is generically derived from the data constructors.
 ferror :: (SOP.Generic a, SOP.HasDatatypeInfo a)
