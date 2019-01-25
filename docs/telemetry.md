@@ -1,12 +1,11 @@
-**NOTE**: This is a markdown file which desugars into a literate
-Haskell file which can be compiled and imported into `ghci`.
-**Do not** modify directly the `.lhs` file! Rather, edit this file
-directly and either run the tests via `stack test` or load the
-up-to-date file inside `ghci` by typing:
 
-```
-stack ghci --ghci-options "-pgmL markdown-unlit"
-```
+[//]: # (This section is a comment block, it won't be rendered.)
+[//]: # (**NOTE**: This is a markdown file which desugars into a literate)
+[//]: # (Haskell file which can be compiled and imported into `ghci`.)
+[//]: # (**Do not** modify directly the `.lhs` file! Rather, edit this file)
+[//]: # (directly and either run the tests via `stack test` or load the)
+[//]: # (up-to-date file inside `ghci` by typing:)
+[//]: # (stack ghci --ghci-options "-pgmL markdown-unlit")
 
 # Telemetry
 
@@ -19,7 +18,7 @@ import Oscoin.Telemetry as Telemetry
 import Oscoin.Telemetry.Middleware (telemetryMiddleware)
 import Oscoin.Telemetry.Metrics (forkEkgServer, newMetricsStore, noLabels)
 import Oscoin.Telemetry.Logging   as Log
-import           Oscoin.Crypto.Blockchain.Block
+import Oscoin.Crypto.Blockchain.Block
 
 import qualified Network.Wai as Wai
 ```
@@ -95,9 +94,10 @@ Thanks to the `telemetryMiddleware` you can now mount the `Middleware` in your n
 the metrics will be available at `/metrics` using Prometheus'
 [exposition format](https://prometheus.io/docs/instrumenting/exposition_formats/):
 
-<img width="638" alt="screenshot 2019-01-24 at 16 25 04" src="https://user-images.githubusercontent.com/45846748/51688353-ac04fc80-1ff4-11e9-81f2-678a89cc9457.png">
+![ekg](./images/telemetry_metrics.png)
 
-Apart from domain-specific metrics, we also collect by default interesting GHC metrics like the one relative to the RTS.
+Apart from domain-specific metrics, we also collect by default interesting GHC metrics
+like the one relative to the RTS.
 
 ## Enabling EKG
 
@@ -119,7 +119,7 @@ enableEKG = do
 If you embed `enableEKG` in your `main`, you will now be
 able to access (some) of the metrics via the EKG dashboard:
 
-<img width="1098" alt="screenshot 2019-01-24 at 16 32 07" src="https://user-images.githubusercontent.com/45846748/51688800-a3f98c80-1ff5-11e9-8b2a-bfaace0c0aa7.png">
+![ekg](./images/telemetry_ekg.png)
 
 ## Extending the Telemetry component
 
@@ -130,6 +130,8 @@ there might be events worth capturing that are not present in the `NotableEvent`
 1. We need to add a new type constructor for the `NotableEvent` GADT;
 2. We need to modify the big pattern matching inside `Oscoin.Telemetry.emit` to deal with the new constructor (but the compiler will warn us about this). At this stage we will need to pick what to log (or what not to);
 3. We need to modify the `toActions` function (again, the compiler will tell us what to do) in order to map this event to the particular metrics we will need to update. With reference to our practical example, we might want to log something inside `emit` about the mempool's size changing, and perhaps inside our `toActions` either update a counter to keep track of how many events of this type we had or maybe even an histogram to categorise the size of the mempool over time (which might be a good idea regardless of this new event).
+
+## Footer
 
 _This last line is needed for the test machinery, ignore it._
 

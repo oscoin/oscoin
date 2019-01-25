@@ -44,9 +44,9 @@ To open the docs, run::
   stack haddock oscoin --open
 
 It's also possible to browse documentation/tutorials for individual components
-in the `docs <https://github.com/oscoin/oscoin/tree/master/docs>`_ directory:
+in the `docs <./docs>`_ directory:
 
-- `Telemetry <https://github.com/oscoin/oscoin/tree/master/docs/telemetry.md>`_ documentation;
+- `Telemetry <./docs/telemetry.md>`_ documentation;
 
 These documents are literate Haskell files pre-processed with
 `markdown-unlit <https://github.com/sol/markdown-unlit>`_, so that they are
