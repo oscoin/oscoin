@@ -11,7 +11,7 @@ import           Oscoin.Crypto.Blockchain
                  , height
                  , takeBlocks
                  )
-import           Oscoin.Crypto.Blockchain.Block
+import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import           Oscoin.Storage.Block.SQLite
@@ -30,25 +30,28 @@ import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Codec.Serialise (Serialise)
 import qualified Data.Set as Set
 
-import           Test.QuickCheck
+import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
+import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
 tests =
     [ testGroup "Storage.Block"
-        [ testCase "Store/lookup Block" (withMemDB testStoreLookupBlock)
-        , testCase "Store/lookup Tx"    (withMemDB testStoreLookupTx)
-        , testCase "Get Genesis Block"  (withMemDB testGetGenesisBlock)
-        , testCase "Get blocks"         (withMemDB testGetBlocks)
-        , testCase "Get Score"          (withMemDB testGetScore)
-        , testCase "Orphans"            (withMemDB testOrphans)
-        , testCase "isStored"           (withMemDB testIsStored)
-        , testCase "isConflicting"      (withMemDB testIsConflicting)
+        [ testProperty "Store/lookup Block" (withMemDB genGenesisLinkedBlock testStoreLookupBlock)
+        , testProperty "Store/lookup Tx"    (withMemDB genNonEmptyBlock testStoreLookupTx)
+        , testProperty "Get Genesis Block"  (withMemDB (const arbitrary) testGetGenesisBlock)
+        , testProperty "Get blocks"         (withMemDB genGetBlocks testGetBlocks)
+        , testProperty "Get Score"          (withMemDB genAtLeastSixBlocks testGetScore)
+        , testProperty "Orphans"            (withMemDB (const (vectorOf 10 (arbitraryBlockWith []))) testOrphans)
+        , testProperty "isStored"           (withMemDB (const arbitrary) testIsStored)
+        , testProperty "isConflicting"      (withMemDB (\g -> (,) <$> genGenesisLinkedBlock g
+                                                                  <*> genGenesisLinkedBlock g
+                                                       ) testIsConflicting)
         ]
     , testGroup "Storage.Block Forks"
-        [ testCase "One block fork" (withMemDB testFork1)
-        , testCase "Two block fork" (withMemDB testFork2)
+        [ testProperty "One block fork" (withMemDB genTestFork1 testFork1)
+        , testProperty "Two block fork" (withMemDB genTestFork2 testFork2)
         ]
     ]
 
@@ -58,30 +61,37 @@ defaultGenesis :: Block tx DummySeal
 defaultGenesis =
     sealBlock mempty (emptyGenesisBlock Time.epoch)
 
-withMemDB :: (Handle RadTx DummySeal -> IO a) -> IO a
-withMemDB action =
-    bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
-            close
-            action
+withMemDB :: Show a
+          => (Block RadTx DummySeal -> Gen a)
+          -> (a -> Handle RadTx DummySeal -> IO ())
+          -> Property
+withMemDB genTestData action = monadicIO $ do
+    testData <- pick (genTestData defaultGenesis)
+    liftIO $
+        bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
+                close
+                (action testData)
   where
     blockValidate _ _ = Right ()
 
-testStoreLookupBlock :: Handle RadTx DummySeal -> Assertion
-testStoreLookupBlock h = do
-    gen <- getGenesisBlock h
-    blk <- linkParent gen <$> generate arbitraryBlock
+genGenesisLinkedBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
+genGenesisLinkedBlock genesisBlock = linkParent genesisBlock <$> arbitraryBlock
+
+testStoreLookupBlock :: Block RadTx DummySeal
+                     -> Handle RadTx DummySeal
+                     -> Assertion
+testStoreLookupBlock blk h = do
     storeBlock h blk
     Just blk' <- lookupBlock h (blockHash blk)
 
     blk' @?= blk
 
-testGetScore :: Handle RadTx DummySeal -> Assertion
-testGetScore h = do
-    gen <- getGenesisBlock h
+genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
+genAtLeastSixBlocks genesisBlock =
+    arbitraryValidBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
 
-    chain :: Blockchain RadTx DummySeal <-
-        generate $ (arbitraryValidBlockchainFrom gen
-            `suchThat` (\c -> height c > 6))
+testGetScore :: Blockchain RadTx DummySeal -> Handle RadTx DummySeal -> Assertion
+testGetScore chain h = do
 
     storeBlockchain' h (initDef [] $ blocks chain)
 
@@ -92,15 +102,21 @@ testGetScore h = do
     score' <- getChainSuffixScore (hConn h) (blockHash blk3)
     score' @?= blockScore blk1 + blockScore blk2
 
-testFork1 :: Handle RadTx DummySeal -> Assertion
-testFork1 h = do
+genTestFork1 :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork1 genesisBlock = do
+    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
+    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
+        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
+    pure (blk, blk')
+
+testFork1 :: (Block RadTx DummySeal, Block RadTx DummySeal)
+          -> Handle RadTx DummySeal
+          -> Assertion
+testFork1 (blk, blk') h = do
     gen <- getGenesisBlock h
 
-    blk <- generate $ arbitraryValidBlockWith (blockHeader gen) []
     storeBlock h blk
-
-    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
-        <$> generate (arbitraryValidBlockWith (blockHeader gen) [])
     storeBlock h blk'
 
     hashes <- getChainHashes (hConn h)
@@ -115,21 +131,26 @@ testFork1 h = do
     os <- getOrphans h
     os @?= mempty
 
-testFork2 :: Handle RadTx DummySeal -> Assertion
-testFork2 h@Handle{..} = do
-    gen <- getGenesisBlock h
-
-    blk <- generate $ arbitraryValidBlockWith (blockHeader gen) []
-    storeBlock h blk
-
+genTestFork2 :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork2 genesisBlock = do
+    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
     -- The first conflicting block we add doesn't have enough score.
     blk1 <- withDifficulty (Difficulty $ blockScore blk - 1)
-        <$> generate (arbitraryValidBlockWith (blockHeader gen) [])
-    storeBlock h blk1
-
+        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
     -- The second one plus the first do.
     blk2 <- withDifficulty 2
-        <$> generate (arbitraryValidBlockWith (blockHeader blk1) [])
+        <$> arbitraryValidBlockWith (blockHeader blk1) []
+    pure (blk, blk1, blk2)
+
+testFork2 :: (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
+          -> Handle RadTx DummySeal
+          -> Assertion
+testFork2 (blk, blk1, blk2) h@Handle{..} = do
+    gen <- getGenesisBlock h
+
+    storeBlock h blk
+    storeBlock h blk1
     storeBlock h blk2
 
     -- `blk` is not part of the best chain anymore.
@@ -140,12 +161,15 @@ testFork2 h@Handle{..} = do
     os <- getOrphans h
     os @?= mempty
 
-testStoreLookupTx :: Handle RadTx DummySeal -> Assertion
-testStoreLookupTx h = do
-    gen <- getGenesisBlock h
-    blk <- linkParent gen <$>
-        generate (arbitraryBlock `suchThat` (not . null . blockData))
+genNonEmptyBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
+genNonEmptyBlock genesisBlock =
+    linkParent genesisBlock <$>
+        arbitraryBlock `suchThat` (not . null . blockData)
 
+testStoreLookupTx :: Block RadTx DummySeal
+                  -> Handle RadTx DummySeal
+                  -> Assertion
+testStoreLookupTx blk h = do
     storeBlock h blk
 
     let tx = headDef (panic "No transactions!")
@@ -155,38 +179,42 @@ testStoreLookupTx h = do
 
     tx' @?= tx
 
-testGetGenesisBlock :: Handle RadTx DummySeal -> Assertion
-testGetGenesisBlock h = do
+
+testGetGenesisBlock :: () -> Handle RadTx DummySeal -> Assertion
+testGetGenesisBlock () h = do
     blk <- getGenesisBlock h
     defaultGenesis @?= blk
 
-testOrphans :: Handle RadTx DummySeal -> Assertion
-testOrphans h = do
-    blks <- replicateM 10 (generate $ arbitraryBlockWith [])
-
+testOrphans :: [Block RadTx DummySeal]
+            -> Handle RadTx DummySeal
+            -> Assertion
+testOrphans blks h = do
     for_ blks (storeBlock h)
     blks' <- getOrphans h
 
     blks' @?= Set.fromList (map blockHash blks)
 
-testGetBlocks :: Handle RadTx DummySeal -> Assertion
-testGetBlocks h = do
-    gen <- getGenesisBlock h
+genGetBlocks :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Blockchain RadTx DummySeal)
+genGetBlocks genesisBlock =
+    (,) <$> arbitraryBlock
+        <*> resize 1 (arbitraryValidBlockchainFrom genesisBlock)
 
-    chain :: Blockchain RadTx DummySeal <-
-        generate $ resize 1 $ arbitraryValidBlockchainFrom gen
-
+testGetBlocks :: (Block RadTx DummySeal, Blockchain RadTx DummySeal)
+              -> Handle RadTx DummySeal
+              -> Assertion
+testGetBlocks (block, chain) h = do
     storeBlockchain' h (initDef [] $ blocks chain)
 
     -- This orphan block shouldn't be returned by 'maximumChainBy'.
-    storeBlock h =<< generate arbitraryBlock
+    storeBlock h block
 
     blks' <- getBlocks h (fromIntegral $ height chain)
 
     blocks chain @?= blks'
 
-testIsStored :: Handle RadTx DummySeal -> Assertion
-testIsStored h@Handle{..} = do
+testIsStored :: () -> Handle RadTx DummySeal -> Assertion
+testIsStored () h@Handle{..} = do
     gen <- getGenesisBlock h
 
     result <- isStored hConn (blockHash gen)
@@ -195,19 +223,18 @@ testIsStored h@Handle{..} = do
     result' <- isStored hConn Crypto.zeroHash
     result' @?= False
 
-testIsConflicting :: Handle RadTx DummySeal -> Assertion
-testIsConflicting h@Handle{..} = do
-    gen <- getGenesisBlock h
-
-    blk <- linkParent gen <$> generate arbitraryBlock
+testIsConflicting :: (Block RadTx DummySeal, Block RadTx DummySeal)
+                  -> Handle RadTx DummySeal
+                  -> Assertion
+testIsConflicting (blk, blk') h@Handle{..} = do
     storeBlock h blk
 
-    blk' <- linkParent gen <$> generate arbitraryBlock
     result <- isConflicting hConn blk'
     result @?= True
 
     result' <- isConflicting hConn (linkParent blk blk')
     result' @?= False
+
 
 -- Helpers ---------------------------------------------------------------------
 

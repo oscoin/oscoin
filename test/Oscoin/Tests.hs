@@ -34,6 +34,7 @@ import           Oscoin.Test.Storage.Block.Arbitrary ()
 import qualified Oscoin.Test.Telemetry as Telemetry
 
 import           Test.QuickCheck.Instances ()
+import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
@@ -51,8 +52,8 @@ tests config = testGroup "Oscoin"
     -- ^ Testing API and Node using a 'MonadClient' instance
     , testGroup      "CLI"                            CLI.tests
     , testCase       "Crypto"                         testOscoinCrypto
-    , testCase       "Mempool"                        testOscoinMempool
-    , testCase       "BlockStore lookup block"        testBlockStoreLookupBlock
+    , testProperty   "Mempool"                        testOscoinMempool
+    , testProperty   "BlockStore lookup block"        testBlockStoreLookupBlock
     , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
@@ -75,45 +76,49 @@ testOscoinCrypto = do
     Crypto.fromHashed (Crypto.hash signed) @?=
         Crypto.fromHashed (Crypto.hash val)
 
-testOscoinMempool :: Assertion
-testOscoinMempool = do
+testOscoinMempool :: Property
+testOscoinMempool = once $ monadicIO $ do
     -- Create a new mempool of account transactions.
-    mp <- Mempool.newIO
+    mp <- lift Mempool.newIO
 
     -- Create some arbitrary transactions.
-    txs <- generate arbitrary :: IO [API.RadTx]
+    txs <- pick (arbitrary @[API.RadTx])
 
     -- Subscribe to the mempool with the subscription tokens.
-    chan1 <- atomically $ Mempool.subscribe mp
-    chan2 <- atomically $ Mempool.subscribe mp
+    (chan1, chan2, evs1, evs2) <- lift $ atomically $ do
+        chan1 <- Mempool.subscribe mp
+        chan2 <- Mempool.subscribe mp
 
-    -- Add the transactions.
-    atomically $ Mempool.insertMany mp txs
+        -- Add the transactions.
+        Mempool.insertMany mp txs
 
-    -- Retrieve all events from the channels.
-    evs1 <- atomically $ Mempool.drainChannel chan1
-    evs2 <- atomically $ Mempool.drainChannel chan2
+        -- Retrieve all events from the channels.
+        evs1 <- Mempool.drainChannel chan1
+        evs2 <- Mempool.drainChannel chan2
 
-    -- Verify that they contain the transactions we generated.
-    assertEqual "Chan 1 has all Txs" txs $ concat . mapMaybe fromEvent $ evs1
-    assertEqual "Chan 2 has all Txs" txs $ concat . mapMaybe fromEvent $ evs2
+        pure (chan1, chan2, evs1, evs2)
 
-    -- If we try to read again, the channel is empty.
-    atomically (Mempool.drainChannel chan1) >>= assertEqual "Chan 1 is empty" []
-    atomically (Mempool.drainChannel chan2) >>= assertEqual "Chan 2 is empty" []
+    liftIO $ do
+        -- Verify that they contain the transactions we generated.
+        assertEqual "Chan 1 has all Txs" txs $ concat . mapMaybe fromEvent $ evs1
+        assertEqual "Chan 2 has all Txs" txs $ concat . mapMaybe fromEvent $ evs2
+
+        -- If we try to read again, the channel is empty.
+        atomically (Mempool.drainChannel chan1) >>= assertEqual "Chan 1 is empty" []
+        atomically (Mempool.drainChannel chan2) >>= assertEqual "Chan 2 is empty" []
   where
     fromEvent :: Mempool.Event tx -> Maybe [tx]
     fromEvent (Mempool.Insert txs) = Just txs
     fromEvent _                    = Nothing
 
-testBlockStoreLookupBlock :: Assertion
-testBlockStoreLookupBlock = do
-    blks <- generate $ arbitraryValidBlockchain @() @()
+testBlockStoreLookupBlock :: Property
+testBlockStoreLookupBlock = once $ monadicIO $ do
+    blks <- pick (arbitraryValidBlockchain @() @())
     let g  = genesis blks
     let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
                         , bsOrphans = mempty
                         , bsScoreFn = comparing height }
-    BlockStore.lookupBlock (blockHash g) bs @?= Just g
+    liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore
     :: Gen (Blockchain (Seq Word8) (Seq Word8))

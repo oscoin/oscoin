@@ -25,9 +25,8 @@ import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import           Web.HttpApiData (toUrlPiece)
 
-import           Test.QuickCheck (generate)
+import           Test.QuickCheck.Monadic
 import           Test.Tasty
-import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -51,8 +50,10 @@ tests =
         let ctypes  = fromMediaType <$> [ JSON, CBOR ]
         let accepts = ("*" // "*") : ctypes
         codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
-        [testCase (T.unpack $ prettyCodec codec) $ mkTest codec >>=
-            \HTTPTest{..} -> runSession testState testSession]
+        [ testProperty (T.unpack $ prettyCodec codec) (
+            once $ monadicIO $ do
+                HTTPTest{..} <- mkTest codec
+                liftIO $ runSession testState testSession )]
 
 data HTTPTest = HTTPTest
     { testState   :: NodeState
@@ -62,36 +63,38 @@ data HTTPTest = HTTPTest
 httpTest :: NodeState -> Session () -> IO HTTPTest
 httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
 
-postTransactionWithInvalidSignature :: Codec -> IO HTTPTest
-postTransactionWithInvalidSignature codec = httpTest emptyNodeState $ do
-    (_, tx) <- liftIO $ genDummyTx
-    otherPubKey <- fst <$> Crypto.generateKeyPair
-    let tx' = tx { txPubKey = otherPubKey }
-    post codec "/transactions" tx' >>=
-        assertResultErr "Invalid transaction signature" <>
-        assertStatus badRequest400
+postTransactionWithInvalidSignature :: Codec -> PropertyM IO HTTPTest
+postTransactionWithInvalidSignature codec = do
+    (_, tx) <- genDummyTx
+    liftIO $ httpTest emptyNodeState $ do
+        otherPubKey <- fst <$> Crypto.generateKeyPair
+        let tx' = tx { txPubKey = otherPubKey }
+        post codec "/transactions" tx' >>=
+            assertResultErr "Invalid transaction signature" <>
+            assertStatus badRequest400
 
-smokeTestOscoinAPI :: Codec -> IO HTTPTest
-smokeTestOscoinAPI codec = httpTest emptyNodeState $ do
-    get codec "/" >>= assertStatus ok200
+smokeTestOscoinAPI :: Codec -> PropertyM IO HTTPTest
+smokeTestOscoinAPI codec = do
+    (txHash, tx) <- genDummyTx
+    liftIO $ httpTest emptyNodeState $ do
+        get codec "/" >>= assertStatus ok200
 
-    -- The mempool is empty.
-    get codec "/transactions" >>=
-        assertStatus ok200 <>
-        assertResultOK ([] @API.RadTx)
+        -- The mempool is empty.
+        get codec "/transactions" >>=
+            assertStatus ok200 <>
+            assertResultOK ([] @API.RadTx)
 
-    (txHash, tx) <- liftIO $ genDummyTx
-    -- Submit the transaction to the mempool.
-    post codec "/transactions" tx >>=
-        assertStatus accepted202 <>
-        assertResultOK (API.TxSubmitResponse $ Crypto.hash tx)
+        -- Submit the transaction to the mempool.
+        post codec "/transactions" tx >>=
+            assertStatus accepted202 <>
+            assertResultOK (API.TxSubmitResponse $ Crypto.hash tx)
 
-    -- Get the mempool once again, make sure the transaction is in there.
-    get codec "/transactions" >>=
-        assertStatus ok200 <>
-        assertResultOK [tx]
+        -- Get the mempool once again, make sure the transaction is in there.
+        get codec "/transactions" >>=
+            assertStatus ok200 <>
+            assertResultOK [tx]
 
-    getTransactionReturns codec txHash $ unconfirmedTx tx
+        getTransactionReturns codec txHash $ unconfirmedTx tx
 
 unconfirmedTx :: API.RadTx -> API.TxLookupResponse
 unconfirmedTx tx = API.TxLookupResponse
@@ -108,29 +111,29 @@ getTransactionReturns codec txHash expected =
     assertStatus ok200 <>
     assertResultOK expected
 
-getMissingBlock :: Codec -> IO HTTPTest
-getMissingBlock codec = httpTest emptyNodeState $ do
+getMissingBlock :: Codec -> PropertyM IO HTTPTest
+getMissingBlock codec = liftIO $ httpTest emptyNodeState $ do
     get codec "/blocks/not-a-hash" >>= assertStatus notFound404
 
     let missing = toUrlPiece (Crypto.zeroHash :: Crypto.Hash)
     get codec ("/blocks/" <> missing) >>= assertStatus notFound404
 
-getExistingBlock :: Codec -> IO HTTPTest
+getExistingBlock :: Codec -> PropertyM IO HTTPTest
 getExistingBlock codec = do
-    chain <- generate arbitraryValidBlockchain
+    chain <- pick arbitraryValidBlockchain
     let g = genesis chain
     let blockId = toUrlPiece $ blockHash g
 
-    httpTest (nodeState mempty chain def) $
+    liftIO $ httpTest (nodeState mempty chain def) $
         get codec ("/blocks/" <> blockId) >>=
             assertStatus ok200 <>
             assertResultOK g
 
-getBestChain :: Codec -> IO HTTPTest
+getBestChain :: Codec -> PropertyM IO HTTPTest
 getBestChain codec = do
-    chain <- generate $ arbitraryValidBlockchain
+    chain <- pick arbitraryValidBlockchain
 
-    httpTest (nodeState mempty chain def) $ do
+    liftIO $ httpTest (nodeState mempty chain def) $ do
         get codec "/blockchain/best?depth=1" >>=
             assertStatus ok200 <>
             assertResultOK (take 1 $ blocks chain)
