@@ -121,6 +121,15 @@ executables:
       - semigroups
 
 tests:
+  documentation:
+    main: telemetry.lhs
+    source-dirs: docs
+    ghc-options: -pgmL markdown-unlit
+    dependencies:
+      - oscoin
+      - markdown-unlit
+      - wai
+
   test:
     main: Main.hs
     source-dirs: test

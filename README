@@ -43,6 +43,16 @@ To open the docs, run::
 
   stack haddock oscoin --open
 
+It's also possible to browse documentation/tutorials for individual components
+in the `docs <./docs>`_ directory:
+
+- `Telemetry <./docs/telemetry.md>`_ documentation;
+
+These documents are literate Haskell files pre-processed with
+`markdown-unlit <https://github.com/sol/markdown-unlit>`_, so that they are
+executable code which can be kept up-to-date with the codebase. We also have
+a ``test-suite`` which ensure these documentation files keep compiling.
+
 COPYRIGHT
 ---------
 
