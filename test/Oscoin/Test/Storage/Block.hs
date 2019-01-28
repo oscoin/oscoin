@@ -61,21 +61,61 @@ defaultGenesis :: Block tx DummySeal
 defaultGenesis =
     sealBlock mempty (emptyGenesisBlock Time.epoch)
 
-withMemDB :: Show a
-          => (Block RadTx DummySeal -> Gen a)
-          -> (a -> Handle RadTx DummySeal -> IO ())
-          -> Property
-withMemDB genTestData action = monadicIO $ do
-    testData <- pick (genTestData defaultGenesis)
-    liftIO $
-        bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
-                close
-                (action testData)
-  where
-    blockValidate _ _ = Right ()
+{------------------------------------------------------------------------------
+  Generators tailored for the tests at hand
+------------------------------------------------------------------------------}
 
+-- | Generates an arbitrary 'Block' which is linked with the genesis block
+-- and that has a valid timestamp (> timestamp(genesis)).
 genGenesisLinkedBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
-genGenesisLinkedBlock genesisBlock = linkParent genesisBlock <$> arbitraryBlock
+genGenesisLinkedBlock genesisBlock =
+    let genesisTimestamp = blockTimestamp . blockHeader $ genesisBlock
+        blockInTheFuture = arbitraryBlock
+            `suchThat` ((> genesisTimestamp) . blockTimestamp . blockHeader)
+    in linkParent genesisBlock <$> blockInTheFuture
+
+-- | Generates a non-empty 'Block'.
+genNonEmptyBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
+genNonEmptyBlock genesisBlock =
+    genGenesisLinkedBlock genesisBlock `suchThat` (not . null . blockData)
+
+-- | Generates a 'Blockchain' with at least six blocks.
+genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
+genAtLeastSixBlocks genesisBlock =
+    arbitraryValidBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
+
+-- | Generates two 'Block's, one which has difficulty greater than the second.
+genTestFork1 :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork1 genesisBlock = do
+    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
+    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
+        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
+    pure (blk, blk')
+
+-- | Generates three 'Block's, in increasing order of 'Difficulty'.
+genTestFork2 :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork2 genesisBlock = do
+    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
+    -- The first conflicting block we add doesn't have enough score.
+    blk1 <- withDifficulty (Difficulty $ blockScore blk - 1)
+        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
+    -- The second one plus the first do.
+    blk2 <- withDifficulty 2
+        <$> arbitraryValidBlockWith (blockHeader blk1) []
+    pure (blk, blk1, blk2)
+
+genGetBlocks :: Block RadTx DummySeal
+             -> Gen (Block RadTx DummySeal, Blockchain RadTx DummySeal)
+genGetBlocks genesisBlock =
+    (,) <$> arbitraryBlock
+        <*> resize 1 (arbitraryValidBlockchainFrom genesisBlock)
+
+
+{------------------------------------------------------------------------------
+  The tests proper
+------------------------------------------------------------------------------}
 
 testStoreLookupBlock :: Block RadTx DummySeal
                      -> Handle RadTx DummySeal
@@ -85,10 +125,6 @@ testStoreLookupBlock blk h = do
     Just blk' <- lookupBlock h (blockHash blk)
 
     blk' @?= blk
-
-genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
-genAtLeastSixBlocks genesisBlock =
-    arbitraryValidBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
 
 testGetScore :: Blockchain RadTx DummySeal -> Handle RadTx DummySeal -> Assertion
 testGetScore chain h = do
@@ -101,14 +137,6 @@ testGetScore chain h = do
     [blk1, blk2, blk3] <- pure $ takeBlocks 3 chain
     score' <- getChainSuffixScore (hConn h) (blockHash blk3)
     score' @?= blockScore blk1 + blockScore blk2
-
-genTestFork1 :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
-genTestFork1 genesisBlock = do
-    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
-    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
-        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
-    pure (blk, blk')
 
 testFork1 :: (Block RadTx DummySeal, Block RadTx DummySeal)
           -> Handle RadTx DummySeal
@@ -131,18 +159,6 @@ testFork1 (blk, blk') h = do
     os <- getOrphans h
     os @?= mempty
 
-genTestFork2 :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
-genTestFork2 genesisBlock = do
-    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
-    -- The first conflicting block we add doesn't have enough score.
-    blk1 <- withDifficulty (Difficulty $ blockScore blk - 1)
-        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
-    -- The second one plus the first do.
-    blk2 <- withDifficulty 2
-        <$> arbitraryValidBlockWith (blockHeader blk1) []
-    pure (blk, blk1, blk2)
-
 testFork2 :: (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
           -> Handle RadTx DummySeal
           -> Assertion
@@ -161,11 +177,6 @@ testFork2 (blk, blk1, blk2) h@Handle{..} = do
     os <- getOrphans h
     os @?= mempty
 
-genNonEmptyBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
-genNonEmptyBlock genesisBlock =
-    linkParent genesisBlock <$>
-        arbitraryBlock `suchThat` (not . null . blockData)
-
 testStoreLookupTx :: Block RadTx DummySeal
                   -> Handle RadTx DummySeal
                   -> Assertion
@@ -178,7 +189,6 @@ testStoreLookupTx blk h = do
     Just tx' <- lookupTx h (Crypto.hash tx)
 
     tx' @?= tx
-
 
 testGetGenesisBlock :: () -> Handle RadTx DummySeal -> Assertion
 testGetGenesisBlock () h = do
@@ -193,12 +203,6 @@ testOrphans blks h = do
     blks' <- getOrphans h
 
     blks' @?= Set.fromList (map blockHash blks)
-
-genGetBlocks :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Blockchain RadTx DummySeal)
-genGetBlocks genesisBlock =
-    (,) <$> arbitraryBlock
-        <*> resize 1 (arbitraryValidBlockchainFrom genesisBlock)
 
 testGetBlocks :: (Block RadTx DummySeal, Blockchain RadTx DummySeal)
               -> Handle RadTx DummySeal
@@ -235,11 +239,26 @@ testIsConflicting (blk, blk') h@Handle{..} = do
     result' <- isConflicting hConn (linkParent blk blk')
     result' @?= False
 
+{------------------------------------------------------------------------------
+  Useful combinators & helpers
+------------------------------------------------------------------------------}
 
--- Helpers ---------------------------------------------------------------------
+withMemDB :: Show a
+          => (Block RadTx DummySeal -> Gen a)
+          -> (a -> Handle RadTx DummySeal -> IO ())
+          -> Property
+withMemDB genTestData action = monadicIO $ do
+    testData <- pick (genTestData defaultGenesis)
+    liftIO $
+        bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
+                close
+                (action testData)
+  where
+    blockValidate _ _ = Right ()
 
 withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
 withDifficulty d blk =
     blk { blockHeader = header, blockHash = headerHash header }
   where
     header = (blockHeader blk) { blockTargetDifficulty = d }
+
