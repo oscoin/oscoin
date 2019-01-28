@@ -247,7 +247,7 @@ withMemDB :: Show a
           => (Block RadTx DummySeal -> Gen a)
           -> (a -> Handle RadTx DummySeal -> IO ())
           -> Property
-withMemDB genTestData action = monadicIO $ do
+withMemDB genTestData action = once $ monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
     liftIO $
         bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
