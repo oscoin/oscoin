@@ -27,10 +27,10 @@ tests :: [TestTree]
 tests =
     [ testGroup "getState"
         [ testProperty "existing value" $ monadicIO $ do
-            -- #341: We need 'vectorOf 1' here as generating an
+            -- #341: We need 'listOf1' here as generating an
             -- empty list will make the test fail as the path would be
             -- empty.
-            path <- pick (vectorOf 1 arbitraryRadicleIdent)
+            path <- pick (listOf1 arbitraryRadicleIdent)
             -- TODO Generate arbitrary Radicle values once #258 is fixed
             let radValue = Rad.String "hooray!"
             let bindings = [(T.intercalate "/" path, radValue)]
