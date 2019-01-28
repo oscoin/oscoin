@@ -11,11 +11,12 @@ import qualified Data.Conduit.Tests as Conduit
 import qualified Integration.Tests as Integration
 import qualified Oscoin.Tests as Oscoin
 import           Test.Tasty
+import           Test.Tasty.Ingredients.FailFast
 
 main :: IO ()
 main = do
     config <- Consensus.getConfig Testing
-    defaultMain $ testGroup "All"
+    defaultMainWithIngredients (map failFast defaultIngredients) $ testGroup "All"
         [ Oscoin.tests config
         , Multihash.tests
         , Concurrent.tests

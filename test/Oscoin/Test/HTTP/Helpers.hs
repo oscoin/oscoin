@@ -60,7 +60,8 @@ import           Oscoin.Time
 import           Oscoin.Test.Consensus.Node (DummyNodeId, DummySeal)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 
-import           Test.QuickCheck (arbitrary, generate)
+import           Test.QuickCheck (arbitrary)
+import           Test.QuickCheck.Monadic
 import           Test.Tasty.HUnit.Extended
 
 import           Codec.Serialise (Serialise)
@@ -166,9 +167,9 @@ withNode NodeState{..} k = do
 liftNode :: Node a -> Session a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
 
-genDummyTx :: MonadIO m => m (Hashed API.RadTx, API.RadTx)
+genDummyTx :: MonadIO m => PropertyM m (Hashed API.RadTx, API.RadTx)
 genDummyTx = do
-    radValue <- liftIO $ generate arbitrary
+    radValue <- pick arbitrary
     createValidTx radValue
 
 createValidTx :: MonadIO m => Rad.Value -> m (Hashed API.RadTx, API.RadTx)

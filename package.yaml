@@ -176,6 +176,7 @@ tests:
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1
+      - tasty-fail-fast
       - tasty-hedgehog
       - tasty-hunit >=0.10.0.1
       - tasty-quickcheck
