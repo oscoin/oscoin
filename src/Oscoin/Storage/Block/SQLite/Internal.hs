@@ -97,7 +97,6 @@ initialize gen h@Handle{hConn} =
             storeBlock' h gen >>
                 pure h
 
-
 -- | Check whether a given block hash exists.
 isStored :: Connection -> BlockHash -> IO Bool
 isStored conn bh =

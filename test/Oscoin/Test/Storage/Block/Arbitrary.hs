@@ -4,14 +4,13 @@ module Oscoin.Test.Storage.Block.Arbitrary where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Storage.Block (BlockStore)
-import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Block.Pure as Pure
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 
 import           Codec.Serialise (Serialise)
 
 import           Test.QuickCheck
 
-instance (Serialise tx, Arbitrary tx) => Arbitrary (BlockStore tx ()) where
+instance (Serialise tx, Arbitrary tx) => Arbitrary (Pure.Handle tx ()) where
     arbitrary =
-        BlockStore.initWithChain <$> arbitraryBlockchain
+        Pure.initWithChain <$> arbitraryBlockchain

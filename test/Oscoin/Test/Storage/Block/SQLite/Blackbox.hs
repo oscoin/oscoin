@@ -5,7 +5,8 @@ module Oscoin.Test.Storage.Block.SQLite.Blackbox
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks, height)
+import           Oscoin.Crypto.Blockchain
+                 (Blockchain(..), blocks, height, txPayload)
 import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
@@ -78,7 +79,7 @@ testStoreLookupTx blk h = do
 
     Just tx' <- Abstract.lookupTx h (Crypto.hash tx)
 
-    tx' @?= tx
+    txPayload tx' @?= tx
 
 testGetGenesisBlock :: () -> Abstract.BlockStore RadTx DummySeal IO -> Assertion
 testGetGenesisBlock () h = do

@@ -24,7 +24,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , emptyHeader
                  , mkBlock
                  )
-import           Oscoin.Storage.Block
+import           Oscoin.Storage.Block.Pure
                  (genesisBlockStore, getBlocks, insert, orphans)
 
 import           Codec.Serialise (Serialise)

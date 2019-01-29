@@ -24,8 +24,8 @@ import           Oscoin.Data.Query (query)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
-import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
+import qualified Oscoin.Storage.Block.Pure as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
@@ -73,7 +73,7 @@ data TestNodeState s = TestNodeState
     { tnsNodeId       :: DummyNodeId
     , tnsMempool      :: Mempool.Mempool DummyTx
     , tnsStateStore   :: StateStore.StateStore DummyState
-    , tnsBlockstore   :: BlockStore.BlockStore DummyTx s
+    , tnsBlockstore   :: BlockStore.Handle DummyTx s
     , tnsReceiptStore :: ReceiptStore.Store DummyTx DummyOutput
     } deriving (Show)
 
@@ -86,7 +86,7 @@ instance ReceiptStore.HasStore DummyTx DummyOutput (TestNodeState s) where
 tnsMempoolL :: Lens' (TestNodeState s) (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })
 
-tnsBlockstoreL :: Lens' (TestNodeState s) (BlockStore.BlockStore DummyTx s)
+tnsBlockstoreL :: Lens' (TestNodeState s) (BlockStore.Handle DummyTx s)
 tnsBlockstoreL = lens tnsBlockstore (\s a -> s { tnsBlockstore = a })
 
 emptyTestNodeState

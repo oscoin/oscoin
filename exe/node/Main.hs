@@ -21,8 +21,8 @@ import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Storage (hoistStorage)
-import qualified Oscoin.Storage.Block as BlockStore
-import qualified Oscoin.Storage.Block.STM as BlockStore
+import           Oscoin.Storage.Block.Abstract (defaultScoreFunction)
+import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
@@ -115,35 +115,36 @@ main = do
     gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
     genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
     stStore     <- StateStore.fromStateM genState
-    blkStore    <- BlockStore.newIO $ BlockStore.initWithChain (fromGenesis gen)
-    seeds'      <- Yaml.decodeFileThrow seeds
-    config      <- Consensus.getConfig environment
 
-    metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
-    forkEkgServer metricsStore ekgHost ekgPort
+    BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) defaultScoreFunction Nakamoto.validateBlock $ \blkStore -> do
+        seeds'      <- Yaml.decodeFileThrow seeds
+        config      <- Consensus.getConfig environment
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
-                                     , Log.cfgStyle = Log.styleFromEnvironment environment
-                                     } $ \lgr ->
-        let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
-        in withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
-                    nid
-                    mem
-                    stStore
-                    blkStore
-                    Rad.txEval
-                    consensus                                      $ \nod ->
-        withGossip telemetryHandle
-                   P2P.NodeAddr { P2P.nodeId   = nid
-                                , P2P.nodeHost = host
-                                , P2P.nodePort = gossipPort
-                                }
-                   seeds'
-                   (storage nod config)
-                   (Handshake.simpleHandshake keys)               $ \gos ->
-            Async.runConcurrently $
-                     Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
-                  <> Async.Concurrently (miner nod gos)
+        metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
+        forkEkgServer metricsStore ekgHost ekgPort
+
+        withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
+                                         , Log.cfgStyle = Log.styleFromEnvironment environment
+                                         } $ \lgr ->
+            let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
+            in withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
+                        nid
+                        mem
+                        stStore
+                        blkStore
+                        Rad.txEval
+                        consensus                                      $ \nod ->
+            withGossip telemetryHandle
+                       P2P.NodeAddr { P2P.nodeId   = nid
+                                    , P2P.nodeHost = host
+                                    , P2P.nodePort = gossipPort
+                                    }
+                       seeds'
+                       (storage nod config)
+                       (Handshake.simpleHandshake keys)               $ \gos ->
+                Async.runConcurrently $
+                         Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
+                      <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env telemetryHandle neb config = Node.Config
         { Node.cfgEnv = env

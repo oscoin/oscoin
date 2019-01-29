@@ -8,6 +8,7 @@ module Oscoin.Storage.Block.SQLite
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Validate)
+import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), BlockHash, BlockHeader(..), Depth, Score, mkBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -42,7 +43,7 @@ withBlockStore :: ( ToField s
                -> Validate tx s
                -- ^ A block validation function
                -> (Abstract.BlockStore tx s IO -> IO b)
-               -- ^ Action to use the 'BlockStore'.
+               -- ^ Action which uses the 'BlockStore'.
                -> IO b
 withBlockStore path genesisBlock score validate action =
     let newBlockStore internalHandle =
@@ -51,7 +52,6 @@ withBlockStore path genesisBlock score validate action =
                 , Abstract.validateBlock   = hValidFn internalHandle
                 , Abstract.insertBlock     = storeBlock internalHandle
                 , Abstract.getGenesisBlock = getGenesisBlock (hConn internalHandle)
-                , Abstract.member          = isStored (hConn internalHandle)
                 , Abstract.lookupBlock     = lookupBlock internalHandle
                 , Abstract.lookupTx        = lookupTx internalHandle
                 , Abstract.getOrphans      = getOrphans internalHandle
@@ -77,12 +77,26 @@ lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
     for result $ \bh ->
         pure $ mkBlock bh txs
 
-lookupTx :: FromRow tx => Handle tx s -> Crypto.Hashed tx -> IO (Maybe tx)
-lookupTx Handle{hConn} h =
-    listToMaybe <$> Sql.query hConn
+    {--
+lookupTx :: forall tx s. (Crypto.Hashable tx) => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
+lookupTx h (blocks -> chain) = listToMaybe $ do
+    (i, block) <- zip [1..] chain
+    tx <- toList $ blockData block
+    guard (Crypto.hash tx == h)
+    pure $ TxLookup tx (blockHash block) i
+    --}
+
+-- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
+-- type out of the database.
+lookupTx :: FromRow tx => Handle tx s -> Crypto.Hashed tx -> IO (Maybe (TxLookup tx))
+lookupTx Handle{hConn} h = do
+    res <- Sql.query hConn
         [sql| SELECT message, author, chainid, nonce, context
                 FROM transactions
                WHERE hash = ? |] (Only h)
+    pure $ case listToMaybe res of
+        Nothing -> Nothing
+        Just tx -> Just $ TxLookup tx Crypto.zeroHash 0
 
 getBlocks :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> Depth -> IO [Block tx s]
 getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do

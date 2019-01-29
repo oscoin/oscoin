@@ -44,8 +44,8 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
-import qualified Oscoin.Storage.Block as BlockStore
 import           Oscoin.Storage.Block.Class
+import qualified Oscoin.Storage.Block.Pure as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Time
 
