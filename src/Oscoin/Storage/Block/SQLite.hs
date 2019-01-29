@@ -2,141 +2,68 @@
 
 -- | Disk-backed block storage using SQLite.
 module Oscoin.Storage.Block.SQLite
-    ( Handle
-    , withBlockStore
-    , open
-    , close
-    , initialize
-    , storeBlock
-    , lookupBlock
-    , lookupTx
-    , getGenesisBlock
-    , getBlocks
-    , getTip
-    , getOrphans
+    ( withBlockStore
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHash
-                 , BlockHeader(..)
-                 , Depth
-                 , Score
-                 , blockHash
-                 , mkBlock
-                 )
+                 (Block(..), BlockHash, BlockHeader(..), Depth, Score, mkBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 
+import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite.Internal
-
-import           Paths_oscoin
-
-import           Control.Concurrent.STM
 
 import           Database.SQLite.Simple ((:.)(..), Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.FromRow (FromRow)
-import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
 import           Database.SQLite.Simple.ToField (ToField)
 import           Database.SQLite.Simple.ToRow (ToRow)
-import qualified Database.SQLite3 as Sql3
 
 import           Codec.Serialise (Serialise)
-import qualified Data.Set as Set
 
--- | Open a connection to the block store.
-open :: (Ord s, Ord tx)
-     => String
-     -> (Block tx s -> Score)
-     -> Validate tx s
-     -> IO (Handle tx s)
-open path score validate =
-    Handle <$> (Sql.open path >>= setupConnection)
-           <*> newTVarIO mempty
-           <*> pure score
-           <*> pure validate
-  where
-    setupConnection conn = do
-        enableForeignKeys conn
-        pure conn
-    enableForeignKeys conn =
-        Sql3.exec (Sql.connectionHandle conn) "PRAGMA foreign_keys = ON;"
-
--- | Close a connection to the block store.
-close :: Handle tx s -> IO ()
-close Handle{..} = Sql.close hConn
-
-withBlockStore :: (Ord s, Ord tx)
+-- | Bracket-style initialisation of the SQLite BlockStore
+withBlockStore :: ( ToField s
+                  , FromField s
+                  , Serialise s
+                  , Ord s
+                  , ToRow tx
+                  , FromRow tx
+                  , Ord tx)
                => String
+               -- ^ The path where the DB will live on disk
+               -> Block tx s
+               -- ^ The genesis block (used to initialise the store)
                -> (Block tx s -> Score)
+               -- ^ A block scoring function
                -> Validate tx s
-               -> (Handle tx s -> IO b)
+               -- ^ A block validation function
+               -> (Abstract.BlockStore tx s IO -> IO b)
+               -- ^ Action to use the 'BlockStore'.
                -> IO b
-withBlockStore path score validate =
-    bracket (open path score validate) close
+withBlockStore path genesisBlock score validate action =
+    let newBlockStore internalHandle =
+            ( Abstract.BlockStore {
+                  Abstract.scoreBlock      = hScoreFn internalHandle
+                , Abstract.validateBlock   = hValidFn internalHandle
+                , Abstract.insertBlock     = storeBlock internalHandle
+                , Abstract.getGenesisBlock = getGenesisBlock (hConn internalHandle)
+                , Abstract.member          = isStored (hConn internalHandle)
+                , Abstract.lookupBlock     = lookupBlock internalHandle
+                , Abstract.lookupTx        = lookupTx internalHandle
+                , Abstract.getOrphans      = getOrphans internalHandle
+                , Abstract.getBlocks       = getBlocks internalHandle
+                , Abstract.getTip          = getTip internalHandle
+                }
+            , internalHandle
+            )
+    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path score validate))
+               (close . snd)
+               (action . fst)
 
--- | Initialize the block store with a genesis block. This can safely be run
--- multiple times.
-initialize :: (ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
-initialize gen h@Handle{hConn} =
-    getDataFileName "data/blockstore.sql" >>=
-        readFile >>=
-        Sql3.exec (Sql.connectionHandle hConn) >>
-            storeBlock' h gen >>
-                pure h
-
--- | Store a block, along with its transactions in the block store.
-storeBlock :: forall tx s. (ToField s, ToRow tx, Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
-storeBlock h@Handle{..} blk =
-    Sql.withTransaction hConn $ do
-        blockExists       <- isStored hConn $ blockHash blk
-        blockParentExists <- isStored hConn $ blockPrevHash $ blockHeader blk
-        blockConflicts    <- isConflicting hConn blk
-
-        unless blockExists $
-            if blockParentExists && not blockConflicts
-            then
-                storeBlock' h blk
-            else do
-                storeOrphan h blk
-                findBestChain
-  where
-    chainScore score =
-        sum . map score
-
-    -- Look through the orphans for any chain that is higher scoring than the
-    -- main chain, and replace the low scoring blocks on the main chain with
-    -- the higher scoring ones.
-    --
-    -- Nb. This has shortcomings, namely that only the best chain from the
-    -- point of view of the orphan set is compared with the main chain. It
-    -- may be that a worse-scoring orphan chain is able to replace the suffix
-    -- of the main chain simply by virtue of having a more recent parent,
-    -- and therefore requiring a lower score to outperform the main chain suffix.
-    --
-    -- To solve this, we either need to check all orphan chains above a certain
-    -- score against the main chain, or evict old orphan chains that haven't
-    -- won against the main chain.
-    findBestChain = do
-        orphanChain <- longestOrphanChain h
-
-        case lastMay (toList orphanChain) of
-            Just b | parentHash <- blockPrevHash (blockHeader b) ->
-                whenM (isStored hConn parentHash) $ do
-                    suffixScore <- getChainSuffixScore hConn parentHash
-
-                    let orphanScore = chainScore hScoreFn orphanChain
-                     in when (orphanScore > suffixScore) $ do
-                        revertBlocks hConn parentHash
-                        storeBlockchain' h orphanChain
-                        deleteOrphans h orphanChain
-            _ ->
-                pass
 
 lookupBlock :: forall tx s. (Serialise s, FromField s, FromRow tx) => Handle tx s -> BlockHash -> IO (Maybe (Block tx s))
 lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
@@ -156,20 +83,6 @@ lookupTx Handle{hConn} h =
         [sql| SELECT message, author, chainid, nonce, context
                 FROM transactions
                WHERE hash = ? |] (Only h)
-
-getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
-getGenesisBlock Handle{hConn} = do
-    Only bHash :. bHeader <-
-        headDef (panic "No genesis block!") <$> Sql.query_ hConn
-            [sql|   SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
-                      FROM blocks
-                     WHERE parenthash IS NULL |]
-    bTxs <- getBlockTxs hConn bHash
-    pure $ mkBlock bHeader bTxs
-
-getOrphans :: Handle tx s -> IO (Set BlockHash)
-getOrphans Handle{..} =
-    Set.map blockHash <$> readTVarIO hOrphans
 
 getBlocks :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> Depth -> IO [Block tx s]
 getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do
