@@ -20,9 +20,8 @@ import           Oscoin.Environment
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
-import qualified Oscoin.Storage.Block as BlockStore
+import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.Class (MonadBlockStore(..), getBlocks)
-import qualified Oscoin.Storage.Block.STM as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
@@ -62,7 +61,7 @@ data Handle tx st s i = Handle
     { hConfig       :: Config
     , hNodeId       :: i
     , hStateStore   :: StateStore.Handle st
-    , hBlockStore   :: BlockStore.Handle tx s
+    , hBlockStore   :: Abstract.BlockStore tx s IO
     , hMempool      :: Mempool.Handle tx
     , hEval         :: Evaluator st tx Rad.Value
     , hConsensus    :: Consensus tx s (NodeT tx st s i IO)
@@ -91,17 +90,20 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance (Monad m, MonadIO m, Hashable tx) => MonadBlockStore tx s (NodeT tx st s i m) where
-    storeBlock blk = do
-        bs <- asks hBlockStore
-        liftIO . atomically $ BlockStore.put bs blk
+instance (Monad m, MonadIO m) => MonadBlockStore tx s (NodeT tx st s i m) where
+    storeBlock blk = withBlockStore (`Abstract.insertBlock` blk)
 
-    lookupBlock     = withBlockStore . BlockStore.lookupBlock
-    lookupTx        = withBlockStore . BlockStore.lookupTx
-    getGenesisBlock = withBlockStore   BlockStore.getGenesisBlock
-    getOrphans      = withBlockStore   BlockStore.orphans
-    getBlocks       = withBlockStore . BlockStore.getBlocks
-    getTip          = withBlockStore   BlockStore.getTip
+    lookupBlock h = withBlockStore (`Abstract.lookupBlock` h)
+
+    lookupTx   h = withBlockStore (`Abstract.lookupTx` h)
+
+    getGenesisBlock = withBlockStore Abstract.getGenesisBlock
+
+    getOrphans = withBlockStore Abstract.getOrphans
+
+    getBlocks depth = withBlockStore (`Abstract.getBlocks` depth)
+
+    getTip = withBlockStore Abstract.getTip
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}
@@ -111,12 +113,11 @@ instance (Monad m, MonadIO m, Hashable tx) => MonadBlockStore tx s (NodeT tx st 
 
 withBlockStore
     :: MonadIO m
-    => (BlockStore.BlockStore tx s -> b)
+    => (Abstract.BlockStore tx s IO -> IO b)
     -> NodeT tx st s i m b
 withBlockStore f = do
     bs <- asks hBlockStore
-    liftIO . atomically $
-        BlockStore.for bs f
+    liftIO $ f bs
 
 instance (Monad m, MonadIO m, Query st, Hashable st) => MonadQuery (NodeT tx st s i m) where
     type Key (NodeT tx st s i m) = (StateHash, STree.Path)

@@ -14,8 +14,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
-import           Oscoin.Storage.Block (BlockStore(..))
-import qualified Oscoin.Storage.Block as BlockStore
+import           Oscoin.Storage.Block.Pure (Handle(..))
+import qualified Oscoin.Storage.Block.Pure as BlockStore
 
 import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.API.HTTP as HTTP
@@ -117,9 +117,9 @@ testBlockStoreLookupBlock :: Property
 testBlockStoreLookupBlock = once $ monadicIO $ do
     blks <- pick (arbitraryValidBlockchain @() @())
     let g  = genesis blks
-    let bs = BlockStore { bsChains = Map.singleton (blockHash (tip blks)) blks
-                        , bsOrphans = mempty
-                        , bsScoreFn = comparing height }
+    let bs = BlockStore.Handle { bsChains = Map.singleton (blockHash (tip blks)) blks
+                               , bsOrphans = mempty
+                               , bsScoreFn = comparing height }
     liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore

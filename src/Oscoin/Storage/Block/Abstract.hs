@@ -8,6 +8,9 @@
 
 module Oscoin.Storage.Block.Abstract
     ( BlockStore(..)
+
+    , noValidation
+    , defaultScoreFunction
     , insertBlocksNaive
     , blocksScore
     ) where
@@ -15,6 +18,7 @@ module Oscoin.Storage.Block.Abstract
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types (Validate)
+import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 
@@ -28,11 +32,9 @@ data BlockStore tx s m = BlockStore
     -- ^ Inserts a 'Block' into the store.
     , getGenesisBlock :: m (Block tx s)
     -- ^ Get the genesis block.
-    , member          :: BlockHash -> m Bool
-    -- ^ Is the given 'BlockHash' member (i.e. stored) of this BlockStore?
     , lookupBlock     :: BlockHash -> m (Maybe (Block tx s))
     -- ^ Lookups a 'Block' from the store when given its hash.
-    , lookupTx        :: Hashed tx -> m (Maybe tx)
+    , lookupTx        :: Hashed tx -> m (Maybe (TxLookup tx))
     -- ^ Lookups a transaction by its hash.
     , getOrphans      :: m (Set BlockHash)
     -- ^ The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
@@ -45,6 +47,12 @@ data BlockStore tx s m = BlockStore
 {------------------------------------------------------------------------------
 Extra operations on the BlockStore, which are implementation-independent.
 ------------------------------------------------------------------------------}
+
+noValidation :: Validate tx s
+noValidation _ _ = Right ()
+
+defaultScoreFunction :: Block tx s -> Score
+defaultScoreFunction = fromDifficulty . blockTargetDifficulty . blockHeader
 
 -- | /O(n)/. A naive function to store blocks in linear time.
 -- Useful for testing but discouraged for any serious production use.

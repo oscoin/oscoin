@@ -49,8 +49,9 @@ import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import qualified Oscoin.Storage.Block as BlockStore
-import qualified Oscoin.Storage.Block.STM as BlockStore
+import           Oscoin.Storage.Block.Abstract
+                 (defaultScoreFunction, noValidation)
+import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
@@ -151,18 +152,18 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    bsh <- BlockStore.newIO $ BlockStore.initWithChain blockstoreState
-    sth <- liftIO $ StateStore.fromStateM statestoreState
+    BlockStore.Concrete.STM.withBlockStore blockstoreState defaultScoreFunction noValidation $ \bsh -> do
+        sth <- liftIO $ StateStore.fromStateM statestoreState
 
-    Node.withNode
-        cfg
-        42
-        mph
-        sth
-        bsh
-        Rad.txEval
-        (trivialConsensus "")
-        k
+        Node.withNode
+            cfg
+            42
+            mph
+            sth
+            bsh
+            Rad.txEval
+            (trivialConsensus "")
+            k
 
 liftNode :: Node a -> Session a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)

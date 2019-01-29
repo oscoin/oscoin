@@ -42,8 +42,8 @@ import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
 import qualified Oscoin.Telemetry.Logging as Log
 
-import qualified Oscoin.Storage.Block.Class as BlockStore
-import qualified Oscoin.Storage.Block.STM as BlockStore
+import qualified Oscoin.Storage.Block.Abstract as Abstract
+import qualified Oscoin.Storage.Block.Class as BlockStore.Class
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 
@@ -54,23 +54,21 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 import           Lens.Micro ((^.))
 
-withNode
-    :: (Hashable tx)
-    => Config
-    -> i
-    -> Mempool.Handle tx
-    -> StateStore.Handle st
-    -> BlockStore.Handle tx s
-    -> Evaluator st tx Rad.Value
-    -> Consensus tx s (NodeT tx st s i IO)
-    -> (Handle tx st s i -> IO c)
-    -> IO c
+withNode :: Config
+         -> i
+         -> Mempool.Handle tx
+         -> StateStore.Handle st
+         -> Abstract.BlockStore tx s IO
+         -> Evaluator st tx Rad.Value
+         -> Consensus tx s (NodeT tx st s i IO)
+         -> (Handle tx st s i -> IO c)
+         -> IO c
 withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     bracket open close
   where
     open = do
         hReceiptStore <- ReceiptStore.newHandle
-        gen <- runNodeT Handle{..} BlockStore.getGenesisBlock
+        gen <- runNodeT Handle{..} BlockStore.Class.getGenesisBlock
         Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "running in"
                  (ftag "env" % stext) (Env.toText $ cfgEnv hConfig)
@@ -150,13 +148,13 @@ getPath sh p = queryM (sh, p)
 
 -- | Get a value from the latest state.
 getPathLatest
-    :: (Hashable tx, MonadIO m, Query st, Hashable st)
+    :: (MonadIO m, Query st, Hashable st)
     => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
 getPathLatest path = do
-    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip
+    stateHash <- blockStateHash . blockHeader <$> BlockStore.Class.getTip
     result <- getPath stateHash path
     for result $ \v ->
         pure (stateHash, v)
 
-getBlocks :: (Hashable tx, MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
-getBlocks = BlockStore.getBlocks
+getBlocks :: (MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
+getBlocks = BlockStore.Class.getBlocks
