@@ -6,18 +6,23 @@
 -- the timestamp of its parent.
 module Oscoin.Storage.Block.SQLite.Internal
     ( Handle(..)
+    , open
+    , close
+    , initialize
     , isStored
     , isConflicting
     , storeOrphan
     , deleteOrphans
     , longestOrphanChain
+    , getGenesisBlock
     , getBlockTxs
     , getChainScore
     , getChainSuffixScore
     , getChainHashes
+    , getOrphans
     , revertBlocks
     , storeBlockchain'
-    , storeBlock'
+    , storeBlock
     ) where
 
 import           Oscoin.Prelude
@@ -31,10 +36,13 @@ import           Oscoin.Crypto.Blockchain.Block
                  , Score
                  , blockHash
                  , isGenesisBlock
+                 , mkBlock
                  )
 import           Oscoin.Time (Timestamp)
 
-import           Database.SQLite.Simple ((:.)(..), Connection, Only(..))
+import           Paths_oscoin
+
+import           Database.SQLite.Simple as Sql ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.FromRow (FromRow)
@@ -42,7 +50,9 @@ import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
 import           Database.SQLite.Simple.ToField (ToField)
 import           Database.SQLite.Simple.ToRow (ToRow)
+import qualified Database.SQLite3 as Sql3
 
+import           Codec.Serialise
 import           Control.Concurrent.STM
 import qualified Data.Set as Set
 import           GHC.Exts (IsList(fromList))
@@ -54,6 +64,39 @@ data Handle tx s = Handle
     , hScoreFn :: Block tx s -> Score      -- ^ Block scoring function.
     , hValidFn :: Validate tx s            -- ^ Block validation function.
     }
+
+-- | Opens a connection to the SQLite DB.
+open :: (Ord s, Ord tx)
+     => String
+     -> (Block tx s -> Score)
+     -> Validate tx s
+     -> IO (Handle tx s)
+open path score validate =
+    Handle <$> (Sql.open path >>= setupConnection)
+           <*> newTVarIO mempty
+           <*> pure score
+           <*> pure validate
+  where
+    setupConnection conn = do
+        enableForeignKeys conn
+        pure conn
+    enableForeignKeys conn =
+        Sql3.exec (Sql.connectionHandle conn) "PRAGMA foreign_keys = ON;"
+
+-- | Close a connection to the block store.
+close :: Handle tx s -> IO ()
+close Handle{..} = Sql.close hConn
+
+-- | Initialize the block store with a genesis block. This can safely be run
+-- multiple times.
+initialize :: (ToRow tx, ToField s) => Block tx s -> Handle tx s -> IO (Handle tx s)
+initialize gen h@Handle{hConn} =
+    getDataFileName "data/blockstore.sql" >>=
+        readFile >>=
+        Sql3.exec (Sql.connectionHandle hConn) >>
+            storeBlock' h gen >>
+                pure h
+
 
 -- | Check whether a given block hash exists.
 isStored :: Connection -> BlockHash -> IO Bool
@@ -68,6 +111,55 @@ isConflicting conn Block{blockHeader} =
     headDef False . map fromOnly <$> Sql.query conn
         [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE parenthash = ?) |]
         (Only $ blockPrevHash blockHeader)
+
+-- | Store a block, along with its transactions in the block store.
+storeBlock :: forall tx s. (ToField s, ToRow tx, Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
+storeBlock h@Handle{..} blk =
+    Sql.withTransaction hConn $ do
+        blockExists       <- isStored hConn $ blockHash blk
+        blockParentExists <- isStored hConn $ blockPrevHash $ blockHeader blk
+        blockConflicts    <- isConflicting hConn blk
+
+        unless blockExists $
+            if blockParentExists && not blockConflicts
+            then
+                storeBlock' h blk
+            else do
+                storeOrphan h blk
+                findBestChain
+  where
+    chainScore score =
+        sum . map score
+
+    -- Look through the orphans for any chain that is higher scoring than the
+    -- main chain, and replace the low scoring blocks on the main chain with
+    -- the higher scoring ones.
+    --
+    -- Nb. This has shortcomings, namely that only the best chain from the
+    -- point of view of the orphan set is compared with the main chain. It
+    -- may be that a worse-scoring orphan chain is able to replace the suffix
+    -- of the main chain simply by virtue of having a more recent parent,
+    -- and therefore requiring a lower score to outperform the main chain suffix.
+    --
+    -- To solve this, we either need to check all orphan chains above a certain
+    -- score against the main chain, or evict old orphan chains that haven't
+    -- won against the main chain.
+    findBestChain = do
+        orphanChain <- longestOrphanChain h
+
+        case lastMay (toList orphanChain) of
+            Just b | parentHash <- blockPrevHash (blockHeader b) ->
+                whenM (isStored hConn parentHash) $ do
+                    suffixScore <- getChainSuffixScore hConn parentHash
+
+                    let orphanScore = chainScore hScoreFn orphanChain
+                     in when (orphanScore > suffixScore) $ do
+                        revertBlocks hConn parentHash
+                        storeBlockchain' h orphanChain
+                        deleteOrphans h orphanChain
+            _ ->
+                pass
+
 
 -- | Store an orphan in memory.
 storeOrphan :: (Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
@@ -96,6 +188,16 @@ longestOrphanChain Handle{..} =
 
     longest [] = []
     longest xs = blocks $ maximumBy (comparing score) xs
+
+getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Connection -> IO (Block tx s)
+getGenesisBlock conn = do
+    Only bHash :. bHeader <-
+        headDef (panic "No genesis block!") <$> Sql.query_ conn
+            [sql|   SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+                      FROM blocks
+                     WHERE parenthash IS NULL |]
+    bTxs <- getBlockTxs conn bHash
+    pure $ mkBlock bHeader bTxs
 
 -- | Get the transactions belonging to a block.
 getBlockTxs :: FromRow tx => Connection -> BlockHash -> IO [tx]
@@ -126,6 +228,10 @@ getChainHashes :: Connection -> IO [BlockHash]
 getChainHashes conn =
     map fromOnly <$>
         Sql.query_ conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC |]
+
+getOrphans :: Handle tx s -> IO (Set BlockHash)
+getOrphans Handle{..} =
+    Set.map blockHash <$> readTVarIO hOrphans
 
 revertBlocks :: Connection -> BlockHash -> IO ()
 revertBlocks conn hsh = do
