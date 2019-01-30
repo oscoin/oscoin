@@ -29,6 +29,7 @@ import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Environment as Environment
 import qualified Oscoin.Test.P2P as P2P
 import           Oscoin.Test.Storage.Block.Arbitrary ()
+import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
 import qualified Oscoin.Test.Storage.Block.SQLite.Whitebox as SQLite.Whitebox
 import qualified Oscoin.Test.Telemetry as Telemetry
@@ -58,6 +59,7 @@ tests config = testGroup "Oscoin"
     , testProperty   "JSON instance of Signed"        propSignedJSON
     , testGroup      "Consensus"                      (Consensus.tests config)
     , testGroup      "P2P"                            P2P.tests
+    , testGroup      "Storage equivalence checking"   StorageEquivalence.tests
     , testGroup      "SQLite Storage blackbox"        SQLite.Blackbox.tests
     , testGroup      "SQLite Storage whitebox"        SQLite.Whitebox.tests
     , testBlockchain config

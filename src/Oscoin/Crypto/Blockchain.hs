@@ -107,6 +107,7 @@ showChainDigest =
 
 showBlockDigest :: Block tx s -> Text
 showBlockDigest b@Block{blockHeader} =
-    F.sformat ("[" % F.string % " @" % F.build % "]")
+    F.sformat ("[" % F.string % " (p:" % F.string % ") @" % F.build % "]")
               (C8.unpack . Crypto.shortHash . blockHash $ b)
+              (C8.unpack . Crypto.shortHash . blockPrevHash $ blockHeader)
               (prettyDuration $ sinceEpoch (blockTimestamp blockHeader))

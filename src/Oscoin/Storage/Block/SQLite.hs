@@ -82,15 +82,6 @@ lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
     for result $ \bh ->
         pure $ mkBlock bh txs
 
-    {--
-lookupTx :: forall tx s. (Crypto.Hashable tx) => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
-lookupTx h (blocks -> chain) = listToMaybe $ do
-    (i, block) <- zip [1..] chain
-    tx <- toList $ blockData block
-    guard (Crypto.hash tx == h)
-    pure $ TxLookup tx (blockHash block) i
-    --}
-
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.
 lookupTx :: FromRow tx => Handle tx s -> Crypto.Hashed tx -> IO (Maybe (TxLookup tx))

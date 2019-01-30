@@ -1,3 +1,6 @@
+{- | A pure, in-memory storage for a 'BlockChain', suitable to be used as
+   a concrete implementation for a 'BlockStore'.
+-}
 module Oscoin.Storage.Block.Pure
     ( Handle
     , genesisBlockStore
