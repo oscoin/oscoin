@@ -1,8 +1,10 @@
+
+
 1. Background
 
 While cryptocurrencies introduced a solution to the problem of digital scarcity and enumeration, they have failed to create sustainable incentives for the developers that participate in them.
 
-In this paper we introduce a cryptocurrency that rewards and provisions open-source software, as well as a platform for establishing trust & transparency in open source communities. 
+In this paper we introduce a cryptocurrency that rewards and provisions open-source software, as well as a platform for establishing trust & transparency in open source communities.
 
 a. Cryptocurrencies and money
 
@@ -14,8 +16,7 @@ The problem is just another instance of the challenges associated with the incen
 
 b. Developer incentives and the problem of open-source software sustainability
 
-To further motivate this work, we must first familiarize ourselves with the conditions in which free and open-source software is developed. Software whose source code is publicly available is called open-source. Most of the software we use on a daily basis relies on free and public code. In an increasingly digitized society, these open-source projects have become the foundation of digital infrastructure
-underpinning many of our societal goods and services.
+To further motivate this work, we must first familiarize ourselves with the conditions in which free and open-source software is developed. Software whose source code is publicly available is called open-source. Most of the software we use on a daily basis relies on free and public code. In an increasingly digitized society, these open-source projects have become the foundation of digital infrastructure underpinning many of our societal goods and services.
 
 With the emergence of software hosting sites like GitHub and community sites like Stack Overflow, the open-source paradigm became the focal point of software development, resulting in the development of numerous high quality projects which are openly available for anyone to use. This phenomenon helped companies (a) to reduce lead times and bring products to the market faster and (b) to recruit talent from a new pool of technologists, educated on the basis of open-source software.
 
@@ -27,7 +28,7 @@ While most open-source software projects start for the reasons above, the ones t
 
 c. The linked structure in open-source software
 
-While the importance of an open-source software package is highly subjective to each individual, valuable information about its relative importance can be extracted by studying the structure of open-source software through dependencies. 
+While the importance of an open-source software package is highly subjective to each individual, valuable information about its relative importance can be extracted by studying the structure of open-source software through dependencies.
 
 Similarly to how Google pioneered a large-scale search engine around PageRank that takes advantage of the present structure in hypertext (the web) in order to organize the world’s information, the linked graph of open-source software dependencies offers an important resource when it comes to information extraction, that can be thought of as an implicit form of implicit trust present in the structure.
 
