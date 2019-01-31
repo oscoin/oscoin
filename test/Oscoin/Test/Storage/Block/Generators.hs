@@ -149,7 +149,10 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
             case event of
               DoNotFork -> go xs acc
               ForkChain -> do
-                  fork <- resize (fromIntegral forkMaxLength) (genBlockchainFrom x)
+                  forkSize <- choose ( min 2 (fromIntegral forkMaxLength)
+                                     , fromIntegral forkMaxLength
+                                     )
+                  fork <- resize forkSize (genBlockchainFrom x)
                   let (blks, orphanChain) = fmap (unsafeToBlockchain . reverse)
                                           . splitAt 1
                                           . drop 1 -- drop the tip, which is 'x'.

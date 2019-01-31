@@ -58,9 +58,9 @@ propInsertGetTipEquivalence =
 -- 4. We add the \"missing link\", assessing the tip coincides.
 propForksInsertGetTipEquivalence :: Property
 propForksInsertGetTipEquivalence = do
-    let forkParams = ForkParams 0 5 3
+    let forkParams = ForkParams 0 10 3  -- 3 forks of max 10 blocks.
         generator = do
-            chain <- resize 10 $ genBlockchainFrom defaultGenesis
+            chain <- resize 20 $ genBlockchainFrom defaultGenesis
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAll generator $ \(chain, orphansWithLink) -> do
