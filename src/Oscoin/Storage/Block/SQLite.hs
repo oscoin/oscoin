@@ -27,6 +27,11 @@ import           Database.SQLite.Simple.ToRow (ToRow)
 import           Codec.Serialise (Serialise)
 
 -- | Bracket-style initialisation of the SQLite BlockStore
+-- FIXME(adn): This internally calls 'initialize', which is obviously not
+-- ideal when we have state on disk and we are re-opening a database rather
+-- than starting from scratch. In practice, /for now/, we should be OK as
+-- 'initialize' should be idempotent, but nevertheless we need a better
+-- migration strategy/initialisation here.
 withBlockStore :: ( ToField s
                   , FromField s
                   , Serialise s

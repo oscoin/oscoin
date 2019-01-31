@@ -1,5 +1,5 @@
 module Oscoin.Storage.Block.Pure
-    ( Handle(..)
+    ( Handle
     , genesisBlockStore
     , fromOrphans
     , initWithChain
@@ -29,20 +29,20 @@ import           Text.Show (Show(..))
 
 -- | Store of 'Block's and 'Blockchain's.
 data Handle tx s = Handle
-    { bsChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
-    , bsOrphans :: Map BlockHash (Block tx s)      -- ^ Orphan blocks.
-    , bsScoreFn :: ScoringFunction tx s            -- ^ Chain scoring function.
+    { hChains  :: Map BlockHash (Blockchain tx s) -- ^ Chains leading back to genesis.
+    , hOrphans :: Map BlockHash (Block tx s)      -- ^ Orphan blocks.
+    , hScoreFn :: ScoringFunction tx s            -- ^ Chain scoring function.
     }
 
 instance Show (Handle tx s) where
-    -- We can't derive Show because 'bsScoreFn' is a function.
+    -- We can't derive Show because 'hScoreFn' is a function.
     show = const "Handle{}"
 
 instance (Ord tx, Ord s) => Semigroup (Handle tx s) where
     (<>) a b = Handle
-        { bsOrphans = bsOrphans a <> bsOrphans b
-        , bsChains  = bsChains  a <> bsChains  b
-        , bsScoreFn = bsScoreFn a }
+        { hOrphans = hOrphans a <> hOrphans b
+        , hChains  = hChains  a <> hChains  b
+        , hScoreFn = hScoreFn a }
 
 instance (Ord tx, Ord s) => Monoid (Handle tx s) where
     mempty = Handle mempty mempty (comparing height)
@@ -54,9 +54,9 @@ genesisBlockStore gen = initWithChain $ fromGenesis gen
 initWithChain :: Blockchain tx s -> Handle tx s
 initWithChain  chain =
     Handle
-        { bsChains  = Map.singleton (blockHash $ genesis chain) chain
-        , bsOrphans = mempty
-        , bsScoreFn = comparing height
+        { hChains  = Map.singleton (blockHash $ genesis chain) chain
+        , hOrphans = mempty
+        , hScoreFn = comparing height
         }
 
 getBlocks
@@ -64,7 +64,7 @@ getBlocks
     -> Handle tx s
     -> [Block tx s]
 getBlocks (fromIntegral -> d) Handle{..} =
-    takeBlocks d . maximumBy bsScoreFn . Map.elems $ bsChains
+    takeBlocks d . maximumBy hScoreFn . Map.elems $ hChains
 -- Nb. we guarantee that there is at least one chain in the store by exposing
 -- only the 'genesisHandle' smart constructor.
 
@@ -73,33 +73,33 @@ getTip = tip . getBestChain
 
 getBestChain :: Handle tx s -> Blockchain tx s
 getBestChain Handle{..} =
-    maximumBy bsScoreFn . Map.elems $ bsChains
+    maximumBy hScoreFn . Map.elems $ hChains
 
 -- | /O(n)/. Get the genesis block.
 getGenesisBlock :: Handle tx s -> Block tx s
-getGenesisBlock Handle{bsChains} =
-    genesis (snd $ Map.findMin bsChains)
+getGenesisBlock Handle{hChains} =
+    genesis (snd $ Map.findMin hChains)
     -- Nb. since all blockchains share the same genesis block, we can just pick
     -- any.
 
 insert :: Block tx s -> Handle tx s -> Handle tx s
 insert blk bs@Handle{..} =
-    linkBlocks $ bs { bsOrphans = Map.insert (blockHash blk) blk bsOrphans }
+    linkBlocks $ bs { hOrphans = Map.insert (blockHash blk) blk hOrphans }
 
 fromOrphans :: (Foldable t) => t (Block tx s) -> Block tx s -> Handle tx s
 fromOrphans (toList -> blks) gen =
-    linkBlocks $ (genesisBlockStore gen) { bsOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
+    linkBlocks $ (genesisBlockStore gen) { hOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
 
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock :: BlockHash -> Handle tx s -> Maybe (Block tx s)
 lookupBlock h Handle{..} =
-        Map.lookup h bsOrphans
-    <|> List.find ((== h) . blockHash) (foldMap blocks $ Map.elems bsChains)
+        Map.lookup h hOrphans
+    <|> List.find ((== h) . blockHash) (foldMap blocks $ Map.elems hChains)
 
 orphans :: Handle tx s -> Set BlockHash
-orphans Handle{bsOrphans} =
-    let parentHashes   = Set.fromList $ map (blockPrevHash . blockHeader) (Map.elems bsOrphans)
-        danglingHashes = Map.keysSet bsOrphans
+orphans Handle{hOrphans} =
+    let parentHashes   = Set.fromList $ map (blockPrevHash . blockHeader) (Map.elems hOrphans)
+        danglingHashes = Map.keysSet hOrphans
      in Set.difference parentHashes danglingHashes
 
 -- | Lookup a transaction in the 'Handle'. Only considers transactions in
@@ -116,18 +116,18 @@ chainStateHash =
 -- linking of an orphan to its parent fails, the block is discarded.
 linkBlocks :: Handle tx s -> Handle tx s
 linkBlocks bs' =
-    go (Map.elems (bsOrphans bs')) bs'
+    go (Map.elems (hOrphans bs')) bs'
   where
     go [] bs =
         bs
-    go (blk:blks) bs@Handle{bsChains, bsOrphans} =
-        case Map.lookup (blockPrevHash (blockHeader blk)) bsChains of
+    go (blk:blks) bs@Handle{hChains, hOrphans} =
+        case Map.lookup (blockPrevHash (blockHeader blk)) hChains of
             Just chain ->
-                let store = Map.delete (blockHash blk) bsOrphans
+                let store = Map.delete (blockHash blk) hOrphans
                  in go (Map.elems store) $
-                    bs { bsOrphans  = store
-                       , bsChains   = Map.insert (blockHash blk)
+                    bs { hOrphans  = store
+                       , hChains   = Map.insert (blockHash blk)
                                                  (blk |> chain)
-                                                 bsChains }
+                                                 hChains }
             Nothing ->
                 go blks bs

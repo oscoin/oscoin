@@ -7,14 +7,13 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), genesis, height, tip, unsafeToBlockchain)
+                 (Blockchain(..), genesis, height, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlockchain)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
-import           Oscoin.Storage.Block.Pure (Handle(..))
 import qualified Oscoin.Storage.Block.Pure as BlockStore
 
 import qualified Oscoin.Test.API as API
@@ -43,7 +42,6 @@ import           Test.Tasty.QuickCheck
 import qualified Data.Aeson as Aeson
 import           Data.Default (def)
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Map as Map
 
 tests :: Consensus.Config -> TestTree
 tests config = testGroup "Oscoin"
@@ -117,9 +115,7 @@ testBlockStoreLookupBlock :: Property
 testBlockStoreLookupBlock = once $ monadicIO $ do
     blks <- pick (arbitraryValidBlockchain @() @())
     let g  = genesis blks
-    let bs = BlockStore.Handle { bsChains = Map.singleton (blockHash (tip blks)) blks
-                               , bsOrphans = mempty
-                               , bsScoreFn = comparing height }
+    let bs = BlockStore.initWithChain blks
     liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore

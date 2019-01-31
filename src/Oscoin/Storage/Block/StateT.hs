@@ -11,19 +11,19 @@ import           Oscoin.Crypto.Hash (Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
 
-type Handle tx s = StateT (Pure.Handle tx s) Identity
+type Handle tx s m = StateT (Pure.Handle tx s) m
 
 -- | A bracket-style initialiser for an in-memory block store.
-withBlockStore :: Hashable tx
+withBlockStore :: (Monad m, Hashable tx)
                => Block tx s
                -- ^ The genesis block (used to initialise the store)
                -> (Block tx s -> Score)
                -- ^ A block scoring function
                -> Validate tx s
                -- ^ A block validation function
-               -> (Abstract.BlockStore tx s (Handle tx s) -> Handle tx s b)
+               -> (Abstract.BlockStore tx s (Handle tx s m) -> Handle tx s m b)
                -- ^ Action to use the 'BlockStore'.
-               -> b
+               -> m b
 withBlockStore gen score validate action =
     let hdl = Pure.genesisBlockStore gen
         newBlockStore  =
@@ -38,4 +38,4 @@ withBlockStore gen score validate action =
                 , Abstract.getBlocks       = gets . Pure.getBlocks
                 , Abstract.getTip          = gets Pure.getTip
                 }
-    in runIdentity $ evalStateT (action newBlockStore) hdl
+    in evalStateT (action newBlockStore) hdl
