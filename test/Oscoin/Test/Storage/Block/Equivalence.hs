@@ -60,21 +60,22 @@ propForksInsertGetTipEquivalence :: Property
 propForksInsertGetTipEquivalence = do
     let forkParams = ForkParams 0 10 3  -- 3 forks of max 10 blocks.
         generator = do
-            chain <- resize 20 $ genBlockchainFrom defaultGenesis
+            chain <- resize 15 $ genBlockchainFrom defaultGenesis
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAll generator $ \(chain, orphansWithLink) -> do
         ioProperty $ withStores $ \stores -> do
             -- Step 1: Store the chain in both stores.
-            _ <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
-            forM_ orphansWithLink $ \(orphans, missingLink) -> do
+            p0 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
+            ps <- forM orphansWithLink $ \(orphans, missingLink) -> do
                 -- Step 2: Store the orphan chains
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks orphans))
                 p2 <- apiCheck stores Abstract.getOrphans
                 -- Step 3: Add the missing link and check the tip
                 p3 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
                 p4 <- apiCheck stores Abstract.getTip
-                pure (p1 .&&. p2 .&&. p3 .&&. p4)
+                pure [p1,p2,p3,p4]
+            pure $ foldl (.&&.) p0 (mconcat ps)
 
 {------------------------------------------------------------------------------
   Useful combinators
@@ -93,11 +94,12 @@ withStores action =
 -- | When given a function from a 'BlockStore' operation to a result 'a', it
 -- calls the function over both stores and returns whether or not the result
 -- matches.
-apiCheck :: (Monad m, Eq b, Show b)
+apiCheck :: (HasCallStack, Monad m, Eq b, Show b)
          => StoresUnderTest tx s m
          -> (Abstract.BlockStore tx s m -> m b)
          -> m Property
 apiCheck (store1, store2) apiCall = do
-    res1 <- apiCall store1
-    res2 <- apiCall store2
-    pure (res1 === res2)
+    withFrozenCallStack $ do
+        res1 <- apiCall store1
+        res2 <- apiCall store2
+        pure $ counterexample (prettyCallStack callStack) (res1 === res2)
