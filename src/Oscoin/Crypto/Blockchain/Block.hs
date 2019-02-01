@@ -13,6 +13,7 @@ module Oscoin.Crypto.Blockchain.Block
     , genesisBlock
     , isGenesisBlock
     , headerHash
+    , parentHash
     , withHeader
     , blockScore
     , sealBlock
@@ -106,6 +107,9 @@ emptyHeader = BlockHeader
 headerHash :: Serialise s => BlockHeader s -> BlockHash
 headerHash =
     Crypto.fromHashed . Crypto.hash
+
+parentHash :: Block tx s -> BlockHash
+parentHash = blockPrevHash . blockHeader
 
 withHeader :: Serialise s => Block tx a -> BlockHeader s -> Block tx s
 withHeader blk h = blk { blockHeader = h, blockHash = headerHash h }

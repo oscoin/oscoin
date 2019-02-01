@@ -36,9 +36,9 @@ import           Test.QuickCheck.Monadic
 
 type DummySeal = Text
 
+-- | Generates a genesis block with a slightly more realistic 'Difficulty'.
 defaultGenesis :: Block tx DummySeal
-defaultGenesis =
-    sealBlock mempty (emptyGenesisBlock Time.epoch)
+defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
 
 -- | Generates an arbitrary 'Block' which is linked with the genesis block
 -- and that has a valid timestamp (> timestamp(genesis)).

@@ -20,7 +20,7 @@ import qualified Oscoin.Storage.Block.STM as STM
 
 import           Oscoin.Test.Storage.Block.Generators
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
-import           Oscoin.Test.Util (Condensed(..))
+import           Oscoin.Test.Util (Condensed(..), showOrphans)
 
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -81,16 +81,6 @@ propForksInsertGetTipEquivalence = do
                 p4 <- apiCheck stores Abstract.getTip
                 pure [p1,p2,p3,p4]
             pure $ foldl (.&&.) p0 (mconcat ps)
-
-showOrphans :: (Blockchain RadTx DummySeal, [(Blockchain RadTx DummySeal, Block RadTx DummySeal)])
-            -> String
-showOrphans (initialChain, orphansWithLinks) =
-    "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
-    "orphans:\n- " <> T.unpack (showOrphanAndLinks)
-  where
-      showOrphanAndLinks =
-          T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")
-                             $ orphansWithLinks
 
 {------------------------------------------------------------------------------
   Useful combinators

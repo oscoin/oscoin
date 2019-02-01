@@ -29,8 +29,8 @@ data ForkParams = ForkParams
     -- ^ The maximum size for the generated fork.
     , forkNumber          :: Natural
     -- ^ The number of desired forks to generate.
-    -- For example, a @forkProbability@ of 3 will ensure that /at least/
-    -- (but there could be more) forks will be generated.
+    -- For example, a @forkProbability@ of 3 will ensure that /at most/
+    -- (but there could be less) forks will be generated.
     }
 
 data ChainEvent =
@@ -51,11 +51,12 @@ genChainEvents inputChainSize ForkParams{..} = do
 -- as described in https://github.com/oscoin/oscoin/issues/344
 genDifficultyFrom :: Difficulty -> Gen Difficulty
 genDifficultyFrom (fromDifficulty -> prevDifficulty) =
-    let (lessDifficulty :: Integer) = round (fromIntegral prevDifficulty / 4.0 :: Double)
-        (moreDifficulty :: Integer) = round (fromIntegral prevDifficulty * 4.0 :: Double)
-    in frequency [ (80, pure $ Difficulty prevDifficulty)
+    let (lessDifficulty :: Integer) = ceiling (fromIntegral prevDifficulty / 4.0 :: Double)
+        (moreDifficulty :: Integer) = ceiling (fromIntegral prevDifficulty * 4.0 :: Double)
+    in frequency [ (20, pure (Difficulty prevDifficulty))
+                 , (60, fromIntegral <$> choose (1, lessDifficulty))
                  , (20, fromIntegral <$> choose (lessDifficulty, moreDifficulty))
-              ]
+                 ]
 
 genBlockFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
              => Block tx s

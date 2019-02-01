@@ -10,7 +10,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHash, BlockHeader(..), Depth, Score, mkBlock)
+                 (Block(..), BlockHash, BlockHeader(..), Score, mkBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import qualified Oscoin.Storage.Block.Abstract as Abstract
@@ -93,18 +93,3 @@ lookupTx Handle{hConn} h = do
     pure $ case listToMaybe res of
         Nothing -> Nothing
         Just tx -> Just $ TxLookup tx Crypto.zeroHash 0
-
-getBlocks :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> Depth -> IO [Block tx s]
-getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do
-    rows :: [Only BlockHash :. BlockHeader s] <- Sql.query hConn
-        [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
-                 FROM blocks
-             ORDER BY timestamp DESC
-                LIMIT ? |] (Only depth)
-
-    for rows $ \(Only h :. bh) ->
-        mkBlock bh <$> getBlockTxs hConn h
-
-getTip :: (Serialise s, FromField s, FromRow tx) => Handle tx s -> IO (Block tx s)
-getTip h =
-    headDef (panic "No blocks in storage!") <$> getBlocks h 1
