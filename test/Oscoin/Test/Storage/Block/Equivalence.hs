@@ -8,6 +8,10 @@ module Oscoin.Test.Storage.Block.Equivalence
 
 import           Oscoin.Prelude
 
+import           GHC.Exception
+
+import qualified Data.List as List
+import qualified Data.Text as T
 import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Storage.Block.Abstract as Abstract
@@ -16,6 +20,7 @@ import qualified Oscoin.Storage.Block.STM as STM
 
 import           Oscoin.Test.Storage.Block.Generators
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
+import           Oscoin.Test.Util (Condensed(..))
 
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -42,7 +47,7 @@ classifyChain chain =
 -- and get the tip, and that both stores agree on the result.
 propInsertGetTipEquivalence :: Property
 propInsertGetTipEquivalence =
-    forAll (resize 25 $ genBlockchainFrom defaultGenesis) $ \chain -> do
+    forAllShrink (resize 25 $ genBlockchainFrom defaultGenesis) genericShrink $ \chain -> do
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
@@ -63,7 +68,7 @@ propForksInsertGetTipEquivalence = do
             chain <- resize 15 $ genBlockchainFrom defaultGenesis
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
-    forAll generator $ \(chain, orphansWithLink) -> do
+    forAllShow generator showOrphans $ \(chain, orphansWithLink) -> do
         ioProperty $ withStores $ \stores -> do
             -- Step 1: Store the chain in both stores.
             p0 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
@@ -76,6 +81,16 @@ propForksInsertGetTipEquivalence = do
                 p4 <- apiCheck stores Abstract.getTip
                 pure [p1,p2,p3,p4]
             pure $ foldl (.&&.) p0 (mconcat ps)
+
+showOrphans :: (Blockchain RadTx DummySeal, [(Blockchain RadTx DummySeal, Block RadTx DummySeal)])
+            -> String
+showOrphans (initialChain, orphansWithLinks) =
+    "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
+    "orphans:\n- " <> T.unpack (showOrphanAndLinks)
+  where
+      showOrphanAndLinks =
+          T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")
+                             $ orphansWithLinks
 
 {------------------------------------------------------------------------------
   Useful combinators
@@ -94,7 +109,7 @@ withStores action =
 -- | When given a function from a 'BlockStore' operation to a result 'a', it
 -- calls the function over both stores and returns whether or not the result
 -- matches.
-apiCheck :: (HasCallStack, Monad m, Eq b, Show b)
+apiCheck :: forall tx s m b. (HasCallStack, Monad m, Eq b, Show b, Condensed b)
          => StoresUnderTest tx s m
          -> (Abstract.BlockStore tx s m -> m b)
          -> m Property
@@ -102,4 +117,18 @@ apiCheck (store1, store2) apiCall = do
     withFrozenCallStack $ do
         res1 <- apiCall store1
         res2 <- apiCall store2
-        pure $ counterexample (prettyCallStack callStack) (res1 === res2)
+        pure $ counterexample (apiMismatch callStack res1 res2) (res1 === res2)
+  where
+    apiMismatch :: CallStack -> b -> b -> String
+    apiMismatch cs res1 res2 =
+        let calledAt = case getCallStack cs of
+                         [(_, loc)] -> srcLocFile loc <> ":" <>
+                                       show (srcLocStartLine loc) <> ":" <>
+                                       show (srcLocStartCol loc)
+                         _          -> "(unknown)"
+        in List.unlines [
+                 "api call at " <> calledAt <> " yielded a result mismatch!\n"
+               , "store1 = " <> T.unpack (condensed res1) <> "\n"
+               , "store2 = " <> T.unpack (condensed res2) <> "\n"
+               , "Counterexample is:"
+               ]

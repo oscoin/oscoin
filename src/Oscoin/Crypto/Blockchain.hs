@@ -34,9 +34,10 @@ import qualified Formatting as F
 import           GHC.Exts (IsList(..))
 import           Numeric.Natural
 
-
+-- | A 'Blockchain' is a non-empty list of blocks, with the /most recent
+-- block in front/.
 newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
-    deriving (Show)
+    deriving (Show, Generic)
 
 instance Semigroup (Blockchain tx s) where
     (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)
@@ -49,6 +50,8 @@ instance IsList (Blockchain tx s) where
 
 infixr 5 |>
 
+-- | Appends a new 'Block' in front of the input 'Blockchain', making it
+-- /the new tip/.
 (|>) :: Block tx s -> Blockchain tx s -> Blockchain tx s
 (|>) blk (Blockchain blks) = Blockchain (blk <| blks)
 

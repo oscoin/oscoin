@@ -120,11 +120,11 @@ propNetworkNodesConverge tnInit genNetworks config =
                 propHighConvergence  = nodeCount == 1 || score >= 0.8
                 propSuperConvergence = nodeCount == 1 || score >= 0.9
 
-             in cover propReplication      70 "replicated any data"
-              . cover propChainGrowth      75 "have more than one block"
-              . cover propSuperConvergence 70 "have super convergence"
-              . cover propHighConvergence  80 "have high convergence"
-              . cover propMajConvergence   95 "have majority convergence"
+             in cover 70.0 propReplication      "replicated any data"
+              . cover 75.0 propChainGrowth      "have more than one block"
+              . cover 70.0 propSuperConvergence "have super convergence"
+              . cover 80.0 propHighConvergence  "have high convergence"
+              . cover 95.0 propMajConvergence   "have majority convergence"
               . counterexample (T.unpack $ prettyCounterexample tn' replicatedTxs score)
               $ propLowConvergence
 

@@ -16,6 +16,7 @@ extra-deps:
 - formatting-6.3.7 # Handy to have a Buildable [a] instance
 - pretty-terminal-0.1.0.0
 - tasty-fail-fast-0.0.3
+- QuickCheck-2.12.6.1
 
 - git: http://git.oscoin.io/radicle
   commit: 12707c83663909d303e4daf1806f22a779be7598

@@ -83,10 +83,10 @@ genBlockchainFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
                   => Block tx s
                   -> Gen (Blockchain tx s)
 genBlockchainFrom parentBlock = sized $ \n -> do
-    snd <$> foldM (\(currentTip, chain) _ -> do
-               newTip <- genBlockFrom currentTip
-               pure (newTip, newTip |> chain)
-            ) (parentBlock, unsafeToBlockchain [parentBlock]) [1 .. n]
+    foldM (\chain _ -> do
+               newTip <- genBlockFrom (tip chain)
+               pure (newTip |> chain)
+          ) (unsafeToBlockchain [parentBlock]) [1 .. n]
 
 -- | Generates a bunch of chain \"candidates\" to be used in more articulated
 -- tests wanting to assess the resilience of fork selection. Here is the
@@ -137,9 +137,9 @@ genOrphanChainsFrom :: forall tx s. (Arbitrary tx, Arbitrary s, Serialise s, Ser
                     -- the missing link that, upon insertion, will
                     -- yield a fork.
 genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
-    let blks = reverse . toList . blocks $ inputChain
-    events <- genChainEvents (length blks) forkParams
-    go (zip events blks) [] -- Starts with genesis first
+    let genesisFirst = reverse . toList . blocks $ inputChain
+    events <- genChainEvents (length genesisFirst) forkParams
+    go (zip events genesisFirst) [] -- Starts with genesis first
     where
         go :: [(ChainEvent, Block tx s)]
            -> [(Blockchain tx s, Block tx s)]
