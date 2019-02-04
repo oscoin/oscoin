@@ -12,7 +12,6 @@ module Oscoin.Storage.Block.Abstract
     , noValidation
     , defaultScoreFunction
     , insertBlocksNaive
-    , blocksScore
     ) where
 
 import           Oscoin.Prelude
@@ -61,7 +60,3 @@ defaultScoreFunction = fromDifficulty . blockTargetDifficulty . blockHeader
 -- can decide how to implement it efficiently.
 insertBlocksNaive :: Monad m => BlockStore tx s m -> [Block tx s] -> m ()
 insertBlocksNaive bs = traverse_ (insertBlock bs) . reverse
-
--- | Given a list of blocks, computes the total 'Score'.
-blocksScore :: BlockStore tx s m -> [Block tx s] -> Score
-blocksScore bs = foldl' (\acc b -> acc + scoreBlock bs b) 0

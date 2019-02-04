@@ -91,19 +91,13 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m
     {-# INLINE subscribe #-}
 
 instance (Monad m, MonadIO m) => MonadBlockStore tx s (NodeT tx st s i m) where
-    storeBlock blk = withBlockStore (`Abstract.insertBlock` blk)
-
-    lookupBlock h = withBlockStore (`Abstract.lookupBlock` h)
-
-    lookupTx   h = withBlockStore (`Abstract.lookupTx` h)
-
+    storeBlock blk  = withBlockStore (`Abstract.insertBlock` blk)
+    lookupBlock h   = withBlockStore (`Abstract.lookupBlock` h)
+    lookupTx   h    = withBlockStore (`Abstract.lookupTx` h)
     getGenesisBlock = withBlockStore Abstract.getGenesisBlock
-
-    getOrphans = withBlockStore Abstract.getOrphans
-
+    getOrphans      = withBlockStore Abstract.getOrphans
     getBlocks depth = withBlockStore (`Abstract.getBlocks` depth)
-
-    getTip = withBlockStore Abstract.getTip
+    getTip          = withBlockStore Abstract.getTip
 
     {-# INLINE storeBlock     #-}
     {-# INLINE lookupBlock    #-}

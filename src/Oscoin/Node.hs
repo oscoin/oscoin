@@ -54,15 +54,16 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
 import           Lens.Micro ((^.))
 
-withNode :: Config
-         -> i
-         -> Mempool.Handle tx
-         -> StateStore.Handle st
-         -> Abstract.BlockStore tx s IO
-         -> Evaluator st tx Rad.Value
-         -> Consensus tx s (NodeT tx st s i IO)
-         -> (Handle tx st s i -> IO c)
-         -> IO c
+withNode
+    :: Config
+    -> i
+    -> Mempool.Handle tx
+    -> StateStore.Handle st
+    -> Abstract.BlockStore tx s IO
+    -> Evaluator st tx Rad.Value
+    -> Consensus tx s (NodeT tx st s i IO)
+    -> (Handle tx st s i -> IO c)
+    -> IO c
 withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     bracket open close
   where
