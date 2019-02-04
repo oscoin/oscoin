@@ -6,7 +6,7 @@ module Oscoin.Test.Storage.Block.SQLite.Blackbox
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blocks, height, txPayload)
+                 (Blockchain(..), blocks, chainLength, txPayload)
 import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
@@ -104,7 +104,7 @@ testGetBlocks (block, chain) h = do
     -- This orphan block shouldn't be returned by 'maximumChainBy'.
     Abstract.insertBlock h block
 
-    blks' <- Abstract.getBlocks h (fromIntegral $ height chain)
+    blks' <- Abstract.getBlocks h (fromIntegral $ chainLength chain)
 
     blocks chain @?= blks'
 
