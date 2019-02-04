@@ -7,6 +7,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain
                  ( Blockchain(..)
                  , blocks
+                 , chainLength
                  , emptyGenesisBlock
                  , height
                  , takeBlocks
@@ -213,7 +214,7 @@ testGetBlocks (block, chain) h = do
     -- This orphan block shouldn't be returned by 'maximumChainBy'.
     storeBlock h block
 
-    blks' <- getBlocks h (fromIntegral $ height chain)
+    blks' <- getBlocks h (fromIntegral $ chainLength chain)
 
     blocks chain @?= blks'
 

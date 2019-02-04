@@ -10,6 +10,7 @@ module Oscoin.Crypto.Blockchain
     , blocks
     , takeBlocks
     , height
+    , chainLength
     , lookupTx
     , showBlockDigest
     , showChainDigest
@@ -70,8 +71,15 @@ genesis = NonEmpty.last . fromBlockchain
 fromGenesis :: Block tx s -> Blockchain tx s
 fromGenesis g = Blockchain (g :| [])
 
+-- | Returns the height of the chain. That is, the number of blocks not including
+-- the genesis. A 'Blockchain' with only a genesis block will thus have a height
+-- of zero.
 height :: Blockchain tx s -> Height
-height = fromIntegral . length . fromBlockchain
+height chain = fromIntegral $ chainLength chain - 1
+
+-- | Returns the length of a chain, or total number of blocks including the genesis.
+chainLength :: Blockchain tx s -> Int
+chainLength = NonEmpty.length . fromBlockchain
 
 -- | Scoring function for blockchains.
 type ScoringFunction tx s = Blockchain tx s -> Blockchain tx s -> Ordering
