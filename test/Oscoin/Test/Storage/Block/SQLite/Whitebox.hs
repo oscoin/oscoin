@@ -79,7 +79,7 @@ testGetScore :: Blockchain RadTx DummySeal
              -> Sqlite.Handle RadTx DummySeal
              -> Assertion
 testGetScore chain h = do
-    storeBlockchain' h (initDef [] $ blocks chain)
+    traverse_ (storeBlock h) (reverse $ initDef [] $ blocks chain)
 
     score <- getChainScore (hConn h)
     score @?= sum (map blockScore (blocks chain))

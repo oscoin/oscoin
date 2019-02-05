@@ -1,9 +1,16 @@
-module Oscoin.Storage.Block.Orphanage where
-    -- ( Orphanage
-    -- , emptyOrphanage
-    -- , insertOrphan
-    -- , ChainCandidate
-    -- ) where
+module Oscoin.Storage.Block.Orphanage
+    ( Orphanage -- opaque
+    , BlockWithScore(..)
+    , emptyOrphanage
+    , getOrphans
+    , insertOrphan
+    , getCandidateScore
+    , toBlocksOldestFirst
+    , selectBestCandidate
+    , pruneOrphanage
+    -- * Internal use only
+    , ChainCandidate(..)
+    ) where
 
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
@@ -126,6 +133,9 @@ snocBlock BlockWithScore{..} cc =
 emptyOrphanage :: Orphanage tx s
 emptyOrphanage = Orphanage mempty mempty mempty
 
+getOrphans :: Orphanage tx s -> Set BlockHash
+getOrphans = Map.keysSet . orphans
+
 -- | Given a block on the main chain, selects the best-scoring
 -- 'ChainCandidate' which would extend the chain from that given block.
 selectBestCandidate :: BlockHash -> Orphanage tx s -> Maybe ChainCandidate
@@ -181,6 +191,13 @@ storeOrphan :: BlockWithScore tx s -> Orphanage tx s -> Orphanage tx s
 storeOrphan bws o =
     let bHash = blockHash . bsBlock $ bws
     in o { orphans = Map.insert bHash (bsBlock bws) (orphans o) }
+
+-- | Given a candidate which won, delete the orphans from the store and
+-- the chain from the candidates
+pruneOrphanage :: BlockHash -> ChainCandidate -> Orphanage tx s -> Orphanage tx s
+pruneOrphanage rootHash ChainCandidate{candidateChain} o =
+    let o' = o { orphans = foldl (\mp k -> Map.delete k mp) (orphans o) (toList candidateChain) }
+    in bulkDelete rootHash o'
 
 -- | Adds a new 'Block' to the 'Orphanage'. Three scenarios are possible:
 -- 1. This is a \"singleton\" 'Block', i.e. it doesn't extend any of the
@@ -305,15 +322,6 @@ replaceAt ix new xs
   | otherwise =
     let (excludesXs, rest) = List.splitAt ix xs
     in excludesXs <> [new] <> drop ix rest
-
-deleteAt :: Int -> [a] -> [a]
-deleteAt ix xs
-  | ix >= length xs = xs
-  | ix == 0 = drop 1 xs
-  | otherwise =
-    let (excludes, rest) = List.splitAt ix xs
-    in excludes <> drop ix rest
-
 
 -- Temporary
 

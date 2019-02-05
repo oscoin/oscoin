@@ -12,7 +12,6 @@ module Oscoin.Storage.Block.SQLite.Internal
     , isStored
     , isConflicting
     , storeOrphan
-    , longestOrphanChain
     , getGenesisBlock
     , getTip
     , getBlockTxs
@@ -21,15 +20,15 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getChainSuffixScore
     , getChainHashes
     , getOrphans
-    , revertBlocks
-    , storeBlockchain'
+    , rollbackBlocks
     , storeBlock
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus (Validate, validateBlockchain)
-import           Oscoin.Crypto.Blockchain (Depth, blocks)
+import           Oscoin.Crypto.Blockchain
+                 (Depth, blocks, showChainDigest, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -38,8 +37,11 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHash
                  , isGenesisBlock
                  , mkBlock
+                 , parentHash
                  )
-import           Oscoin.Storage.Block.Orphanage hiding (storeOrphan)
+import           Oscoin.Storage.Block.Orphanage
+                 (BlockWithScore(..), ChainCandidate, Orphanage)
+import qualified Oscoin.Storage.Block.Orphanage as O
 import           Oscoin.Time (Timestamp)
 
 import           Paths_oscoin
@@ -77,7 +79,7 @@ open :: (Ord s, Ord tx)
      -> IO (Handle tx s)
 open path score validate =
     Handle <$> (Sql.open path >>= setupConnection)
-           <*> newTVarIO emptyOrphanage
+           <*> newTVarIO O.emptyOrphanage
            <*> pure score
            <*> pure validate
   where
@@ -116,108 +118,60 @@ isConflicting conn Block{blockHeader} =
         (Only $ blockPrevHash blockHeader)
 
 -- | Store a block, along with its transactions in the block store.
-storeBlock :: forall tx s. (ToField s, FromRow tx, ToRow tx, Ord tx, Serialise s, FromField s, Ord s) => Handle tx s -> Block tx s -> IO ()
+storeBlock
+    :: forall tx s.
+        ( ToField s
+        , FromRow tx
+        , ToRow tx
+        , Ord tx
+        , Serialise s
+        , FromField s
+        , Ord s
+        , Show s
+        , Show tx
+        ) => Handle tx s -> Block tx s -> IO ()
 storeBlock h@Handle{..} blk = do
-    let prevHash = blockPrevHash $ blockHeader blk
+    let prevHash = parentHash blk
     orphans <- atomically (readTVar hOrphans)
     Sql.withTransaction hConn $ do
         blockExists       <- isStored hConn $ blockHash blk
+        parentOnMainChain <- isStored hConn prevHash
         blockConflicts    <- isConflicting hConn blk
         currentTip        <- getTip h
+        putStrLn ("\nblock: "  ++ show (blockHash blk))
+        putStrLn ("\ncurrent_tip: "  ++ show (blockHash currentTip))
+        putStrLn ("\nparent: " ++ show prevHash)
         if not blockExists && extendsTip currentTip blk && not blockConflicts
            then storeBlock' h blk
            else do
-               let o' = insertOrphan (BlockWithScore blk (hScoreFn blk)) orphans
-               case selectBestCandidate prevHash o' of
-                 Nothing -> atomically $ writeTVar hOrphans o'
-                 Just bc -> do
-                     -- Compare the orphan best chain with the chain suffix
-                     -- currently adopted
-                     chainSuffix <- getChainSuffix hConn prevHash
-                     if (sum . map hScoreFn $ chainSuffix) < getCandidateScore bc
-                        then do
-                            revertBlocks hConn prevHash
-                            storeBlockchain' h (reverse $ toBlocksOldestFirst o' bc) -- temporary reverse.
-                            atomically  $ writeTVar hOrphans (bulkDelete prevHash o')
-                        else atomically $ writeTVar hOrphans o'
+               let o' = O.insertOrphan (BlockWithScore blk (hScoreFn blk)) orphans
+               if parentOnMainChain
+                  then case O.selectBestCandidate prevHash o' of
+                           Nothing -> atomically $ writeTVar hOrphans o'
+                           Just bc -> do
+                               -- Compare the orphan best chain with the chain suffix
+                               -- currently adopted
+                               chainSuffix <- getChainSuffix hConn prevHash
+                               if (sum . map hScoreFn $ chainSuffix) < O.getCandidateScore bc
+                                  then do
+                                      putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
+                                      rollbackBlocks hConn prevHash
+                                      putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
+                                      putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
+                                      storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
+                                      atomically  $ writeTVar hOrphans (O.pruneOrphanage prevHash bc o')
+                                  else atomically $ writeTVar hOrphans o'
+                  else atomically $ writeTVar hOrphans o'
   where
     extendsTip :: Block tx s -> Block tx s -> Bool
-    extendsTip currentTip blk = blockHash currentTip == (blockPrevHash . blockHeader $ blk)
-  -- where
-  --       blockExists       <- isStored hConn $ blockHash blk
-  --       blockParentExists <- isStored hConn $
-  --       blockConflicts    <- isConflicting hConn blk
-
-  --       -- FIXME(adn) This logic should all be factored out the store, as it's
-  --       -- a different concern.
-  --       unless blockExists $ do
-
-
-  --           if blockParentExists && not blockConflicts
-  --           then
-  --               storeBlock' h blk
-  --           else do
-  --               storeOrphan h blk
-  --               findBestChain
-  -- where
-  --   chainScore score =
-  --       sum . map score
-
-  --   -- Look through the orphans for any chain that is higher scoring than the
-  --   -- main chain, and replace the low scoring blocks on the main chain with
-  --   -- the higher scoring ones.
-  --   --
-  --   -- Nb. This has shortcomings, namely that only the best chain from the
-  --   -- point of view of the orphan set is compared with the main chain. It
-  --   -- may be that a worse-scoring orphan chain is able to replace the suffix
-  --   -- of the main chain simply by virtue of having a more recent parent,
-  --   -- and therefore requiring a lower score to outperform the main chain suffix.
-  --   --
-  --   -- To solve this, we either need to check all orphan chains above a certain
-  --   -- score against the main chain, or evict old orphan chains that haven't
-  --   -- won against the main chain.
-  --   findBestChain = do
-  --       orphanChain <- longestOrphanChain h
-
-  --       case lastMay (toList orphanChain) of
-  --           Just b | parentHash <- blockPrevHash (blockHeader b) ->
-  --               whenM (isStored hConn parentHash) $ do
-  --                   suffixScore <- getChainSuffixScore hConn parentHash
-
-  --                   let orphanScore = chainScore hScoreFn orphanChain
-  --                    in when (orphanScore > suffixScore) $ do
-  --                       revertBlocks hConn parentHash
-  --                       storeBlockchain' h orphanChain
-  --                       -- deleteOrphans h orphanChain
-  --           _ ->
-  --               pass
-
+    extendsTip currentTip blk = blockHash currentTip == (parentHash blk)
 
 -- | Store an orphan in memory.
+-- FIXME(adn) This is a bit of an abstraction leak, remove this function in
+-- the future.
 storeOrphan :: (Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
 storeOrphan Handle{..} b =
-    atomically . modifyTVar hOrphans . insertOrphan $ (BlockWithScore b (hScoreFn b))
-
--- | Finds the longest orphan chain according to the scoring function in `Handle`.
-longestOrphanChain :: Handle tx s -> IO [Block tx s]
-longestOrphanChain Handle{..} = undefined
-    {-
-    -- Sorts all orphan blocks by timestamp, and checks all subsequences for
-    -- validity. Then choses the subsequence with the highest score as the
-    -- result.
-      longest
-    . filter (isRight . validateBlockchain hValidFn)
-    . map fromList
-    . tailDef []
-    . subsequences
-    . sortOn (Down . blockTimestamp . blockHeader)
-    . Set.toList <$> readTVarIO hOrphans
-  where
-    score = sum . map hScoreFn . blocks
-
-    longest [] = []
-    longest xs = blocks $ maximumBy (comparing score) xs
--}
+    atomically . modifyTVar hOrphans . O.insertOrphan $ (BlockWithScore b (hScoreFn b))
 
 getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Connection -> IO (Block tx s)
 getGenesisBlock conn = do
@@ -276,10 +230,11 @@ getChainHashes conn =
 
 getOrphans :: Handle tx s -> IO (Set BlockHash)
 getOrphans Handle{..} =
-    Map.keysSet . orphans <$> readTVarIO hOrphans
+    O.getOrphans <$> readTVarIO hOrphans
 
-revertBlocks :: Connection -> BlockHash -> IO ()
-revertBlocks conn hsh = do
+-- | Rollback the blocks from the given 'BlockHash' (excluded) up to the tip.
+rollbackBlocks :: Connection -> BlockHash -> IO ()
+rollbackBlocks conn hsh = do
     result <- lookupBlockTimestamp conn hsh
     case result of
         Just t ->
@@ -288,8 +243,10 @@ revertBlocks conn hsh = do
         Nothing ->
             pure ()
 
-storeBlockchain' :: (ToRow tx, ToField s) => Handle tx s -> [Block tx s] -> IO ()
-storeBlockchain' h = traverse_ (storeBlock' h) . reverse
+-- | When given a list of blocks ordered by /oldest first/, it inserts them
+-- into the store.
+storeBlocksOldestFirst :: (ToRow tx, ToField s) => Handle tx s -> [Block tx s] -> IO ()
+storeBlocksOldestFirst h = traverse_ (storeBlock' h)
 
 lookupBlockTimestamp :: Connection -> BlockHash -> IO (Maybe Timestamp)
 lookupBlockTimestamp conn hsh =

@@ -118,7 +118,7 @@ apiCheck (store1, store2) apiCall = do
                          _          -> "(unknown)"
         in List.unlines [
                  "api call at " <> calledAt <> " yielded a result mismatch!\n"
-               , "store1 = " <> T.unpack (condensed res1) <> "\n"
-               , "store2 = " <> T.unpack (condensed res2) <> "\n"
+               , "sqlStore  = " <> T.unpack (condensed res1) <> "\n"
+               , "pureStore = " <> T.unpack (condensed res2) <> "\n"
                , "Counterexample is:"
                ]

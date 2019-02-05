@@ -6,7 +6,6 @@ module Oscoin.Test.Storage.Block.Orphanage
 import           Oscoin.Prelude
 
 import           Codec.Serialise
-import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 
 import           Oscoin.Crypto.Blockchain
@@ -44,7 +43,7 @@ propInsertOrphans = do
     forAllShow (genOrphanChainsFrom forkParams initialChain) showIt $ \chains ->
         monadic runIdentity $ do
             ps <- forM chains $ \(orphanChain, _missingLink) -> do
-                     let actual = Map.keys (orphans $ insertOrphans (blocks orphanChain) orphanage)
+                     let actual = toList $ getOrphans (insertOrphans (blocks orphanChain) orphanage)
                      pure (sort actual === sort (map blockHash (blocks orphanChain)))
             pure $ foldl (.&&.) (property True) ps
 
