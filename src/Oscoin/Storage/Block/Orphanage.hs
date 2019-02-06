@@ -200,9 +200,7 @@ bulkInsert ptr newChains o =
 
 -- | Stores the orphan block into the internal storage.
 storeOrphan :: Block tx s -> Orphanage tx s -> Orphanage tx s
-storeOrphan b o =
-    let bHash = blockHash b
-    in o { orphans = Map.insert bHash b (orphans o) }
+storeOrphan b o = o { orphans = Map.insert (blockHash b) b (orphans o) }
 
 -- | Given a candidate which won, delete the orphans from the store and
 -- the chain from the candidates

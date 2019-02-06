@@ -77,11 +77,11 @@ propForksInsertGetTipEquivalence = do
                 putStrLn ("=====> New orphan round starting (round " ++ show ix ++ ")")
                 -- Step 2: Store the orphan chains
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks orphans))
-                p2 <- apiCheck stores Abstract.getOrphans
+                -- p2 <- apiCheck stores Abstract.getOrphans
                 -- Step 3: Add the missing link and check the tip
                 p3 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
                 p4 <- apiCheck stores Abstract.getTip
-                pure [p1,p2,p3,p4]
+                pure [p1,p3,p4]
             pure $ foldl (.&&.) p0 (mconcat ps)
 
 {------------------------------------------------------------------------------

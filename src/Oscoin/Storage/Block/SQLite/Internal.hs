@@ -130,43 +130,71 @@ storeBlock
         ) => Handle tx s -> Block tx s -> IO ()
 storeBlock h@Handle{..} blk = do
     let prevHash = parentHash blk
-    orphans <- atomically (readTVar hOrphans)
     Sql.withTransaction hConn $ do
         blockExists        <- isStored hConn $ blockHash blk
         blockConflicts     <- isConflicting hConn blk
         currentTip         <- getTip h
-        mutableBlockHashes <- reverse <$> getChainHashes hConn 2016 -- FIXME(adn) temporary hack.
-        -- putStrLn ("\nblock: "  ++ show (blockHash blk))
-        -- putStrLn ("\ncurrent_tip: "  ++ show (blockHash currentTip))
-        -- putStrLn ("\nparent: " ++ show prevHash)
-        if not blockExists && extendsTip currentTip blk && not blockConflicts
-           then storeBlock' h blk
-           else do
-               let o' = O.insertOrphan blk orphans
-               case catMaybes (map (\h -> (h,) <$> O.selectBestCandidate h o') mutableBlockHashes) of
-                   [] -> atomically $ writeTVar hOrphans o'
-                   potentialChains -> forM_ potentialChains $ \(rootHash, bc) -> do
-                       -- putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
-                       -- Compare the orphan best chain with the chain suffix
-                       -- currently adopted
-                       chainSuffix <- getChainSuffix hConn rootHash
-                       if (O.fromChainSuffix hScoreFn chainSuffix < bc)
-                          then do
-                              -- putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
-                              rollbackBlocks hConn rootHash
-                              -- putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
-                              storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
-                              -- Prune the chain which won.
-                              atomically $ writeTVar hOrphans (O.pruneOrphanage rootHash bc o')
-                          else atomically $ writeTVar hOrphans o'
+
+        putStrLn ("\nblock: "  ++ show (blockHash blk))
+        putStrLn ("current_tip: "  ++ show (blockHash currentTip))
+        putStrLn ("parent: " ++ show prevHash)
+
+        if (not blockExists && extendsTip currentTip && not blockConflicts)
+            then storeBlock' h blk
+            else storeOrphan h blk
+
+        -- Fork selection starts now.
+        selectBestChain h
   where
-    extendsTip :: Block tx s -> Block tx s -> Bool
-    extendsTip currentTip blk = blockHash currentTip == (parentHash blk)
+    extendsTip :: Block tx s -> Bool
+    extendsTip currentTip = blockHash currentTip == parentHash blk
+
+selectBestChain
+    :: ( FromRow tx
+       , Serialise s
+       , FromField s
+       , ToField s
+       , ToRow tx
+       )
+    => Handle tx s -> IO ()
+selectBestChain h@Handle{..} = do
+    mutableBlockHashes <- reverse <$> getChainHashes hConn 2016 -- FIXME(adn) temporary hack.
+    orphans <- atomically (readTVar hOrphans)
+
+    case sortBy (comparing Down) . catMaybes $ (map (\h -> (h,) <$> O.selectBestCandidate h orphans) mutableBlockHashes) of
+        [] -> putStrLn ("no suitable candidate found." :: String)
+        ((rootHash,bc):_) -> do
+            -- Compare the orphan best chain with the chain suffix currently adopted
+            chainSuffix <- getChainSuffix hConn rootHash
+            putStrLn $ "root_hash: " ++ show rootHash
+            putStrLn $ "candidate: " ++ toS (showChain (reverse $ O.toBlocksOldestFirst orphans bc))
+            putStrLn $ "suffix: " ++ toS (showChain chainSuffix)
+
+            when (O.fromChainSuffix hScoreFn chainSuffix < bc) $
+                switchToFork rootHash bc orphans chainSuffix
+
+  where
+    showChain [] = "[]"
+    showChain bs = showChainDigest (unsafeToBlockchain bs) <> toS ("@Score=" ++ show (sum (map hScoreFn bs)))
+
+    switchToFork rootHash fork orphans chainSuffix = do
+        putStrLn ("switching chains..." :: String)
+        rollbackBlocks hConn (fromIntegral $ length chainSuffix)
+        storeBlocksOldestFirst h (O.toBlocksOldestFirst orphans fork)
+        getTip h >>= \newTip -> putStrLn $ "tip now: " ++ show (blockHash newTip)
+        -- Prune the chain which won, /as well as/ every dangling orphan
+        -- originating from the suffix chain which has been replaced.
+        atomically $ writeTVar hOrphans $
+              foldl (\acc blockInSuffix ->
+                         O.pruneOrphanage (blockHash blockInSuffix)
+                                          (O.fromChainSuffix hScoreFn [blockInSuffix])
+                                          $ acc
+                    ) (O.pruneOrphanage rootHash fork orphans) chainSuffix
+
 
 -- | Store an orphan in memory.
--- FIXME(adn) This is a bit of an abstraction leak, remove this function in
--- the future, or at least do not export it.
-storeOrphan :: (Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
+-- FIXME(adn) Make this function internal.
+storeOrphan :: Handle tx s -> Block tx s -> IO ()
 storeOrphan Handle{..} = atomically . modifyTVar hOrphans . O.insertOrphan
 
 getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Connection -> IO (Block tx s)
@@ -228,16 +256,13 @@ getOrphans :: Handle tx s -> IO (Set BlockHash)
 getOrphans Handle{..} =
     O.getOrphans <$> readTVarIO hOrphans
 
--- | Rollback the blocks from the given 'BlockHash' (excluded) up to the tip.
-rollbackBlocks :: Connection -> BlockHash -> IO ()
-rollbackBlocks conn hsh = do
-    result <- lookupBlockTimestamp conn hsh
-    case result of
-        Just t ->
-            Sql.execute conn
-                [sql| DELETE FROM blocks WHERE timestamp > ? |] (Only t)
-        Nothing ->
-            pure ()
+-- | Rollback 'n' blocks.
+rollbackBlocks :: Connection -> Depth -> IO ()
+rollbackBlocks conn (fromIntegral -> depth :: Integer) = do
+    Sql.execute conn
+        [sql| DELETE FROM blocks WHERE hash IN
+              (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)
+        |] (Only depth)
 
 -- | When given a list of blocks ordered by /oldest first/, it inserts them
 -- into the store.
