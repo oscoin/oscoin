@@ -7,8 +7,10 @@ module Oscoin.Test.Storage.Block.SQLite.Whitebox
 
 import           Oscoin.Prelude
 
+import           Codec.Serialise
+
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blocks, height, takeBlocks)
+                 (Blockchain(..), blocks, height, showChainDigest, takeBlocks)
 import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
@@ -18,10 +20,11 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
                  (arbitraryValidBlockWith, arbitraryValidBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
+import           Oscoin.Test.Storage.Block.Generators
 import           Oscoin.Test.Storage.Block.SQLite
 
 import           Test.Tasty
-import           Test.Tasty.HUnit.Extended
+import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
 tests :: [TestTree]
@@ -56,20 +59,30 @@ genTestFork1 genesisBlock = do
 genTestFork2 :: Block RadTx DummySeal
              -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
 genTestFork2 genesisBlock = do
-    blk  <- withDifficulty (encodeDifficulty 3)
-        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
-    -- The first conflicting block we add doesn't have enough score.
-    blk1 <- withDifficulty (encodeDifficulty 2)
-        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
-    -- The second one plus the first do.
-    blk2 <- withDifficulty (encodeDifficulty 2)
-        <$> arbitraryValidBlockWith (blockHeader blk1) []
-    pure (blk, blk1, blk2)
+    blk   <- genBlockFrom genesisBlock
+    chain <- resize 3 (genBlockchainFrom genesisBlock)
+    case (reverse $ blocks chain) of
+      [_genesis, b1,b2] -> do
+          -- The first conflicting block we add doesn't have enough score.
+          blk1 <- withDifficulty (Difficulty $ blockScore blk - 1) <$> pure b1
+          -- The second one plus the first do.
+          blk2 <- withDifficulty 2 <$> pure b2
+          pure (blk, blk1, linkParent blk1 blk2)
+      _ -> panic ("genTestFork2: invalid generated list :" <> showChainDigest chain)
 
 -- | Generates a 'Blockchain' with at least six blocks.
 genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
 genAtLeastSixBlocks genesisBlock =
     arbitraryValidBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
+
+-- | NOTE(adn) This function is better used sparingly, as changing the
+-- 'Difficulty' after the block has been forged also changes its hash and might
+-- generate invalid chains if one forget to call 'linkParent'.
+withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
+withDifficulty d blk =
+    blk { blockHeader = header, blockHash = headerHash header }
+  where
+    header = (blockHeader blk) { blockTargetDifficulty = d }
 
 {------------------------------------------------------------------------------
   The tests proper
@@ -119,7 +132,7 @@ testFork1 (blk, blk') h = do
     storeBlock h blk
     storeBlock h blk'
 
-    hashes <- getChainHashes (hConn h)
+    hashes <- getChainHashes (hConn h) 2
     hashes @?= [blockHash blk', blockHash gen]
 
     -- The chain score shouldn't include the first block we added, since it was
@@ -142,7 +155,7 @@ testFork2 (blk, blk1, blk2) h@Sqlite.Handle{..} = do
     storeBlock h blk2
 
     -- `blk` is not part of the best chain anymore.
-    hashes <- getChainHashes hConn
+    hashes <- getChainHashes hConn 3
     hashes @?= [blockHash blk2, blockHash blk1, blockHash gen]
 
     -- The orphans list has been purged.

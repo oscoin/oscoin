@@ -60,7 +60,6 @@ import qualified Database.SQLite3 as Sql3
 import           Codec.Serialise
 import           Control.Concurrent.STM
 import qualified Data.Set as Set
-import           GHC.Exts (IsList(fromList))
 
 -- | A handle to an on-disk block store.
 data Handle tx s = Handle
@@ -133,33 +132,33 @@ storeBlock h@Handle{..} blk = do
     let prevHash = parentHash blk
     orphans <- atomically (readTVar hOrphans)
     Sql.withTransaction hConn $ do
-        blockExists       <- isStored hConn $ blockHash blk
-        parentOnMainChain <- isStored hConn prevHash
-        blockConflicts    <- isConflicting hConn blk
-        currentTip        <- getTip h
-        putStrLn ("\nblock: "  ++ show (blockHash blk))
-        putStrLn ("\ncurrent_tip: "  ++ show (blockHash currentTip))
-        putStrLn ("\nparent: " ++ show prevHash)
+        blockExists        <- isStored hConn $ blockHash blk
+        blockConflicts     <- isConflicting hConn blk
+        currentTip         <- getTip h
+        mutableBlockHashes <- reverse <$> getChainHashes hConn 2016 -- FIXME(adn) temporary hack.
+        -- putStrLn ("\nblock: "  ++ show (blockHash blk))
+        -- putStrLn ("\ncurrent_tip: "  ++ show (blockHash currentTip))
+        -- putStrLn ("\nparent: " ++ show prevHash)
         if not blockExists && extendsTip currentTip blk && not blockConflicts
            then storeBlock' h blk
            else do
                let o' = O.insertOrphan blk orphans
-               if parentOnMainChain
-                  then case O.selectBestCandidate prevHash o' of
-                           Nothing -> atomically $ writeTVar hOrphans o'
-                           Just bc -> do
-                               -- Compare the orphan best chain with the chain suffix
-                               -- currently adopted
-                               chainSuffix <- getChainSuffix hConn prevHash
-                               when (O.fromChainSuffix hScoreFn chainSuffix < bc) $ do
-                                   putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
-                                   rollbackBlocks hConn prevHash
-                                   putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
-                                   putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
-                                   storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
-                               -- Either ways, we need to prune the chain which didn't won.
-                               atomically $ writeTVar hOrphans (O.pruneOrphanage prevHash bc o')
-                  else atomically $ writeTVar hOrphans o'
+               case catMaybes (map (\h -> (h,) <$> O.selectBestCandidate h o') mutableBlockHashes) of
+                   [] -> atomically $ writeTVar hOrphans o'
+                   potentialChains -> forM_ potentialChains $ \(rootHash, bc) -> do
+                       -- putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
+                       -- Compare the orphan best chain with the chain suffix
+                       -- currently adopted
+                       chainSuffix <- getChainSuffix hConn rootHash
+                       if (O.fromChainSuffix hScoreFn chainSuffix < bc)
+                          then do
+                              -- putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
+                              rollbackBlocks hConn rootHash
+                              -- putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
+                              storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
+                              -- Prune the chain which won.
+                              atomically $ writeTVar hOrphans (O.pruneOrphanage rootHash bc o')
+                          else atomically $ writeTVar hOrphans o'
   where
     extendsTip :: Block tx s -> Block tx s -> Bool
     extendsTip currentTip blk = blockHash currentTip == (parentHash blk)
@@ -220,10 +219,10 @@ getChainSuffixScore conn hsh = do
         Nothing ->
             pure 0
 
-getChainHashes :: Connection -> IO [BlockHash]
-getChainHashes conn =
+getChainHashes :: Connection -> Depth -> IO [BlockHash]
+getChainHashes conn (fromIntegral -> depth :: Integer) =
     map fromOnly <$>
-        Sql.query_ conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC |]
+      Sql.query conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC LIMIT ? |] (Only depth)
 
 getOrphans :: Handle tx s -> IO (Set BlockHash)
 getOrphans Handle{..} =

@@ -87,7 +87,7 @@ genBlockchainFrom parentBlock = sized $ \n -> do
     foldM (\chain _ -> do
                newTip <- genBlockFrom (tip chain)
                pure (newTip |> chain)
-          ) (unsafeToBlockchain [parentBlock]) [1 .. n]
+          ) (unsafeToBlockchain [parentBlock]) [1 .. n - 1]
 
 -- | Generates a bunch of chain \"candidates\" to be used in more articulated
 -- tests wanting to assess the resilience of fork selection. Here is the

@@ -157,7 +157,7 @@ selectBestCandidate blockOnMainChain o =
         Just []    -> Nothing
         Just (c:_) -> Just c
 
--- | /O(1)/ Evits the candidates branching off the input block hash from the 'Orphanage'.
+-- | /O(m)/ Evicts the candidates branching off the input block hash from the 'Orphanage'.
 bulkDelete :: BlockHash -> Orphanage tx s -> Orphanage tx s
 bulkDelete bHash o =
     o { candidates = candidates' (candidates o)
@@ -177,9 +177,9 @@ bulkDelete bHash o =
               Nothing          -> oldTips
               Just staleChains -> foldl' updateFn oldTips staleChains
 
--- | /O(1)/ Inserts the candidates branching off the input block hash from the 'Orphanage'.
+-- | /O(m)/ Inserts the candidates branching off the input block hash from the 'Orphanage'.
 -- NOTE(adn) This function is ought to be internal and just called /after/ the its dual
--- 'deleteCandidates'. This is used inside 'insertOrphans' to prune and replace
+-- 'bulkDelete'. This is used inside 'insertOrphans' to prune and replace
 -- candidates for which the parent block has changed.
 bulkInsert :: ChainPointer -> Candidates -> Orphanage tx s -> Orphanage tx s
 bulkInsert ptr newChains o =

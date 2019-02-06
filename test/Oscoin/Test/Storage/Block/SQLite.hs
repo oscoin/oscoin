@@ -4,21 +4,12 @@ module Oscoin.Test.Storage.Block.SQLite
     , DummySeal
     , withSqliteDB
     , withMemStore
-    , withDifficulty
     ) where
 
 import           Oscoin.Prelude
 
-import           Codec.Serialise
-
 import           Oscoin.Crypto.Blockchain
-                 ( Difficulty
-                 , blockScore
-                 , blockTargetDifficulty
-                 , emptyGenesisBlock
-                 , headerHash
-                 , sealBlock
-                 )
+                 (blockScore, emptyGenesisBlock, sealBlock)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block(..), blockTimestamp, linkParent)
 import           Oscoin.Data.RadicleTx
@@ -60,7 +51,7 @@ withSqliteDB :: Show a
              -> Property
 withSqliteDB genTestData action = once $ monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
-    liftIO $
+    liftIO $ do
         bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
                 close
                 (action testData)
@@ -78,9 +69,3 @@ withMemStore genTestData action = once $ monadicIO $ do
         Sqlite.withBlockStore ":memory:" defaultGenesis blockScore blockValidate $ action testData
   where
     blockValidate _ _ = Right ()
-
-withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
-withDifficulty d blk =
-    blk { blockHeader = header, blockHash = headerHash header }
-  where
-    header = (blockHeader blk) { blockTargetDifficulty = d }

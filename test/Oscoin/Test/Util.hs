@@ -36,6 +36,12 @@ instance Condensed a => Condensed (Maybe a) where
     condensed Nothing  = "Nothing"
     condensed (Just x) = condensed x
 
+instance (Condensed a, Condensed b) => Condensed (a, b) where
+    condensed (a,b) = "(" <> condensed a <> "," <> condensed b <> ")"
+
+instance (Condensed a, Condensed b, Condensed c) => Condensed (a, b, c) where
+    condensed (a,b,c) = "(" <> condensed a <> "," <> condensed b <> "," <> condensed c <> ")"
+
 instance Condensed a => Condensed [a] where
     condensed xs = "[" <> T.intercalate "," (map condensed xs) <> "]"
 
@@ -44,6 +50,9 @@ instance Condensed BlockHash where
 
 instance Condensed (Block tx s) where
     condensed = showBlockDigest
+
+instance Condensed (Blockchain tx s) where
+    condensed = showChainDigest
 
 showOrphans :: (Blockchain RadTx s, [(Blockchain RadTx s, Block RadTx s)])
             -> String
