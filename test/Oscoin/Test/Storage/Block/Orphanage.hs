@@ -36,7 +36,7 @@ tests =
 
 propInsertOrphans :: Property
 propInsertOrphans = do
-    let orphanage    = emptyOrphanage
+    let orphanage    = emptyOrphanage blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,)
         forkParams = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
@@ -52,7 +52,7 @@ propInsertOrphans = do
 -- time there is /only one/ best chain to select.
 propSelectBestCandidateSingleChoice :: Property
 propSelectBestCandidateSingleChoice = do
-    let orphanage    = emptyOrphanage
+    let orphanage    = emptyOrphanage blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,)
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
@@ -79,7 +79,7 @@ propSelectBestCandidateSingleChoice = do
 -- recognise and fuse chain fragments.
 propSelectBestCandidateMultipleChoice :: Property
 propSelectBestCandidateMultipleChoice = do
-    let orphanage    = emptyOrphanage
+    let orphanage    = emptyOrphanage blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,) . map (\(a,_,c) -> (a,c))
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
@@ -100,7 +100,7 @@ firstAndLast (a,_,c) = (a,c)
 
 propSelectBestCandidateComplex :: Property
 propSelectBestCandidateComplex = do
-    let orphanage = emptyOrphanage
+    let orphanage = emptyOrphanage blockScore
         generator = do
             chain <- resize 15 $ genBlockchainFrom defaultGenesis
             orph  <- shuffledOrphanChains forkParams chain
@@ -135,7 +135,7 @@ shuffledOrphanChains params initialChain = do
 
 insertOrphans :: [Block tx s] -> Orphanage tx s -> Orphanage tx s
 insertOrphans xs o =
-    foldl' (\o' b -> insertOrphan (BlockWithScore b (blockScore b)) o') o xs
+    foldl' (\o' b -> insertOrphan b o') o xs
 
 bestChainOracle :: BlockHash
                 -- ^ The hash of the adopted block this chain originates from.

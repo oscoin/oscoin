@@ -70,9 +70,11 @@ propForksInsertGetTipEquivalence = do
             pure (chain, orph)
     forAllShow generator showOrphans $ \(chain, orphansWithLink) -> do
         ioProperty $ withStores $ \stores -> do
+            putStrLn ("=======> New round starting with new stores" :: String)
             -- Step 1: Store the chain in both stores.
             p0 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
-            ps <- forM orphansWithLink $ \(orphans, missingLink) -> do
+            ps <- forM (zip [1..] orphansWithLink) $ \(ix, (orphans, missingLink)) -> do
+                putStrLn ("=====> New orphan round starting (round " ++ show ix ++ ")")
                 -- Step 2: Store the orphan chains
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks orphans))
                 p2 <- apiCheck stores Abstract.getOrphans

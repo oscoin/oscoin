@@ -39,8 +39,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  , parentHash
                  )
-import           Oscoin.Storage.Block.Orphanage
-                 (BlockWithScore(..), ChainCandidate, Orphanage)
+import           Oscoin.Storage.Block.Orphanage (ChainCandidate, Orphanage)
 import qualified Oscoin.Storage.Block.Orphanage as O
 import           Oscoin.Time (Timestamp)
 
@@ -79,7 +78,7 @@ open :: (Ord s, Ord tx)
      -> IO (Handle tx s)
 open path score validate =
     Handle <$> (Sql.open path >>= setupConnection)
-           <*> newTVarIO O.emptyOrphanage
+           <*> newTVarIO (O.emptyOrphanage score)
            <*> pure score
            <*> pure validate
   where
@@ -144,7 +143,7 @@ storeBlock h@Handle{..} blk = do
         if not blockExists && extendsTip currentTip blk && not blockConflicts
            then storeBlock' h blk
            else do
-               let o' = O.insertOrphan (BlockWithScore blk (hScoreFn blk)) orphans
+               let o' = O.insertOrphan blk orphans
                if parentOnMainChain
                   then case O.selectBestCandidate prevHash o' of
                            Nothing -> atomically $ writeTVar hOrphans o'
@@ -152,15 +151,14 @@ storeBlock h@Handle{..} blk = do
                                -- Compare the orphan best chain with the chain suffix
                                -- currently adopted
                                chainSuffix <- getChainSuffix hConn prevHash
-                               if (sum . map hScoreFn $ chainSuffix) < O.getCandidateScore bc
-                                  then do
-                                      putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
-                                      rollbackBlocks hConn prevHash
-                                      putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
-                                      putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
-                                      storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
-                                      atomically  $ writeTVar hOrphans (O.pruneOrphanage prevHash bc o')
-                                  else atomically $ writeTVar hOrphans o'
+                               when (O.fromChainSuffix hScoreFn chainSuffix < bc) $ do
+                                   putStrLn $ "\nsuffix: " ++ toS (showChainDigest $ unsafeToBlockchain chainSuffix)
+                                   rollbackBlocks hConn prevHash
+                                   putStrLn $ "\ncandidate_raw: " ++ show (map blockHash $ O.toBlocksOldestFirst o' bc)
+                                   putStrLn $ "\ncandidate: " ++ toS (showChainDigest $ unsafeToBlockchain (reverse $ O.toBlocksOldestFirst o' bc))
+                                   storeBlocksOldestFirst h (O.toBlocksOldestFirst o' bc)
+                               -- Either ways, we need to prune the chain which didn't won.
+                               atomically $ writeTVar hOrphans (O.pruneOrphanage prevHash bc o')
                   else atomically $ writeTVar hOrphans o'
   where
     extendsTip :: Block tx s -> Block tx s -> Bool
@@ -168,10 +166,9 @@ storeBlock h@Handle{..} blk = do
 
 -- | Store an orphan in memory.
 -- FIXME(adn) This is a bit of an abstraction leak, remove this function in
--- the future.
+-- the future, or at least do not export it.
 storeOrphan :: (Ord tx, Ord s) => Handle tx s -> Block tx s -> IO ()
-storeOrphan Handle{..} b =
-    atomically . modifyTVar hOrphans . O.insertOrphan $ (BlockWithScore b (hScoreFn b))
+storeOrphan Handle{..} = atomically . modifyTVar hOrphans . O.insertOrphan
 
 getGenesisBlock :: (Serialise s, FromField s, FromRow tx) => Connection -> IO (Block tx s)
 getGenesisBlock conn = do
