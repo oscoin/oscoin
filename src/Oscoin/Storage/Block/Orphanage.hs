@@ -3,16 +3,17 @@ module Oscoin.Storage.Block.Orphanage
     , emptyOrphanage
     , getOrphans
     , insertOrphan
-    , fromChainSuffix
     , getCandidateScore
     , toBlocksOldestFirst
-    , selectBestCandidate
+    , selectBestChain
+    , fromChainSuffix
     , pruneOrphanage
     -- * Internal use only
     , ChainCandidate(..)
     ) where
 
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import           Data.Sequence (Seq, ViewL(..), ViewR(..), (<|), (><), (|>))
 import qualified Data.Sequence as Seq
@@ -25,17 +26,17 @@ import           Oscoin.Crypto.Blockchain hiding (parentHash, (|>))
 ------------------------------------------------------------------------------}
 
 type Index = Int
-type ChainPointer = BlockHash
-type Candidates   = [ChainCandidate]
+type ChainRoot = BlockHash
+type Candidates s = [ChainCandidate s]
 
 data Orphanage tx s = Orphanage
     { orphans    :: Map BlockHash (Block tx s)
     -- ^ The /actual/ blocks, indexed by their block hash and in no particular
     -- order.
-    , candidates :: Map ChainPointer Candidates
+    , candidates :: Map ChainRoot (Candidates s)
     -- ^ The chain candidates, indexed by the /parent hash/ of the /tail/ of
     -- the chain.
-    , tips       :: Map BlockHash (ChainPointer, Index)
+    , tips       :: Map BlockHash (ChainRoot, Index)
     -- ^ /All/ the tips of /all/ the chain candidates in the system. This
     -- allows fast lookup when we need to merge two chains together. The
     -- value indexed by this map is the 'BlockHash' to be used to lookup the
@@ -46,20 +47,32 @@ data Orphanage tx s = Orphanage
     }
 
 -- | A 'ChainCandidate' is a sequence of blocks and a partially-accumulated
--- 'Score, used to compute the best chain is 'selectBestCandidate'. The chain
+-- 'Score', used to compute the best chain is 'selectBestChain'. The chain
 -- is stored \"oldest first\", i.e. from the oldest to the newest block.
-data ChainCandidate = ChainCandidate
-    { candidateChain :: Seq BlockHash
+data ChainCandidate s = ChainCandidate
+    { candidateChain     :: Seq BlockHash
     -- ^ The actual candidate chain, stored as a sequence of hashes.
-    , candidateScore :: Score
+    , candidateTipHeader :: BlockHeader s
+    -- ^ The 'BlockHeader' of the current tip, to be used (when needed) for
+    -- the comparison with other candidates.
+    , candidateScore     :: Score
     -- ^ The total 'Score' for this candidate
     } deriving (Eq, Show)
 
-instance Ord ChainCandidate where
+instance Eq s => Ord (ChainCandidate s) where
     compare chain1 chain2 =
-        case candidateScore chain1 `compare` candidateScore chain2 of
+        let compareScore  = candidateScore chain1 `compare` candidateScore chain2
+            compareLength = Seq.length (candidateChain chain1) `compare`
+                            Seq.length (candidateChain chain2)
+            compareTipTs  = blockTimestamp (candidateTipHeader chain1) `compare`
+                            blockTimestamp (candidateTipHeader chain2)
+        in case compareScore of
           -- If we score a draw, pick the longest.
-          EQ -> Seq.length (candidateChain chain1) `compare` Seq.length (candidateChain chain2)
+          EQ -> case compareLength of
+                  -- If we draw a score /again/, compare the timestamp of the
+                  -- tip and pick the most recent.
+                  EQ -> compareTipTs
+                  y  -> y
           x  -> x
 
 {------------------------------------------------------------------------------
@@ -67,41 +80,44 @@ instance Ord ChainCandidate where
 ------------------------------------------------------------------------------}
 
 -- | /O(1)/ Creates a new 'ChainCandidate' from the input 'BlockWithScore'.
-newChainCandidate :: (Block tx s -> Score) -> Block tx s -> ChainCandidate
+newChainCandidate :: (Block tx s -> Score) -> Block tx s -> ChainCandidate s
 newChainCandidate scoreBlock b = ChainCandidate
     { candidateChain = Seq.singleton (blockHash b)
+    , candidateTipHeader = blockHeader b
     , candidateScore = scoreBlock b
     }
 
--- | Builds a 'ChainCandidate' out of a list of blocks. Very useful to turn
+-- | /O(n)/ Builds a 'ChainCandidate' out of a list of blocks. Very useful to turn
 -- a chain suffix on the main chain into a 'ChainCandidate' for comparison,
 -- to determine which of the two won.
-fromChainSuffix :: (Block tx s -> Score) -> [Block tx s] -> ChainCandidate
+fromChainSuffix :: (Block tx s -> Score)
+                -> NonEmpty (Block tx s)
+                -> ChainCandidate s
 fromChainSuffix scoreBlock blks = ChainCandidate
-    { candidateChain = Seq.fromList (map blockHash blks)
+    { candidateChain = Seq.fromList . NonEmpty.toList . map blockHash $ blks
+    , candidateTipHeader = blockHeader . NonEmpty.head $ blks
     , candidateScore = sum (map scoreBlock blks)
     }
 
 -- | /O(n * log(n))/. Returns a list of blocks out of this 'ChainCandidate',
 -- ordered with the oldest first.
-toBlocksOldestFirst :: Orphanage tx s -> ChainCandidate -> [Block tx s]
+toBlocksOldestFirst :: Orphanage tx s -> ChainCandidate s -> [Block tx s]
 toBlocksOldestFirst Orphanage{orphans} ChainCandidate{candidateChain} =
-    case sequence (map (`Map.lookup` orphans) (toList candidateChain)) of
-      Nothing   -> panic "toBlocksOldestFirst: the candidate chain was empty."
-      Just blks -> blks
+    fromMaybe (panic "toBlocksOldestFirst: the candidate chain was empty.") $
+        traverse (`Map.lookup` orphans) (toList candidateChain)
 
 -- | /O(1)/ Extracs the 'Score' out of this 'ChainCandidate'.
-getCandidateScore :: ChainCandidate -> Score
+getCandidateScore :: ChainCandidate s -> Score
 getCandidateScore = candidateScore
 
 -- | /O(1)/. Lookups the tip (i.e. the newest) block for this 'ChainCandidate'.
-lookupChainTip :: ChainCandidate -> Maybe BlockHash
+lookupChainTip :: ChainCandidate s -> Maybe BlockHash
 lookupChainTip cc = case Seq.viewr (candidateChain cc) of
                       EmptyR -> Nothing
                       _ :> b -> Just b
 
 -- | /O(1)/. Lookups the root (i.e. the oldest) block for this 'ChainCandidate'.
-lookupChainRoot :: ChainCandidate -> Maybe BlockHash
+lookupChainRoot :: ChainCandidate s -> Maybe BlockHash
 lookupChainRoot cc = case Seq.viewl (candidateChain cc) of
                       EmptyL -> Nothing
                       b :< _ -> Just b
@@ -110,19 +126,20 @@ lookupChainRoot cc = case Seq.viewl (candidateChain cc) of
 -- the same.
 consBlock :: forall tx s. (Block tx s -> Score)
           -> Block tx s
-          -> ChainCandidate
-          -> ChainCandidate
+          -> ChainCandidate s
+          -> ChainCandidate s
 consBlock scoreBlock b cc =
-    cc { candidateChain = blockHash b <| (candidateChain cc)
-       , candidateScore = scoreBlock b +  (candidateScore cc)
+    cc { candidateChain = blockHash b <| candidateChain cc
+       , candidateScore = scoreBlock b + candidateScore cc
        }
 
 -- | \( O(\log(\min(n_1,n_2))) \) Concatenate two candidates together, where
 -- the second chain /extends/ the first one.
-consCandidates :: ChainCandidate -> ChainCandidate -> ChainCandidate
+consCandidates :: ChainCandidate s -> ChainCandidate s -> ChainCandidate s
 consCandidates chain1 chain2 =
     ChainCandidate
         { candidateChain = candidateChain chain1 >< candidateChain chain2
+        , candidateTipHeader = candidateTipHeader chain2
         , candidateScore = candidateScore chain1 + candidateScore chain2
         }
 
@@ -130,11 +147,12 @@ consCandidates chain1 chain2 =
 -- in a new tip.
 snocBlock :: forall tx s. (Block tx s -> Score)
           -> Block tx s
-          -> ChainCandidate
-          -> ChainCandidate
+          -> ChainCandidate s
+          -> ChainCandidate s
 snocBlock scoreBlock b cc =
-    cc { candidateChain = (candidateChain cc) |> blockHash b
-       , candidateScore = scoreBlock b +  (candidateScore cc)
+    cc { candidateChain = candidateChain cc |> blockHash b
+       , candidateTipHeader = blockHeader b
+       , candidateScore = scoreBlock b + candidateScore cc
        }
 
 {------------------------------------------------------------------------------
@@ -148,14 +166,22 @@ emptyOrphanage = Orphanage mempty mempty mempty
 getOrphans :: Orphanage tx s -> Set BlockHash
 getOrphans = Map.keysSet . orphans
 
--- | Given a block on the main chain, selects the best-scoring
--- 'ChainCandidate' which would extend the chain from that given block.
-selectBestCandidate :: BlockHash -> Orphanage tx s -> Maybe ChainCandidate
+-- | /O(log(n))/ Picks the best candidate out of the candidate set at the given 'BlockHash'.
+selectBestCandidate :: Eq s => BlockHash -> Orphanage tx s -> Maybe (ChainCandidate s)
 selectBestCandidate blockOnMainChain o =
-    case sortBy (comparing Down) <$> Map.lookup blockOnMainChain (candidates o) of
+    case sortOn Down <$> Map.lookup blockOnMainChain (candidates o) of
         Nothing    -> Nothing
         Just []    -> Nothing
         Just (c:_) -> Just c
+
+-- | /O(n * log(n))/ Given a list of block hashes on the main chain, selects the best-scoring
+-- 'ChainCandidate' which would extend the chain from that given block.
+selectBestChain :: Eq s => [BlockHash] -> Orphanage tx s -> Maybe (BlockHash, ChainCandidate s)
+selectBestChain blocksOnMainChain o =
+    case sortOn (Down . snd) . catMaybes $
+         [(h,) <$> selectBestCandidate h o | h <- blocksOnMainChain] of
+        []  -> Nothing
+        c:_ -> Just c
 
 -- | /O(m)/ Evicts the candidates branching off the input block hash from the 'Orphanage'.
 bulkDelete :: BlockHash -> Orphanage tx s -> Orphanage tx s
@@ -164,10 +190,10 @@ bulkDelete bHash o =
       , tips = tips' (tips o)
       }
   where
-      candidates' :: Map ChainPointer Candidates -> Map ChainPointer Candidates
+      candidates' :: Map ChainRoot (Candidates s) -> Map ChainRoot (Candidates s)
       candidates' = Map.delete bHash
 
-      tips' :: Map BlockHash (ChainPointer, Index) -> Map BlockHash (ChainPointer, Index)
+      tips' :: Map BlockHash (ChainRoot, Index) -> Map BlockHash (ChainRoot, Index)
       tips' oldTips =
           let updateFn mp staleChain =
                   case lookupChainTip staleChain of
@@ -181,16 +207,16 @@ bulkDelete bHash o =
 -- NOTE(adn) This function is ought to be internal and just called /after/ the its dual
 -- 'bulkDelete'. This is used inside 'insertOrphans' to prune and replace
 -- candidates for which the parent block has changed.
-bulkInsert :: ChainPointer -> Candidates -> Orphanage tx s -> Orphanage tx s
+bulkInsert :: forall tx s. ChainRoot -> Candidates s -> Orphanage tx s -> Orphanage tx s
 bulkInsert ptr newChains o =
     o { candidates = candidates' (candidates o)
       , tips = tips' (tips o)
       }
   where
-      candidates' :: Map ChainPointer Candidates -> Map ChainPointer Candidates
+      candidates' :: Map ChainRoot (Candidates s) -> Map ChainRoot (Candidates s)
       candidates' = Map.insert ptr newChains
 
-      tips' :: Map BlockHash (ChainPointer, Index) -> Map BlockHash (ChainPointer, Index)
+      tips' :: Map BlockHash (ChainRoot, Index) -> Map BlockHash (ChainRoot, Index)
       tips' oldTips =
           let updateFn mp (newChain, ix) =
                   case lookupChainTip newChain of
@@ -204,9 +230,9 @@ storeOrphan b o = o { orphans = Map.insert (blockHash b) b (orphans o) }
 
 -- | Given a candidate which won, delete the orphans from the store and
 -- the chain from the candidates
-pruneOrphanage :: BlockHash -> ChainCandidate -> Orphanage tx s -> Orphanage tx s
+pruneOrphanage :: BlockHash -> ChainCandidate s -> Orphanage tx s -> Orphanage tx s
 pruneOrphanage rootHash ChainCandidate{candidateChain} o =
-    let o' = o { orphans = foldl (\mp k -> Map.delete k mp) (orphans o) (toList candidateChain) }
+    let o' = o { orphans = foldl' (flip Map.delete) (orphans o) (toList candidateChain) }
     in bulkDelete rootHash o'
 
 -- | Adds a new 'Block' to the 'Orphanage'. Three scenarios are possible:
@@ -226,47 +252,49 @@ pruneOrphanage rootHash ChainCandidate{candidateChain} o =
 -- from the BlockStore.
 insertOrphan :: forall tx s. Block tx s -> Orphanage tx s -> Orphanage tx s
 insertOrphan b (storeOrphan b -> o) =
-    let orphanage' =
-            -- Check if this block is the parent of any existing chain..
-            case Map.lookup bHash currentCandidates of
-              Just chains ->
-                  -- Yes, it is. This means we have to add it at the /front/ of
-                  -- of all the chain candidates that branch off from this block,
-                  -- as well as updating the outermost map.
-                  let chains' = map (consBlock (scoreBlock o) b) chains
-                  in bulkInsert parentHash chains' (bulkDelete bHash o)
-              Nothing ->
-                  -- No, it's not. This means either it's a \"singleton\" orphan
-                  -- or it extends some other candidate we have already stored.
-                  case tryExtendChain b o of
-                     Just o' -> o'
-                     Nothing ->
-                         case Map.lookup parentHash currentCandidates of
-                           Just _existingCandidates ->
-                               o { candidates = Map.adjust (\old -> old <> [newChainCandidate (scoreBlock o) b]) parentHash (candidates o)
-                                 , tips       = Map.adjust (\(oldP, oldIx) -> (oldP, oldIx + 1))  parentHash (tips o)
-                                 }
-                           Nothing ->
-                               -- This is genuinely a \"singleton\" chain, and we simply
-                               -- store it.
-                               insertSingletonChain parentHash b o
-        in fromMaybe orphanage' (tryLinkChains orphanage')
+  maybe o tryLinkChains (extendInFront <|> extendExisting)
 
   where
     bHash             = blockHash b
     parentHash        = blockPrevHash . blockHeader $ b
     currentCandidates = candidates o
+
+    -- Check if this block is the parent of any existing chain, and if it is,
+    -- this means we have to add it at the /front/ of
+    -- of all the chain candidates that branch off from this block,
+    -- as well as updating the outermost map.
+    extendInFront :: Maybe (Orphanage tx s)
+    extendInFront = do
+        chains <- Map.lookup bHash currentCandidates
+        let chains' = map (consBlock (scoreBlock o) b) chains
+        pure $ bulkInsert parentHash chains' (bulkDelete bHash o)
+
+    extendExisting :: Maybe (Orphanage tx s)
+    extendExisting = tryExtendChain b o <|> addSingleton
+
+    addSingleton :: Maybe (Orphanage tx s)
+    addSingleton = Just $
+        case Map.lookup parentHash currentCandidates of
+          Just _existingCandidates ->
+              o { candidates = Map.adjust (\old -> old <> [newChainCandidate (scoreBlock o) b]) parentHash (candidates o)
+                , tips       = Map.adjust (\(oldP, oldIx) -> (oldP, oldIx + 1))  parentHash (tips o)
+                }
+          Nothing ->
+              -- This is genuinely a \"singleton\" chain, and we simply
+              -- store it.
+              insertSingletonChain parentHash b o
+
     -- If in the candidates we have the /parent/ of the block being inserted
     -- /and/ it also appears to be in the tips, we need to fuse two chains
-    -- together
-    tryLinkChains :: Orphanage tx s -> Maybe (Orphanage tx s)
-    tryLinkChains orph = do
+    -- together.
+    tryLinkChains :: Orphanage tx s -> Orphanage tx s
+    tryLinkChains orph = fromMaybe orph $ do
         candidateChains <- Map.lookup parentHash (candidates orph)
         (chainPtr, ix)  <- Map.lookup parentHash (tips orph)
-        chainToExtend   <- (List.!! ix) <$> (Map.lookup chainPtr (candidates o))
+        chainToExtend   <- (List.!! ix) <$> Map.lookup chainPtr (candidates o)
         -- If we find a match, we need to "attach" all the blocks from the
         -- /chainToPrepend/ to the /chainToExtend/.
-        let predFn c = (((==) bHash) <$> lookupChainRoot c) == Just True
+        let predFn c = ((bHash ==) <$> lookupChainRoot c) == Just True
         (chainToPrepend, ix') <- findCandidate predFn candidateChains
         chainTip <- lookupChainTip chainToPrepend
         let newChain = chainToExtend `consCandidates` chainToPrepend
@@ -275,14 +303,14 @@ insertOrphan b (storeOrphan b -> o) =
             { candidates = Map.insert chainPtr (replaceAt ix' newChain candidateChains)
                          . Map.delete parentHash
                          $ candidates orph
-            , tips = Map.adjust (\_ -> (chainPtr, ix')) chainTip
+            , tips = Map.adjust (const (chainPtr, ix')) chainTip
                    . Map.delete parentHash
                    $ tips orph
             }
 
-findCandidate :: (ChainCandidate -> Bool)
-              -> Candidates
-              -> Maybe (ChainCandidate, Index)
+findCandidate :: (ChainCandidate s -> Bool)
+              -> Candidates s
+              -> Maybe (ChainCandidate s, Index)
 findCandidate predFn xs =
     case List.filter (\(c,_) -> predFn c) (zip xs [0..]) of
       [(c, ix)] -> Just (c, ix)
@@ -303,15 +331,15 @@ insertSingletonChain parentHash b o =
 tryExtendChain :: Block tx s -> Orphanage tx s -> Maybe (Orphanage tx s)
 tryExtendChain b o = do
     (parentBlockHash, candidateIndex) <- Map.lookup (blockPrevHash . blockHeader $ b) (tips o)
-    candidateChain <- (List.!! candidateIndex) <$> (Map.lookup parentBlockHash (candidates o))
+    candidateChain <- (List.!! candidateIndex) <$> Map.lookup parentBlockHash (candidates o)
     oldTip <- lookupChainTip candidateChain
     -- We now extend the 'ChainCandidate' with the new block.
     let !chain' = snocBlock (scoreBlock o) b candidateChain
     let candidates' = Map.adjust (replaceAt candidateIndex chain') parentBlockHash
-                    $ (candidates o)
+                    $ candidates o
     let tips' = Map.insert (blockHash b) (parentBlockHash, candidateIndex)
               . Map.delete oldTip
-              $ (tips o)
+              $ tips o
     -- Now the tip changed -- we have to remove the old one from @tips@
     pure $ o { candidates = candidates'
              , tips = tips'
@@ -332,13 +360,3 @@ replaceAt ix new xs
   | otherwise =
     let (excludesXs, rest) = List.splitAt ix xs
     in excludesXs <> [new] <> drop ix rest
-
--- Temporary
-
-debugShow :: Orphanage tx s -> String
-debugShow Orphanage{..} = mconcat [
-  "{ orphans = " <> show (Map.keys orphans) <>
-  "\n, candidates = " <> show candidates <>
-  "\n, tips = " <> show tips <>
-  "\n}\n"
-  ]

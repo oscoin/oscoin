@@ -30,7 +30,7 @@ withBlockStore :: Hashable tx
                -- ^ Action to use the 'BlockStore'.
                -> IO b
 withBlockStore chain score validate action = do
-    hdl <- newTVarIO $ Pure.initWithChain chain
+    hdl <- newTVarIO (Pure.initWithChain' chain score)
     let modifyHandle = atomically . modifyTVar' hdl
         newBlockStore  =
                 Abstract.BlockStore {

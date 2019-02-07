@@ -6,6 +6,7 @@ module Oscoin.Storage.Block.Pure
     , genesisBlockStore
     , fromOrphans
     , initWithChain
+    , initWithChain'
 
     , getBlocks
     , getTip
@@ -54,13 +55,39 @@ instance (Ord tx, Ord s) => Monoid (Handle tx s) where
 genesisBlockStore :: Block tx s -> Handle tx s
 genesisBlockStore gen = initWithChain $ fromGenesis gen
 
+-- FIXME(adn) Fix properly as part of oscoin#367?
 initWithChain :: Blockchain tx s -> Handle tx s
-initWithChain  chain =
+initWithChain  chain = initWithChain' chain blockScore
+
+-- | Like 'initWithChain', but allows the user to override the stock
+-- 'ScoringFunction', expressed in terms of a function at the block-level.
+initWithChain' :: Blockchain tx s -> (Block tx s -> Score) -> Handle tx s
+initWithChain' chain scoreFn =
     Handle
         { hChains  = Map.singleton (blockHash $ genesis chain) chain
         , hOrphans = mempty
-        , hScoreFn = comparing height
+        , hScoreFn = compareChainsDefault scoreFn
         }
+
+compareChainsDefault :: (Block tx s -> Score)
+                     -> Blockchain tx s
+                     -> Blockchain tx s
+                     -> Ordering
+compareChainsDefault scoreBlock c1 c2 =
+    let compareScore  = chainScore c1 `compare` chainScore c2
+        compareLength = chainLength c1 `compare` chainLength c2
+        compareTipTs  = (blockTimestamp . blockHeader . tip $ c1) `compare`
+                        (blockTimestamp . blockHeader . tip $ c2)
+    in case compareScore of
+      -- If we score a draw, pick the longest.
+      EQ -> case compareLength of
+              -- If we draw a score /again/, compare the timestamp of the
+              -- tip and pick the most recent.
+              EQ -> compareTipTs
+              y  -> y
+      x  -> x
+  where
+      chainScore = sum . map scoreBlock . blocks
 
 getBlocks
     :: Depth

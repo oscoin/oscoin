@@ -47,10 +47,10 @@ classifyChain chain =
 -- and get the tip, and that both stores agree on the result.
 propInsertGetTipEquivalence :: Property
 propInsertGetTipEquivalence =
-    forAllShrink (resize 25 $ genBlockchainFrom defaultGenesis) genericShrink $ \chain -> do
+    forAllShrink (resize 25 $ genBlockchainFrom defaultGenesis) genericShrink $ \chain ->
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
-                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
+                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks chain)
                 p2 <- apiCheck stores Abstract.getTip
                 pure (p1 .&&. p2)
 
@@ -68,21 +68,18 @@ propForksInsertGetTipEquivalence = do
             chain <- resize 15 $ genBlockchainFrom defaultGenesis
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
-    forAllShow generator showOrphans $ \(chain, orphansWithLink) -> do
+    forAllShow generator showOrphans $ \(chain, orphansWithLink) ->
         ioProperty $ withStores $ \stores -> do
-            putStrLn ("=======> New round starting with new stores" :: String)
             -- Step 1: Store the chain in both stores.
-            p0 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks chain))
-            ps <- forM (zip [1..] orphansWithLink) $ \(ix, (orphans, missingLink)) -> do
-                putStrLn ("=====> New orphan round starting (round " ++ show ix ++ ")")
+            p0 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks chain)
+            ps <- forM orphansWithLink $ \(orphans, missingLink) -> do
                 -- Step 2: Store the orphan chains
-                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` (blocks orphans))
-                -- p2 <- apiCheck stores Abstract.getOrphans
+                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks orphans)
                 -- Step 3: Add the missing link and check the tip
                 p3 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
                 p4 <- apiCheck stores Abstract.getTip
                 pure [p1,p3,p4]
-            pure $ foldl (.&&.) p0 (mconcat ps)
+            pure $ foldl' (.&&.) p0 (mconcat ps)
 
 {------------------------------------------------------------------------------
   Useful combinators
@@ -105,7 +102,7 @@ apiCheck :: forall tx s m b. (HasCallStack, Monad m, Eq b, Show b, Condensed b)
          => StoresUnderTest tx s m
          -> (Abstract.BlockStore tx s m -> m b)
          -> m Property
-apiCheck (store1, store2) apiCall = do
+apiCheck (store1, store2) apiCall =
     withFrozenCallStack $ do
         res1 <- apiCall store1
         res2 <- apiCall store2

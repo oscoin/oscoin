@@ -9,6 +9,7 @@ module Oscoin.Crypto.Blockchain
     , fromGenesis
     , blocks
     , takeBlocks
+    , takeWhileBlocks
     , height
     , chainLength
     , lookupTx
@@ -64,6 +65,9 @@ blocks = NonEmpty.toList . fromBlockchain
 
 takeBlocks :: Int -> Blockchain tx s -> [Block tx s]
 takeBlocks n = NonEmpty.take n . fromBlockchain
+
+takeWhileBlocks :: (Block tx s -> Bool) -> Blockchain tx s -> [Block tx s]
+takeWhileBlocks p = NonEmpty.takeWhile p . fromBlockchain
 
 tip :: Blockchain tx s -> Block tx s
 tip (Blockchain blks) = NonEmpty.head blks

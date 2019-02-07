@@ -26,9 +26,8 @@ module Oscoin.Storage.Block.SQLite.Internal
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Validate, validateBlockchain)
-import           Oscoin.Crypto.Blockchain
-                 (Depth, blocks, showChainDigest, unsafeToBlockchain)
+import           Oscoin.Consensus (Validate)
+import           Oscoin.Crypto.Blockchain (Depth)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -39,13 +38,13 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  , parentHash
                  )
-import           Oscoin.Storage.Block.Orphanage (ChainCandidate, Orphanage)
+import           Oscoin.Storage.Block.Orphanage (Orphanage)
 import qualified Oscoin.Storage.Block.Orphanage as O
 import           Oscoin.Time (Timestamp)
 
 import           Paths_oscoin
 
-import qualified Data.Map.Strict as Map
+import qualified Data.List.NonEmpty as NonEmpty
 
 import           Database.SQLite.Simple as Sql ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
@@ -59,7 +58,6 @@ import qualified Database.SQLite3 as Sql3
 
 import           Codec.Serialise
 import           Control.Concurrent.STM
-import qualified Data.Set as Set
 
 -- | A handle to an on-disk block store.
 data Handle tx s = Handle
@@ -70,8 +68,7 @@ data Handle tx s = Handle
     }
 
 -- | Opens a connection to the SQLite DB.
-open :: (Ord s, Ord tx)
-     => String
+open :: String
      -> (Block tx s -> Score)
      -> Validate tx s
      -> IO (Handle tx s)
@@ -116,6 +113,7 @@ isConflicting conn Block{blockHeader} =
         (Only $ blockPrevHash blockHeader)
 
 -- | Store a block, along with its transactions in the block store.
+-- Invariant: the input block must have been validate (cfr. 'applyBlock').
 storeBlock
     :: forall tx s.
         ( ToField s
@@ -125,23 +123,32 @@ storeBlock
         , Serialise s
         , FromField s
         , Ord s
-        , Show s
-        , Show tx
         ) => Handle tx s -> Block tx s -> IO ()
-storeBlock h@Handle{..} blk = do
-    let prevHash = parentHash blk
+storeBlock h@Handle{..} blk =
     Sql.withTransaction hConn $ do
+        genesisBlock       <- getGenesisBlock hConn
         blockExists        <- isStored hConn $ blockHash blk
         blockConflicts     <- isConflicting hConn blk
         currentTip         <- getTip h
 
-        putStrLn ("\nblock: "  ++ show (blockHash blk))
-        putStrLn ("current_tip: "  ++ show (blockHash currentTip))
-        putStrLn ("parent: " ++ show prevHash)
-
-        if (not blockExists && extendsTip currentTip && not blockConflicts)
+        if not blockExists && extendsTip currentTip && not blockConflicts
             then storeBlock' h blk
-            else storeOrphan h blk
+            -- FIXME(adn) Sob, this is a side effect of the fact that storing
+            -- the genesis as an orphan would insert it into the orphanage with
+            -- its parent hash, which means that we won't be able to retrieve
+            -- a potentiol candidate branching off from genesis in our 'selectBestChain'
+            -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
+            -- inserting the genesis block into the orphanage in the first place;
+            -- After all, the genesis block should never be considered at orphan.
+            -- However, this is the least satisfactory solution, as it means we
+            -- need to hit the DB to grab the genesis /at every block insertion/.
+            -- We have a couple of fixes here:
+            -- 1. We cache the genesis block in memory;
+            -- 2. We add a precondition that we should never insert genesis in
+            --    the first place, so that this could would panic;
+            -- 3. We clearly state this invariant and amend our QC generators so
+            --    that we never generate chains starting from genesis.
+            else unless (blk == genesisBlock) $ storeOrphan h blk
 
         -- Fork selection starts now.
         selectBestChain h
@@ -150,7 +157,9 @@ storeBlock h@Handle{..} blk = do
     extendsTip currentTip = blockHash currentTip == parentHash blk
 
 selectBestChain
-    :: ( FromRow tx
+    :: forall tx s.
+       ( Eq s
+       , FromRow tx
        , Serialise s
        , FromField s
        , ToField s
@@ -158,42 +167,43 @@ selectBestChain
        )
     => Handle tx s -> IO ()
 selectBestChain h@Handle{..} = do
-    mutableBlockHashes <- reverse <$> getChainHashes hConn 2016 -- FIXME(adn) temporary hack.
-    orphans <- atomically (readTVar hOrphans)
+    -- FIXME(adn) (Temporary hack) The idea here is to grab the last 2016
+    -- blocks, which are considered the \"mutable\" part of the chain and
+    -- compare each root hash to see if there is any fork originating from that.
+    mutableBlockHashes <- reverse <$> getChainHashes hConn 2016
 
-    case sortBy (comparing Down) . catMaybes $ (map (\h -> (h,) <$> O.selectBestCandidate h orphans) mutableBlockHashes) of
-        [] -> putStrLn ("no suitable candidate found." :: String)
-        ((rootHash,bc):_) -> do
+    orphans <- readTVarIO hOrphans
+
+    case O.selectBestChain mutableBlockHashes orphans of
+        Nothing -> pure ()
+        Just (rootHash,bc) -> do
             -- Compare the orphan best chain with the chain suffix currently adopted
             chainSuffix <- getChainSuffix hConn rootHash
-            putStrLn $ "root_hash: " ++ show rootHash
-            putStrLn $ "candidate: " ++ toS (showChain (reverse $ O.toBlocksOldestFirst orphans bc))
-            putStrLn $ "suffix: " ++ toS (showChain chainSuffix)
 
-            when (O.fromChainSuffix hScoreFn chainSuffix < bc) $
+            -- Switch-to-better-chain condition: either the chain suffix is
+            -- empty, which means we are extending directly the tip, or if we
+            -- found a better candidate.
+            let newChainFound = null chainSuffix
+                             || O.fromChainSuffix hScoreFn (NonEmpty.fromList chainSuffix) < bc
+
+            when newChainFound $
                 switchToFork rootHash bc orphans chainSuffix
 
   where
-    showChain [] = "[]"
-    showChain bs = showChainDigest (unsafeToBlockchain bs) <> toS ("@Score=" ++ show (sum (map hScoreFn bs)))
-
     switchToFork rootHash fork orphans chainSuffix = do
-        putStrLn ("switching chains..." :: String)
         rollbackBlocks hConn (fromIntegral $ length chainSuffix)
         storeBlocksOldestFirst h (O.toBlocksOldestFirst orphans fork)
-        getTip h >>= \newTip -> putStrLn $ "tip now: " ++ show (blockHash newTip)
         -- Prune the chain which won, /as well as/ every dangling orphan
         -- originating from the suffix chain which has been replaced.
         atomically $ writeTVar hOrphans $
-              foldl (\acc blockInSuffix ->
+              foldl' (\acc blockInSuffix ->
                          O.pruneOrphanage (blockHash blockInSuffix)
-                                          (O.fromChainSuffix hScoreFn [blockInSuffix])
+                                          (O.fromChainSuffix hScoreFn (blockInSuffix NonEmpty.:| []))
                                           $ acc
-                    ) (O.pruneOrphanage rootHash fork orphans) chainSuffix
+                     ) (O.pruneOrphanage rootHash fork orphans) chainSuffix
 
 
 -- | Store an orphan in memory.
--- FIXME(adn) Make this function internal.
 storeOrphan :: Handle tx s -> Block tx s -> IO ()
 storeOrphan Handle{..} = atomically . modifyTVar hOrphans . O.insertOrphan
 
@@ -258,7 +268,7 @@ getOrphans Handle{..} =
 
 -- | Rollback 'n' blocks.
 rollbackBlocks :: Connection -> Depth -> IO ()
-rollbackBlocks conn (fromIntegral -> depth :: Integer) = do
+rollbackBlocks conn (fromIntegral -> depth :: Integer) =
     Sql.execute conn
         [sql| DELETE FROM blocks WHERE hash IN
               (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)

@@ -58,7 +58,7 @@ showOrphans :: (Blockchain RadTx s, [(Blockchain RadTx s, Block RadTx s)])
             -> String
 showOrphans (initialChain, orphansWithLinks) =
     "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
-    "orphans:\n- " <> T.unpack (showOrphanAndLinks)
+    "orphans:\n- " <> T.unpack showOrphanAndLinks
   where
       showOrphanAndLinks =
           T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")

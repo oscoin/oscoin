@@ -107,4 +107,3 @@ testGetBlocks (block, chain) h = do
     blks' <- Abstract.getBlocks h (fromIntegral $ chainLength chain)
 
     blocks chain @?= blks'
-

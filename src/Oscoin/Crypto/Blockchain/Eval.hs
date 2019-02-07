@@ -15,7 +15,7 @@ import           Oscoin.Prelude
 
 
 import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
-import           Oscoin.Crypto.Blockchain.Block
+import           Oscoin.Crypto.Blockchain.Block hiding (parentHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)

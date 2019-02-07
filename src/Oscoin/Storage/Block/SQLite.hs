@@ -16,7 +16,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite.Internal
 
-import           Database.SQLite.Simple ((:.)(..), Only(..))
+import           Database.SQLite.Simple (Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.FromRow (FromRow)
@@ -39,8 +39,6 @@ withBlockStore :: ( ToField s
                   , ToRow tx
                   , FromRow tx
                   , Ord tx
-                  , Show s
-                  , Show tx
                   )
                => String
                -- ^ The path where the DB will live on disk

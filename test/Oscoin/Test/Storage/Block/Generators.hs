@@ -8,7 +8,6 @@ module Oscoin.Test.Storage.Block.Generators
     , genBlockFrom
     , genBlockchainFrom
     , genOrphanChainsFrom
-    , genChainEvents
     ) where
 
 import           Oscoin.Prelude
@@ -33,11 +32,14 @@ data ForkParams = ForkParams
     -- (but there could be less) forks will be generated.
     }
 
+-- | A 'ChainEvent' is an internal type used by the generators to decidec whether
+-- or not originate a new fork from a given block.
 data ChainEvent =
         DoNotFork
       | ForkChain
       deriving Show
 
+-- | Generatens some chain events in a shuffled, unpredictable order.
 genChainEvents :: Int
                -- ^ The size of the input chain.
                -> ForkParams
@@ -58,6 +60,9 @@ genDifficultyFrom (fromDifficulty -> prevDifficulty) =
                  , (20, fromIntegral <$> choose (lessDifficulty, moreDifficulty))
                  ]
 
+--- | Generates an arbitrary block. Mostly similar (if not identical) to the
+-- one in 'Oscoin.Test.Crypto.Blockchain.Arbitrary', with the difference that
+-- we use our own internal generator for the 'Difficulty'.
 genBlockFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
              => Block tx s
              -> Gen (Block tx s)
@@ -83,7 +88,7 @@ genBlockFrom parentBlock =  do
 genBlockchainFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
                   => Block tx s
                   -> Gen (Blockchain tx s)
-genBlockchainFrom parentBlock = sized $ \n -> do
+genBlockchainFrom parentBlock = sized $ \n ->
     foldM (\chain _ -> do
                newTip <- genBlockFrom (tip chain)
                pure (newTip |> chain)
@@ -146,15 +151,15 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
            -> [(Blockchain tx s, Block tx s)]
            -> Gen [(Blockchain tx s, Block tx s)]
         go [] !acc = pure acc
-        go ((event,x):xs) !acc = do
+        go ((event,x):xs) !acc =
             case event of
               DoNotFork -> go xs acc
               ForkChain -> do
-                  forkSize <- choose ( min 2 (fromIntegral forkMaxLength)
+                  forkSize <- choose ( min 3 (fromIntegral forkMaxLength)
                                      , fromIntegral forkMaxLength
                                      )
                   fork <- resize forkSize (genBlockchainFrom x)
-                  let (blks, orphanChain) = fmap (unsafeToBlockchain . reverse)
+                  let (blks, orphanChain) = map (unsafeToBlockchain . reverse)
                                           . splitAt 1
                                           . drop 1 -- drop the tip, which is 'x'.
                                           . reverse

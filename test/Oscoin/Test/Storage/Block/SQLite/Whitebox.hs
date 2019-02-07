@@ -61,7 +61,7 @@ genTestFork2 :: Block RadTx DummySeal
 genTestFork2 genesisBlock = do
     blk   <- genBlockFrom genesisBlock
     chain <- resize 3 (genBlockchainFrom genesisBlock)
-    case (reverse $ blocks chain) of
+    case reverse $ blocks chain of
       [_genesis, b1,b2] -> do
           -- The first conflicting block we add doesn't have enough score.
           blk1 <- withDifficulty (Difficulty $ blockScore blk - 1) <$> pure b1

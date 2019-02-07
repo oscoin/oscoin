@@ -15,8 +15,8 @@ import qualified Test.QuickCheck as QC
 -- | Drop-in for QuickCheck '===' that relies on the 'Condensed' instance to
 -- show the counterexample.
 (===) :: forall b. (HasCallStack, Eq b, Show b, Condensed b) => b -> b -> Property
-(===) actual expected = do
-    withFrozenCallStack $ do
+(===) actual expected =
+    withFrozenCallStack $
         counterexample (mismatch callStack) (actual QC.=== expected)
   where
     mismatch :: CallStack -> String
