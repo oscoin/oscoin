@@ -51,7 +51,7 @@ noValidation :: Validate tx s
 noValidation _ _ = Right ()
 
 defaultScoreFunction :: Block tx s -> Score
-defaultScoreFunction = fromDifficulty . blockTargetDifficulty . blockHeader
+defaultScoreFunction = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
 -- | /O(n)/. A naive function to store blocks in linear time.
 -- Useful for testing but discouraged for any serious production use.

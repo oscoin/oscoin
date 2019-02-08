@@ -48,19 +48,22 @@ testBlockchain config = testGroup "Blockchain"
         \(d :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) d == Just d
     , testProperty "Difficulty (compact): decode . encode == id" $
-        \(d :: Difficulty) ->
-            ( decodeDifficultyCompact
-            . readWord32LE
+        \(d :: Integer) -> -- TODO(alexis): Should only create 256-bit integers.
+            ( decodeDifficulty
+            . encodeDifficulty
+            ) d == (d, False)
+    , testProperty "Difficulty (compact): Word32 encoding" $
+        \(w :: Word32) ->
+            ( readWord32LE
             . LBS.toStrict
             . runPut
             . putWord32le
-            . encodeDifficultyCompact
-            ) d == (d, False)
+            ) w == Just w
     , testCase "Difficulty (compact): matches Bitcoin format" $ do
-        decodeDifficultyCompact 0x1b0404cb @?=
-            (Difficulty 0x404CB000000000000000000000000000000000000000000000000, False)
-        decodeDifficultyCompact 0x1d00ffff @?=
-            (Difficulty 0xFFFF0000000000000000000000000000000000000000000000000000, False)
+        decodeDifficulty (unsafeDifficulty 0x1b0404cb) @?=
+            (0x404CB000000000000000000000000000000000000000000000000, False)
+        decodeDifficulty (unsafeDifficulty 0x1d00ffff) @?=
+            (0xFFFF0000000000000000000000000000000000000000000000000000, False)
     ]
 
 testValidateBlock :: Consensus.Config -> TestTree

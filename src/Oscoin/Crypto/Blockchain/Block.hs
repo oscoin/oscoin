@@ -100,7 +100,7 @@ emptyHeader = BlockHeader
     , blockStateHash = Crypto.zeroHash
     , blockSeal = ()
     , blockTimestamp = epoch
-    , blockTargetDifficulty = 0
+    , blockTargetDifficulty = unsafeDifficulty 0
     }
 
 headerHash :: Serialise s => BlockHeader s -> BlockHash
@@ -227,7 +227,7 @@ sealBlock seal blk =
     blk' = blk { blockHeader = (blockHeader blk) { blockSeal = seal } }
 
 blockScore :: Block tx s -> Integer
-blockScore = fromDifficulty . blockTargetDifficulty . blockHeader
+blockScore = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
 hashState :: Crypto.Hashable st => st -> StateHash
 hashState = Crypto.fromHashed . Crypto.hash

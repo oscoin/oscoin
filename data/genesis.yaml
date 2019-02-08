@@ -1,10 +1,10 @@
-hash: 2Drjgb4FtnRngdfXWFVUvfcfPVHCBGgEFDa5WyHd9vb3gnijPh
+hash: 2DrjgbJwttiS3Utyv6bM1kjNGoTcz2AmNubGxcYkBLBNxaHzm1
 data: []
 header:
   dataHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
-  targetDifficulty: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  targetDifficulty: ffff0021
   stateHash: 2Drjgb6ZHrriuZFxfp1ciyA5UKF6q18VM9unh7Gd5btJMZf1hE
-  seal: 88900
-  timestamp: 1548250336186600708
+  seal: 0
+  timestamp: 1549359882729842127
   parentHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
 

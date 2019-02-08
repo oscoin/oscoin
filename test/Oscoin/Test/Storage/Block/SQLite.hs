@@ -84,4 +84,3 @@ withDifficulty d blk =
     blk { blockHeader = header, blockHash = headerHash header }
   where
     header = (blockHeader blk) { blockTargetDifficulty = d }
-

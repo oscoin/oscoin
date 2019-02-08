@@ -31,7 +31,10 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 instance Arbitrary Difficulty where
-    arbitrary = Difficulty . getPositive <$> arbitrary
+    arbitrary = (unsafeDifficulty . getPositive
+        <$> arbitrary) `suchThat` noOverflow
+      where
+        noOverflow d = d <= maxDifficulty
 
 instance (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Arbitrary (Block tx s) where
     arbitrary = arbitraryBlock
@@ -97,7 +100,7 @@ arbitraryBlock =
 arbitraryBlockWith :: forall tx s. (Serialise s, Serialise tx, Arbitrary s) => [tx] -> Gen (Block tx s)
 arbitraryBlockWith txs = do
     timestamp <- arbitrary
-    diffi <- arbitrary `suchThat` (> 0)
+    diffi <- arbitrary
     prevHash <- arbitrary :: Gen Hash
     stateHash <- arbitrary :: Gen Hash
     blockSeal  <- arbitrary
@@ -122,14 +125,14 @@ arbitraryValidBlockWith prevHeader txs = do
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- arbitrary
-    blockDiffi <- Difficulty <$> choose (1, 3)
+    blockDiffi <- unsafeDifficulty <$> choose (1, 3)
     let header = emptyHeader
                { blockPrevHash         = headerHash prevHeader
                , blockDataHash         = hashTxs txs
                , blockStateHash        = hashState blockState
                , blockSeal
                , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
-               , blockTargetDifficulty = blockTargetDifficulty prevHeader + blockDiffi
+               , blockTargetDifficulty = blockDiffi
                }
     pure $ mkBlock header txs
 

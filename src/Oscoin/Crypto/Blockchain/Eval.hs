@@ -190,7 +190,7 @@ mkUnsealedBlock parent blockTimestamp txs blockState = mkBlock header txs
             , blockDataHash          = hashTxs txs
             , blockStateHash         = Crypto.fromHashed (Crypto.hash blockState)
             , blockSeal              = ()
-            , blockTargetDifficulty  = 0
+            , blockTargetDifficulty  = unsafeDifficulty 0
             , blockTimestamp
             }
 

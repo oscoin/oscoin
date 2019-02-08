@@ -34,7 +34,7 @@ blockTime = 1 * seconds
 -- | The default difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty
 defaultGenesisDifficulty =
-    0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    unsafeDifficulty 0x1d00ffff
     -- This is the original difficulty of Bitcoin at genesis.
 
 minGenesisDifficulty :: Difficulty
@@ -116,7 +116,7 @@ hasPoW header =
     difficulty header < blockTargetDifficulty header
 
 difficulty :: BlockHeader PoW -> Difficulty
-difficulty = Difficulty . os2ip . headerHash
+difficulty = encodeDifficulty . os2ip . headerHash
 
 -- | Number of blocks to consider for difficulty calculation. Roughly 2 weeks
 -- withh a 10 min block time.
@@ -129,9 +129,9 @@ chainDifficulty [] =
     minGenesisDifficulty
 chainDifficulty (NonEmpty.fromList -> blks)
     | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 =
-        Difficulty $ fromDifficulty currentDifficulty
-                   * fromIntegral targetElapsed
-                   `div` toInteger actualElapsed
+        encodeDifficulty $ fst (decodeDifficulty currentDifficulty)
+                         * fromIntegral targetElapsed
+                         `div` toInteger actualElapsed
     | otherwise =
         prevDifficulty
   where

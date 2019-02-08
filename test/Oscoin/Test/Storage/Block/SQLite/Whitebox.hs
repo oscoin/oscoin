@@ -48,7 +48,7 @@ genTestFork1 :: Block RadTx DummySeal
              -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
 genTestFork1 genesisBlock = do
     blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
-    blk' <- withDifficulty (Difficulty $ blockScore blk + 1)
+    blk' <- withDifficulty (encodeDifficulty $ blockScore blk + 1)
         <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
     pure (blk, blk')
 
@@ -56,12 +56,13 @@ genTestFork1 genesisBlock = do
 genTestFork2 :: Block RadTx DummySeal
              -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
 genTestFork2 genesisBlock = do
-    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
+    blk  <- withDifficulty (encodeDifficulty 3)
+        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
     -- The first conflicting block we add doesn't have enough score.
-    blk1 <- withDifficulty (Difficulty $ blockScore blk - 1)
+    blk1 <- withDifficulty (encodeDifficulty 2)
         <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
     -- The second one plus the first do.
-    blk2 <- withDifficulty 2
+    blk2 <- withDifficulty (encodeDifficulty 2)
         <$> arbitraryValidBlockWith (blockHeader blk1) []
     pure (blk, blk1, blk2)
 

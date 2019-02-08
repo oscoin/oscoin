@@ -1,69 +1,61 @@
 module Oscoin.Crypto.Blockchain.Block.Difficulty
-    ( Difficulty(..)
+    ( Difficulty
     , TargetDifficulty
+    , fromDifficulty
+    , unsafeDifficulty
     , minDifficulty
+    , maxDifficulty
     , easyDifficulty
     , parseDifficulty
     , prettyDifficulty
-    , encodeDifficultyCompact
-    , decodeDifficultyCompact
+    , encodeDifficulty
+    , decodeDifficulty
     , readWord32LE
     ) where
 
 import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise(..))
-import           Control.Exception (assert)
+import qualified Codec.Serialise.Decoding as Serialise
+import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
-import           Crypto.Number.Serialize (i2osp, os2ip)
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText)
+import qualified Data.Binary.Builder as Binary
+import qualified Data.Binary.Get as Binary
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Unsafe as BS
-import           Database.SQLite.Simple
-import           Database.SQLite.Simple.FromField
-                 (FromField(..), fieldData, returnError)
-import           Database.SQLite.Simple.Ok (Ok(..))
+import           Database.SQLite.Simple.FromField (FromField(..))
 import           Database.SQLite.Simple.ToField (ToField(..))
 
 -- | Block difficulty.
 --
--- Uses an 'Integer' underneath for ease of use, but is encoded into a compact
--- 4-byte format for storage and transmission. The compact format is the
--- same that is used in Bitcoin.
+-- Encoded in the same compact 4-byte format as the `bits` field in the
+-- Bitcoin block header.
 --
 -- See <https://en.bitcoin.it/wiki/Difficulty> for more details.
 --
--- The encoding to compact form is handled by 'encodeDifficultyCompact' and
--- 'decodeDifficultyCompact'.
+-- The encoding to compact form is handled by 'encodeDifficulty' and
+-- 'decodeDifficulty'.
 --
-newtype Difficulty = Difficulty { fromDifficulty :: Integer }
-    deriving (Show, Read, Eq, Ord, Num, Enum, Real, Integral)
+newtype Difficulty = Difficulty { fromDifficulty :: Word32 }
+    deriving (Show, Read, Eq, Ord, Enum, FromField, ToField)
 
 instance Serialise Difficulty where
-    encode = encode . encodeDifficultyCompact
+    encode = Serialise.encodeBytes
+           . LBS.toStrict
+           . BS.toLazyByteString
+           . Binary.putWord32le
+           . fromDifficulty
     decode = do
-        compact <- decode
-        case decodeDifficultyCompact compact of
-            (d, False) -> pure d
-            (_, True)  -> fail "Difficulty overflowed"
-
-instance FromField Difficulty where
-    fromField f =
-        case fieldData f of
-            SQLBlob bs -> case decodeDifficultyCompact (readWord32LE bs) of
-                (d, False) ->
-                    Ok d
-                (_, True)  ->
-                    returnError ConversionFailed f "Difficulty overflowed"
-            _ ->
-                returnError ConversionFailed f "Invalid SQL type for Difficulty"
-
-instance ToField Difficulty where
-    toField = SQLBlob . LBS.toStrict . BS.toLazyByteString . BS.word32LE
-                      . encodeDifficultyCompact
+        bs <- LBS.fromStrict <$> Serialise.decodeBytes
+        difi <- either (\(_,_,e) -> fail e) (\(_,_,x) -> pure (Difficulty x)) $
+            Binary.runGetOrFail Binary.getWord32le bs
+        case decodeDifficulty difi of
+            (_, True)  -> fail "Overflow trying to decode difficulty"
+            (_, False) -> pure difi
 
 instance ToJSON Difficulty where
     toJSON = toJSON . prettyDifficulty
@@ -74,25 +66,36 @@ instance FromJSON Difficulty where
             Just d  -> pure d
             Nothing -> fail "Error decoding difficulty"
 
+unsafeDifficulty :: Word32 -> Difficulty
+unsafeDifficulty = Difficulty
+
 prettyDifficulty :: Difficulty -> Text
 prettyDifficulty =
-     BaseN.encodedText . BaseN.encodeBase16 . i2osp . fromDifficulty
+     BaseN.encodedText . BaseN.encodeBase16 . toBS . fromDifficulty
+  where
+    toBS = LBS.toStrict . BS.toLazyByteString . BS.word32LE
 
 parseDifficulty :: Text -> Maybe Difficulty
-parseDifficulty t =
-    case BaseN.decodeBase16 $ encodeUtf8 t of
-        Just d  -> Just $ Difficulty (os2ip d)
-        Nothing -> Nothing
+parseDifficulty t = do
+    n <- BaseN.decodeBase16 $ encodeUtf8 t
+    d <- Difficulty <$> readWord32LE n
+    case decodeDifficulty d of
+        (_, True)  -> Nothing -- Overflow!
+        (_, False) -> Just d
 
 -- | The minimum difficulty.
 minDifficulty :: Difficulty
-minDifficulty =
+minDifficulty = encodeDifficulty
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 -- | An easy difficulty. About 24s per block on a single core.
 easyDifficulty :: Difficulty
-easyDifficulty =
+easyDifficulty = encodeDifficulty
     0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+maxDifficulty :: Difficulty
+maxDifficulty =
+    Difficulty 0x1d00ffff
 
 -- | Decode the compact number used in the difficulty target of a block.
 --
@@ -107,9 +110,9 @@ easyDifficulty =
 -- \[
 -- N = -1^{sign} \times mantissa \times 256^{exponent-3}
 -- \]
-decodeDifficultyCompact :: Word32 -> (Difficulty, Bool) -- ^ 'True' means overflow
-decodeDifficultyCompact nCompact =
-    (Difficulty $ if neg then res * (-1) else res, over)
+decodeDifficulty :: Difficulty -> (Integer, Bool) -- ^ 'True' means overflow
+decodeDifficulty (Difficulty nCompact) =
+    (if neg then res * (-1) else res, over)
   where
     nSize = fromIntegral nCompact `shiftR` 24
 
@@ -133,9 +136,9 @@ decodeDifficultyCompact nCompact =
 --
 -- Taken from 'haskoin-core' project.
 --
-encodeDifficultyCompact :: Difficulty -> Word32
-encodeDifficultyCompact (Difficulty i) =
-    nCompact
+encodeDifficulty :: Integer -> Difficulty
+encodeDifficulty i =
+    Difficulty nCompact
   where
     i' = abs i
 
@@ -166,8 +169,8 @@ encodeDifficultyCompact (Difficulty i) =
 --
 -- Adapted from the cardano project.
 --
-readWord32LE :: ByteString -> Word32
-readWord32LE bs = assert (BS.length bs == 4) $
+readWord32LE :: ByteString -> Maybe Word32
+readWord32LE bs = if BS.length bs /= 4 then Nothing else Just $
     fromIntegral (BS.unsafeIndex bs 0)
   + fromIntegral (BS.unsafeIndex bs 1) `shiftL` 8
   + fromIntegral (BS.unsafeIndex bs 2) `shiftL` 16
