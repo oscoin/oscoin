@@ -64,9 +64,9 @@ genTestFork2 genesisBlock = do
     case reverse $ blocks chain of
       [_genesis, b1,b2] -> do
           -- The first conflicting block we add doesn't have enough score.
-          blk1 <- withDifficulty (Difficulty $ blockScore blk - 1) <$> pure b1
+          blk1 <- withDifficulty (encodeDifficulty $ blockScore blk - 1) <$> pure b1
           -- The second one plus the first do.
-          blk2 <- withDifficulty 2 <$> pure b2
+          blk2 <- withDifficulty (encodeDifficulty 2) <$> pure b2
           pure (blk, blk1, linkParent blk1 blk2)
       _ -> panic ("genTestFork2: invalid generated list :" <> showChainDigest chain)
 
