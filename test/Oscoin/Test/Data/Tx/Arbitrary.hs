@@ -12,4 +12,5 @@ instance (Serialise a, Arbitrary a) => Arbitrary (Tx a) where
     arbitrary = do
         (pub, priv) <- arbitraryKeyPair
         msg         <- arbitrarySignedWith priv
-        pure $ mkTx msg pub
+        randomNonce <- getPositive <$> arbitrary
+        pure $ (mkTx msg pub) { txNonce = randomNonce }
