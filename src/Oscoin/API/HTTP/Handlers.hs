@@ -15,7 +15,6 @@ import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.State.Tree (Key)
-import qualified Oscoin.Storage.Block.Class as BlockStore
 import           Oscoin.Storage.Receipt.Class
 import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
@@ -50,7 +49,7 @@ getTransaction txId = do
         lookupTx id = Mempool.lookupTx id >>= \case
             Just tx -> pure $ Just (tx, Nothing, 0)
             Nothing -> do
-                result <- BlockStore.lookupTx id
+                result <- Node.lookupTx id
                 pure $ fromTxLookup <$> result
 
 submitTransaction :: ApiAction s i a
@@ -79,7 +78,7 @@ getBestChain = do
 
 getBlock :: (ToJSON s, Serialise s) => BlockHash -> ApiAction s i a
 getBlock h = do
-    result <- node $ BlockStore.lookupBlock h
+    result <- node $ Node.lookupBlock h
     case result of
         Just blk ->
             respond ok200 $ body (Ok blk)

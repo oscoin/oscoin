@@ -6,7 +6,6 @@ module Oscoin.Storage
 
     , applyBlock
     , applyTx
-    , lookupBlock
     , lookupTx
 
     , isNovelTx
@@ -15,8 +14,8 @@ module Oscoin.Storage
 
 import           Oscoin.Prelude
 
-import           Oscoin.Storage.Block.Class (MonadBlockStore)
-import qualified Oscoin.Storage.Block.Class as BlockStore
+import           Oscoin.Storage.Block.Abstract (BlockStore, isNovelBlock)
+import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Storage.State.Class as StateStore
 
@@ -57,34 +56,34 @@ data ApplyResult =
     | Error   [NotableEvent]
 
 applyBlock
-    :: ( MonadBlockStore tx s m
-       , MonadStateStore st   m
+    :: ( MonadStateStore st   m
        , MonadMempool    tx   m
        , Crypto.Hashable tx
        , Serialise       tx
        , Serialise       s
        )
-    => Evaluator st tx o
+    => BlockStore tx s m
+    -> Evaluator st tx o
     -> Validate     tx s
     -> Consensus.Config
     -> Block        tx s
     -> m ApplyResult
-applyBlock eval validate config blk = do
+applyBlock bs eval validate config blk = do
     let blkHash = blockHash blk
-    novel <- isNovelBlock blkHash
+    novel <- isNovelBlock bs blkHash
     if | novel -> do
-        blks <- BlockStore.getBlocks 2016 -- XXX(alexis)
+        blks <- BlockStore.getBlocks bs 2016 -- XXX(alexis)
         case validateBlockSize config blk >>= const (validate blks blk) of
             Left err -> pure $ Error [BlockValidationFailedEvent blkHash err]
             Right () -> do
                 let txs = blockData blk
-                BlockStore.storeBlock blk
+                BlockStore.insertBlock bs blk
                 Mempool.delTxs txs
 
                 -- Try to find the parent state of the block, and if found,
                 -- save a new state in the state store.
                 result <- runMaybeT $ do
-                    prevBlock <- MaybeT $ BlockStore.lookupBlock
+                    prevBlock <- MaybeT $ BlockStore.lookupBlock bs
                         (blockPrevHash $ blockHeader blk)
 
                     prevState <- MaybeT $ StateStore.lookupState
@@ -108,36 +107,29 @@ applyBlock eval validate config blk = do
        | otherwise -> pure $ Stale [BlockStaleEvent blkHash]
 
 applyTx
-    :: ( MonadBlockStore tx s m
-       , MonadMempool    tx   m
+    :: ( MonadMempool    tx   m
        , Crypto.Hashable tx
        )
-    => tx
+    => BlockStore tx s m
+    -> tx
     -> m ApplyResult
-applyTx tx = do
+applyTx bs tx = do
     let txHash = Crypto.hash tx
-    novel <- isNovelTx txHash
+    novel <- isNovelTx bs txHash
     if | novel     -> Mempool.addTxs [tx] $> Applied [TxAppliedEvent txHash]
        | otherwise -> pure $ Stale [TxStaleEvent txHash]
 
-lookupBlock :: MonadBlockStore tx s m => BlockHash -> m (Maybe (Block tx s))
-lookupBlock = BlockStore.lookupBlock
-
 lookupTx
-    :: ( MonadBlockStore tx s m
-       , MonadMempool    tx   m
-       )
-    => Hashed tx
+    :: ( MonadMempool    tx   m )
+    => BlockStore tx s m
+    -> Hashed tx
     -> m (Maybe tx)
-lookupTx hsh =
+lookupTx bs hsh =
     runMaybeT $
-            MaybeT (BlockStore.lookupTx hsh <&> map txPayload)
+            MaybeT (BlockStore.lookupTx bs hsh <&> map txPayload)
         <|> MaybeT (Mempool.lookupTx    hsh)
 
 --------------------------------------------------------------------------------
 
-isNovelBlock :: (MonadBlockStore tx s m) => BlockHash -> m Bool
-isNovelBlock = map isNothing . lookupBlock
-
-isNovelTx :: (MonadBlockStore tx s m, MonadMempool tx m) => Hashed tx -> m Bool
-isNovelTx = map isNothing . lookupTx
+isNovelTx :: MonadMempool tx m => BlockStore tx s m -> Hashed tx -> m Bool
+isNovelTx bs = map isNothing . lookupTx bs

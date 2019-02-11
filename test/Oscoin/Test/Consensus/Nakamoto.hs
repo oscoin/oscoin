@@ -12,7 +12,6 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.State.Tree (Tree)
-import           Oscoin.Storage.Block.Class (MonadBlockStore)
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore)
 
@@ -47,7 +46,6 @@ newtype NakamotoT tx m a =
 
 instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx m)
 
-instance MonadBlockStore   tx PoW m => MonadBlockStore   tx PoW  (NakamotoT tx m)
 instance MonadMempool      tx     m => MonadMempool      tx      (NakamotoT tx m)
 instance MonadReceiptStore tx ()  m => MonadReceiptStore tx ()   (NakamotoT tx m)
 
@@ -77,10 +75,14 @@ instance HasTestNodeState PoW NakamotoNodeState where
     testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
 
 instance TestableNode PoW NakamotoNode NakamotoNodeState where
-    testableTick    = mineBlock nakConsensus dummyEval
+    testableTick tn =
+        withTestBlockStore $ \bs -> mineBlock bs nakConsensus dummyEval tn
     testableInit    = initNakamotoNodes
     testableRun     = runNakamotoNode
     testableScore   = const Nakamoto.chainScore
+
+instance LiftTestNodeT PoW NakamotoNode where
+    liftTestNodeT = lift
 
 nakamotoNode :: DummyNodeId -> NakamotoNodeState
 nakamotoNode nid = NakamotoNodeState

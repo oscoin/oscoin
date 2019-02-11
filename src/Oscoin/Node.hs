@@ -15,6 +15,8 @@ module Oscoin.Node
     , getPath
     , getPathLatest
     , getBlocks
+    , lookupTx
+    , lookupBlock
     ) where
 
 import           Oscoin.Prelude
@@ -23,15 +25,22 @@ import           Oscoin.Consensus (Consensus(..), Validate)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
 import qualified Oscoin.Consensus.Config as Consensus
+import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHeader(..), Depth, StateHash, blockHash)
+                 ( Block(..)
+                 , BlockHash
+                 , BlockHeader(..)
+                 , Depth
+                 , StateHash
+                 , blockHash
+                 )
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
-import           Oscoin.Crypto.Hash (Hashable, formatHash)
+import           Oscoin.Crypto.Hash (Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Environment as Env
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Node.Trans
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
@@ -42,8 +51,8 @@ import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
 import qualified Oscoin.Telemetry.Logging as Log
 
-import qualified Oscoin.Storage.Block.Abstract as Abstract
-import qualified Oscoin.Storage.Block.Class as BlockStore.Class
+import           Oscoin.Storage.Block.Abstract (BlockStore, hoistBlockStore)
+import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 
@@ -59,7 +68,7 @@ withNode
     -> i
     -> Mempool.Handle tx
     -> StateStore.Handle st
-    -> Abstract.BlockStore tx s IO
+    -> BlockStore tx s IO
     -> Evaluator st tx Rad.Value
     -> Consensus tx s (NodeT tx st s i IO)
     -> (Handle tx st s i -> IO c)
@@ -69,7 +78,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
   where
     open = do
         hReceiptStore <- ReceiptStore.newHandle
-        gen <- runNodeT Handle{..} BlockStore.Class.getGenesisBlock
+        gen <- liftIO (BlockStore.getGenesisBlock hBlockStore)
         Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "running in"
                  (ftag "env" % stext) (Env.toText $ cfgEnv hConfig)
@@ -91,16 +100,16 @@ miner
        )
     => NodeT tx st s i m a
 miner = do
-    Handle{hEval, hConsensus, hConfig} <- ask
+    Handle{hEval, hConsensus, hConfig, hBlockStore} <- ask
     let telemetryHandle = cfgTelemetry hConfig
     forever $ do
-        nTxs <- numTxs
+        nTxs <- Mempool.numTxs
         if nTxs == 0 && cfgNoEmptyBlocks hConfig
         then
             liftIO $ threadDelay $ 1000 * 1000
         else do
             time <- currentTick
-            blk <- hoist liftIO $ Consensus.mineBlock hConsensus hEval time
+            blk <- hoist liftIO $ Consensus.mineBlock (hoistBlockStore lift hBlockStore) hConsensus hEval time
 
             for_ blk $ \b -> do
                 lift   $ P2P.broadcast $ P2P.BlockMsg b
@@ -118,9 +127,9 @@ mineBlock
        )
     => NodeT tx st s i m (Maybe (Block tx s))
 mineBlock = do
-    Handle{hEval, hConsensus} <- ask
+    Handle{hEval, hConsensus, hBlockStore} <- ask
     time <- currentTick
-    hoist liftIO $ Consensus.mineBlock hConsensus hEval time
+    hoist liftIO $ Consensus.mineBlock (hoistBlockStore lift hBlockStore) hConsensus hEval time
 
 storage
     :: ( MonadIO m
@@ -134,10 +143,18 @@ storage
     -> Consensus.Config
     -> Storage tx s (NodeT tx st s i m)
 storage eval validate config = Storage
-    { storageApplyBlock  = Storage.applyBlock eval validate config
-    , storageApplyTx     = Storage.applyTx
-    , storageLookupBlock = Storage.lookupBlock
-    , storageLookupTx    = Storage.lookupTx
+    { storageApplyBlock = \blk -> do
+        bs <- asks hBlockStore
+        Storage.applyBlock (hoistBlockStore liftIO bs) eval validate config blk
+    , storageApplyTx     = \tx -> do
+        bs <- asks hBlockStore
+        Storage.applyTx (hoistBlockStore liftIO bs) tx
+    , storageLookupBlock = \blk -> do
+        bs <- asks hBlockStore
+        BlockStore.lookupBlock (hoistBlockStore liftIO bs) blk
+    , storageLookupTx    = \tx -> do
+        bs <- asks hBlockStore
+        Storage.lookupTx (hoistBlockStore liftIO bs) tx
     }
 
 getMempool :: MonadIO m => NodeT tx st s i m (Mempool tx)
@@ -150,12 +167,20 @@ getPath sh p = queryM (sh, p)
 -- | Get a value from the latest state.
 getPathLatest
     :: (MonadIO m, Query st, Hashable st)
-    => STree.Path -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
+    => STree.Path
+    -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
 getPathLatest path = do
-    stateHash <- blockStateHash . blockHeader <$> BlockStore.Class.getTip
+    bs <- asks hBlockStore
+    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip (hoistBlockStore liftIO bs)
     result <- getPath stateHash path
     for result $ \v ->
         pure (stateHash, v)
 
 getBlocks :: (MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
-getBlocks = BlockStore.Class.getBlocks
+getBlocks d = withBlockStore (`BlockStore.getBlocks` d)
+
+lookupTx :: (MonadIO m) => Hashed tx -> NodeT tx st s i m (Maybe (TxLookup tx))
+lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)
+
+lookupBlock :: (MonadIO m) => BlockHash -> NodeT tx st s i m (Maybe (Block tx s))
+lookupBlock h = withBlockStore (`BlockStore.lookupBlock` h)

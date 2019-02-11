@@ -11,9 +11,11 @@ module Oscoin.Test.Consensus.Node
     , tnsBlockstoreL
     , emptyTestNodeState
     , runTestNodeT
+    , LiftTestNodeT(..)
+    , withTestBlockStore
     ) where
 
-import           Oscoin.Prelude hiding (StateT, runStateT, show)
+import           Oscoin.Prelude hiding (StateT, evalStateT, runStateT, show)
 
 import           Oscoin.Consensus.Class (MonadQuery(..))
 import           Oscoin.Crypto.Blockchain.Block (Block, StateHash)
@@ -24,8 +26,9 @@ import           Oscoin.Data.Query (query)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.State.Tree as STree
-import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
-import qualified Oscoin.Storage.Block.Pure as BlockStore
+import           Oscoin.Storage.Block.Abstract
+                 (BlockStore(..), hoistBlockStore, noValidation)
+import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
@@ -40,6 +43,40 @@ import           Lens.Micro
 import           Text.Show (Show(..))
 
 import           Test.QuickCheck
+
+-- Type class which serves as an evidence that we can hoist a 'TestNodeT'
+-- computation into @m@.
+class Monad m => LiftTestNodeT s m | m -> s where
+    liftTestNodeT :: TestNodeT s Identity a -> m a
+
+
+-- | Runs the given action against a test 'BlockStore' which is baked by
+-- a pure, in-memory 'Handle', kept around as part of the 'NodeTestState'.
+withTestBlockStore
+    :: (LiftTestNodeT s n)
+    => (BlockStore DummyTx s n -> n b)
+    -> n b
+withTestBlockStore action =
+    let store = BlockStore
+          { scoreBlock      = Block.blockScore
+          , validateBlock   = noValidation
+          , insertBlock     = \b -> do
+              st <- get
+              modify (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore st) })
+          , getGenesisBlock =
+              gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
+          , lookupBlock     = \h -> do
+              pureStore <- gets tnsBlockstore
+              pure $ BlockStore.Pure.lookupBlock h pureStore
+          , lookupTx        = \tx ->
+              gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
+          , getOrphans      = gets (BlockStore.Pure.orphans . tnsBlockstore)
+          , getBlocks       = \d ->
+              gets (BlockStore.Pure.getBlocks d . tnsBlockstore)
+          , getTip          = gets (BlockStore.Pure.getTip . tnsBlockstore)
+          }
+    in action (hoistBlockStore liftTestNodeT store)
+
 
 newtype DummyTx = DummyTx Word8
     deriving (Eq, Ord, Hashable.Hashable, Hashable, Binary, Serialise)
@@ -73,7 +110,7 @@ data TestNodeState s = TestNodeState
     { tnsNodeId       :: DummyNodeId
     , tnsMempool      :: Mempool.Mempool DummyTx
     , tnsStateStore   :: StateStore.StateStore DummyState
-    , tnsBlockstore   :: BlockStore.Handle DummyTx s
+    , tnsBlockstore   :: BlockStore.Pure.Handle DummyTx s
     , tnsReceiptStore :: ReceiptStore.Store DummyTx DummyOutput
     } deriving (Show)
 
@@ -86,7 +123,7 @@ instance ReceiptStore.HasStore DummyTx DummyOutput (TestNodeState s) where
 tnsMempoolL :: Lens' (TestNodeState s) (Mempool.Mempool DummyTx)
 tnsMempoolL = lens tnsMempool (\s a -> s { tnsMempool = a })
 
-tnsBlockstoreL :: Lens' (TestNodeState s) (BlockStore.Handle DummyTx s)
+tnsBlockstoreL :: Lens' (TestNodeState s) (BlockStore.Pure.Handle DummyTx s)
 tnsBlockstoreL = lens tnsBlockstore (\s a -> s { tnsBlockstore = a })
 
 emptyTestNodeState
@@ -94,7 +131,7 @@ emptyTestNodeState
 emptyTestNodeState seal nid = TestNodeState
     { tnsStateStore   = StateStore.fromState genState
     , tnsMempool      = mempty
-    , tnsBlockstore   = BlockStore.genesisBlockStore genBlk
+    , tnsBlockstore   = BlockStore.Pure.genesisBlockStore genBlk
     , tnsNodeId       = nid
     , tnsReceiptStore = ReceiptStore.emptyStore
     }
@@ -123,20 +160,6 @@ instance Monad m => MonadMempool DummyTx (TestNodeT s m) where
     {-# INLINE delTxs #-}
     {-# INLINE numTxs #-}
 
-instance (Monad m) => MonadBlockStore DummyTx s (TestNodeT s m) where
-    storeBlock  blk  = modify' (over tnsBlockstoreL (BlockStore.insert blk))
-    lookupBlock hdr  = BlockStore.lookupBlock hdr <$> gets tnsBlockstore
-    lookupTx    txh  = BlockStore.lookupTx txh <$> gets tnsBlockstore
-    getGenesisBlock  = BlockStore.getGenesisBlock <$> gets tnsBlockstore
-    getOrphans       = BlockStore.orphans <$> gets tnsBlockstore
-    getBlocks d      = BlockStore.getBlocks d <$> gets tnsBlockstore
-    getTip           = BlockStore.getTip <$> gets tnsBlockstore
-
-    {-# INLINE storeBlock     #-}
-    {-# INLINE lookupBlock    #-}
-    {-# INLINE getOrphans     #-}
-    {-# INLINE getBlocks      #-}
-
 instance Monad m => MonadQuery (TestNodeT s m) where
     type Key (TestNodeT s m) = (StateHash, STree.Path)
     type Val (TestNodeT s m) = STree.Val
@@ -162,3 +185,4 @@ instance Monad m => MonadStateStore DummyState (TestNodeT s m) where
 
 runTestNodeT :: TestNodeState s -> TestNodeT s m a -> m (a, TestNodeState s)
 runTestNodeT s (TestNodeT ma) = runStateT ma s
+

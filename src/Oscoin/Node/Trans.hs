@@ -5,6 +5,7 @@ module Oscoin.Node.Trans
     , runNodeT
     , Config(..)
     , Handle(..)
+    , withBlockStore
     ) where
 
 import           Oscoin.Prelude
@@ -21,7 +22,6 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block.Abstract as Abstract
-import           Oscoin.Storage.Block.Class (MonadBlockStore(..), getBlocks)
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
@@ -89,21 +89,6 @@ instance (Hashable tx, Monad m, MonadIO m) => MonadMempool tx (NodeT tx st s i m
     {-# INLINE delTxs    #-}
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
-
-instance (Monad m, MonadIO m) => MonadBlockStore tx s (NodeT tx st s i m) where
-    storeBlock blk  = withBlockStore (`Abstract.insertBlock` blk)
-    lookupBlock h   = withBlockStore (`Abstract.lookupBlock` h)
-    lookupTx   h    = withBlockStore (`Abstract.lookupTx` h)
-    getGenesisBlock = withBlockStore Abstract.getGenesisBlock
-    getOrphans      = withBlockStore Abstract.getOrphans
-    getBlocks depth = withBlockStore (`Abstract.getBlocks` depth)
-    getTip          = withBlockStore Abstract.getTip
-
-    {-# INLINE storeBlock     #-}
-    {-# INLINE lookupBlock    #-}
-    {-# INLINE getOrphans     #-}
-    {-# INLINE getBlocks      #-}
-    {-# INLINE getTip         #-}
 
 withBlockStore
     :: MonadIO m

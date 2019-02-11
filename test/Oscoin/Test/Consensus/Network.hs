@@ -44,8 +44,8 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
-import           Oscoin.Storage.Block.Class
-import qualified Oscoin.Storage.Block.Pure as BlockStore
+import qualified Oscoin.Storage.Block.Abstract as Abstract
+import qualified Oscoin.Storage.Block.Pure as Pure
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Time
 
@@ -65,9 +65,9 @@ import           Text.Show (Show(..))
 
 class
     ( MonadMempool DummyTx m
-    , MonadBlockStore DummyTx s m
     , MonadStateStore DummyState m
     , HasTestNodeState s a
+    , LiftTestNodeT s m
     ) => TestableNode s m a | a -> m, m -> a
   where
     testableInit         :: TestNetwork s b -> TestNetwork s a
@@ -97,7 +97,7 @@ testableShow = showChainDigest . testableBestChain
 testableBestChain :: TestableNode s m a => a -> Blockchain DummyTx s
 testableBestChain nodeState =
     let blockStore = nodeState ^. testNodeStateL . tnsBlockstoreL
-     in unsafeToBlockchain $ BlockStore.getBlocks 10000 blockStore
+     in unsafeToBlockchain $ Pure.getBlocks 10000 blockStore
      -- XXX(alexis): Don't use a magic number.
 
 -- Msg ------------------------------------------------------------------------
@@ -232,13 +232,14 @@ applyMessage :: (TestableNode s m a, Serialise s)
              -> Msg s
              -> m [Msg s]
 applyMessage _ _ _ _ msg@(TxMsg tx) = do
-    result <- Storage.applyTx tx
+    result <- withTestBlockStore $ \bs -> Storage.applyTx bs tx
     pure $ case result of
         Storage.Applied _ -> [msg]
         _                 -> []
 applyMessage config to validate eval msg@(BlockMsg blk) = do
-    result          <- Storage.applyBlock eval validate config blk
-    parentMissing   <- isNothing <$> Storage.lookupBlock parentHash
+    (result, parentMissing) <- withTestBlockStore $ \bs ->
+        (,) <$> Storage.applyBlock bs eval validate config blk
+            <*> map isNothing (Abstract.lookupBlock bs parentHash)
 
     -- If the parent block is missing, request it from the network.
     pure $ case result of
@@ -249,7 +250,7 @@ applyMessage config to validate eval msg@(BlockMsg blk) = do
   where
     parentHash = blockPrevHash $ blockHeader blk
 applyMessage _ _ _ _ (ReqBlockMsg from bh) = do
-    mblk <- Storage.lookupBlock bh
+    mblk <- withTestBlockStore $ \bs -> Abstract.lookupBlock bs bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
 applyMessage config to validate eval (ResBlockMsg _ blk) =
     applyMessage config to validate eval (BlockMsg blk)

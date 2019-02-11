@@ -13,6 +13,12 @@
           - testableTick
           # END false positives
       - module:
+        - name: Oscoin.Test.Consensus.Node
+        - identifier:
+          # BEGIN false positives
+          - liftTestNodeT
+          # END false positives
+      - module:
         - name: Oscoin.Test.P2P.IO
         - identifier:
           # BEGIN debug functions

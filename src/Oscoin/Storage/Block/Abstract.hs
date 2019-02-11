@@ -9,9 +9,11 @@
 module Oscoin.Storage.Block.Abstract
     ( BlockStore(..)
 
+    , hoistBlockStore
     , noValidation
     , defaultScoreFunction
     , insertBlocksNaive
+    , isNovelBlock
     ) where
 
 import           Oscoin.Prelude
@@ -47,6 +49,24 @@ data BlockStore tx s m = BlockStore
 Extra operations on the BlockStore, which are implementation-independent.
 ------------------------------------------------------------------------------}
 
+-- | Given a natural transformation from @n@ to @m@, hoists a 'BlockStore'
+-- initialised with a monad @n@ to work in the monad @m@.
+hoistBlockStore
+    :: forall tx s n m. (forall a. n a -> m a)
+    -> BlockStore tx s n
+    -> BlockStore tx s m
+hoistBlockStore natTrans bs = BlockStore
+    { scoreBlock      = scoreBlock bs
+    , validateBlock   = validateBlock bs
+    , insertBlock     = natTrans . insertBlock bs
+    , getGenesisBlock = natTrans (getGenesisBlock bs)
+    , lookupBlock     = natTrans . lookupBlock bs
+    , lookupTx        = natTrans . lookupTx bs
+    , getOrphans      = natTrans (getOrphans bs)
+    , getBlocks       = natTrans . getBlocks bs
+    , getTip          = natTrans (getTip bs)
+    }
+
 noValidation :: Validate tx s
 noValidation _ _ = Right ()
 
@@ -60,3 +80,6 @@ defaultScoreFunction = fst . decodeDifficulty . blockTargetDifficulty . blockHea
 -- can decide how to implement it efficiently.
 insertBlocksNaive :: Monad m => BlockStore tx s m -> [Block tx s] -> m ()
 insertBlocksNaive bs = traverse_ (insertBlock bs) . reverse
+
+isNovelBlock :: Functor m => BlockStore tx s m -> BlockHash -> m Bool
+isNovelBlock bs = map isNothing . lookupBlock bs

@@ -7,8 +7,8 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Storage.Block.Class (MonadBlockStore)
-import qualified Oscoin.Storage.Block.Class as BlockStore
+import           Oscoin.Storage.Block.Abstract (BlockStore)
+import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import qualified Oscoin.Storage.State.Class as StateStore
 
@@ -23,8 +23,7 @@ import           Codec.Serialise (Serialise)
 -- | Mine a block with the given 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
 mineBlock
-    :: ( MonadBlockStore   tx s m
-       , MonadMempool      tx   m
+    :: ( MonadMempool      tx   m
        , MonadReceiptStore tx b m
        , MonadStateStore   st   m
        , Serialise         tx
@@ -32,22 +31,23 @@ mineBlock
        , Crypto.Hashable   tx
        , Crypto.Hashable   st
        )
-    => Consensus tx s m
+    => BlockStore tx s m
+    -> Consensus tx s m
     -> Evaluator st tx b
     -> Timestamp
     -> m (Maybe (Block tx s))
-mineBlock Consensus{cMiner} eval time = do
+mineBlock bs Consensus{cMiner} eval time = do
     txs <- (map . map) snd Mempool.getTxs
-    parent <- BlockStore.getTip
+    parent <- BlockStore.getTip bs
     maybeState <- StateStore.lookupState $ blockStateHash $ blockHeader parent
     case maybeState of
         Just st -> do
             let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
-            maybeBlockHeader <- cMiner BlockStore.getBlocks (blockHeader blockCandidate)
+            maybeBlockHeader <- cMiner (BlockStore.getBlocks bs) (blockHeader blockCandidate)
             for maybeBlockHeader $ \header ->
                 let blk = blockCandidate `withHeader` header
                  in do Mempool.delTxs (blockData blk)
-                       BlockStore.storeBlock blk
+                       BlockStore.insertBlock bs blk
                        StateStore.storeState st'
                        for_ receipts addReceipt
                        pure blk

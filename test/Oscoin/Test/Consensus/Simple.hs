@@ -9,7 +9,6 @@ import           Oscoin.Consensus.Simple
 import           Oscoin.Crypto.Blockchain.Block (sealBlock)
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import           Oscoin.Storage.Block.Class (MonadBlockStore(..))
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
 import           Oscoin.Time
@@ -51,7 +50,6 @@ instance Monad m => MonadLastTime (SimpleT tx i m) where
     setLastAskTick tick   = modify' (\s -> s { ltLastAsk = tick })
 
 instance MonadMempool      tx    m => MonadMempool      tx    (SimpleT tx i m)
-instance MonadBlockStore   tx () m => MonadBlockStore   tx () (SimpleT tx i m)
 instance MonadReceiptStore tx () m => MonadReceiptStore tx () (SimpleT tx i m)
 instance MonadStateStore   S     m => MonadStateStore    S    (SimpleT tx i m)
 
@@ -71,11 +69,14 @@ data SimpleNodeState = SimpleNodeState
 instance HasTestNodeState PoA SimpleNodeState where
     testNodeStateL = lens snsNode (\s snsNode -> s { snsNode })
 
+instance LiftTestNodeT PoA SimpleNode where
+    liftTestNodeT = lift
 
 instance TestableNode PoA SimpleNode SimpleNodeState where
     testableTick tick = do
         position <- ask
-        mineBlock (simpleConsensus position) identityEval tick
+        withTestBlockStore $ \bs ->
+          mineBlock bs (simpleConsensus position) identityEval tick
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
