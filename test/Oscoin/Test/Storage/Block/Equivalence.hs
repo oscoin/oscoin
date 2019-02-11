@@ -58,8 +58,7 @@ propInsertGetTipEquivalence =
 -- 1. We start from a default chain;
 -- 2. We generate some random orphan chains together with the \"missing link\"
 --    necessary to make them non-orphans;
--- 3. After inserting each orphan chain, we check 'getOrphans' is consistent
---    between implementations;
+-- 3. We insert the orphan chain.
 -- 4. We add the \"missing link\", assessing the tip coincides.
 propForksInsertGetTipEquivalence :: Property
 propForksInsertGetTipEquivalence = do
@@ -76,9 +75,9 @@ propForksInsertGetTipEquivalence = do
                 -- Step 2: Store the orphan chains
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks orphans)
                 -- Step 3: Add the missing link and check the tip
-                p3 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
-                p4 <- apiCheck stores Abstract.getTip
-                pure [p1,p3,p4]
+                p2 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
+                p3 <- apiCheck stores Abstract.getTip
+                pure [p1,p2,p3]
             pure $ foldl' (.&&.) p0 (mconcat ps)
 
 {------------------------------------------------------------------------------
