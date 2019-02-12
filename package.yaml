@@ -80,7 +80,6 @@ library:
     - tagged
     - text
     - transformers
-    - typed-process
     - unordered-containers
     - wai
     - wai-middleware-static
@@ -110,15 +109,6 @@ executables:
       ld-options: -static
     dependencies:
       - oscoin
-
-  git-remote-oss:
-    main: exe/git-remote-helper/Main.hs
-    when:
-    - condition: "flag(static)"
-      ld-options: -static
-    dependencies:
-      - oscoin
-      - semigroups
 
 tests:
   documentation:
