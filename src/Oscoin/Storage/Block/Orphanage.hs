@@ -3,7 +3,6 @@ module Oscoin.Storage.Block.Orphanage
     , emptyOrphanage
     , getOrphans
     , insertOrphan
-    , getCandidateScore
     , toBlocksOldestFirst
     , selectBestChain
     , fromChainSuffix
@@ -20,6 +19,7 @@ import qualified Data.Sequence as Seq
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain hiding (parentHash, (|>))
+import qualified Oscoin.Crypto.Blockchain as Block
 
 {------------------------------------------------------------------------------
   Types
@@ -47,7 +47,7 @@ data Orphanage tx s = Orphanage
     }
 
 -- | A 'ChainCandidate' is a sequence of blocks and a partially-accumulated
--- 'Score', used to compute the best chain is 'selectBestChain'. The chain
+-- 'Score', used to compute the best chain in 'selectBestChain'. The chain
 -- is stored \"oldest first\", i.e. from the oldest to the newest block.
 data ChainCandidate s = ChainCandidate
     { candidateChain     :: Seq BlockHash
@@ -64,14 +64,13 @@ instance Eq s => Ord (ChainCandidate s) where
         let compareScore  = candidateScore chain1 `compare` candidateScore chain2
             compareLength = Seq.length (candidateChain chain1) `compare`
                             Seq.length (candidateChain chain2)
-            compareTipTs  = blockTimestamp (candidateTipHeader chain1) `compare`
-                            blockTimestamp (candidateTipHeader chain2)
+            compareTipHash = lookupChainTip chain1 `compare` lookupChainTip chain2
         in case compareScore of
           -- If we score a draw, pick the longest.
           EQ -> case compareLength of
-                  -- If we draw a score /again/, compare the timestamp of the
-                  -- tip and pick the most recent.
-                  EQ -> compareTipTs
+                  -- If we draw a score /again/, compare the hash of the
+                  -- tip header.
+                  EQ -> compareTipHash
                   y  -> y
           x  -> x
 
@@ -80,8 +79,8 @@ instance Eq s => Ord (ChainCandidate s) where
 ------------------------------------------------------------------------------}
 
 -- | /O(1)/ Creates a new 'ChainCandidate' from the input 'BlockWithScore'.
-newChainCandidate :: (Block tx s -> Score) -> Block tx s -> ChainCandidate s
-newChainCandidate scoreBlock b = ChainCandidate
+chainCandidate :: (Block tx s -> Score) -> Block tx s -> ChainCandidate s
+chainCandidate scoreBlock b = ChainCandidate
     { candidateChain = Seq.singleton (blockHash b)
     , candidateTipHeader = blockHeader b
     , candidateScore = scoreBlock b
@@ -106,17 +105,13 @@ toBlocksOldestFirst Orphanage{orphans} ChainCandidate{candidateChain} =
     fromMaybe (panic "toBlocksOldestFirst: the candidate chain was empty.") $
         traverse (`Map.lookup` orphans) (toList candidateChain)
 
--- | /O(1)/ Extracs the 'Score' out of this 'ChainCandidate'.
-getCandidateScore :: ChainCandidate s -> Score
-getCandidateScore = candidateScore
-
--- | /O(1)/. Lookups the tip (i.e. the newest) block for this 'ChainCandidate'.
+-- | /O(1)/. Looks up the tip (i.e. the newest) block for this 'ChainCandidate'.
 lookupChainTip :: ChainCandidate s -> Maybe BlockHash
 lookupChainTip cc = case Seq.viewr (candidateChain cc) of
                       EmptyR -> Nothing
                       _ :> b -> Just b
 
--- | /O(1)/. Lookups the root (i.e. the oldest) block for this 'ChainCandidate'.
+-- | /O(1)/. Looks up the root (i.e. the oldest) block for this 'ChainCandidate'.
 lookupChainRoot :: ChainCandidate s -> Maybe BlockHash
 lookupChainRoot cc = case Seq.viewl (candidateChain cc) of
                       EmptyL -> Nothing
@@ -204,7 +199,7 @@ bulkDelete bHash o =
               Just staleChains -> foldl' updateFn oldTips staleChains
 
 -- | /O(m)/ Inserts the candidates branching off the input block hash from the 'Orphanage'.
--- NOTE(adn) This function is ought to be internal and just called /after/ the its dual
+-- NOTE(adn) This function ought to be internal and just called /after/ the its dual
 -- 'bulkDelete'. This is used inside 'insertOrphans' to prune and replace
 -- candidates for which the parent block has changed.
 bulkInsert :: forall tx s. ChainRoot -> Candidates s -> Orphanage tx s -> Orphanage tx s
@@ -242,7 +237,7 @@ pruneOrphanage rootHash ChainCandidate{candidateChain} o =
 -- 2. This block is the /parent/ of an existing set of candidates. In this
 --    case, we iterate over all the candidates and add the block at the left
 --    end of each sequence, as well as replacing the old, stale set with a
---    new one, which key now points to the parent hash of the incoming block.
+--    new one, which now points to the parent hash of the incoming block.
 -- 3. This block extends one of the chain candidates at the end (i.e. this is
 --    a continuation of one of the chains. This is the trickiest scenario to
 --    implement efficiently.
@@ -256,7 +251,7 @@ insertOrphan b (storeOrphan b -> o) =
 
   where
     bHash             = blockHash b
-    parentHash        = blockPrevHash . blockHeader $ b
+    parentHash        = Block.parentHash $ b
     currentCandidates = candidates o
 
     -- Check if this block is the parent of any existing chain, and if it is,
@@ -276,7 +271,7 @@ insertOrphan b (storeOrphan b -> o) =
     addSingleton = Just $
         case Map.lookup parentHash currentCandidates of
           Just _existingCandidates ->
-              o { candidates = Map.adjust (\old -> old <> [newChainCandidate (scoreBlock o) b]) parentHash (candidates o)
+              o { candidates = Map.adjust (\old -> old <> [chainCandidate (scoreBlock o) b]) parentHash (candidates o)
                 , tips       = Map.adjust (\(oldP, oldIx) -> (oldP, oldIx + 1))  parentHash (tips o)
                 }
           Nothing ->
@@ -321,7 +316,7 @@ insertSingletonChain :: BlockHash
                      -> Orphanage tx s
                      -> Orphanage tx s
 insertSingletonChain parentHash b o =
-    o { candidates = Map.insert parentHash [newChainCandidate (scoreBlock o) b] (candidates o)
+    o { candidates = Map.insert parentHash [chainCandidate (scoreBlock o) b] (candidates o)
       , tips       = Map.insert (blockHash b) (parentHash, 0) (tips o)
       }
 

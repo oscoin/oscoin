@@ -74,16 +74,14 @@ compareChainsDefault :: (Block tx s -> Score)
                      -> Blockchain tx s
                      -> Ordering
 compareChainsDefault scoreBlock c1 c2 =
-    let compareScore  = chainScore c1 `compare` chainScore c2
-        compareLength = chainLength c1 `compare` chainLength c2
-        compareTipTs  = (blockTimestamp . blockHeader . tip $ c1) `compare`
-                        (blockTimestamp . blockHeader . tip $ c2)
+    let compareScore      = chainScore c1 `compare` chainScore c2
+        compareLength     = chainLength c1 `compare` chainLength c2
+        compareTipHashes  = (blockHash . tip $ c1) `compare` (blockHash . tip $ c2)
     in case compareScore of
       -- If we score a draw, pick the longest.
       EQ -> case compareLength of
-              -- If we draw a score /again/, compare the timestamp of the
-              -- tip and pick the most recent.
-              EQ -> compareTipTs
+              -- If we draw a score /again/, compare the hash of the tips.
+              EQ -> compareTipHashes
               y  -> y
       x  -> x
   where
