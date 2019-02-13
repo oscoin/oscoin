@@ -60,14 +60,12 @@ withTestBlockStore action =
     let store = BlockStore
           { scoreBlock      = Block.blockScore
           , validateBlock   = noValidation
-          , insertBlock     = \b -> do
-              st <- get
-              modify (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore st) })
+          , insertBlock     = \b ->
+              modify (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
           , getGenesisBlock =
               gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
-          , lookupBlock     = \h -> do
-              pureStore <- gets tnsBlockstore
-              pure $ BlockStore.Pure.lookupBlock h pureStore
+          , lookupBlock     = \h ->
+              BlockStore.Pure.lookupBlock h <$> gets tnsBlockstore
           , lookupTx        = \tx ->
               gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
           , getOrphans      = gets (BlockStore.Pure.orphans . tnsBlockstore)
