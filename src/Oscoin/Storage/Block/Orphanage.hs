@@ -34,8 +34,8 @@ data Orphanage tx s = Orphanage
     -- ^ The /actual/ blocks, indexed by their block hash and in no particular
     -- order.
     , candidates :: Map ChainRoot (Candidates s)
-    -- ^ The chain candidates, indexed by the /parent hash/ of the /tail/ of
-    -- the chain.
+    -- ^ The chain candidates, indexed by the /parent hash/ of the /root/ of
+    -- the chain (i.e. the oldest block and the first in the sequence).
     , tips       :: Map BlockHash (ChainRoot, Index)
     -- ^ /All/ the tips of /all/ the chain candidates in the system. This
     -- allows fast lookup when we need to merge two chains together. The
@@ -65,14 +65,9 @@ instance Eq s => Ord (ChainCandidate s) where
             compareLength = Seq.length (candidateChain chain1) `compare`
                             Seq.length (candidateChain chain2)
             compareTipHash = lookupChainTip chain1 `compare` lookupChainTip chain2
-        in case compareScore of
-          -- If we score a draw, pick the longest.
-          EQ -> case compareLength of
-                  -- If we draw a score /again/, compare the hash of the
-                  -- tip header.
-                  EQ -> compareTipHash
-                  y  -> y
-          x  -> x
+        -- If we score a draw, pick the longest.  If we draw a score /again/,
+        -- compare the hash of the tip header.
+        in mconcat [compareScore, compareLength, compareTipHash]
 
 {------------------------------------------------------------------------------
   Operations on chain candidates

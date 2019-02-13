@@ -43,7 +43,7 @@ propInsertOrphans = do
     let orphanage    = emptyOrphanage blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,)
-        forkParams = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
+        forkParams   = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
     forAllShow (genOrphanChainsFrom forkParams initialChain) showIt $ \chains ->
         monadic runIdentity $ do
             ps <- forM chains $ \(orphanChain, _missingLink) -> do

@@ -38,7 +38,6 @@ withBlockStore :: ( ToField s
                   , Ord s
                   , ToRow tx
                   , FromRow tx
-                  , Ord tx
                   )
                => String
                -- ^ The path where the DB will live on disk

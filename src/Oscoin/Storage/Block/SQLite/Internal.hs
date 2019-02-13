@@ -119,36 +119,26 @@ storeBlock
         ( ToField s
         , FromRow tx
         , ToRow tx
-        , Ord tx
         , Serialise s
         , FromField s
         , Ord s
         ) => Handle tx s -> Block tx s -> IO ()
 storeBlock h@Handle{..} blk =
     Sql.withTransaction hConn $ do
-        genesisBlock       <- getGenesisBlock hConn
         blockExists        <- isStored hConn $ blockHash blk
         blockConflicts     <- isConflicting hConn blk
         currentTip         <- getTip h
 
         if not blockExists && extendsTip currentTip && not blockConflicts
             then storeBlock' h blk
-            -- FIXME(adn) Sob, this is a side effect of the fact that storing
+            -- NOTE(adn) This is a side effect of the fact that storing
             -- the genesis as an orphan would insert it into the orphanage with
             -- its parent hash, which means that we won't be able to retrieve
             -- a potentiol candidate branching off from genesis in our 'selectBestChain'
             -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
             -- inserting the genesis block into the orphanage in the first place;
             -- After all, the genesis block should never be considered at orphan.
-            -- However, this is the least satisfactory solution, as it means we
-            -- need to hit the DB to grab the genesis /at every block insertion/.
-            -- We have a couple of fixes here:
-            -- 1. We cache the genesis block in memory;
-            -- 2. We add a precondition that we should never insert genesis in
-            --    the first place, so that this could would panic;
-            -- 3. We clearly state this invariant and amend our QC generators so
-            --    that we never generate chains starting from genesis.
-            else unless (blk == genesisBlock) $ storeOrphan h blk
+            else unless (isGenesisBlock blk) $ storeOrphan h blk
 
         -- Fork selection starts now.
         selectBestChain h
@@ -174,20 +164,18 @@ selectBestChain h@Handle{..} = do
 
     orphans <- readTVarIO hOrphans
 
-    case O.selectBestChain mutableBlockHashes orphans of
-        Nothing -> pure ()
-        Just (rootHash,bc) -> do
-            -- Compare the orphan best chain with the chain suffix currently adopted
-            chainSuffix <- getChainSuffix hConn rootHash
+    for_ (O.selectBestChain mutableBlockHashes orphans) $ \(rootHash, bc) -> do
+        -- Compare the orphan best chain with the chain suffix currently adopted
+        chainSuffix <- getChainSuffix hConn rootHash
 
-            -- Switch-to-better-chain condition: either the chain suffix is
-            -- empty, which means we are extending directly the tip, or if we
-            -- found a better candidate.
-            let newChainFound = null chainSuffix
-                             || O.fromChainSuffix hScoreFn (NonEmpty.fromList chainSuffix) < bc
+        -- Switch-to-better-chain condition: either the chain suffix is
+        -- empty, which means we are extending directly the tip, or if we
+        -- found a better candidate.
+        let newChainFound = null chainSuffix
+                         || O.fromChainSuffix hScoreFn (NonEmpty.fromList chainSuffix) < bc
 
-            when newChainFound $
-                switchToFork rootHash bc orphans chainSuffix
+        when newChainFound $
+            switchToFork rootHash bc orphans chainSuffix
 
   where
     switchToFork rootHash fork orphans chainSuffix = do
