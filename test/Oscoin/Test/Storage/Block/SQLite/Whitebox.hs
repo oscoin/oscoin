@@ -16,11 +16,10 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary
-                 (arbitraryValidBlockWith, arbitraryValidBlockchainFrom)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import           Oscoin.Test.Storage.Block.Generators
 import           Oscoin.Test.Storage.Block.SQLite
 
 import           Test.Tasty
@@ -32,8 +31,8 @@ tests =
     [ testGroup "Storage.Block.SQLite whitebox testing (internals)"
         [ testProperty "Get Score"          (withSqliteDB genAtLeastSixBlocks testGetScore)
         , testProperty "isStored"           (withSqliteDB (const arbitrary) testIsStored)
-        , testProperty "isConflicting"      (withSqliteDB (\g -> (,) <$> genGenesisLinkedBlock g
-                                                                     <*> genGenesisLinkedBlock g
+        , testProperty "isConflicting"      (withSqliteDB (\g -> (,) <$> genBlockFrom g
+                                                                     <*> genBlockFrom g
                                                           ) testIsConflicting)
         ]
     , testGroup "Storage.Block.SQLite whitebox (forks)"
@@ -50,9 +49,9 @@ tests =
 genTestFork1 :: Block RadTx DummySeal
              -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
 genTestFork1 genesisBlock = do
-    blk  <- arbitraryValidBlockWith (blockHeader genesisBlock) []
-    blk' <- withDifficulty (encodeDifficulty $ blockScore blk + 1)
-        <$> arbitraryValidBlockWith (blockHeader genesisBlock) []
+    blk  <- genBlockFrom genesisBlock
+    blk' <- withDifficulty (encodeDifficulty $ blockScore blk + 1) <$>
+               genBlockFrom genesisBlock
     pure (blk, blk')
 
 -- | Generates three 'Block's, in increasing order of 'Difficulty'.
@@ -73,7 +72,7 @@ genTestFork2 genesisBlock = do
 -- | Generates a 'Blockchain' with at least six blocks.
 genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
 genAtLeastSixBlocks genesisBlock =
-    arbitraryValidBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
+    genBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
 
 -- | NOTE(adn) This function is better used sparingly, as changing the
 -- 'Difficulty' after the block has been forged also changes its hash and might

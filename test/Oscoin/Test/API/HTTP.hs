@@ -120,7 +120,7 @@ getMissingBlock codec = liftIO $ httpTest emptyNodeState $ do
 
 getExistingBlock :: Codec -> PropertyM IO HTTPTest
 getExistingBlock codec = do
-    chain <- pick arbitraryValidBlockchain
+    chain <- pick arbitraryBlockchain
     let g = genesis chain
     let blockId = toUrlPiece $ blockHash g
 
@@ -131,7 +131,7 @@ getExistingBlock codec = do
 
 getBestChain :: Codec -> PropertyM IO HTTPTest
 getBestChain codec = do
-    chain <- pick arbitraryValidBlockchain
+    chain <- pick arbitraryBlockchain
 
     liftIO $ httpTest (nodeState mempty chain def) $ do
         get codec "/blockchain/best?depth=1" >>=

@@ -10,7 +10,8 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (blockScore)
 import           Oscoin.Storage.Block.Orphanage
 
-import           Oscoin.Test.Storage.Block.Generators
+import           Oscoin.Test.Crypto.Blockchain.Generators
+                 (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite
                  ( bestChainOracle
                  , defaultGenesis

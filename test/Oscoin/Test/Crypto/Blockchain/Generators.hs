@@ -1,24 +1,27 @@
-{- | Drop-in replacement for 'Oscoin.Test.Crypto.Blockchain.Arbitrary', coded
-   separately for now to not cause too much breakage for tests relying on the
-   fact chains are small.
--}
-
-module Oscoin.Test.Storage.Block.Generators
+module Oscoin.Test.Crypto.Blockchain.Generators
     ( ForkParams(..)
-    , genBlockFrom
+
+      -- * Generating generic chains
     , genBlockchainFrom
     , genOrphanChainsFrom
+
+      -- * Generating Nakamoto chains
+    , genNakamotoBlockchainFrom
     ) where
 
 import           Oscoin.Prelude
 
 import           Codec.Serialise (Serialise)
+import           Data.List.NonEmpty ((<|))
 import           GHC.Natural
 
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Time
 
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+                 (genBlockFrom, genNakamotoBlockFrom)
 import           Test.QuickCheck
+
 
 data ForkParams = ForkParams
     { forkBranchingFactor :: Natural
@@ -49,50 +52,6 @@ genChainEvents inputChainSize ForkParams{..} = do
     dontFork <- vectorOf (inputChainSize - fromIntegral forkNumber) (pure DoNotFork)
     shuffle (doFork ++ dontFork)
 
--- | The difficulty is calculated with random swings with a factor of 4(**),
--- as described in https://github.com/oscoin/oscoin/issues/344
--- (**) This is /almost/ true: in particular, we decrease the difficulty of a
--- factor of 4000 to make sure we generate a wider variety of scores in our
--- tests, for example:
---
---     Chain Score (100 in total):
---     34% >50000 score
---     24% 5000-50000 score
---     16% 0 score
---     14% 500-5000 score
---     12% 0-10 score
---
-genDifficultyFrom :: Difficulty -> Gen Difficulty
-genDifficultyFrom (fromDifficulty -> prevDifficulty) =
-    let (lessDifficulty :: Integer) = ceiling (fromIntegral prevDifficulty / 4000.0 :: Double)
-        (moreDifficulty :: Integer) = ceiling (fromIntegral prevDifficulty * 4.0 :: Double)
-    in frequency [ (20, pure (unsafeDifficulty prevDifficulty))
-                 , (60, encodeDifficulty <$> choose (1, lessDifficulty))
-                 , (20, encodeDifficulty <$> choose (lessDifficulty, moreDifficulty))
-                 ]
-
---- | Generates an arbitrary block. Mostly similar (if not identical) to the
--- one in 'Oscoin.Test.Crypto.Blockchain.Arbitrary', with the difference that
--- we use our own internal generator for the 'Difficulty'.
-genBlockFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
-             => Block tx s
-             -> Gen (Block tx s)
-genBlockFrom parentBlock =  do
-    let prevHeader = blockHeader parentBlock
-    elapsed    <- choose (2750 * seconds, 3250 * seconds)
-    txs        <- listOf arbitrary
-    blockState <- arbitrary :: Gen Word8
-    blockSeal  <- arbitrary
-    blockDiffi <- genDifficultyFrom (blockTargetDifficulty prevHeader)
-    let header = emptyHeader
-               { blockPrevHash         = headerHash prevHeader
-               , blockDataHash         = hashTxs txs
-               , blockStateHash        = hashState blockState
-               , blockSeal
-               , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
-               , blockTargetDifficulty = blockDiffi
-               }
-    pure $ mkBlock header txs
 
 -- | Generates a 'Blockchain' from the input 'Block' (included in the resulting
 -- chain).
@@ -181,3 +140,21 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
                   case blks of
                     [missingBlock] -> go xs ((orphanChain, missingBlock) : acc)
                     _ -> go xs acc
+
+{------------------------------------------------------------------------------
+  Generating Nakamoto's chains
+------------------------------------------------------------------------------}
+
+genNakamotoBlockchainFrom
+    :: (Arbitrary tx, Serialise tx)
+    => Block tx Nakamoto.PoW
+    -> Gen (Blockchain tx Nakamoto.PoW)
+genNakamotoBlockchainFrom parentBlock = sized $ \n ->
+    go (parentBlock :| []) n
+  where
+    go blks 0 =
+        pure $ Blockchain blks
+    go blks n = do
+        blk <- genNakamotoBlockFrom blks
+        go (blk <| blks) (n - 1)
+

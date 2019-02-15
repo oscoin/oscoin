@@ -21,14 +21,12 @@ import qualified Oscoin.Test.API.HTTP as HTTP
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary
-                 (arbitraryValidBlockchain)
+import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryBlockchain)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Environment as Environment
 import qualified Oscoin.Test.P2P as P2P
-import           Oscoin.Test.Storage.Block.Arbitrary ()
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
 import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
@@ -55,7 +53,7 @@ tests config = testGroup "Oscoin"
     , testCase       "Crypto"                         testOscoinCrypto
     , testProperty   "Mempool"                        testOscoinMempool
     , testProperty   "BlockStore lookup block"        testBlockStoreLookupBlock
-    , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryValidBlockchain)
+    , testProperty   "BlockStore"                     (propOscoinBlockStore arbitraryBlockchain)
     , testProperty   "JSON instance of Hashed"        propHashedJSON
     , testProperty   "JSON instance of Signed"        propSignedJSON
     , testGroup      "Consensus"                      (Consensus.tests config)
@@ -117,7 +115,7 @@ testOscoinMempool = once $ monadicIO $ do
 
 testBlockStoreLookupBlock :: Property
 testBlockStoreLookupBlock = once $ monadicIO $ do
-    blks <- pick (arbitraryValidBlockchain @() @())
+    blks <- pick (arbitraryBlockchain @() @())
     let g  = genesis blks
     let bs = BlockStore.initWithChain blks
     liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
@@ -126,7 +124,7 @@ propOscoinBlockStore
     :: Gen (Blockchain (Seq Word8) (Seq Word8))
     -> Property
 propOscoinBlockStore chainGen =
-    forAll chainGen $ \chain -> do
+    forAll (resize 10 chainGen) $ \chain -> do
         let foldEval x xs = Right ((), xs <> x)
         let blks = NonEmpty.toList $ fromBlockchain chain
         let bs   = BlockStore.fromOrphans blks (genesis chain)

@@ -12,11 +12,10 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary
-                 ( arbitraryBlock
-                 , arbitraryBlockWith
-                 , arbitraryValidBlockchainFrom
-                 )
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary
+                 (arbitraryBlock, arbitraryBlockWith)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
@@ -30,7 +29,7 @@ import           Test.Tasty.QuickCheck
 tests :: [TestTree]
 tests =
     [ testGroup "Storage.Block"
-        [ testProperty "Store/lookup Block" (withMemStore genGenesisLinkedBlock testStoreLookupBlock)
+        [ testProperty "Store/lookup Block" (withMemStore genBlockFrom testStoreLookupBlock)
         , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock testStoreLookupTx)
         , testProperty "Get Genesis Block"  (withMemStore (const arbitrary) testGetGenesisBlock)
         , testProperty "Get blocks"         (withMemStore genGetBlocks testGetBlocks)
@@ -45,14 +44,14 @@ tests =
 -- | Generates a non-empty 'Block'.
 genNonEmptyBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
 genNonEmptyBlock genesisBlock =
-    genGenesisLinkedBlock genesisBlock `suchThat` (not . null . blockData)
+    genBlockFrom genesisBlock `suchThat` (not . null . blockData)
 
 
 genGetBlocks :: Block RadTx DummySeal
              -> Gen (Block RadTx DummySeal, Blockchain RadTx DummySeal)
 genGetBlocks genesisBlock =
     (,) <$> arbitraryBlock
-        <*> resize 1 (arbitraryValidBlockchainFrom genesisBlock)
+        <*> resize 1 (genBlockchainFrom genesisBlock)
 
 
 {------------------------------------------------------------------------------

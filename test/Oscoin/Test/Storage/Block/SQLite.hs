@@ -1,6 +1,5 @@
 module Oscoin.Test.Storage.Block.SQLite
-    ( genGenesisLinkedBlock
-    , defaultGenesis
+    ( defaultGenesis
     , DummySeal
     , withSqliteDB
     , withMemStore
@@ -24,10 +23,9 @@ import           Oscoin.Storage.Block.SQLite as Sqlite
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 import qualified Oscoin.Time as Time
 
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryBlock)
+import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import           Oscoin.Test.Storage.Block.Generators
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Monadic
@@ -37,15 +35,6 @@ type DummySeal = Text
 -- | Generates a genesis block with a slightly more realistic 'Difficulty'.
 defaultGenesis :: Block tx DummySeal
 defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
-
--- | Generates an arbitrary 'Block' which is linked with the genesis block
--- and that has a valid timestamp (> timestamp(genesis)).
-genGenesisLinkedBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
-genGenesisLinkedBlock genesisBlock =
-    let genesisTimestamp = blockTimestamp . blockHeader $ genesisBlock
-        blockInTheFuture = arbitraryBlock
-            `suchThat` ((> genesisTimestamp) . blockTimestamp . blockHeader)
-    in linkParent genesisBlock <$> blockInTheFuture
 
 {------------------------------------------------------------------------------
   Useful combinators & helpers

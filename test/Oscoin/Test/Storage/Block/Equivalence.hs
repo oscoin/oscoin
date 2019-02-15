@@ -18,7 +18,8 @@ import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
 
-import           Oscoin.Test.Storage.Block.Generators
+import           Oscoin.Test.Crypto.Blockchain.Generators
+                 (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
 import           Oscoin.Test.Util (Condensed(..), showOrphans)
 
