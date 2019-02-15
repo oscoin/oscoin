@@ -16,11 +16,16 @@ module Oscoin.Crypto.Hash
     , maxHash
     , zeroHash
     , shortHash
+
+    -- * Temporary multihash shim
+    , encodeAtBase
+    , decodeAtBase
     ) where
 
 import           Oscoin.Prelude
 import qualified Prelude
 
+import qualified Codec.Serialise.Multihash as Multihash.CBOR
 import           Codec.Serialise.Orphans ()
 
 import           Codec.Serialise (Serialise)
@@ -28,8 +33,6 @@ import qualified Codec.Serialise as Serial
 import           Control.Monad.Fail (fail)
 import           Crypto.Hash (Blake2b_256(..), Digest)
 import qualified Crypto.Hash as Crypto
-import           Crypto.Hash.Multi (Multihashable)
-import qualified Crypto.Hash.Multi as Multihash
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import           Data.Binary (Binary)
@@ -44,6 +47,8 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
 import qualified Data.Map as Map
 import           Data.Maybe (fromJust)
+import           Data.Multihash (Multihash, Multihashable)
+import qualified Data.Multihash as Multihash
 import qualified Data.Text as T
 import qualified Database.SQLite.Simple as Sql
 import qualified Database.SQLite.Simple.FromField as Sql
@@ -53,6 +58,26 @@ import           Formatting (Format)
 import qualified Formatting as Fmt
 import qualified Text.Show as Show
 import           Web.HttpApiData (FromHttpApiData(..), ToHttpApiData(..))
+
+{------------------------------------------------------------------------------
+-- Little multihash shim needed while we tackle
+-- https://github.com/oscoin/ipfs/issues/43
+------------------------------------------------------------------------------}
+
+-- | Decode a 'C.Digest' from a multihash- and base-n-encoded 'ByteString'.
+decodeAtBase
+    :: forall a b.
+       ( Multihashable    a
+       , BaseN.DecodeBase b
+       )
+    => BaseN.Base b
+    -> ByteString
+    -> Either String (Digest a)
+decodeAtBase base = BaseN.decodeAtBaseEither base >=> Multihash.decodeDigest
+
+-- | Encode a 'Multihash' at a 'BaseN.Base'.
+encodeAtBase :: BaseN.Base b -> Multihash -> BaseN.AtBase b
+encodeAtBase base mhash = BaseN.encodeAtBase base (Multihash.encodedBytes mhash)
 
 -- | Default hash algorithm type used in this module.
 type HashAlgorithm = Blake2b_256
@@ -100,7 +125,7 @@ instance Multihashable a => ToJSON (Hash' a) where
 instance Multihashable a => FromJSON (Hash' a) where
     parseJSON = withText "Hash'" $
         either fail pure
-            . second Hash . Multihash.decodeAtBase BaseN.Base58 . encodeUtf8
+            . second Hash . decodeAtBase BaseN.Base58 . encodeUtf8
 
 instance Multihashable a => Sql.ToField (Hash' a) where
     toField = Sql.SQLText . BaseN.encodedText . multiB58
@@ -110,7 +135,7 @@ instance (Multihashable a, Typeable a) => Sql.FromField (Hash' a) where
         case Sql.fieldData f of
             Sql.SQLText t ->
                 either (const sqlErr) (Sql.Ok . Hash)
-                       (Multihash.decodeAtBase BaseN.Base58 $ encodeUtf8 t)
+                       (decodeAtBase BaseN.Base58 $ encodeUtf8 t)
             _ ->
                 sqlErr
       where
@@ -124,15 +149,15 @@ instance Sql.FromField (Hashed a) where
     fromField = map toHashed . Sql.fromField
 
 instance forall a. Multihashable a => Serialise (Hash' a) where
-    encode = Multihash.encodeCBOR . fromHash
-    decode = Hash <$> Multihash.decodeCBOR
+    encode = Multihash.CBOR.encode . fromHash
+    decode = Hash <$> Multihash.CBOR.decode
 
 instance Multihashable a => ToHttpApiData (Hash' a) where
     toQueryParam = Fmt.sformat formatHash
 
 instance Multihashable a => FromHttpApiData (Hash' a) where
     parseQueryParam =
-        bimap T.pack Hash . Multihash.decodeAtBase BaseN.Base58 . encodeUtf8
+        bimap T.pack Hash . decodeAtBase BaseN.Base58 . encodeUtf8
 
 -- | A 'Hash'' tagged by its pre-image
 newtype Hashed' algo a = Hashed (Hash' algo)
@@ -242,7 +267,7 @@ fmtB58 :: Multihashable a => Format r (Hash' a -> r)
 fmtB58 = Fmt.mapf multiB58 BaseN.format
 
 multiB58 :: Multihashable a => Hash' a -> BaseN.Base58
-multiB58 = Multihash.encodeAtBase BaseN.Base58 . Multihash.fromDigest . fromHash
+multiB58 = encodeAtBase BaseN.Base58 . Multihash.fromDigest . fromHash
 
 hashDigestSize :: forall proxy a. Crypto.HashAlgorithm a => proxy a -> Int
 hashDigestSize _ = Crypto.hashDigestSize (Prelude.undefined :: a)

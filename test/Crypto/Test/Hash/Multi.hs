@@ -5,10 +5,11 @@ module Crypto.Test.Hash.Multi
 import           Oscoin.Prelude
 
 import qualified Crypto.Hash as C
-import           Crypto.Hash.Multi (Multihashable)
-import qualified Crypto.Hash.Multi as Multihash
 import           Data.ByteString.BaseN (Base, DecodeBase)
 import qualified Data.ByteString.BaseN as BaseN
+import           Data.Multihash (Multihashable)
+import qualified Data.Multihash as Multihash
+import           Oscoin.Crypto.Hash (decodeAtBase, encodeAtBase)
 
 import           Hedgehog (MonadGen, PropertyT, forAll, property, (===))
 import qualified Hedgehog.Gen as Gen
@@ -16,6 +17,9 @@ import qualified Hedgehog.Range as Range
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 import           Test.Tasty.HUnit (Assertion, testCase, (@?=))
+
+-- FIXME(adn) These tests needs to probably be moved to `multihash-cryptonite`
+-- and `multibase` altogether.
 
 tests :: TestTree
 tests = testGroup "Multihash"
@@ -69,8 +73,8 @@ propRoundtrip
     -> PropertyT IO ()
 propRoundtrip base algo bs =
     let digest = C.hashWith algo bs
-        enc    = Multihash.encodeAtBase base . Multihash.fromDigest
-        dec    = Multihash.decodeAtBase base . BaseN.encodedBytes
+        enc    = encodeAtBase base . Multihash.fromDigest
+        dec    = decodeAtBase base . BaseN.encodedBytes
      in (dec . enc) digest === Right digest
 
 example
@@ -95,4 +99,4 @@ multihash
     -> ByteString
     -> BaseN.AtBase b
 multihash base algo bs =
-    Multihash.encodeAtBase base $ Multihash.multihash algo bs
+    encodeAtBase base $ Multihash.multihash algo bs

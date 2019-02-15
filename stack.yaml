@@ -27,5 +27,12 @@ extra-deps:
 - git: https://github.com/oscoin/gossip
   commit: 3307ec12e30288c21ef20030be871ba3e518b58b
 
+- git: https://github.com/oscoin/ipfs
+  commit: 421c5fc975b8ef030ba5e631af424be6c7fdd2bb
+  subdirs:
+      - binary-varint
+      - multihash-cryptonite
+      - multihash-serialise
+
 ghc-options:
   "$locals": -fhide-source-paths

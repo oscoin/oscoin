@@ -64,6 +64,8 @@ library:
     - microlens-mtl
     - mmorph
     - mtl
+    - multihash-cryptonite
+    - multihash-serialise
     - network
     - optparse-applicative
     - prettyprinter
@@ -151,6 +153,7 @@ tests:
       - memory
       - microlens
       - mtl
+      - multihash-cryptonite
       - network
       - nicify-lib
       - optparse-applicative
