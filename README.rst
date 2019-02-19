@@ -1,11 +1,29 @@
-README
+oscoin
 ======
+Oscoin full node reference implementation in Haskell.
 
-This is the oscoin client.
+**Warning: this implementation is a work in progress, and not ready for
+production use. The source code is provided here for informational purposes
+only.**
 
-TESTING
+Building
+--------
+Build the full node with::
+
+   stack build
+
+Running
 -------
+First, generate a key pair for your node::
 
+   stack exec oscoin-cli -- keypair generate
+
+Then run the full node with::
+
+   stack exec oscoin -- --no-empty-blocks
+
+Testing
+-------
 Run the tests with file-watching with::
 
   stack test --file-watch --fast
@@ -17,9 +35,8 @@ To load the tests in the repl, run::
 Then call the ``main`` function to run them, and reload with ``:r`` as
 necessary.
 
-PROFILING
+Profiling
 ---------
-
 To profile the test-suite, run::
 
   stack test --profile -j4 --work-dir .stack-work-prof
@@ -32,9 +49,8 @@ This will output a file, ``test.prof`` which you can convert to an interactive
 This will require installation of ``ghc-prof-flamegraph``. Then open the ``.svg``
 with any browser.
 
-DOCS
+Docs
 ----
-
 To generate local package documentation, run::
 
   stack haddock oscoin
@@ -53,9 +69,6 @@ These documents are literate Haskell files pre-processed with
 executable code which can be kept up-to-date with the codebase. We also have
 a ``test-suite`` which ensure these documentation files keep compiling.
 
-COPYRIGHT
+Copyright
 ---------
-
-Copyright (c) Monadic, 2017-2018
-
-.. vim: filetype=rst
+Copyright (c) Monadic, 2017-2019
