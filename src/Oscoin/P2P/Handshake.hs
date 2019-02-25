@@ -31,7 +31,7 @@ import           Codec.Serialise (Serialise)
 data HandshakeError =
       SimpleHandshakeError SimpleError
     | NoiseHandshakeError  NoiseError
-    deriving Show
+    deriving (Show, Generic)
 
 instance Exception HandshakeError
 

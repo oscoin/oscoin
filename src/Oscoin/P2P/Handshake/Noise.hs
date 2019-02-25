@@ -69,7 +69,7 @@ data NoiseError =
     | MissingRemoteStaticKey
     | NoiseException SomeException
     | NetworkError Transport.RecvError
-    deriving Show
+    deriving (Show, Generic)
 
 instance Exception NoiseError
 

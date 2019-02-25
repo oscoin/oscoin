@@ -94,11 +94,10 @@ withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
         Membership.defaultConfig
         Periodic.defaultConfig
         scheduleInterval
-        (wrapHandshake handshake)
+        (wrapHandshake telemetryStore handshake)
         (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
         (wrapLookup storageLookupBlock storageLookupTx)
-        (nodeHost selfAddr)
-        (nodePort selfAddr)
+        (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
         peers
         run
   where
@@ -110,27 +109,33 @@ wrapHandshake
     :: ( Exception e
        , Serialise o
        )
-    => Handshake e NodeId Wire o
+    => Telemetry.Handle
+    -> Handshake e NodeId Wire o
     -> Gossip.Socket.HandshakeRole
     -> Socket
     -> SockAddr
     -> Maybe NodeId
     -> IO (Gossip.Socket.Connection NodeId Wire)
-wrapHandshake handshake role sock addr psk = do
+wrapHandshake telemetry handshake role sock addr psk = do
     hres <-
         runHandshakeT (Transport.framed sock) $
             handshake (mapHandshakeRole role) psk
     case hres of
-        Left  e -> throwM e
+        Left  e -> do
+            emit telemetry . Telemetry.HandshakeEvent $
+                HandshakeError addr (toException e)
+            throwM e
         Right r -> do
+            let peer = Gossip.Peer
+                        { Gossip.peerNodeId = hrPeerId r
+                        , Gossip.peerAddr   = addr
+                        }
+            emit telemetry . Telemetry.HandshakeEvent $ HandshakeComplete peer
             mutex <- newMVar ()
             let transp = Transport.streamingEnvelope (hrPreSend r) (hrPostRecv r)
                        $ Transport.streaming sock
             pure Gossip.Socket.Connection
-                { Gossip.Socket.connPeer = Gossip.Peer
-                    { Gossip.peerNodeId = hrPeerId r
-                    , Gossip.peerAddr   = addr
-                    }
+                { Gossip.Socket.connPeer = peer
                 , Gossip.Socket.connSend  = withMVar mutex . const . Transport.streamingSend transp
                 , Gossip.Socket.connRecv  = Transport.streamingRecv transp
                 , Gossip.Socket.connClose = pure ()

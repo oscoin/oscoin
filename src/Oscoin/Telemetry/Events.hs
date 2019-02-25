@@ -8,6 +8,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Time (Duration)
 
+import qualified Network.Gossip.IO.Trace as Gossip (Traceable)
+
 import           Network.HTTP.Types as HTTP
 import           Network.Wai as HTTP
 
@@ -50,3 +52,7 @@ data NotableEvent where
     -- ^ Triggered every time the P2P layer returns a 'ConversionError'.
     HttpApiRequest :: HTTP.Request -> HTTP.Status -> Duration -> NotableEvent
     -- ^ Triggered every time a new HTTP request is issued to the node's API.
+    GossipEvent :: Gossip.Traceable P2P.NodeId -> NotableEvent
+    -- ^ Events emitted by the @gossip@ library
+    HandshakeEvent :: P2P.HandshakeEvent P2P.NodeId -> NotableEvent
+    -- ^ Events emitted during the p2p handshake phase

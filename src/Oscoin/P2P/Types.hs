@@ -7,6 +7,8 @@ module Oscoin.P2P.Types
 
     , Msg(..)
     , MsgId(..)
+
+    , HandshakeEvent(..)
     , ConversionError(..)
 
     -- * Formatters
@@ -19,6 +21,8 @@ import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Telemetry.Logging as Log
+
+import qualified Network.Gossip.IO.Peer as Gossip (Peer)
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
@@ -35,7 +39,7 @@ import           Data.Aeson
 import           Data.Hashable (Hashable(..))
 import           Formatting as F
 import qualified Generics.SOP as SOP
-import           Network.Socket (HostName, PortNumber)
+import           Network.Socket (HostName, PortNumber, SockAddr)
 
 newtype NodeId = NodeId { fromNodeId :: PublicKey }
     deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
@@ -79,6 +83,10 @@ data MsgId tx =
     deriving (Eq, Generic)
 
 instance Serialise tx => Serialise (MsgId tx)
+
+data HandshakeEvent n =
+      HandshakeError    SockAddr SomeException
+    | HandshakeComplete (Gossip.Peer n)
 
 data ConversionError =
       DeserialiseFailure CBOR.DeserialiseFailure

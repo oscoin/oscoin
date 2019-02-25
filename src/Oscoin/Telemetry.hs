@@ -21,13 +21,21 @@ import           Formatting.Buildable as F
 import           GHC.Stack as GHC
 import           Lens.Micro
 import           Network.HTTP.Types as HTTP
+import           Network.Socket (SockAddr)
 import           Network.Wai as HTTP
+
+import qualified Network.Gossip.HyParView as Gossip.HPV
+import qualified Network.Gossip.IO.Peer as Gossip (Peer, peerAddr, peerNodeId)
+import qualified Network.Gossip.IO.Protocol as Gossip
+import qualified Network.Gossip.IO.Trace as Gossip
+import qualified Network.Gossip.Plumtree as Gossip.EBT
 
 import qualified Oscoin.Consensus.Types as Consensus
 import           Oscoin.Crypto.Blockchain.Block (prettyDifficulty)
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
-import           Oscoin.Crypto.Hash (formatHash)
+import           Oscoin.Crypto.Hash (formatHash, formatHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.PubKey (publicKeyHash)
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
@@ -134,9 +142,89 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                           (HTTP.pathInfo req)
                           (HTTP.queryString req)
                           duration
+
+        GossipEvent    e -> Log.withNamespace "gossip" $ traceGossip e
+        HandshakeEvent e -> Log.withNamespace "p2p"    $ traceHandshake e
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
+
+    traceGossip = \case
+        Gossip.TraceBootstrap e -> case e of
+            Gossip.Bootstrapping self _others ->
+                Log.infoM "bootstrapping" fmtPeer self
+            Gossip.Bootstrapped self ->
+                Log.infoM "bootstrapped" fmtPeer self
+
+        Gossip.TraceConnection e -> case e of
+            Gossip.Connecting peer ->
+                Log.infoM "connecting" fmtPeer peer
+            Gossip.Connected peer ->
+                Log.infoM "connected" fmtPeer peer
+            Gossip.ConnectFailed peer ex ->
+                Log.errM "failed to connect"
+                         (fmtPeer % " " % fexception)
+                         peer
+                         ex
+            Gossip.ConnectionLost peer ex ->
+                Log.infoM "connection reset by peer"
+                          (fmtPeer % " " % fexception)
+                          peer
+                          ex
+            Gossip.ConnectionAccepted addr ->
+                Log.infoM "incoming connection" (ftag "addr" % fmtSockAddr) addr
+            Gossip.Disconnected peer ->
+                Log.infoM "disconnected" fmtPeer peer
+
+        Gossip.TraceMembership e ->
+            let
+                (msg, peer) = case e of
+                    Gossip.Promoted p ->
+                        ("peer promoted to active view", p)
+                    Gossip.Demoted p ->
+                        ("peer demoted from active view", p)
+             in
+                Log.debugM msg fmtPeer peer
+
+        Gossip.TraceWire (Gossip.ProtocolError rcpt ex) ->
+            Log.errM "error sending" (fmtPeer % " " % fexception) rcpt ex
+        Gossip.TraceWire e ->
+            let
+                payloadInfo = \case
+                   Gossip.ProtocolPlumtree rpc ->
+                       case Gossip.EBT.rpcPayload rpc of
+                           Gossip.EBT.Gossip{} -> "gossip"
+                           Gossip.EBT.IHave{}  -> "ihave"
+                           Gossip.EBT.Prune    -> "prune"
+                           Gossip.EBT.Graft{}  -> "graft"
+
+                   Gossip.ProtocolHyParView rpc ->
+                       case Gossip.HPV.rpcPayload rpc of
+                           Gossip.HPV.Join           -> "join"
+                           Gossip.HPV.ForwardJoin{}  -> "forward join"
+                           Gossip.HPV.Disconnect     -> "disconnect"
+                           Gossip.HPV.Neighbor{}     -> "neighbor"
+                           Gossip.HPV.NeighborReject -> "neighbor reject"
+                           Gossip.HPV.Shuffle{}      -> "shuffle"
+                           Gossip.HPV.ShuffleReply{} -> "shuffle reply"
+
+                (msg, pl, peer) = case e of
+                    Gossip.ProtocolRecv from rpc ->
+                        ("received", payloadInfo rpc, from)
+                    Gossip.ProtocolSend to' rpc ->
+                        ("sending", payloadInfo rpc, to')
+                    _ -> panic "Gossip.ProtocolError not handled"
+             in
+                Log.debugM msg (stext % " " % fmtPeer) pl peer
+
+    traceHandshake = \case
+        P2P.HandshakeError addr ex ->
+            Log.errM "error during handshake"
+                     (ftag "addr" % fmtSockAddr % " " % fexception)
+                     addr
+                     ex
+        P2P.HandshakeComplete peer ->
+            Log.debugM "handshake complete" fmtPeer peer
 
 -- | Maps each 'NotableEvent' to a set of 'Action's. The big pattern-matching
 -- block is by design. Despite the repetition (once in 'emit' and once in
@@ -209,6 +297,82 @@ toActions = \case
                         (fromIntegral duration / fromIntegral Time.seconds)
      ]
 
+    GossipEvent e -> case e of
+        Gossip.TraceConnection evt -> case evt of
+            Gossip.Connected{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.connection.connect_success.total"
+                    noLabels
+                ]
+            Gossip.ConnectFailed{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.connection.connect_errors.total"
+                    noLabels
+                ]
+            Gossip.ConnectionAccepted{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.connection.accepted.total"
+                    noLabels
+                ]
+            Gossip.ConnectionLost{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.connection.reset_by_peer.total"
+                    noLabels
+                ]
+            Gossip.Disconnected{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.connection.disconnected.total"
+                    noLabels
+                ]
+            _ -> []
+
+        Gossip.TraceWire evt -> case evt of
+            Gossip.ProtocolError{} ->
+                [ CounterIncrease
+                    "oscoin.p2p.gossip.protocol.errors.total"
+                    noLabels
+                ]
+            -- For protocol messages, we measure the total number exchanged, and
+            -- separately actual payload (vs. control) messages.
+            Gossip.ProtocolRecv _ msg ->
+                  CounterIncrease
+                    "oscoin.p2p.gossip.protocol.received.total"
+                    noLabels
+                : case msg of
+                    Gossip.ProtocolPlumtree
+                        Gossip.EBT.RPC { Gossip.EBT.rpcPayload = Gossip.EBT.Gossip{} } ->
+                        [ CounterIncrease
+                            "oscoin.p2p.gossip.protocol.received.payload.total"
+                            noLabels
+                        ]
+                    _ -> []
+            Gossip.ProtocolSend _ msg ->
+                  CounterIncrease
+                    "oscoin.p2p.gossip.protocol.sent.total"
+                    noLabels
+                : case msg of
+                    Gossip.ProtocolPlumtree
+                        Gossip.EBT.RPC { Gossip.EBT.rpcPayload = Gossip.EBT.Gossip{} } ->
+                        [ CounterIncrease
+                            "oscoin.p2p.gossip.protocol.sent.payload.total"
+                            noLabels
+                        ]
+                    _ -> []
+
+        _ -> []
+
+    HandshakeEvent e -> case e of
+        P2P.HandshakeError{} ->
+            [ CounterIncrease
+                "oscoin.p2p.handshake.errors.total"
+                noLabels
+            ]
+        P2P.HandshakeComplete{} ->
+            [ CounterIncrease
+                "oscoin.p2p.handshake.completions.total"
+                noLabels
+            ]
+
 
 {------------------------------------------------------------------------------
   Utility functions
@@ -259,6 +423,18 @@ fmtParams = mapf (T.pack . toS . HTTP.renderQuery False) fquoted
 
 fmtDuration :: Format r (Duration -> r)
 fmtDuration = mapf Time.prettyDuration stext
+
+fmtNodeId :: Format r (P2P.NodeId -> r)
+fmtNodeId = mapf (publicKeyHash . P2P.fromNodeId) formatHashed
+
+fmtSockAddr :: Format r (SockAddr -> r)
+fmtSockAddr = shown -- FIXME(kim)
+
+fmtPeer :: Format r (Gossip.Peer P2P.NodeId -> r)
+fmtPeer =
+       mapf Gossip.peerAddr   (ftag "peer_addr"   % fmtSockAddr)
+     % " "
+    <> mapf Gossip.peerNodeId (ftag "peer_nodeid" % fmtNodeId)
 
 {------------------------------------------------------------------------------
   Labels
