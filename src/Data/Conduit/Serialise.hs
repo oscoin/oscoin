@@ -13,8 +13,9 @@ import           Control.Monad (unless)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.ST (ST, stToIO)
 import           Control.Monad.Trans.Class (lift)
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Lazy.Internal as LBS
 import           Data.Conduit (ConduitT, await, awaitForever, yield)
 
 
@@ -26,21 +27,21 @@ conduitDecodeCBOR
        , MonadThrow m
        , Serialise  a
        )
-    => ConduitT LBS.ByteString a m ()
+    => ConduitT ByteString a m ()
 conduitDecodeCBOR = sink =<< newDecoder
   where
     sink dec = await >>= maybe (close dec) (push dec)
 
-    push dec bs | LBS.null bs = sink dec
-                | otherwise   = go False dec bs
+    push dec bs | BS.null bs = sink dec
+                | otherwise  = go False dec bs
 
     close dec = go True dec mempty
 
     go done (CBOR.Done l _ a) bs = do
         yield a
-        let leftover = LBS.fromStrict l <> bs
+        let leftover = l <> bs
         if done then
-            unless (LBS.null leftover) $ do
+            unless (BS.null leftover) $ do
                 dec <- newDecoder
                 go done dec leftover
         else
@@ -53,9 +54,7 @@ conduitDecodeCBOR = sink =<< newDecoder
 
     lifted = lift . liftIO . stToIO
 
-feed :: LBS.ByteString -> CBOR.IDecode s a -> ST s (CBOR.IDecode s a)
-feed lbs (CBOR.Done l o a) = pure $ CBOR.Done (l <> LBS.toStrict lbs) o a
-feed lbs (CBOR.Fail l o e) = pure $ CBOR.Fail (l <> LBS.toStrict lbs) o e
-feed lbs (CBOR.Partial  k) = case lbs of
-    LBS.Chunk chunk more -> k (Just chunk) >>= feed more
-    LBS.Empty            -> k Nothing      >>= feed LBS.Empty
+feed :: ByteString -> CBOR.IDecode s a -> ST s (CBOR.IDecode s a)
+feed bs (CBOR.Done l o a) = pure $ CBOR.Done (l <> bs) o a
+feed bs (CBOR.Fail l o e) = pure $ CBOR.Fail (l <> bs) o e
+feed bs (CBOR.Partial  k) = k (Just bs)

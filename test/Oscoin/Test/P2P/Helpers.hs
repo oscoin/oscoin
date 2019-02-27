@@ -6,6 +6,8 @@ module Oscoin.Test.P2P.Helpers
     , streamingClient
     , framedServer
     , framedClient
+    , hybridServer
+    , hybridClient
 
     , bind
     , accept
@@ -96,6 +98,34 @@ framedClient port msgs =
     connect port $ \(sock,_) ->
         let tsp = Transport.framed sock
          in traverse_ (Transport.framedSend tsp) msgs
+
+hybridServer :: Serialise a => Int -> Socket -> IO [a]
+hybridServer nframed sock=
+    accept sock $ \(sock',_) -> do
+        as <- map reverse . loop nframed [] $ Transport.framed sock'
+        bs <-
+            runConduit $
+                   Transport.streamingRecv (Transport.streaming sock')
+                .| sinkList
+        pure $ as <> bs
+  where
+    loop 0 acc _   = pure acc
+    loop n acc tsp = do
+        recv'd <- Transport.framedRecv tsp
+        case recv'd of
+            Left  Transport.RecvConnReset -> pure acc
+            Left  e                       -> throwM e
+            Right frame                   -> loop (n - 1) (frame : acc) tsp
+
+hybridClient :: (Foldable t, Serialise a) => Int -> t a -> t a -> IO ()
+hybridClient port framed streaming =
+    connect port $ \(sock,_) ->
+        let
+            tf = Transport.framed sock
+            ts = Transport.streaming sock
+         in
+            traverse_ (Transport.framedSend    tf) framed
+         *> traverse_ (Transport.streamingSend ts) streaming
 
 bind :: ((Int, Sock.Socket) -> IO a) -> IO a
 bind = bracket (bindRandomPortTCP "127.0.0.1") (Sock.close . snd)

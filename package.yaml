@@ -39,6 +39,7 @@ library:
     - cborg
     - clock
     - conduit
+    - conduit-extra
     - containers
     - cryptonite
     - data-default
@@ -50,7 +51,6 @@ library:
     - ekg-core
     - fast-logger
     - filepath
-    - focus
     - formatting
     - generics-sop
     - gossip
@@ -78,7 +78,6 @@ library:
     - serialise
     - sqlite-simple
     - stm >=2.4.5.0
-    - stm-containers
     - tagged
     - text
     - transformers

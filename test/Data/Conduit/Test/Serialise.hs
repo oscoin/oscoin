@@ -5,8 +5,10 @@ import           Prelude
 import           Data.Conduit.Serialise (conduitDecodeCBOR, conduitEncodeCBOR)
 
 import           Codec.Serialise (Serialise)
+import qualified Data.ByteString.Lazy as LBS
 import           Data.Conduit (runConduit, (.|))
 import           Data.Conduit.Combinators (sinkList, yieldMany)
+import qualified Data.Conduit.Combinators as Conduit
 import           Data.List.NonEmpty (NonEmpty, nonEmpty)
 import           Data.Text (Text)
 import           GHC.Generics (Generic)
@@ -29,6 +31,7 @@ propSerdeIdentity xs = do
         runConduit $
                yieldMany xs
             .| conduitEncodeCBOR
+            .| Conduit.concatMap LBS.toChunks
             .| conduitDecodeCBOR
             .| sinkList
 

@@ -25,6 +25,8 @@ tests = testGroup "IO"
                         propStreamingHappy
         , testProperty "Works: Framed Server <-> Framed Client"
                         propFramedHappy
+        , testProperty "Works: Hybrid Server <-> Hybrid Client"
+                        propHybridHappy
         , testProperty "Fails: Streaming Server <-> Framed Client"
                         propStreamingServerFramedClient
         , testProperty "Fails: Framed Server <-> Streaming Client"
@@ -37,6 +39,7 @@ props :: IO Bool
 props = checkParallel $ Group "P2P.IO"
     [ ("prop_streaming_happy",  propStreamingHappy)
     , ("prop_framed_happy",     propFramedHappy)
+    , ("prop_hybrid_happy",     propHybridHappy)
     , ("prop_streaming_framed", propStreamingServerFramedClient)
     , ("prop_framed_streaming", propFramedServerStreamingClient)
     ]
@@ -48,6 +51,22 @@ propStreamingHappy = property $
 propFramedHappy :: Property
 propFramedHappy = property $
     forAll nonEmptyFrobs >>= compatible framedServer framedClient
+
+propHybridHappy :: Property
+propHybridHappy = property $ do
+    framed    <- forAll nonEmptyFrobs
+    streaming <- forAll nonEmptyFrobs
+
+    annotate $
+           show (length framed) <> " framed, "
+        <> show (length streaming) <> " streaming"
+
+    xs' <-
+        map fst . evalIO . bind $ \(port, sock) ->
+            concurrently (hybridServer (length framed) sock) $
+                hybridClient port framed streaming
+
+    Just (framed <> streaming) === nonEmpty xs'
 
 propFramedServerStreamingClient :: Property
 propFramedServerStreamingClient = property $
