@@ -126,9 +126,7 @@ main = do
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
     forkEkgServer metricsStore ekgHost ekgPort
 
-    withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
-                                     , Log.cfgStyle = Log.styleFromEnvironment environment
-                                     } $ \lgr -> Log.withExceptionLogged lgr $
+    withStdLogger (Log.configForEnvironment environment) $ \lgr -> Log.withExceptionLogged lgr $
         BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) defaultScoreFunction $ \blkStore -> do
             let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
             withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)

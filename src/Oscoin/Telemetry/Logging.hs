@@ -27,7 +27,10 @@ module Oscoin.Telemetry.Logging
     -- * Configuration
     , Config (..)
     , defaultConfig
-    , styleFromEnvironment
+
+    , configForEnvironment
+    , styleForEnvironment
+    , severityForEnvironment
 
     -- * Constructing 'Logger's
     , withStdLogger
@@ -199,13 +202,26 @@ defaultStyle = StyleFormatter
     , layoutFormat = NoLayout
     }
 
--- | Given an oscoin's 'Environment', it returns the correct 'StyleFormatter'
--- to be used.
-styleFromEnvironment :: Environment -> StyleFormatter
-styleFromEnvironment = \case
+-- | The conventional 'StyleFormatter' for an 'Environment'.
+styleForEnvironment :: Environment -> StyleFormatter
+styleForEnvironment = \case
     Production  -> StyleFormatter False NoLayout
     Development -> StyleFormatter True HumanReadable
     Testing     -> defaultStyle
+
+-- | The conventional 'Severity' for an 'Environment'.
+severityForEnvironment :: Environment -> Severity
+severityForEnvironment = \case
+    Production  -> Info
+    Development -> Debug
+    Testing     -> Err
+
+-- | The conventional 'Config' for an 'Environment'.
+configForEnvironment :: Environment -> Config
+configForEnvironment env = defaultConfig
+    { cfgLevel = severityForEnvironment env
+    , cfgStyle = styleForEnvironment env
+    }
 
 -- | Default 'Config'
 defaultConfig :: Config
