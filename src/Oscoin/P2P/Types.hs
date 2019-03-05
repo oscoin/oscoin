@@ -1,10 +1,12 @@
 {-# LANGUAGE UndecidableInstances #-}
+
 module Oscoin.P2P.Types
     ( NodeId
     , mkNodeId
     , fromNodeId
 
     , NodeAddr(..)
+    , readNodeAddr
 
     , Msg(..)
     , MsgId(..)
@@ -27,17 +29,9 @@ import qualified Network.Gossip.IO.Peer as Gossip (Peer)
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
-import           Data.Aeson
-                 ( FromJSON
-                 , ToJSON
-                 , object
-                 , parseJSON
-                 , toJSON
-                 , withObject
-                 , (.:)
-                 , (.=)
-                 )
+import           Data.Aeson (FromJSON, ToJSON)
 import           Data.Hashable (Hashable(..))
+import           Data.IP (IP(..))
 import           Formatting as F
 import qualified Generics.SOP as SOP
 import           Network.Socket (HostName, PortNumber, SockAddr)
@@ -58,27 +52,65 @@ instance (Serialise (PK c))          => Serialise (NodeId c)
 mkNodeId :: PK c -> NodeId c
 mkNodeId = NodeId
 
-data NodeAddr c = NodeAddr
-    { nodeId   :: NodeId c
+data NodeAddr f c = NodeAddr
+    { nodeId   :: f (NodeId c)
     , nodeHost :: HostName
     , nodePort :: PortNumber
     }
 
-deriving instance (Eq (PK c)) => Eq (NodeAddr c)
+deriving instance Eq   (f (NodeId c)) => Eq   (NodeAddr f c)
+deriving instance Show (f (NodeId c)) => Show (NodeAddr f c)
 
-instance FromJSON (PK c) => FromJSON (NodeAddr c) where
-    parseJSON = withObject "NodeAddr" $ \o -> do
-        nodeId   <- o .: "nodeId"
-        nodeHost <- o .: "host"
-        nodePort <- toEnum <$> o .: "port"
-        pure NodeAddr{..}
+-- | Read a 'NodeAddr Maybe' from a 'String'. For use in CLI parsers.
+--
+-- The 'NodeId' is always 'Nothing'.
+--
+-- The input string is expected to be a @:@-separated pair of host : port, where
+-- host may be an IP address or hostname. If host is an IPv6 address, it must be
+-- enclosed in square brackets as per <https://tools.ietf.org/html/rfc3986#section-3.2.2 RFC 3986, Section 3.2.2>
+-- in order to delimit it from the port number.
+--
+-- Examples:
+--
+-- >>> readNodeAddr "[2001:db8:00:00:00:00:00:01]:42"
+-- Right (NodeAddr {nodeId = Nothing, nodeHost = "2001:db8::1", nodePort = 42})
+--
+-- >>> readNodeAddr "[2001:db8::01]:42"
+-- Right (NodeAddr {nodeId = Nothing, nodeHost = "2001:db8::1", nodePort = 42})
+--
+-- >>> readNodeAddr "127.0.0.1:42"
+-- Right (NodeAddr {nodeId = Nothing, nodeHost = "127.0.0.1", nodePort = 42})
+--
+-- >>> readNodeAddr "goo.gl:42"
+-- Right (NodeAddr {nodeId = Nothing, nodeHost = "goo.gl", nodePort = 42})
+--
+readNodeAddr :: String -> Either String (NodeAddr Maybe c)
+readNodeAddr s = do
+    (h, more) <- (first show <$> readIP s) <|> readHost s
+    p         <- note "Invalid port number" (readMaybe more)
+    pure NodeAddr
+        { nodeId   = Nothing
+        , nodeHost = h
+        , nodePort = p
+        }
+  where
+    readIP :: String -> Either String (IP, String)
+    readIP ('[' : more) =
+        case break (== ']') more of
+            (xs, ']' : ':' : rest) ->
+                case reads xs of
+                    [(ipv6, [])] -> Right (IPv6 ipv6, rest)
+                    _            -> Left "Invalid IPv6"
+            _                      -> Left "Missing closing ']' for IPv6"
 
-instance ToJSON (PK c) => ToJSON (NodeAddr c) where
-    toJSON NodeAddr{..} = object
-        [ "nodeId" .= nodeId
-        , "host"   .= nodeHost
-        , "port"   .= fromEnum nodePort
-        ]
+    readIP s' = case reads s' of
+        [(ipv4, ':' : rest)] -> Right (IPv4 ipv4, rest)
+        _                    -> Left "Invalid IP"
+
+    readHost :: String -> Either String (HostName, String)
+    readHost s' = case break (== ':') s' of
+        (h, ':' : rest) -> Right (h, rest)
+        _               -> Left "Missing ':' separator after host name"
 
 data Msg c tx s =
       BlockMsg (Block c tx s)

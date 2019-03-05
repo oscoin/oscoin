@@ -26,7 +26,7 @@ extra-deps:
   commit: c28e58e5de980697add9905845c82c844f2928b0
 
 - git: https://github.com/oscoin/gossip
-  commit: e27ae8dac76ded78d3b20a9c7d1cf80a23a88e0c
+  commit: 7da6fed6821cc0452ef194522c3cc59019ab7f53
 
 - git: https://github.com/oscoin/ipfs
   commit: 421c5fc975b8ef030ba5e631af424be6c7fdd2bb

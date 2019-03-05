@@ -41,7 +41,7 @@ data Args = Args
     { host          :: HostName
     , gossipPort    :: PortNumber
     , apiPort       :: PortNumber
-    , seeds         :: FilePath
+    , seeds         :: [P2P.NodeAddr Maybe Crypto]
     , genesis       :: FilePath
     , noEmptyBlocks :: Bool
     , keysPath      :: Maybe FilePath
@@ -73,10 +73,13 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> value 8477
            <> showDefault
             )
-        <*> option str
-            ( long "seeds"
-           <> help "Path to YAML file describing gossip seed nodes"
-           <> value "exe/node/gossip-seeds.yaml"
+        <*> some
+            ( option (eitherReader P2P.readNodeAddr)
+                ( long "seed"
+               <> help "One or more gossip seed nodes to connect to. \
+                       \The first node in a new network may use its own address."
+               <> metavar "HOST:PORT"
+                )
             )
         <*> option str
             ( long "genesis"
@@ -118,8 +121,6 @@ main = do
     gen         <- Yaml.decodeFileThrow genesis :: IO GenesisBlock
     genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
     stStore     <- StateStore.fromStateM genState
-
-    seeds'      <- Yaml.decodeFileThrow seeds
     config      <- Consensus.getConfig environment
 
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
@@ -138,11 +139,11 @@ main = do
                      Rad.txEval
                      consensus                                      $ \nod ->
                 withGossip telemetryHandle
-                           P2P.NodeAddr { P2P.nodeId   = nid
+                           P2P.NodeAddr { P2P.nodeId   = pure nid
                                         , P2P.nodeHost = host
                                         , P2P.nodePort = gossipPort
                                         }
-                           seeds'
+                           seeds
                            (storage nod config)
                            (Handshake.simpleHandshake keys)         $ \gos ->
                     Async.runConcurrently $

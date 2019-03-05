@@ -153,14 +153,26 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                     Log.infoM "bootstrapped" fmtPeer self
 
             Gossip.TraceConnection e -> case e of
-                Gossip.Connecting peer ->
-                    Log.infoM "connecting" fmtPeer peer
+                Gossip.Connecting addr mnid ->
+                    Log.infoM "connecting"
+                        ( ftag "addr" % fmtSockAddr
+                        % " "
+                        % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
+                        )
+                        addr
+                        mnid
                 Gossip.Connected peer ->
                     Log.infoM "connected" fmtPeer peer
-                Gossip.ConnectFailed peer ex ->
+                Gossip.ConnectFailed addr mnid ex ->
                     Log.errM "failed to connect"
-                             (fmtPeer % " " % fexception)
-                             peer
+                             ( ftag "addr" % fmtSockAddr
+                             % " "
+                             % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
+                             % " "
+                             % fexception
+                             )
+                             addr
+                             mnid
                              ex
                 Gossip.ConnectionLost peer ex ->
                     Log.infoM "connection reset by peer"

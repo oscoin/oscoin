@@ -21,7 +21,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
-import           Oscoin.P2P (NodeAddr(..), mkNodeId)
 import           Oscoin.Time (Timestamp)
 
 
@@ -29,8 +28,8 @@ import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
 import           Crypto.Random.Types (MonadRandom)
 import           Data.ByteArray (ByteArrayAccess)
+import           Data.ByteArray.Orphans ()
 import qualified Data.Yaml as Yaml
-import           Network.Socket (HostName, PortNumber)
 import           Numeric.Natural
 
 import           Radicle.Conversion
@@ -62,7 +61,6 @@ data Command =
     | RevisionMerge RevisionId
     | GenerateKeyPair
     | GenesisCreate [FilePath] Difficulty
-    | NodeSeed HostName PortNumber
     deriving (Show)
 
 dispatchCommand
@@ -105,15 +103,6 @@ dispatchCommand (GenesisCreate files d) = do
                 printGenesisYaml signed d
             | otherwise ->
                 pure $ ResultError (mconcat errs)
-
-dispatchCommand (NodeSeed h p) = do
-    (pk, _) <- readKeyPair
-    putString . decodeUtf8 . Yaml.encode $
-        NodeAddr { nodeId   = mkNodeId pk
-                 , nodeHost = h
-                 , nodePort = p
-                 }
-    pure ResultOk
 
 dispatchCommand cmd = pure $
     ResultError $ "Command `" <> show cmd <> "` not yet implemented"

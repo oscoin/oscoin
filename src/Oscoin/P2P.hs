@@ -109,18 +109,24 @@ withGossip
        , Serialise (BlockHash c)
        )
     => Telemetry.Handle
-    -> NodeAddr c
+    -> NodeAddr Identity c
     -- ^ Node identity (\"self\")
-    -> [NodeAddr c]
+    -> [NodeAddr Maybe c]
     -- ^ Initial peers to connect to
     -> Storage c tx s IO
     -> Handshake e (NodeId c) (Wire c) o
     -> (Gossip.Run.Env (NodeId c) -> IO a)
     -> IO a
 withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
-    (self:peers) <-
-        for (selfAddr:peerAddrs) $ \NodeAddr{..} ->
-            Gossip.knownPeer nodeId nodeHost nodePort
+    self  <-
+        Gossip.knownPeer
+            (runIdentity (nodeId selfAddr))
+            (nodeHost selfAddr)
+            (nodePort selfAddr)
+    peers <-
+        for peerAddrs $ \NodeAddr { nodeId, nodeHost, nodePort } ->
+            (nodeId,) <$> Gossip.resolve nodeHost nodePort
+
     Gossip.Run.withGossip
         self
         Membership.defaultConfig
