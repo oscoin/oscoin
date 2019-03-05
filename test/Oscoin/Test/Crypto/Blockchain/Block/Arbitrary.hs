@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Test.Crypto.Blockchain.Block.Arbitrary
     ( arbitraryBlock
     , arbitraryBlockWith
@@ -12,14 +13,23 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hash)
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Time ()
 import           Test.QuickCheck
 
+instance Arbitrary s => Arbitrary (Sealed c s) where
+    arbitrary = SealedWith <$> arbitrary
+
 instance Arbitrary Difficulty where
     arbitrary = arbitraryDifficulty
 
-instance (Serialise tx, Serialise s, Arbitrary tx, Arbitrary s) => Arbitrary (Block tx s) where
+instance ( Serialise tx
+         , Serialise s
+         , Arbitrary tx
+         , Arbitrary s
+         , IsCrypto c
+         ) => Arbitrary (Block c tx s) where
     arbitrary = arbitraryBlock
 
 instance Arbitrary Nakamoto.PoW where
@@ -32,11 +42,10 @@ instance Arbitrary Nakamoto.PoW where
 -- generate well-formed blocks and blockchains, take a look at 'genBlockFrom' and
 -- 'genBlockchainFrom'.
 arbitraryBlock
-    :: forall tx s. (Serialise s, Serialise tx, Arbitrary tx, Arbitrary s)
-    => Gen (Block tx s)
+    :: (IsCrypto c, Serialise s, Serialise tx, Arbitrary tx, Arbitrary s)
+    => Gen (Block c tx s)
 arbitraryBlock =
     arbitraryBlockWith =<< arbitrary
-
 
 -- | Generates a random 'Difficulty' without considering the previous one.
 arbitraryDifficulty :: Gen Difficulty
@@ -44,26 +53,25 @@ arbitraryDifficulty =
     (unsafeDifficulty . getPositive <$> arbitrary) `suchThat` noOverflow
   where noOverflow d = d <= maxDifficulty
 
-
 -- | Generates a 'Block' from a given list of transactions. The same caveats
 -- as 'arbitraryBlock' apply.
 arbitraryBlockWith
-    :: forall tx s. (Serialise s, Serialise tx, Arbitrary s)
+    :: forall c tx s. (IsCrypto c, Serialise s, Serialise tx, Arbitrary s)
     => [tx]
-    -> Gen (Block tx s)
+    -> Gen (Block c tx s)
 arbitraryBlockWith txs = do
     timestamp <- arbitrary
     diffi <- arbitraryDifficulty
-    prevHash <- arbitrary :: Gen Hash
-    stateHash <- arbitrary :: Gen Hash
-    blockSeal  <- arbitrary
+    prevHash <- arbitrary :: Gen (Hash c)
+    stateHash <- arbitrary :: Gen (Hash c)
+    blockSeal <- arbitrary
 
-    let header = emptyHeader
+    let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockPrevHash   = prevHash
                , blockDataHash   = hashTxs txs
                , blockStateHash  = stateHash
-               , blockSeal
                , blockTimestamp  = timestamp
+               , blockSeal
                , blockTargetDifficulty = diffi
                }
     pure $ mkBlock header txs

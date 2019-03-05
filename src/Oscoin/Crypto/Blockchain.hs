@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
     , ScoringFunction
@@ -35,16 +36,19 @@ import qualified Formatting as F
 import           GHC.Exts (IsList(..))
 import           Numeric.Natural
 
--- | A 'Blockchain' is a non-empty list of blocks, with the /most recent
+-- | A 'Blockchain' is a non-empty /sealed/ list of blocks, with the /most recent
 -- block in front/.
-newtype Blockchain tx s = Blockchain { fromBlockchain :: NonEmpty (Block tx s) }
-    deriving (Show, Generic)
+newtype Blockchain c tx s =
+    Blockchain { fromBlockchain :: NonEmpty (Block c tx (Sealed c s)) }
+    deriving (Generic)
 
-instance Semigroup (Blockchain tx s) where
+deriving instance (Show (Crypto.Hash c), Show tx, Show s) => Show (Blockchain c tx s)
+
+instance Semigroup (Blockchain c tx s) where
     (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)
 
-instance IsList (Blockchain tx s) where
-    type Item (Blockchain tx s) = Block tx s
+instance IsList (Blockchain c tx s) where
+    type Item (Blockchain c tx s) = Block c tx (Sealed c s)
 
     fromList = Blockchain . NonEmpty.fromList
     toList   = NonEmpty.toList . fromBlockchain
@@ -53,58 +57,64 @@ infixr 5 |>
 
 -- | Appends a new 'Block' in front of the input 'Blockchain', making it
 -- /the new tip/.
-(|>) :: Block tx s -> Blockchain tx s -> Blockchain tx s
+(|>) :: Block c tx (Sealed c s) -> Blockchain c tx s -> Blockchain c tx s
 (|>) blk (Blockchain blks) = Blockchain (blk <| blks)
 
-unsafeToBlockchain :: [Block tx s] -> Blockchain tx s
+unsafeToBlockchain :: [Block c tx (Sealed c s)] -> Blockchain c tx s
 unsafeToBlockchain blks =
     Blockchain $ NonEmpty.fromList blks
 
-blocks :: Blockchain tx s -> [Block tx s]
+blocks :: Blockchain c tx s -> [Block c tx (Sealed c s)]
 blocks = NonEmpty.toList . fromBlockchain
 
-takeBlocks :: Int -> Blockchain tx s -> [Block tx s]
+takeBlocks :: Int -> Blockchain c tx s -> [Block c tx (Sealed c s)]
 takeBlocks n = NonEmpty.take n . fromBlockchain
 
-takeWhileBlocks :: (Block tx s -> Bool) -> Blockchain tx s -> [Block tx s]
+takeWhileBlocks :: (Block c tx (Sealed c s) -> Bool)
+                -> Blockchain c tx s
+                -> [Block c tx (Sealed c s)]
 takeWhileBlocks p = NonEmpty.takeWhile p . fromBlockchain
 
-tip :: Blockchain tx s -> Block tx s
+tip :: Blockchain c tx s -> Block c tx (Sealed c s)
 tip (Blockchain blks) = NonEmpty.head blks
 
-genesis :: Blockchain tx s -> Block tx s
+genesis :: Blockchain c tx s -> Block c tx (Sealed c s)
 genesis = NonEmpty.last . fromBlockchain
 
-fromGenesis :: Block tx s -> Blockchain tx s
+fromGenesis :: Block c tx (Sealed c s) -> Blockchain c tx s
 fromGenesis g = Blockchain (g :| [])
 
 -- | Returns the height of the chain. That is, the number of blocks not including
 -- the genesis. A 'Blockchain' with only a genesis block will thus have a height
 -- of zero.
-height :: Blockchain tx s -> Height
+height :: Blockchain c tx s -> Height
 height chain = fromIntegral $ chainLength chain - 1
 
 -- | Returns the length of a chain, or total number of blocks including the genesis.
-chainLength :: Blockchain tx s -> Int
+chainLength :: Blockchain c tx s -> Int
 chainLength = NonEmpty.length . fromBlockchain
 
 -- | Scoring function for blockchains.
-type ScoringFunction tx s = Blockchain tx s -> Blockchain tx s -> Ordering
+type ScoringFunction c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
 
-data TxLookup tx = TxLookup
+data TxLookup c tx = TxLookup
     { txPayload       :: tx
-    , txBlockHash     :: BlockHash
+    , txBlockHash     :: BlockHash c
     , txConfirmations :: Natural
     }
 
-lookupTx :: forall tx s. (Crypto.Hashable tx) => Crypto.Hashed tx -> Blockchain tx s -> Maybe (TxLookup tx)
+lookupTx
+    :: forall c tx s. (Crypto.Hashable c tx, Eq (Crypto.Hash c))
+    => Crypto.Hashed c tx
+    -> Blockchain c tx s
+    -> Maybe (TxLookup c tx)
 lookupTx h (blocks -> chain) = listToMaybe $ do
     (i, block) <- zip [1..] chain
     tx <- toList $ blockData block
     guard (Crypto.hash tx == h)
     pure $ TxLookup tx (blockHash block) i
 
-showChainDigest :: Blockchain tx s -> Text
+showChainDigest :: Crypto.HasHashing c => Blockchain c tx s -> Text
 showChainDigest =
     T.unwords . intersperse "←"
               . reverse
@@ -112,9 +122,9 @@ showChainDigest =
               . map showBlockDigest
               . fromBlockchain
 
-showBlockDigest :: Block tx s -> Text
-showBlockDigest b@Block{blockHeader} =
+showBlockDigest :: Crypto.HasHashing c => Block c tx s -> Text
+showBlockDigest b =
     F.sformat ("[" % F.string % " (p:" % F.string % ") @" % F.build % "]")
               (C8.unpack . Crypto.shortHash . blockHash $ b)
-              (C8.unpack . Crypto.shortHash . blockPrevHash $ blockHeader)
-              (prettyDuration $ sinceEpoch (blockTimestamp blockHeader))
+              (C8.unpack . Crypto.shortHash . blockPrevHash . blockHeader $ b)
+              (prettyDuration $ sinceEpoch (blockTimestamp . blockHeader $ b))

@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 -- | This module provides the 'runCLI' and 'runCLIWithState' functions
 -- to run the CLI in a test environment. The test environment is a
 -- state monad that mocks the API client and the Key Store.
@@ -38,19 +39,23 @@ import qualified System.Directory as Dir
 import           System.Environment
 import           System.IO.Temp (withSystemTempDirectory)
 
+import           Oscoin.Test.Crypto
 import           Test.Tasty.HUnit.Extended
 
 
 -- | Run the CLI in a test environment and print the result and the
 -- final TestCommandState
-runCLI :: [String] -> IO TestCommandState
+runCLI :: IsCrypto c => [String] -> IO (TestCommandState c)
 runCLI args = runCLIWithState args identity
 
 -- | Same as @runCLI@ but accepts an additional function that allows
 -- you to modify the initial state of the test environment before
 -- running the command.
 runCLIWithState
-    :: [String] -> (TestCommandState -> TestCommandState) -> IO TestCommandState
+    :: IsCrypto c
+    => [String]
+    -> (TestCommandState c -> TestCommandState c)
+    -> IO (TestCommandState c)
 runCLIWithState args setupState = do
     storedKeyPair <- Crypto.generateKeyPair
     -- We don't seem to care about overriding the location of the keys for
@@ -75,16 +80,17 @@ runCLIWithState args setupState = do
 -- | Monad to run the CLI for testing purposes. It mocks both the API
 -- client and the Key Store by providing `MonadClient` and
 -- `MonadKeyStore` instances.
-newtype TestCommandRunner a = TestCommandRunner { fromTestCommandRunner :: StateT TestCommandState IO a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadState TestCommandState)
+newtype TestCommandRunner c a = TestCommandRunner
+    { fromTestCommandRunner :: StateT (TestCommandState c) IO a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadState (TestCommandState c))
 
-data TestCommandState = TestCommandState
-    { transactions  :: Map.Map (Hashed RadTx) RadTx
-    , storedKeyPair :: Maybe (Crypto.PublicKey, Crypto.PrivateKey)
+data TestCommandState c = TestCommandState
+    { transactions  :: Map.Map (Hashed c (RadTx c)) (RadTx c)
+    , storedKeyPair :: Maybe (Crypto.PK c, Crypto.SK c)
     , commandOutput :: Text
     }
 
-instance MonadCLI TestCommandRunner where
+instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
     sleep _ = pure ()
     putLine t = putStr (t <> "\n")
     putString t = modify $ \s -> s { commandOutput = commandOutput s <> t }
@@ -94,10 +100,10 @@ instance MonadCLI TestCommandRunner where
     getTime = pure Time.epoch
 
 
-instance MonadRandom TestCommandRunner where
+instance MonadRandom (TestCommandRunner c) where
     getRandomBytes = liftIO . getRandomBytes
 
-instance MonadKeyStore TestCommandRunner where
+instance IsCrypto c => MonadKeyStore c (TestCommandRunner c) where
     keysPath = pure Nothing
     writeKeyPair kp = modify (\s -> s { storedKeyPair = Just kp  })
     readKeyPair = do
@@ -106,7 +112,7 @@ instance MonadKeyStore TestCommandRunner where
             Just kp -> pure $ kp
             Nothing -> panic "No keypair stored"
 
-instance MonadClient TestCommandRunner where
+instance IsCrypto c => MonadClient c (TestCommandRunner c) where
     submitTransaction tx = do
         modify (\s -> s { transactions = Map.insert (hash tx) tx (transactions s) })
         pure $ Ok $ TxSubmitResponse $ hash tx
@@ -121,7 +127,7 @@ instance MonadClient TestCommandRunner where
             , txPayload = tx
             }
 
-    getState _key =
+    getState Proxy _key =
         pure $ Err "state not found"
 
 ----------------------------------------------------

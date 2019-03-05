@@ -2,13 +2,14 @@
 
 module Oscoin.Test.Crypto.PubKey.Arbitrary where
 
+import           Oscoin.Test.Crypto
+
 import           Oscoin.Crypto.PubKey
-                 (PrivateKey, PublicKey, Signed, generateKeyPair, sign)
+                 (HasDigitalSignature, PK, SK, Signed, generateKeyPair, sign)
 import           Oscoin.Prelude
 
-import           Codec.Serialise (Serialise)
 import           Crypto.Random.Types (MonadRandom(..))
-import           Data.ByteArray (convert)
+import           Data.ByteArray (ByteArrayAccess, convert)
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
@@ -18,14 +19,25 @@ instance MonadRandom Gen where
         convert <$> resize n (arbitrary :: Gen ByteString)
 
 arbitrarySignedWith
-    :: (Arbitrary a, Serialise a) => PrivateKey -> Gen (Signed a)
+    :: ( Arbitrary a
+       , ByteArrayAccess a
+       , HasDigitalSignature c
+       )
+    => SK c
+    -> Gen (Signed c a)
 arbitrarySignedWith pk =
     arbitrary >>= sign pk
 
-arbitraryKeyPair :: Gen (PublicKey, PrivateKey)
+arbitraryKeyPair :: (HasHashing c, HasDigitalSignature c) => Gen (PK c, SK c)
 arbitraryKeyPair = generateKeyPair
 
-arbitrarySigned :: (Serialise a, Arbitrary a) => Gen (Signed a)
-arbitrarySigned = do
-    (_, priv) <- arbitraryKeyPair
+arbitrarySigned
+    :: forall a c.
+       ( ByteArrayAccess a
+       , Arbitrary a
+       , IsCrypto c
+       ) => Proxy c
+         -> Gen (Signed c a)
+arbitrarySigned Proxy = do
+    (_, priv :: SK c) <- arbitraryKeyPair
     arbitrarySignedWith priv

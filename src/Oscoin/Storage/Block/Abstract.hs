@@ -24,24 +24,22 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 
 -- | An handle over a block storage backend.
-data BlockStore tx s m = BlockStore
-    { scoreBlock      :: Block tx s -> Score
+data BlockStore c tx s m = BlockStore
+    { scoreBlock      :: Block c tx (Sealed c s) -> Score
     -- ^ When given a 'Block', return its 'Score'.
-    , validateBlock   :: Validate tx s
-    -- ^ Validity function for a 'Block'.
-    , insertBlock     :: Block tx s -> m ()
+    , insertBlock     :: Block c tx (Sealed c s) -> m ()
     -- ^ Inserts a 'Block' into the store.
-    , getGenesisBlock :: m (Block tx s)
+    , getGenesisBlock :: m (Block c tx (Sealed c s))
     -- ^ Get the genesis block.
-    , lookupBlock     :: BlockHash -> m (Maybe (Block tx s))
+    , lookupBlock     :: BlockHash c -> m (Maybe (Block c tx (Sealed c s)))
     -- ^ Lookups a 'Block' from the store when given its hash.
-    , lookupTx        :: Hashed tx -> m (Maybe (TxLookup tx))
+    , lookupTx        :: Hashed c tx -> m (Maybe (TxLookup c tx))
     -- ^ Lookups a transaction by its hash.
-    , getOrphans      :: m (Set BlockHash)
+    , getOrphans      :: m (Set (BlockHash c))
     -- ^ The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
-    , getBlocks       :: Depth -> m [Block tx s]
+    , getBlocks       :: Depth -> m [Block c tx (Sealed c s)]
     -- ^ Returns the last N blocks, given a depth.
-    , getTip          :: m (Block tx s)
+    , getTip          :: m (Block c tx (Sealed c s))
     -- ^ Returns the tip of the chain.
     }
 
@@ -52,12 +50,11 @@ Extra operations on the BlockStore, which are implementation-independent.
 -- | Given a natural transformation from @n@ to @m@, hoists a 'BlockStore'
 -- initialised with a monad @n@ to work in the monad @m@.
 hoistBlockStore
-    :: forall tx s n m. (forall a. n a -> m a)
-    -> BlockStore tx s n
-    -> BlockStore tx s m
+    :: forall c tx s n m. (forall a. n a -> m a)
+    -> BlockStore c tx s n
+    -> BlockStore c tx s m
 hoistBlockStore natTrans bs = BlockStore
     { scoreBlock      = scoreBlock bs
-    , validateBlock   = validateBlock bs
     , insertBlock     = natTrans . insertBlock bs
     , getGenesisBlock = natTrans (getGenesisBlock bs)
     , lookupBlock     = natTrans . lookupBlock bs
@@ -67,10 +64,10 @@ hoistBlockStore natTrans bs = BlockStore
     , getTip          = natTrans (getTip bs)
     }
 
-noValidation :: Validate tx s
+noValidation :: Validate c tx s
 noValidation _ _ = Right ()
 
-defaultScoreFunction :: Block tx s -> Score
+defaultScoreFunction :: Block c tx s -> Score
 defaultScoreFunction = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
 -- | /O(n)/. A naive function to store blocks in linear time.
@@ -78,8 +75,12 @@ defaultScoreFunction = fst . decodeDifficulty . blockTargetDifficulty . blockHea
 -- NOTE(adn): It might be conceivable to have this function be upgraded as
 -- a proper abstract function of the 'BlockStore', so that different implementations
 -- can decide how to implement it efficiently.
-insertBlocksNaive :: Monad m => BlockStore tx s m -> [Block tx s] -> m ()
+insertBlocksNaive
+    :: Monad m
+    => BlockStore c tx s m
+    -> [Block c tx (Sealed c s)]
+    -> m ()
 insertBlocksNaive bs = traverse_ (insertBlock bs) . reverse
 
-isNovelBlock :: Functor m => BlockStore tx s m -> BlockHash -> m Bool
+isNovelBlock :: Functor m => BlockStore c tx s m -> BlockHash c -> m Bool
 isNovelBlock bs = map isNothing . lookupBlock bs

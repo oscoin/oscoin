@@ -12,12 +12,12 @@ import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 
 -- MonadMempool ---------------------------------------------------------------
 
-class Monad m => MonadMempool tx m | m -> tx where
+class Monad m => MonadMempool c tx m | m -> tx, m -> c where
     -- | Add transactions to the mempool, notifying all subscribers.
     addTxs :: Foldable t => t tx -> m ()
 
     -- | Get all the transactions in the mempool.
-    getTxs :: m [(Hashed tx, tx)]
+    getTxs :: m [(Hashed c tx, tx)]
 
     -- | Remove the supplied transactions from the mempool.
     delTxs :: Foldable t => t tx -> m ()
@@ -26,43 +26,43 @@ class Monad m => MonadMempool tx m | m -> tx where
     numTxs :: m Int
 
     -- | Lookup a transaction by its hash.
-    lookupTx :: Hashed tx -> m (Maybe tx)
+    lookupTx :: Hashed c tx -> m (Maybe tx)
 
     -- | Subscribe to mempool events.
     subscribe :: m (Channel tx)
 
     default addTxs
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m', Foldable f)
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m', Foldable f)
         => f tx -> m ()
     addTxs = lift . addTxs
     {-# INLINE addTxs #-}
 
     default getTxs
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
-        => m [(Hashed tx, tx)]
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m')
+        => m [(Hashed c tx, tx)]
     getTxs = lift getTxs
     {-# INLINE getTxs #-}
 
     default delTxs
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m', Foldable f)
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m', Foldable f)
         => f tx -> m ()
     delTxs = lift . delTxs
     {-# INLINE delTxs #-}
 
     default numTxs
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m')
         => m Int
     numTxs = lift numTxs
     {-# INLINE numTxs #-}
 
     default lookupTx
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
-        => Hashed tx -> m (Maybe tx)
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m')
+        => Hashed c tx -> m (Maybe tx)
     lookupTx = lift . lookupTx
     {-# INLINE lookupTx #-}
 
     default subscribe
-        :: (MonadMempool tx m', MonadTrans t, m ~ t m')
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m')
         => m (Channel tx)
     subscribe = lift subscribe
     {-# INLINE subscribe #-}

@@ -46,6 +46,7 @@ import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
+import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString.Lazy as LBS
 import           Data.IORef
@@ -57,7 +58,7 @@ instance Serialise (NoisePayload p) where
     decode          = NP . ByteArray.convert <$> CBOR.decodeBytes
 
 newtype NoiseHandshakeHash = NHH ScrubbedBytes
-    deriving Eq
+    deriving (Eq, ByteArrayAccess)
 
 instance Serialise NoiseHandshakeHash where
     encode (NHH sbs) = CBOR.encodeBytes $ ByteArray.convert sbs

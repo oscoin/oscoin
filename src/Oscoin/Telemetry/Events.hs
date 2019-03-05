@@ -4,55 +4,87 @@ module Oscoin.Telemetry.Events
 
 import qualified Oscoin.Consensus.Types as Consensus
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
-import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
+import           Oscoin.Crypto.PubKey (PK)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Time (Duration)
 
 import qualified Network.Gossip.IO.Trace as Gossip (Traceable)
 
+import           Formatting.Buildable (Buildable)
 import           Network.HTTP.Types as HTTP
 import           Network.Wai as HTTP
 
 -- | A \"NotableEvent\" is an event which is worthwhile observing, logging
 -- and measuring.
 data NotableEvent where
-    BlockReceivedEvent :: Crypto.Hash -> NotableEvent
+    BlockReceivedEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                       => Hash c -> NotableEvent
     -- ^ Triggered every time a new block is received at the network level.
-    BlockMinedEvent :: Crypto.Hash -> NotableEvent
+    BlockMinedEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                    => Hash c -> NotableEvent
     -- ^ Triggered every time a new block is mined.
-    BlockAppliedEvent :: Crypto.Hash -> NotableEvent
+    BlockAppliedEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                      => Hash c -> NotableEvent
     -- ^ Triggered every time a new block is (successfully) applied.
-    BlockStaleEvent :: Crypto.Hash -> NotableEvent
+    BlockStaleEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                    => Hash c -> NotableEvent
     -- ^ Triggered every time a block we tried to apply was stale.
-    BlockApplyErrorEvent :: Crypto.Hash -> NotableEvent
+    BlockApplyErrorEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                         => Hash c -> NotableEvent
     -- ^ Triggered every time an action to apply a block resulted in an
     -- error.
-    BlockOrphanEvent :: Crypto.Hash -> NotableEvent
+    BlockOrphanEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                     => Hash c -> NotableEvent
     -- ^ Triggered every time a block is found to be an orphan.
-    BlockValidationFailedEvent :: Crypto.Hash -> Consensus.ValidationError -> NotableEvent
+    BlockValidationFailedEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                               => Hash c
+                               -> Consensus.ValidationError c
+                               -> NotableEvent
     -- ^ Triggered every time a 'Block' fails to validate.
-    BlockEvaluationFailedEvent :: Crypto.Hash -> Eval.EvalError -> NotableEvent
+    BlockEvaluationFailedEvent :: forall c. (Buildable (Hash c), HasHashing c)
+                               => Hash c
+                               -> Eval.EvalError
+                               -> NotableEvent
     -- ^ Triggered every time a 'Block' fails to evaluate.
-    TxSentEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    TxSentEvent :: forall c tx. Buildable (Hash c)
+                => Hashed c tx
+                -> NotableEvent
     -- ^ Triggered every time a transaction is successfully sent.
-    TxSubmittedEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    TxSubmittedEvent :: forall c tx. Buildable (Hash c)
+                     => Hashed c tx
+                     -> NotableEvent
     -- ^ Triggered every time a transaction is successfully submitted via
     -- the HTTP API.
-    TxReceivedEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    TxReceivedEvent :: forall c tx. Buildable (Hash c)
+                    => Hashed c tx
+                    -> NotableEvent
     -- ^ Triggered every time a new tx is received at the network level.
-    TxStaleEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    TxStaleEvent :: forall c tx. Buildable (Hash c)
+                 => Hashed c tx
+                 -> NotableEvent
     -- ^ Triggered every time we called 'applyTx' on a stale transaction.
-    TxAppliedEvent :: forall tx. Crypto.Hashed tx -> NotableEvent
+    TxAppliedEvent :: forall c tx. Buildable (Hash c)
+                   => Hashed c tx
+                   -> NotableEvent
     -- ^ Triggered every time calling 'applyTx' resulted in an 'Applied' result.
-    TxsAddedToMempoolEvent :: forall tx. Crypto.Hashable tx => [tx] -> NotableEvent
+    TxsAddedToMempoolEvent :: forall c. Buildable (Hash c)
+                           => [Hash c]
+                           -> NotableEvent
     -- ^ Triggered every time a new rad transaction was added to the mempool.
-    TxsRemovedFromMempoolEvent :: forall tx. Crypto.Hashable tx => [tx] -> NotableEvent
+    TxsRemovedFromMempoolEvent :: forall c. Buildable (Hash c)
+                               => [Hash c]
+                               -> NotableEvent
     -- ^ Triggered every time a new rad transaction was removed from the mempool.
     Peer2PeerErrorEvent :: P2P.ConversionError -> NotableEvent
     -- ^ Triggered every time the P2P layer returns a 'ConversionError'.
     HttpApiRequest :: HTTP.Request -> HTTP.Status -> Duration -> NotableEvent
     -- ^ Triggered every time a new HTTP request is issued to the node's API.
-    GossipEvent :: Gossip.Traceable P2P.NodeId -> NotableEvent
+    GossipEvent :: forall c. (Hashable c (PK c), Buildable (Hash c))
+                => Gossip.Traceable (P2P.NodeId c)
+                -> NotableEvent
     -- ^ Events emitted by the @gossip@ library
-    HandshakeEvent :: P2P.HandshakeEvent P2P.NodeId -> NotableEvent
+    HandshakeEvent :: forall c. (Hashable c (PK c), Buildable (Hash c))
+                   => P2P.HandshakeEvent (P2P.NodeId c)
+                   -> NotableEvent
     -- ^ Events emitted during the p2p handshake phase

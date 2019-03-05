@@ -12,6 +12,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary
                  (arbitraryBlock, arbitraryBlockWith)
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
@@ -20,20 +21,21 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
 
+import           Data.ByteArray.Orphans ()
 import qualified Data.Set as Set
 
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
-tests :: [TestTree]
-tests =
+tests :: forall c. Dict (IsCrypto c) -> [TestTree]
+tests Dict =
     [ testGroup "Storage.Block"
-        [ testProperty "Store/lookup Block" (withMemStore genBlockFrom testStoreLookupBlock)
-        , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock testStoreLookupTx)
-        , testProperty "Get Genesis Block"  (withMemStore (const arbitrary) testGetGenesisBlock)
-        , testProperty "Get blocks"         (withMemStore genGetBlocks testGetBlocks)
-        , testProperty "Orphans"            (withMemStore (const (vectorOf 10 (arbitraryBlockWith []))) testOrphans)
+        [ testProperty "Store/lookup Block" (withMemStore genBlockFrom (testStoreLookupBlock @c))
+        , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
+        , testProperty "Get Genesis Block"  (withMemStore (const arbitrary) (testGetGenesisBlock @c))
+        , testProperty "Get blocks"         (withMemStore genGetBlocks (testGetBlocks @c))
+        , testProperty "Orphans"            (withMemStore (const (vectorOf 10 (arbitraryBlockWith []))) (testOrphans @c))
         ]
     ]
 
@@ -42,13 +44,18 @@ tests =
 ------------------------------------------------------------------------------}
 
 -- | Generates a non-empty 'Block'.
-genNonEmptyBlock :: Block RadTx DummySeal -> Gen (Block RadTx DummySeal)
+genNonEmptyBlock
+    :: IsCrypto c
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Gen (Block c (RadTx c) (Sealed c DummySeal))
 genNonEmptyBlock genesisBlock =
     genBlockFrom genesisBlock `suchThat` (not . null . blockData)
 
 
-genGetBlocks :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Blockchain RadTx DummySeal)
+genGetBlocks
+    :: IsCrypto c
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Gen (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
 genGetBlocks genesisBlock =
     (,) <$> arbitraryBlock
         <*> resize 1 (genBlockchainFrom genesisBlock)
@@ -58,18 +65,22 @@ genGetBlocks genesisBlock =
   The tests proper
 ------------------------------------------------------------------------------}
 
-testStoreLookupBlock :: Block RadTx DummySeal
-                     -> Abstract.BlockStore RadTx DummySeal IO
-                     -> Assertion
+testStoreLookupBlock
+    :: IsCrypto c
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    -> Assertion
 testStoreLookupBlock blk h = do
     Abstract.insertBlock h blk
     Just blk' <- Abstract.lookupBlock h (blockHash blk)
 
     blk' @?= blk
 
-testStoreLookupTx :: Block RadTx DummySeal
-                  -> Abstract.BlockStore RadTx DummySeal IO
-                  -> Assertion
+testStoreLookupTx
+    :: IsCrypto c
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    -> Assertion
 testStoreLookupTx blk h = do
     Abstract.insertBlock h blk
 
@@ -80,23 +91,30 @@ testStoreLookupTx blk h = do
 
     txPayload tx' @?= tx
 
-testGetGenesisBlock :: () -> Abstract.BlockStore RadTx DummySeal IO -> Assertion
+testGetGenesisBlock
+    :: IsCrypto c
+    => ()
+    -> Abstract.BlockStore c (RadTx c) DummySeal IO -> Assertion
 testGetGenesisBlock () h = do
     blk <- Abstract.getGenesisBlock h
     defaultGenesis @?= blk
 
-testOrphans :: [Block RadTx DummySeal]
-            -> Abstract.BlockStore RadTx DummySeal IO
-            -> Assertion
+testOrphans
+    :: IsCrypto c
+    => [Block c (RadTx c) (Sealed c DummySeal)]
+    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    -> Assertion
 testOrphans blks h = do
     for_ blks (Abstract.insertBlock h)
     blks' <- Abstract.getOrphans h
 
     blks' @?= Set.fromList (map blockHash blks)
 
-testGetBlocks :: (Block RadTx DummySeal, Blockchain RadTx DummySeal)
-              -> Abstract.BlockStore RadTx DummySeal IO
-              -> Assertion
+testGetBlocks
+    :: IsCrypto c
+    => (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
+    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    -> Assertion
 testGetBlocks (block, chain) h = do
     Abstract.insertBlocksNaive h (initDef [] $ blocks chain)
 

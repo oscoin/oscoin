@@ -19,6 +19,8 @@ import Oscoin.Telemetry.Middleware (telemetryMiddleware)
 import Oscoin.Telemetry.Metrics (forkEkgServer, newMetricsStore, noLabels)
 import Oscoin.Telemetry.Logging   as Log
 import Oscoin.Crypto.Blockchain.Block
+import Oscoin.Crypto (Crypto)
+import Oscoin.Crypto.Hash.RealWorld ()
 
 import qualified Network.Wai as Wai
 ```
@@ -52,7 +54,7 @@ use it to _emit_ some interesting events:
 emitBlockMined :: IO ()
 emitBlockMined = do
   handle <- initTelemetry
-  let (b :: Block () ()) = undefined -- Only for doc purposes
+  let (b :: Block Crypto () Unsealed) = undefined -- Only for doc purposes
   Telemetry.emit handle (BlockMinedEvent (blockHash b))
 ```
 

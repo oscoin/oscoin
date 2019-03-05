@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.API.Types
     ( RadTx
     , Result(..)
@@ -11,7 +12,8 @@ module Oscoin.API.Types
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
-import           Oscoin.Crypto.Hash (Hashable, Hashed)
+import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
+import           Oscoin.Crypto.PubKey (PK, Signature)
 import           Oscoin.Data.Tx (Tx)
 import           Oscoin.Prelude
 import           Oscoin.State.Tree (Key)
@@ -32,7 +34,7 @@ import           Lens.Micro
 import           Numeric.Natural
 
 -- | The type of a block transaction in the API.
-type RadTx = Tx Rad.Value
+type RadTx c = Tx c Rad.Value
 
 data Result a =
       Ok  a
@@ -55,10 +57,10 @@ resultToEither (Ok a ) = Right a
 resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
-data TxLookupResponse = TxLookupResponse
-    { txHash          :: Hashed RadTx
+data TxLookupResponse c = TxLookupResponse
+    { txHash          :: Hashed c (RadTx c)
     -- ^ Hash of the transaction.
-    , txBlockHash     :: Maybe BlockHash
+    , txBlockHash     :: Maybe (BlockHash c)
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
     , txOutput        :: Maybe (Either EvalError Rad.Value)
     -- ^ Output of the transaction if it was evaluated. If the
@@ -68,11 +70,14 @@ data TxLookupResponse = TxLookupResponse
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
     -- the 'Block' referenced by 'txBlockHash'.
-    , txPayload       :: RadTx
+    , txPayload       :: RadTx c
     -- ^ The transaction itself.
-    } deriving (Show, Eq, Generic)
+    } deriving (Generic)
 
-instance ToJSON TxLookupResponse where
+deriving instance (HasHashing c, Show (Hash c), Show (RadTx c)) => Show (TxLookupResponse c)
+deriving instance (Eq (Hash c), Eq (RadTx c))                   => Eq (TxLookupResponse c)
+
+instance (ToJSON (RadTx c), ToJSON (Hash c)) => ToJSON (TxLookupResponse c) where
     toJSON TxLookupResponse{..} = object
         [ "txHash" .= toJSON txHash
         , "txBlockHash" .= toJSON txBlockHash
@@ -80,7 +85,8 @@ instance ToJSON TxLookupResponse where
         , "txConfirmations" .= toJSON txConfirmations
         , "txPayload" .= toJSON txPayload
         ]
-instance FromJSON TxLookupResponse where
+
+instance (FromJSON (RadTx c), FromJSON (Hash c)) => FromJSON (TxLookupResponse c) where
     parseJSON = withObject "TxLookupResponse" $ \o -> do
         txHash <- o .: "txHash"
         txBlockHash <- o .: "txBlockHash"
@@ -90,18 +96,24 @@ instance FromJSON TxLookupResponse where
         pure $ TxLookupResponse {..}
 
 
-instance Serial.Serialise TxLookupResponse
+instance ( Serial.Serialise (Hash c)
+         , Serial.Serialise (PK c)
+         , Serial.Serialise (Signature c)
+         ) => Serial.Serialise (TxLookupResponse c)
 
 -- | A transaction receipt. Contains the hashed transaction.
-newtype TxSubmitResponse tx = TxSubmitResponse (Hashed tx)
-    deriving (Show, Eq)
+newtype TxSubmitResponse c tx = TxSubmitResponse (Hashed c tx)
 
-deriving instance Serial.Serialise (TxSubmitResponse tx)
 
-instance Hashable tx => ToJSON (TxSubmitResponse tx) where
+deriving instance Show (Hash c) => Show (TxSubmitResponse c tx)
+deriving instance Eq (Hash c)   => Eq (TxSubmitResponse c tx)
+
+deriving instance Serial.Serialise (Hash c) => Serial.Serialise (TxSubmitResponse c tx)
+
+instance (ToJSON (Hash c), Hashable c tx) => ToJSON (TxSubmitResponse c tx) where
     toJSON (TxSubmitResponse tx) =
         object [ "tx" .= tx ]
 
-instance Hashable tx => FromJSON (TxSubmitResponse tx) where
+instance (FromJSON (Hash c), Hashable c tx) => FromJSON (TxSubmitResponse c tx) where
     parseJSON = withObject "TxSubmitResponse" $ \o ->
         TxSubmitResponse <$> o .: "tx"

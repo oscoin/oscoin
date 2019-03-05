@@ -6,19 +6,19 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (StateHash)
 
-class Monad m => MonadStateStore st m | m -> st where
+class Monad m => MonadStateStore c st m | m -> st, m -> c where
     -- | Lookup a state by hash.
-    lookupState :: StateHash -> m (Maybe st)
+    lookupState :: StateHash c -> m (Maybe st)
 
     -- | Store a state.
     storeState  :: st -> m ()
 
     default lookupState
-        :: (MonadStateStore st m', MonadTrans t, m ~ t m')
-        => StateHash -> m (Maybe st)
+        :: (MonadStateStore c st m', MonadTrans t, m ~ t m')
+        => StateHash c -> m (Maybe st)
     lookupState = lift . lookupState
 
     default storeState
-        :: (MonadStateStore st m', MonadTrans t, m ~ t m')
+        :: (MonadStateStore c st m', MonadTrans t, m ~ t m')
         => st -> m ()
     storeState = lift . storeState

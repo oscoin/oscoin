@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.Test.Consensus.Network.Arbitrary
     ( arbitraryPartitionedNetwork
@@ -11,6 +12,7 @@ import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node (DummyNodeId)
+import           Oscoin.Test.Crypto
 import           Oscoin.Time
 
 import           Data.List (nub, permutations)
@@ -41,11 +43,16 @@ maxLatency blockTime = 3 * blockTime
 simDuration :: Duration -> Duration
 simDuration blockTime = 36 * blockTime
 
-arbitraryTxMsg :: Gen (Msg s)
+arbitraryTxMsg :: Gen (Msg c s)
 arbitraryTxMsg = TxMsg <$> arbitrary
 
 -- | A 'TestNetwork' with some latency, and all messages are delivered.
-arbitraryHealthyNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
+arbitraryHealthyNetwork
+    :: ( IsCrypto c
+       , Ord s
+       )
+    => Duration
+    -> Gen (TestNetwork c s ())
 arbitraryHealthyNetwork blockTime = do
     net  <- arbitrarySynchronousNetwork blockTime
     gen  <- mkStdGen <$> arbitrary :: Gen StdGen
@@ -56,7 +63,12 @@ arbitraryHealthyNetwork blockTime = do
                                  ) gen }
 
 -- | A 'TestNetwork' with no message latency.
-arbitrarySynchronousNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
+arbitrarySynchronousNetwork
+    :: ( IsCrypto c
+       , Ord s
+       )
+     => Duration
+     -> Gen (TestNetwork c s ())
 arbitrarySynchronousNetwork blockTime = do
     addrs <- resize maxNodes (listOf1 arbitrary)
         `suchThat` (\as -> nub as == as) :: Gen [DummyNodeId]
@@ -92,7 +104,12 @@ arbitrarySynchronousNetwork blockTime = do
         }
 
 -- | A 'TestNetwork' with some latency, where some messages are dropped.
-arbitraryPartitionedNetwork :: (Ord s) => Duration -> Gen (TestNetwork s ())
+arbitraryPartitionedNetwork
+    :: ( Ord s
+       , IsCrypto c
+       )
+    => Duration
+    -> Gen (TestNetwork c s ())
 arbitraryPartitionedNetwork blockTime = do
     net@TestNetwork{..} <- arbitraryHealthyNetwork blockTime
     partition           <- arbitraryPartition (Map.keys tnNodes)
@@ -165,7 +182,7 @@ arbitraryBridgePartition addrs = do
         [] ->
             mempty
 
-instance (Ord s) => Arbitrary (TestNetwork s ()) where
+instance (IsCrypto c, Ord s) => Arbitrary (TestNetwork c s ()) where
     arbitrary = arbitraryPartitionedNetwork 1 -- TODO: use size for epochLength?
 
     shrink tn =
@@ -177,7 +194,12 @@ instance (Ord s) => Arbitrary (TestNetwork s ()) where
         lessNodes = filter (not . null . tnNodes)
                   $ catMaybes [filterNetwork tn { tnNodes = Map.fromList ns } | ns <- nodes']
 
-shrinkScheduledMsgs :: Ord s => Set (Scheduled s) -> [Set (Scheduled s)]
+shrinkScheduledMsgs
+    :: ( IsCrypto c
+       , Ord s
+       )
+    => Set (Scheduled c s)
+    -> [Set (Scheduled c s)]
 shrinkScheduledMsgs msgs =
     [Set.filter (not . isMsg) msgs <> ms | ms <- shrinkedMsgs]
   where
@@ -190,7 +212,7 @@ shrinkScheduledMsgs msgs =
 
 -- | Filter messages where the sender is not part of the network. Used after
 -- shrinking the node list.
-filterNetwork :: TestNetwork s a -> Maybe (TestNetwork s a)
+filterNetwork :: TestNetwork c s a -> Maybe (TestNetwork c s a)
 filterNetwork tn@TestNetwork{..} =
     if null scheduled
        then Nothing

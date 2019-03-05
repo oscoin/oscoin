@@ -14,9 +14,10 @@ import           Oscoin.CLI.Revision
 import           Oscoin.CLI.Spinner hiding (progress, withSpinner)
 import           Oscoin.Consensus.Mining (mineGenesis)
 import           Oscoin.Consensus.Nakamoto (mineNakamoto)
-import           Oscoin.Crypto.Blockchain.Block (Difficulty)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash, Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import           Oscoin.Crypto.Hash (Hashed)
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
@@ -24,7 +25,10 @@ import           Oscoin.P2P (NodeAddr(..), mkNodeId)
 import           Oscoin.Time (Timestamp)
 
 
+import           Codec.Serialise (Serialise)
+import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
 import           Crypto.Random.Types (MonadRandom)
+import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.Yaml as Yaml
 import           Network.Socket (HostName, PortNumber)
 import           Numeric.Natural
@@ -32,7 +36,7 @@ import           Numeric.Natural
 import           Radicle.Conversion
 import qualified Radicle.Extended as Rad
 
-class (MonadRandom m, API.MonadClient m, MonadKeyStore m) => MonadCLI m where
+class (MonadRandom m, API.MonadClient c m, MonadKeyStore c m) => MonadCLI c m where
     -- | Sleep for given number of milliseconds
     sleep :: Int -> m ()
     -- | Print text to stdout
@@ -61,7 +65,24 @@ data Command =
     | NodeSeed HostName PortNumber
     deriving (Show)
 
-dispatchCommand :: MonadCLI m => Command -> m Result
+dispatchCommand
+    :: ( MonadCLI c m
+       , Yaml.ToJSON (Crypto.PK c)
+       , Serialise (BlockHash c)
+       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.Signature c)
+       , AuthTree.MerkleHash (Crypto.Hash c)
+       , Crypto.HasDigitalSignature c
+       , Crypto.Hashable c (Crypto.PK c)
+       , ByteArrayAccess (BlockHash c)
+       , Yaml.ToJSON (Crypto.Hash c)
+       , Yaml.ToJSON (Crypto.Signature c)
+       , Show (Crypto.PK c)
+       , Show (Crypto.Signature c)
+       , Show (Crypto.Hash c)
+       )
+    => Command
+    -> m Result
 dispatchCommand (RevisionCreate confirmations) =
     submitTransaction createRevision confirmations
     where createRevision = Rad.fnApply "create-revision" [toRad emptyRevision]
@@ -99,11 +120,26 @@ dispatchCommand cmd = pure $
 
 -- | Mine a genesis block from a list of inputs and print it as YAML to
 -- the console. Takes the target difficulty.
-printGenesisYaml :: MonadCLI m => [API.RadTx] -> Difficulty -> m Result
+printGenesisYaml
+    :: forall c m.
+       ( MonadCLI c m
+       , Serialise (BlockHash c)
+       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.Signature c)
+       , AuthTree.MerkleHash (Crypto.Hash c)
+       , Crypto.Hashable c (Crypto.PK c)
+       , ByteArrayAccess (BlockHash c)
+       , Yaml.ToJSON (Crypto.Hash c)
+       , Yaml.ToJSON (Crypto.PK c)
+       , Yaml.ToJSON (Crypto.Signature c)
+       )
+    => [API.RadTx c]
+    -> Difficulty
+    -> m Result
 printGenesisYaml txs diffi = do
     time <- getTime
 
-    case buildGenesis Rad.txEval time txs Rad.pureEnv of
+    case buildGenesis @c Rad.txEval time txs Rad.pureEnv of
         Left (_, err) ->
             pure $ ResultError (fromEvalError err)
         Right blk -> do
@@ -119,10 +155,14 @@ printGenesisYaml txs diffi = do
 
 -- | Waits until 'n' number of confirmations are reached for the given tx.
 waitConfirmations
-    :: MonadCLI m
-    => Natural -- ^ Number of confirmations to wait for.
-    -> Int -- ^ Number of milliseconds to sleep between tx lookups.
-    -> Hashed API.RadTx -- ^ Transaction hash to lookup.
+    :: ( Show (Crypto.PK c)
+       , Show (Crypto.Signature c)
+       , Show (Crypto.Hash c)
+       , MonadCLI c m
+       )
+    => Natural                -- ^ Number of confirmations to wait for.
+    -> Int                    -- ^ Number of milliseconds to sleep between tx lookups.
+    -> Hashed c (API.RadTx c) -- ^ Transaction hash to lookup.
     -> m Result
 waitConfirmations n delay txHash = withSpinner (msg 0) 100 go where
     msg n' = "Got " <> show n' <> " out of " <> show n <> " confirmations"
@@ -134,17 +174,28 @@ waitConfirmations n delay txHash = withSpinner (msg 0) 100 go where
         other -> pure $ ResultError $ "Unexpected response: " <> show other
 
 -- | Submits a Radicle value to the API as signed transaction.
-submitTransaction :: MonadCLI m
-                  => Rad.Value
-                  -> Natural
-                  -> m Result
+submitTransaction
+    :: ( Show (Crypto.PK c)
+       , Show (Crypto.Hash c)
+       , Show (Crypto.Signature c)
+       , Crypto.HasDigitalSignature c
+       , MonadCLI c m
+       )
+    => Rad.Value
+    -> Natural
+    -> m Result
 submitTransaction rval confirmations = do
     tx <- signTransaction rval
     API.submitTransaction tx >>= \case
         API.Err err -> pure $ ResultError err
         API.Ok (API.TxSubmitResponse txHash) -> waitConfirmations confirmations 500 txHash
 
-signTransaction :: MonadCLI m => Rad.Value -> m API.RadTx
+signTransaction
+    :: ( Crypto.HasDigitalSignature c
+       , MonadCLI c m
+       )
+    => Rad.Value
+    -> m (API.RadTx c)
 signTransaction v = do
     (pk, sk) <- readKeyPair
     msg      <- Crypto.sign sk v

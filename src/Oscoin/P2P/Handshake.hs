@@ -27,6 +27,7 @@ import           Oscoin.P2P.Handshake.Types as Types
 import           Oscoin.P2P.Types (NodeId, fromNodeId, mkNodeId)
 
 import           Codec.Serialise (Serialise)
+import           Data.ByteArray (ByteArrayAccess)
 
 data HandshakeError =
       SimpleHandshakeError SimpleError
@@ -42,13 +43,19 @@ instance Exception HandshakeError
 --
 -- This is not a secure protocol, as all communication is in clear text.
 simpleHandshake
-    :: Serialise p
-    => Crypto.KeyPair
-    -> Handshake SimpleError NodeId p (Crypto.Signed p)
+    :: forall p c.
+       ( Serialise (Crypto.PK c)
+       , Serialise (Crypto.Signature c)
+       , ByteArrayAccess p
+       , Crypto.HasDigitalSignature c
+       , Eq (Crypto.PK c)
+       )
+    => Crypto.KeyPair c
+    -> Handshake SimpleError (NodeId c) p (Crypto.Signed c p)
 simpleHandshake keys role peerId = do
     res <- map mkNodeId . signedPayloads (snd keys)
        <$> keyExchange keys role Nothing
-    guardPeerId peerId res
+    guardPeerId (Proxy :: Proxy c) peerId res
 
 -- | A secure handshake combining 'noiseNNHandshake' and 'keyExchange'.
 --
@@ -56,12 +63,17 @@ simpleHandshake keys role peerId = do
 -- 'NoiseHandshakeHash', which is verified on reception. This is called
 -- \"Channel Binding\" in the Noise spec (Section 11.2).
 secureHandshake
-    :: Serialise p
-    => Crypto.KeyPair
+    :: ( Serialise p
+       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.Signature c)
+       , Eq (Crypto.PK c)
+       , Crypto.HasDigitalSignature c
+       )
+    => Crypto.KeyPair c
     -> Handshake HandshakeError
-                 NodeId
+                 (NodeId c)
                  p
-                 (NoisePayload (Crypto.Signed NoiseHandshakeHash, p))
+                 (NoisePayload (Crypto.Signed c NoiseHandshakeHash, p))
 secureHandshake keys role (map fromNodeId -> peer) = do
     noise <- withHandshakeT NoiseHandshakeError  $ noiseNNHandshake role Nothing
     keyex <- withHandshakeT SimpleHandshakeError $ keyExchange keys role peer
@@ -77,9 +89,10 @@ secureHandshake keys role (map fromNodeId -> peer) = do
 -- Internal --------------------------------------------------------------------
 
 signedHandshakeHash
-    :: Crypto.PrivateKey
-    -> HandshakeResult i o                                     (Crypto.PublicKey, NoiseHandshakeHash)
-    -> HandshakeResult i (Crypto.Signed NoiseHandshakeHash, o) Crypto.PublicKey
+    :: Crypto.HasDigitalSignature c
+    => Crypto.SK c
+    -> HandshakeResult i o                                       (Crypto.PK c, NoiseHandshakeHash)
+    -> HandshakeResult i (Crypto.Signed c NoiseHandshakeHash, o) (Crypto.PK c)
 signedHandshakeHash sk hr = map fst $ mapOutput send recv hr
   where
     (theirPK, handhakeHash) = hrPeerId hr

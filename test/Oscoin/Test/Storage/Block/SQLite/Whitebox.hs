@@ -8,6 +8,7 @@ module Oscoin.Test.Storage.Block.SQLite.Whitebox
 import           Oscoin.Prelude
 
 import           Codec.Serialise
+import           Data.ByteArray.Orphans ()
 
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blocks, height, showChainDigest, takeBlocks)
@@ -16,6 +17,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
@@ -26,18 +28,18 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
-tests :: [TestTree]
-tests =
+tests :: forall c. Dict (IsCrypto c) -> [TestTree]
+tests Dict =
     [ testGroup "Storage.Block.SQLite whitebox testing (internals)"
-        [ testProperty "Get Score"          (withSqliteDB genAtLeastSixBlocks testGetScore)
-        , testProperty "isStored"           (withSqliteDB (const arbitrary) testIsStored)
-        , testProperty "isConflicting"      (withSqliteDB (\g -> (,) <$> genBlockFrom g
-                                                                     <*> genBlockFrom g
+        [ testProperty "Get Score"          (withSqliteDB @c genAtLeastSixBlocks testGetScore)
+        , testProperty "isStored"           (withSqliteDB @c (const arbitrary) testIsStored)
+        , testProperty "isConflicting"      (withSqliteDB @c (\g -> (,) <$> genBlockFrom @c g
+                                                                        <*> genBlockFrom @c g
                                                           ) testIsConflicting)
         ]
     , testGroup "Storage.Block.SQLite whitebox (forks)"
-        [ testProperty "One block fork" (withSqliteDB genTestFork1 testFork1)
-        , testProperty "Two block fork" (withSqliteDB genTestFork2 testFork2)
+        [ testProperty "One block fork" (withSqliteDB @c genTestFork1 testFork1)
+        , testProperty "Two block fork" (withSqliteDB @c genTestFork2 testFork2)
         ]
     ]
 
@@ -46,8 +48,12 @@ tests =
 ------------------------------------------------------------------------------}
 
 -- | Generates two 'Block's, one which has difficulty greater than the second.
-genTestFork1 :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork1
+    :: (IsCrypto c)
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Gen ( Block c (RadTx c) (Sealed c DummySeal)
+           , Block c (RadTx c) (Sealed c DummySeal)
+           )
 genTestFork1 genesisBlock = do
     blk  <- genBlockFrom genesisBlock
     blk' <- withDifficulty (encodeDifficulty $ blockScore blk + 1) <$>
@@ -55,8 +61,13 @@ genTestFork1 genesisBlock = do
     pure (blk, blk')
 
 -- | Generates three 'Block's, in increasing order of 'Difficulty'.
-genTestFork2 :: Block RadTx DummySeal
-             -> Gen (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
+genTestFork2
+    :: (IsCrypto c)
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Gen ( Block c (RadTx c) (Sealed c DummySeal)
+           , Block c (RadTx c) (Sealed c DummySeal)
+           , Block c (RadTx c) (Sealed c DummySeal)
+           )
 genTestFork2 genesisBlock = do
     blk   <- genBlockFrom genesisBlock
     chain <- resize 3 (genBlockchainFrom genesisBlock)
@@ -70,14 +81,21 @@ genTestFork2 genesisBlock = do
       _ -> panic ("genTestFork2: invalid generated list :" <> showChainDigest chain)
 
 -- | Generates a 'Blockchain' with at least six blocks.
-genAtLeastSixBlocks :: Block RadTx DummySeal -> Gen (Blockchain RadTx DummySeal)
+genAtLeastSixBlocks
+    :: (IsCrypto c)
+    => Block c (RadTx c) (Sealed c DummySeal)
+    -> Gen (Blockchain c (RadTx c) DummySeal)
 genAtLeastSixBlocks genesisBlock =
     genBlockchainFrom genesisBlock `suchThat` (\c -> height c > 6)
 
 -- | NOTE(adn) This function is better used sparingly, as changing the
 -- 'Difficulty' after the block has been forged also changes its hash and might
 -- generate invalid chains if one forget to call 'linkParent'.
-withDifficulty :: Serialise s => Difficulty -> Block tx s -> Block tx s
+withDifficulty
+    :: ( IsCrypto c , Serialise s )
+    => Difficulty
+    -> Block c tx s
+    -> Block c tx s
 withDifficulty d blk =
     blk { blockHeader = header, blockHash = headerHash header }
   where
@@ -87,9 +105,11 @@ withDifficulty d blk =
   The tests proper
 ------------------------------------------------------------------------------}
 
-testGetScore :: Blockchain RadTx DummySeal
-             -> Sqlite.Handle RadTx DummySeal
-             -> Assertion
+testGetScore
+    :: IsCrypto c
+    => Blockchain c (RadTx c) DummySeal
+    -> Sqlite.Handle c (RadTx c) DummySeal
+    -> Assertion
 testGetScore chain h = do
     traverse_ (storeBlock h) (reverse $ initDef [] $ blocks chain)
 
@@ -100,19 +120,28 @@ testGetScore chain h = do
     score' <- getChainSuffixScore (hConn h) (blockHash blk3)
     score' @?= blockScore blk1 + blockScore blk2
 
-testIsStored :: () -> Sqlite.Handle RadTx DummySeal -> Assertion
+testIsStored
+    :: forall c.
+       IsCrypto c
+    => ()
+    -> Sqlite.Handle c (RadTx c) DummySeal
+    -> Assertion
 testIsStored () h = do
-    (gen :: Block RadTx DummySeal) <- getGenesisBlock (hConn h)
+    (gen :: Block c (RadTx c) (Sealed c DummySeal)) <- getGenesisBlock (hConn h)
 
     result <- isStored (hConn h) (blockHash gen)
     result @?= True
 
-    result' <- isStored (hConn h) Crypto.zeroHash
+    result' <- isStored (hConn h) (Crypto.zeroHash @c)
     result' @?= False
 
-testIsConflicting :: (Block RadTx DummySeal, Block RadTx DummySeal)
-                  -> Sqlite.Handle RadTx DummySeal
-                  -> Assertion
+testIsConflicting
+    :: IsCrypto c
+    => ( Block c (RadTx c) (Sealed c DummySeal)
+       , Block c (RadTx c) (Sealed c DummySeal)
+       )
+    -> Sqlite.Handle c (RadTx c) DummySeal
+    -> Assertion
 testIsConflicting (blk, blk') h@Handle{..} = do
     storeBlock h blk
 
@@ -122,11 +151,15 @@ testIsConflicting (blk, blk') h@Handle{..} = do
     result' <- isConflicting hConn (linkParent blk blk')
     result' @?= False
 
-testFork1 :: (Block RadTx DummySeal, Block RadTx DummySeal)
-          -> Sqlite.Handle RadTx DummySeal
-          -> Assertion
+testFork1
+    :: forall c.
+       IsCrypto c
+    => ( Block c (RadTx c) (Sealed c DummySeal)
+       , Block c (RadTx c) (Sealed c DummySeal)
+       ) -> Sqlite.Handle c (RadTx c) DummySeal
+         -> Assertion
 testFork1 (blk, blk') h = do
-    (gen :: Block RadTx DummySeal) <- getGenesisBlock (hConn h)
+    (gen :: Block c (RadTx c) (Sealed c DummySeal)) <- getGenesisBlock (hConn h)
 
     storeBlock h blk
     storeBlock h blk'
@@ -143,11 +176,15 @@ testFork1 (blk, blk') h = do
     os <- getOrphans h
     os @?= mempty
 
-testFork2 :: (Block RadTx DummySeal, Block RadTx DummySeal, Block RadTx DummySeal)
-          -> Sqlite.Handle RadTx DummySeal
-          -> Assertion
+testFork2
+    :: IsCrypto c
+    => ( Block c (RadTx c) (Sealed c DummySeal)
+       , Block c (RadTx c) (Sealed c DummySeal)
+       , Block c (RadTx c) (Sealed c DummySeal)
+       ) -> Sqlite.Handle c (RadTx c) DummySeal
+         -> Assertion
 testFork2 (blk, blk1, blk2) h@Sqlite.Handle{..} = do
-    (gen :: Block RadTx DummySeal) <- getGenesisBlock hConn
+    (gen :: Block c (RadTx c) DummySeal) <- getGenesisBlock hConn
 
     storeBlock h blk
     storeBlock h blk1
@@ -160,5 +197,3 @@ testFork2 (blk, blk1, blk2) h@Sqlite.Handle{..} = do
     -- The orphans list has been purged.
     os <- getOrphans h
     os @?= mempty
-
-

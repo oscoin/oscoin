@@ -14,6 +14,7 @@ import           Oscoin.Crypto.Hash
                  (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
 import           Oscoin.Time
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 
 import           Codec.Serialise (Serialise)
@@ -29,30 +30,33 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
-testBlockchain :: Consensus.Config -> TestTree
-testBlockchain config = testGroup "Blockchain"
-    [ testBuildBlock
-    , testValidateBlock config
+testBlockchain
+    :: forall c. Dict (IsCrypto c)
+    -> Consensus.Config
+    -> TestTree
+testBlockchain d@Dict config = testGroup "Blockchain"
+    [ testBuildBlock d
+    , testValidateBlock d config
     , testProperty "JSON Receipt" $ do
-        receipt <- arbitraryReceipt
+        receipt <- arbitraryReceipt d
         pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
     , testProperty "Block: deserialise . serialise == id" $
-        \(blk :: Block ByteString ByteString) ->
+        \(blk :: Block c ByteString ByteString) ->
             (Serialise.deserialise . Serialise.serialise) blk == blk
     , testProperty "Block: decode . encode == id (JSON)" $
-        \(blk :: Block String String) ->
+        \(blk :: Block c String String) ->
             (Aeson.decode . Aeson.encode) blk == Just blk
     , testProperty "Difficulty: decode . encode == id (JSON)" $
-        \(d :: Difficulty) ->
-            (Aeson.decode . Aeson.encode) d == Just d
+        \(diffi :: Difficulty) ->
+            (Aeson.decode . Aeson.encode) diffi == Just diffi
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
-        \(d :: Difficulty) ->
-            (parseDifficulty. prettyDifficulty) d == Just d
+        \(diffi :: Difficulty) ->
+            (parseDifficulty. prettyDifficulty) diffi == Just diffi
     , testProperty "Difficulty (compact): decode . encode == id" $
-        \(d :: Integer) -> -- TODO(alexis): Should only create 256-bit integers.
+        \(diffi :: Integer) -> -- TODO(alexis): Should only create 256-bit integers.
             ( decodeDifficulty
             . encodeDifficulty
-            ) d == (d, False)
+            ) diffi == (diffi, False)
     , testProperty "Difficulty (compact): Word32 encoding" $
         \(w :: Word32) ->
             ( readWord32LE
@@ -67,58 +71,65 @@ testBlockchain config = testGroup "Blockchain"
             (0xFFFF0000000000000000000000000000000000000000000000000000, False)
     ]
 
-testValidateBlock :: Consensus.Config -> TestTree
-testValidateBlock config = testGroup "Nakamoto: validateBlockchain"
+testValidateBlock
+    :: forall c. Dict (IsCrypto c)
+    -> Consensus.Config
+    -> TestTree
+testValidateBlock Dict config = testGroup "Nakamoto: validateBlockchain"
     [ testProperty "Valid blockchains validate" $
-        forAllShow (arbitraryNakamotoBlockchain @Text) (toS . showChainDigest) $
+        forAllShow (arbitraryNakamotoBlockchain @c @Text) (toS . showChainDigest) $
             \blks -> let result = validateBlockchain Nakamoto.validateBlock blks
                      in counterexample (show result) (result == Right ())
     , testProperty "Blocks bigger than the maximum size won't validate" $
-        forAll (arbitrary @(Block Text Nakamoto.PoW)) $
+        forAll (arbitrary @(Block c Text Nakamoto.PoW)) $
           \block -> let result = validateBlockSize config { Consensus.maxBlockSize = 1 } block
                     in counterexample (show result) (hasExceededMaxSize result)
     ]
 
-hasExceededMaxSize :: Either ValidationError a -> Bool
+hasExceededMaxSize :: Either (ValidationError c) a -> Bool
 hasExceededMaxSize (Left (InvalidBlockSize _)) = True
 hasExceededMaxSize _                           = False
 
-testBuildBlock :: TestTree
-testBuildBlock = testGroup "buildBlock"
+testBuildBlock
+    :: forall c. Dict (IsCrypto c)
+    -> TestTree
+testBuildBlock d@Dict = testGroup "buildBlock"
     [ testProperty "creates receipt for all transactions" $
-        \txs -> let (_, _, receipts) = buildTestBlock mempty txs
-                in map receiptTx receipts === map hash txs
+        \txs -> let (_, _, receipts) = buildTestBlock d mempty txs
+                in map receiptTx receipts === map (hash @c) txs
     , testProperty "receipts have block hash" $
-        \txs -> let (blk, _, receipts) = buildTestBlock mempty txs
+        \txs -> let (blk, _, receipts) = buildTestBlock d mempty txs
                 in conjoin [ receiptTxBlock receipt === blockHash blk | receipt <- receipts ]
     , testProperty "valid transactions create new state" $
-        \txs -> let (_, s, _) = buildTestBlock mempty txs
+        \txs -> let (_, s, _) = buildTestBlock d mempty txs
                     validTxOutputs = [ output | TxOk output <- txs ]
                 in reverse validTxOutputs === s
     , testProperty "only valid transactions are included in block" $
-        \txs -> let (blk, _, _) = buildTestBlock mempty txs
+        \txs -> let (blk, _, _) = buildTestBlock d mempty txs
                     validTxs = filter txIsOk txs
                 in validTxs === toList (blockData blk)
     , testProperty "transactions errors recorded in receipts" $
-        \txs err -> let (_, _, receipts) = buildTestBlock mempty txsWithError
+        \txs err -> let (_, _, receipts) = buildTestBlock d mempty txsWithError
                         txsWithError = TxErr err : txs
                     in (receiptTxOutput <$> head receipts) === Just (Left (EvalError (show err)))
     , testProperty "error transactions do not change block" $
         \txs -> let validTxs = [ TxOk out | TxOk out <- txs ]
-                    (blkWithErrors, _, _) = buildTestBlock mempty txs
-                    (blkWithoutErrors, _, _) = buildTestBlock mempty validTxs
+                    (blkWithErrors, _, _) = buildTestBlock d mempty txs
+                    (blkWithoutErrors, _, _) = buildTestBlock d mempty validTxs
                 in  blockData blkWithErrors === blockData blkWithoutErrors
     ]
 
 
-arbitraryReceipt :: Gen (Receipt Tx Output)
-arbitraryReceipt = do
+arbitraryReceipt
+    :: forall c. Dict (IsCrypto c)
+    -> Gen (Receipt c Tx Output)
+arbitraryReceipt Dict = do
     receiptTxBlock <- fromHashed <$> arbitraryHashed
     receiptTx <- arbitraryHashed
     receiptTxOutput <- liftArbitrary2 (EvalError <$> arbitrary) arbitrary
     pure Receipt{..}
   where
-    arbitraryHashed :: Gen (Hashed a)
+    arbitraryHashed :: Gen (Hashed c a)
     arbitraryHashed = toHashed . fromHashed . hash <$> (arbitrary :: Gen ByteString)
 
 
@@ -153,7 +164,7 @@ instance Arbitrary Tx where
 
 instance Serialise Tx
 
-instance Hashable Tx where
+instance HasHashing c => Hashable c Tx where
     hash = hashSerial
 
 eval :: Evaluator St Tx Output
@@ -163,5 +174,10 @@ eval (TxErr err) _    = Left (EvalError (show err))
 
 -- | Build block on an empty genesis block with 'eval' as defined
 -- above.
-buildTestBlock :: St -> [Tx] -> (Block Tx (), St, [Receipt Tx Output])
-buildTestBlock st txs = buildBlock eval epoch st txs (blockHash $ emptyGenesisBlock epoch)
+buildTestBlock
+    :: Dict (IsCrypto c)
+    -> St
+    -> [Tx]
+    -> (Block c Tx Unsealed, St, [Receipt c Tx Output])
+buildTestBlock Dict st txs =
+    buildBlock eval epoch st txs (blockHash $ emptyGenesisBlock epoch)

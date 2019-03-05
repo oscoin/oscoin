@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Consensus.Types
     ( ChainScore
     , Consensus(..)
@@ -15,22 +16,22 @@ import           Oscoin.Time (Duration)
 import qualified Generics.SOP as SOP
 
 -- | Represents an abstract consensus protocol.
-data Consensus tx s m = Consensus
-    { cScore    :: ChainScore tx s
-    , cMiner    :: Miner s m
-    , cValidate :: Validate tx s
+data Consensus c tx s m = Consensus
+    { cScore    :: ChainScore c tx s
+    , cMiner    :: Miner c s m
+    , cValidate :: Validate c tx s
     }
 
 -- | Block validation function.
-type Validate tx s =
-       [Block tx s]                -- ^ Ancestors of block to be validated.
-    -> Block tx s                  -- ^ Block to be validated.
-    -> Either ValidationError ()   -- ^ Either an error or @()@.
+type Validate c tx s =
+       [Block c tx (Sealed c s)]     -- ^ Ancestors of block to be validated.
+    -> Block c tx (Sealed c s)       -- ^ Block to be validated.
+    -> Either (ValidationError c) () -- ^ Either an error or @()@.
 
-data ValidationError =
-      InvalidParentHash       Crypto.Hash
+data ValidationError c =
+      InvalidParentHash       (Crypto.Hash c)
     -- ^ Parent block hash doesn't match
-    | InvalidDataHash         Crypto.Hash
+    | InvalidDataHash         (Crypto.Hash c)
     -- ^ Block data hash doesn't match data
     | InvalidTargetDifficulty TargetDifficulty TargetDifficulty
     -- ^ Expected and actual target difficulty
@@ -41,16 +42,19 @@ data ValidationError =
     -- far in the future
     | InvalidBlockSize Int
     -- ^ The block exceeded the maximum block size.
-    deriving (Eq, Show, Generic)
+    deriving (Generic)
 
-instance SOP.Generic ValidationError
-instance SOP.HasDatatypeInfo ValidationError
+deriving instance Show (Crypto.Hash c) => Show (ValidationError c)
+deriving instance Eq (Crypto.Hash c)   => Eq (ValidationError c)
+
+instance SOP.Generic (ValidationError c)
+instance SOP.HasDatatypeInfo (ValidationError c)
 
 -- | Chain scoring function.
-type ChainScore tx s = Blockchain tx s -> Blockchain tx s -> Ordering
+type ChainScore c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
 
 -- | Block mining function.
-type Miner s m = forall tx unsealed.
-    (Depth -> m [Block tx s])
-    -> BlockHeader unsealed
-    -> m (Maybe (BlockHeader s))
+type Miner c s m = forall tx.
+    (Depth -> m [Block c tx (Sealed c s)])
+    -> Block c tx Unsealed
+    -> m (Maybe (Block c tx (Sealed c s)))

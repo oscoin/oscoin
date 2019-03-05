@@ -7,5 +7,5 @@ import           Oscoin.P2P.Types (Msg)
 
 import           Codec.Serialise (Serialise)
 
-class Monad m => MonadBroadcast m where
-    broadcast :: (Serialise s, Serialise tx, Hashable tx) => Msg tx s -> m ()
+class Monad m => MonadBroadcast c m where
+    broadcast :: (Serialise s, Serialise tx, Hashable c tx) => Msg c tx s -> m ()

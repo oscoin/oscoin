@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Test.Storage.Block.Orphanage
     ( tests
     ) where
@@ -10,6 +11,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (blockScore)
 import           Oscoin.Storage.Block.Orphanage
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite
@@ -21,27 +23,29 @@ import           Oscoin.Test.Storage.Block.SQLite
                  )
 import           Oscoin.Test.Util (Condensed(..), showOrphans)
 
+import           Data.ByteArray.Orphans ()
+
 import           Test.QuickCheck (property)
 import           Test.QuickCheck.Extended ((===))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.QuickCheck hiding ((===))
 
-tests :: [TestTree]
-tests =
-    [ testProperty "insert orphans"       propInsertOrphans
-    , testProperty "selectBestCandidate (single choice)"    propSelectBestCandidateSingleChoice
-    , testProperty "selectBestCandidate (multiple choices)" propSelectBestCandidateMultipleChoice
-    , testProperty "selectBestCandidate (long initial chain, multiple choices)" propSelectBestCandidateComplex
+tests :: Dict (IsCrypto c) -> [TestTree]
+tests d =
+    [ testProperty "insert orphans"                                     (propInsertOrphans d)
+    , testProperty "selectBestCandidate (single choice)"                (propSelectBestCandidateSingleChoice d)
+    , testProperty "selectBestCandidate (multiple choices)"             (propSelectBestCandidateMultipleChoice d)
+    , testProperty "selectBestCandidate (long chain, multiple choices)" (propSelectBestCandidateComplex d)
     ]
 
 {------------------------------------------------------------------------------
   Properties
 ------------------------------------------------------------------------------}
 
-propInsertOrphans :: Property
-propInsertOrphans = do
-    let orphanage    = emptyOrphanage blockScore
+propInsertOrphans :: forall c. Dict (IsCrypto c) -> Property
+propInsertOrphans Dict = do
+    let orphanage    = emptyOrphanage @c blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,)
         forkParams   = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
@@ -55,9 +59,9 @@ propInsertOrphans = do
 -- Generates a bunch of candidates and check the best one is selected.
 -- In this test, we limit the selection to only one choice, i.e. at any given
 -- time there is /only one/ best chain to select.
-propSelectBestCandidateSingleChoice :: Property
-propSelectBestCandidateSingleChoice = do
-    let orphanage    = emptyOrphanage blockScore
+propSelectBestCandidateSingleChoice :: forall c. Dict (IsCrypto c) -> Property
+propSelectBestCandidateSingleChoice Dict = do
+    let orphanage    = emptyOrphanage @c blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,)
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
@@ -82,9 +86,9 @@ propSelectBestCandidateSingleChoice = do
 -- Generates a bunch of candidates and check the best one is selected. The
 -- orphans blocks are fed shuffled to the 'Orphanage', to test its ability to
 -- recognise and fuse chain fragments.
-propSelectBestCandidateMultipleChoice :: Property
-propSelectBestCandidateMultipleChoice = do
-    let orphanage    = emptyOrphanage blockScore
+propSelectBestCandidateMultipleChoice :: forall c. Dict (IsCrypto c) -> Property
+propSelectBestCandidateMultipleChoice Dict = do
+    let orphanage    = emptyOrphanage @c blockScore
         initialChain = unsafeToBlockchain [defaultGenesis]
         showIt       = showOrphans . (initialChain,) . map (\(_,b,c) -> (b,c))
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
@@ -100,9 +104,9 @@ propSelectBestCandidateMultipleChoice = do
             in classifyChainsByScore (map (\(_,b,c) -> (b,c)) chains) $
                  bestChain === bestChainOracle (blockHash defaultGenesis) chains
 
-propSelectBestCandidateComplex :: Property
-propSelectBestCandidateComplex = do
-    let orphanage = emptyOrphanage blockScore
+propSelectBestCandidateComplex :: forall c. Dict (IsCrypto c) -> Property
+propSelectBestCandidateComplex Dict = do
+    let orphanage = emptyOrphanage @c blockScore
         generator = do
             chain <- resize 15 $ genBlockchainFrom defaultGenesis
             orph  <- shuffledOrphanChains forkParams chain
@@ -126,13 +130,16 @@ propSelectBestCandidateComplex = do
   Utility functions
 ------------------------------------------------------------------------------}
 
-classifyChainsByScore :: forall tx s. [(Blockchain tx s, Block tx s)] -> Property -> Property
+classifyChainsByScore
+    :: forall c tx s. [(Blockchain c tx s, Block c tx (Sealed c s))]
+    -> Property
+    -> Property
 classifyChainsByScore chains = tabulate "Chain Score" scores
   where
       scores :: [String]
       scores = map (\(c,lnk) -> toScore (lnk : blocks c)) chains
 
-      toScore :: [Block tx s] -> String
+      toScore :: [Block c tx (Sealed c s)] -> String
       toScore blks = case totalScore blks of
                        x | x == 0     -> "0 score"
                        x | x <= 10    -> "0-10 score"
@@ -142,14 +149,14 @@ classifyChainsByScore chains = tabulate "Chain Score" scores
                        x | x <= 50000 -> "5000-50000 score"
                        _              -> ">50000 score"
 
-      totalScore :: [Block tx s] -> Score
+      totalScore :: [Block c tx (Sealed c s)] -> Score
       totalScore = sum . map blockScore
 
 {------------------------------------------------------------------------------
   (Temporary) Orphans
 ------------------------------------------------------------------------------}
 
-instance Show s => Condensed (ChainCandidate s) where
+instance (IsCrypto c, Show s) => Condensed (ChainCandidate c s) where
     condensed ChainCandidate{..} =
            "Candidate { chain = "
         <> condensed candidateChain

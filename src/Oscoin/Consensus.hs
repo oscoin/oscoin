@@ -19,14 +19,15 @@ import           Oscoin.Consensus.Types
 
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Hash (Hash, Hashable)
 
 import           GHC.Exts (IsList(fromList))
 
 -- | Validate a 'Blockchain' with the given validation function. Returns 'Right'
 -- when valid.
-validateBlockchain :: Validate tx s
-                   -> Blockchain tx s
-                   -> Either ValidationError ()
+validateBlockchain :: Validate c tx s
+                   -> Blockchain c tx s
+                   -> Either (ValidationError c) ()
 validateBlockchain validateBlock (Blockchain (blk :| [])) =
     validateBlock [] blk
 validateBlockchain validateBlock (Blockchain (blk :| blks)) =
@@ -35,10 +36,16 @@ validateBlockchain validateBlock (Blockchain (blk :| blks)) =
 
 -- | Validates the size (in bytes) for a block, comparing the serialised size
 -- with the maximum allowed value as read from the configuration file.
-validateBlockSize :: (Serialise tx, Serialise s)
-                  => Consensus.Config
-                  -> Block tx s
-                  -> Either ValidationError ()
+validateBlockSize
+    :: ( Serialise tx
+       , Hashable c (BlockHeader c s)
+       , Eq (Hash c)
+       , Serialise s
+       , Serialise (Hash c)
+       )
+    => Consensus.Config
+    -> Block c tx s
+    -> Either (ValidationError c) ()
 validateBlockSize config block
     | actualSize <- LBS.length (serialise block)
     , actualSize > fromIntegral (Consensus.maxBlockSize config) =

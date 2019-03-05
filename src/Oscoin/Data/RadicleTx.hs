@@ -1,4 +1,5 @@
 -- | Provide Radicle transaction type, state and evaluator for the blockchain.
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Data.RadicleTx
     ( Env(..)
     , RadTx
@@ -15,7 +16,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), Evaluator)
 import           Oscoin.Crypto.Hash
-import           Oscoin.Crypto.PubKey (PublicKey, unsign)
+import           Oscoin.Crypto.PubKey (PK, unsign)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx(..))
 
@@ -29,34 +30,34 @@ import qualified Radicle
 import qualified Radicle.Extended as Rad
 import qualified Text.Show as Show
 
-newtype Env = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
+newtype Env c = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
-instance Show.Show Env where
+instance Show.Show (Env c) where
     show (Env inner) =
         T.unpack . Rad.prettyValue . Rad.toRad $ Rad.bindingsEnv inner
 
-type RadTx = Tx Rad.Value
+type RadTx c = Tx c Rad.Value
 
-type RadEvaluator = Evaluator Env RadTx Rad.Value
+type RadEvaluator c = Evaluator (Env c) (RadTx c) Rad.Value
 
-pureEnv :: Env
+pureEnv :: Env c
 pureEnv = Env Radicle.pureEnv
 
-instance Hashable Env where
+instance HasHashing c => Hashable c (Env c) where
     -- Nb. This instance is probably not correct, since the primops and refs
     -- are not being hashed. However, they are not currently hashable in
     -- radicle, so we only hash the Env for now.
     hash (Env bindings) =
         toHashed . fromHashed . hashSerial $ Radicle.bindingsEnv bindings
 
-instance ToJSON Env where
-    toJSON = toJSON . hash
+instance (ToJSON (Hash c), HasHashing c) => ToJSON (Env c) where
+    toJSON e = toJSON (hash @c e)
 
-instance Default Env where
+instance Default (Env c) where
     def = pureEnv
 
-instance Query Env where
-    type QueryVal Env = Rad.Value
+instance Query (Env c) where
+    type QueryVal (Env c) = Rad.Value
 
     query path (Env bindings) = do
         ident <- Rad.mkIdent (T.intercalate "/" path)
@@ -65,17 +66,18 @@ instance Query Env where
             Rad.Ref ref -> lookupReference ref bindings
             _           -> pure val
 
-data Program = Program
+data Program c = Program
     { progValue   :: Rad.Value
-    , progAuthor  :: Hashed PublicKey
+    , progAuthor  :: Hashed c (PK c)
     , progChainId :: Word16
     , progNonce   :: Word32
-    } deriving (Show, Generic)
+    } deriving (Generic)
 
-instance Serialise Program
+deriving instance Show (Hash c) => Show (Program c)
+instance Serialise (Hash c) => Serialise (Program c)
 
 -- | Convert a 'Tx' to a Radicle 'Program'.
-txToProgram :: RadTx -> Program
+txToProgram :: Hashable c (PK c) => RadTx c -> Program c
 txToProgram Tx{..} =
     Program
         { progValue   = unsign txMessage
@@ -84,10 +86,10 @@ txToProgram Tx{..} =
         , progNonce   = txNonce
         }
 
-txEval :: Evaluator Env RadTx Rad.Value
+txEval :: Hashable c (PK c) => Evaluator (Env c) (RadTx c) Rad.Value
 txEval tx st = radicleEval (txToProgram tx) st
 
-radicleEval :: Evaluator Env Program Rad.Value
+radicleEval :: Evaluator (Env c) (Program c) Rad.Value
 radicleEval Program{..} (Env st) =
     case runIdentity . Rad.runLang st $ Rad.eval progValue of
         (Left err, _)           -> Left (EvalError (show err))

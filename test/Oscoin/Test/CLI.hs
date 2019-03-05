@@ -1,14 +1,21 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Test.CLI
     ( tests
     ) where
 
 import           Oscoin.Prelude
 
+import           Database.SQLite.Simple.Orphans ()
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txMessageContent)
 import           Oscoin.Test.CLI.Helpers
+import           Oscoin.Test.Util (Condensed(..))
+
+-- For the CLI, at the moment, we can test only against the Crypto.
+import           Oscoin.Crypto (Crypto)
+import           Oscoin.Crypto.Hash.RealWorld ()
 
 import           Radicle.Conversion
 import qualified Radicle.Extended as Rad
@@ -29,7 +36,7 @@ tests =
 
 testRevisionCreate :: TestTree
 testRevisionCreate = testCase "revision create" $ do
-    cliState  <- runCLI ["revision", "create", "--confirmations=1"]
+    cliState  <- runCLI @Crypto ["revision", "create", "--confirmations=1"]
     let submittedMsg = txMessageContent . snd <$> Map.lookupMin (transactions cliState)
     let expectedMessage = Rad.fnApply "create-revision" [toRad emptyRevision]
     assertEqual "Expected message to be an empty revision"
@@ -39,7 +46,7 @@ testRevisionCreate = testCase "revision create" $ do
 testGenerateKeyPair :: TestTree
 testGenerateKeyPair = testCase "keypair generate" $ do
     let setNoKeyPair s = s { storedKeyPair = Nothing }
-    TestCommandState{..} <- runCLIWithState ["keypair", "generate"] setNoKeyPair
+    TestCommandState{..} <- runCLIWithState @Crypto ["keypair", "generate"] setNoKeyPair
     assertBool "No keypair was stored" $ isJust storedKeyPair
 
 testKeyStore :: TestTree
@@ -57,4 +64,4 @@ testKeyStore = testCase "file keystore read/write" $
             liftIO $ assertFileExists pkPath
 
             kp' <- readKeyPair
-            kp @=? kp'
+            condensed kp @=? condensed kp'

@@ -7,7 +7,7 @@ import           Oscoin.Prelude
 
 import           Test.QuickCheck
 
-instance Arbitrary Hash where
+instance HasHashing c => Arbitrary (Hash c) where
     arbitrary =
         fromHashed . hashBinary <$> (arbitrary :: Gen String)
 

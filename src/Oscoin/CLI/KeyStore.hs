@@ -7,9 +7,12 @@ module Oscoin.CLI.KeyStore
     ( MonadKeyStore(..)
     ) where
 
+import           Oscoin.Crypto
 import           Oscoin.Prelude
 
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Crypto.PubKey.RealWorld as Crypto.RealWorld
 
 import           Codec.Serialise (deserialiseOrFail, serialise)
 import qualified Data.ByteString as BS
@@ -18,26 +21,26 @@ import           System.Directory
 import           System.FilePath
 
 
-class Monad m => MonadKeyStore m where
+class (Crypto.HasHashing c, Monad m) => MonadKeyStore c m | m -> c where
 
     keysPath     :: m (Maybe FilePath)
 
     default keysPath
-        :: (MonadKeyStore m', MonadTrans t, m ~ t m')
+        :: (MonadKeyStore c m', MonadTrans t, m ~ t m')
         => m (Maybe FilePath)
     keysPath = lift keysPath
 
-    writeKeyPair :: Crypto.KeyPair -> m ()
+    writeKeyPair :: Crypto.KeyPair c -> m ()
 
     default writeKeyPair
-        :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => Crypto.KeyPair -> m ()
+        :: (MonadKeyStore c m', MonadTrans t, m ~ t m')
+        => Crypto.KeyPair c -> m ()
     writeKeyPair = lift . writeKeyPair
 
-    readKeyPair :: m Crypto.KeyPair
+    readKeyPair :: m (Crypto.KeyPair c)
     default readKeyPair
-        :: (MonadKeyStore m', MonadTrans t, m ~ t m')
-        => m Crypto.KeyPair
+        :: (MonadKeyStore c m', MonadTrans t, m ~ t m')
+        => m (Crypto.KeyPair c)
     readKeyPair = lift readKeyPair
 
 
@@ -58,14 +61,14 @@ ensureConfigDir mbUserPath = do
     configDir <- getConfigPath mbUserPath
     liftIO $ createDirectoryIfMissing True configDir
 
-instance MonadKeyStore (ReaderT (Maybe FilePath) IO) where
+instance MonadKeyStore Crypto (ReaderT (Maybe FilePath) IO) where
     keysPath = ask
     writeKeyPair (pk, sk) =  do
         mbUserPath <- keysPath
         ensureConfigDir mbUserPath
         liftIO $ do
             skPath <- getSecretKeyPath mbUserPath
-            LBS.writeFile skPath $ Crypto.serialisePrivateKey sk
+            LBS.writeFile skPath $ Crypto.RealWorld.serialisePrivateKey sk
             pkPath <- getPublicKeyPath mbUserPath
             LBS.writeFile pkPath $ serialise pk
 
@@ -73,7 +76,7 @@ instance MonadKeyStore (ReaderT (Maybe FilePath) IO) where
         mbUserPath <- keysPath
         liftIO $ do
             skPath <- getSecretKeyPath mbUserPath
-            sk <- fromRightThrow =<< Crypto.deserialisePrivateKey <$> readFileLbs skPath
+            sk <- fromRightThrow =<< Crypto.RealWorld.deserialisePrivateKey <$> readFileLbs skPath
             pkPath <- getPublicKeyPath mbUserPath
             pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
             pure (pk, sk)

@@ -18,6 +18,8 @@ import           GHC.Natural
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
 
+import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
                  (genBlockFrom, genNakamotoBlockFrom)
 import           Test.QuickCheck
@@ -55,9 +57,15 @@ genChainEvents inputChainSize ForkParams{..} = do
 
 -- | Generates a 'Blockchain' from the input 'Block' (included in the resulting
 -- chain).
-genBlockchainFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
-                  => Block tx s
-                  -> Gen (Blockchain tx s)
+genBlockchainFrom
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise s
+       , Serialise tx
+       )
+    => Block c tx (Sealed c s)
+    -> Gen (Blockchain c tx s)
 genBlockchainFrom parentBlock = sized $ \n ->
     foldM (\chain _ -> do
                newTip <- genBlockFrom (tip chain)
@@ -104,22 +112,29 @@ genBlockchainFrom parentBlock = sized $ \n ->
 -- the \"missing link\" is block with hash @G5jzmbW@, which parent is
 -- @GGwLhg3@, which is on the main chain.
 --
-genOrphanChainsFrom :: forall tx s. (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
-                    => ForkParams
-                    -> Blockchain tx s
-                    -- ^ The input (adopted) chain.
-                    -> Gen [(Blockchain tx s, Block tx s)]
-                    -- ^ A list of potential orphans together with
-                    -- the missing link that, upon insertion, will
-                    -- yield a fork.
+genOrphanChainsFrom
+    :: forall c tx s.
+       ( Arbitrary tx
+       , Arbitrary s
+       , Serialise s
+       , Serialise tx
+       , IsCrypto c
+       )
+    => ForkParams
+    -> Blockchain c tx s
+    -- ^ The input (adopted) chain.
+    -> Gen [(Blockchain c tx s, Block c tx (Sealed c s))]
+    -- ^ A list of potential orphans together with
+    -- the missing link that, upon insertion, will
+    -- yield a fork.
 genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
     let genesisFirst = reverse . toList . blocks $ inputChain
     events <- genChainEvents (length genesisFirst) forkParams
     go (zip events genesisFirst) [] -- Starts with genesis first
     where
-        go :: [(ChainEvent, Block tx s)]
-           -> [(Blockchain tx s, Block tx s)]
-           -> Gen [(Blockchain tx s, Block tx s)]
+        go :: [(ChainEvent, Block c tx (Sealed c s))]
+           -> [(Blockchain c tx s, Block c tx (Sealed c s))]
+           -> Gen [(Blockchain c tx s, Block c tx (Sealed c s))]
         go [] !acc = pure acc
         go ((event,x):xs) !acc =
             case event of
@@ -146,12 +161,20 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
 ------------------------------------------------------------------------------}
 
 genNakamotoBlockchainFrom
-    :: (Arbitrary tx, Serialise tx)
-    => Block tx Nakamoto.PoW
-    -> Gen (Blockchain tx Nakamoto.PoW)
+    :: forall c tx.
+       ( Arbitrary tx
+       , Serialise tx
+       , IsCrypto c
+       )
+    => Block c tx (Sealed c Nakamoto.PoW)
+    -> Gen (Blockchain c tx Nakamoto.PoW)
 genNakamotoBlockchainFrom parentBlock = sized $ \n ->
     go (parentBlock :| []) n
   where
+
+    go :: NonEmpty (Block c tx (Sealed c Nakamoto.PoW))
+       -> Int
+       -> Gen (Blockchain c tx Nakamoto.PoW)
     go blks 0 =
         pure $ Blockchain blks
     go blks n = do

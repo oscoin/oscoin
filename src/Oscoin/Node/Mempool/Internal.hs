@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Node.Mempool.Internal
     ( -- * Mempool
       Mempool
@@ -14,6 +15,7 @@ module Oscoin.Node.Mempool.Internal
 import           Oscoin.Prelude hiding (toList)
 import qualified Oscoin.Prelude as Prelude
 
+import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise(..))
@@ -24,45 +26,61 @@ import qualified Data.Set as Set
 -- Mempool --------------------------------------------------------------------
 
 -- | A map of transaction keys to transactions.
-newtype Mempool tx = Mempool (Map (Crypto.Hashed tx) tx)
-    deriving (Show, Semigroup, Monoid, Eq, Generic)
+newtype Mempool c tx = Mempool (Map (Crypto.Hashed c tx) tx)
+    deriving (Generic)
 
-instance Serialise tx => Serialise (Mempool tx) where
+deriving instance (Show (Hash c), Show tx) => Show (Mempool c tx)
+deriving instance (Eq (Hash c), Eq tx)  => Eq (Mempool c tx)
+deriving instance Ord (Hash c) => Semigroup (Mempool c tx)
+deriving instance Ord (Hash c) => Monoid (Mempool c tx)
+
+instance (Ord (Hash c), Serialise tx, Serialise (Hash c)) => Serialise (Mempool c tx) where
     encode (Mempool txs) = encode (Map.elems txs)
     decode               = Mempool <$> decode
 
-instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool tx) where
+instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool c tx) where
     toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
 
 -- | Lookup a transaction in a mempool.
-lookup :: Crypto.Hashed tx -> Mempool tx -> Maybe tx
+lookup :: Ord (Hash c) => Crypto.Hashed c tx -> Mempool c tx -> Maybe tx
 lookup h (Mempool txs) = Map.lookup h txs
 
 -- | Check for key membership.
-member :: Crypto.Hashed tx -> Mempool tx -> Bool
+member :: Ord (Hash c) => Crypto.Hashed c tx -> Mempool c tx -> Bool
 member h (Mempool txs) = Map.member h txs
 
 -- | Add a transaction to a mempool.
-insert :: Crypto.Hashable tx => tx -> Mempool tx -> Mempool tx
+insert
+    :: Ord (Hash c)
+    => Crypto.Hashable c tx
+    => tx
+    -> Mempool c tx
+    -> Mempool c tx
 insert tx (Mempool txs) =
     Mempool (Map.insert (Crypto.hash tx) tx txs)
 
 -- | Add multiple transactions to a mempool.
-insertMany :: (Foldable t, Crypto.Hashable tx) => t tx -> Mempool tx -> Mempool tx
+insertMany
+    :: (Foldable t, Crypto.Hashable c tx, Ord (Hash c))
+    => t tx
+    -> Mempool c tx
+    -> Mempool c tx
 insertMany txs mem = foldl' (flip insert) mem txs
 
 -- | Remove multiple transactions from a mempool.
-removeTxs :: (Foldable t, Crypto.Hashable tx) => t tx -> Mempool tx -> Mempool tx
+removeTxs
+    :: (Foldable t, Crypto.Hashable c tx, Ord (Hash c))
+    => t tx -> Mempool c tx -> Mempool c tx
 removeTxs ks (Mempool txs) =
     Mempool $ Map.withoutKeys txs keys
   where
     keys = Set.fromList . map Crypto.hash $ Prelude.toList ks
 
-size :: Mempool tx -> Int
+size :: Mempool c tx -> Int
 size (Mempool txs) = Map.size txs
 
-elems :: Mempool tx -> [tx]
+elems :: Mempool c tx -> [tx]
 elems (Mempool txs) = Map.elems txs
 
-toList :: Mempool tx -> [(Crypto.Hashed tx, tx)]
+toList :: Mempool c tx -> [(Crypto.Hashed c tx, tx)]
 toList (Mempool txs) = Map.toList txs

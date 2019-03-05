@@ -49,8 +49,7 @@ import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.Storage.Block.Abstract
-                 (defaultScoreFunction, noValidation)
+import           Oscoin.Storage.Block.Abstract (defaultScoreFunction)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
@@ -59,6 +58,7 @@ import qualified Oscoin.Telemetry.Metrics as Metrics
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Node (DummyNodeId, DummySeal)
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary)
@@ -92,49 +92,53 @@ import qualified Radicle.Internal.Core as Radicle
 -- node directly.
 --
 -- See also 'liftWaiSession' and 'liftNode'.
-newtype Session a = Session (ReaderT NodeHandle Wai.Session a)
+newtype Session c a = Session (ReaderT (NodeHandle c) Wai.Session a)
     deriving (Functor, Applicative, Monad, MonadIO)
 
-instance MonadFail Session where
+instance MonadFail (Session c) where
     fail = assertFailure
 
 -- | Node handle for API tests.
-type Node = Node.NodeT API.RadTx Rad.Env DummySeal DummyNodeId IO
+type Node c = Node.NodeT c (API.RadTx c) (Rad.Env c) DummySeal DummyNodeId IO
 
 -- | Node handle for API tests.
-type NodeHandle = Node.Handle API.RadTx Rad.Env DummySeal DummyNodeId
+type NodeHandle c = Node.Handle c (API.RadTx c) (Rad.Env c) DummySeal DummyNodeId
 
 -- | Node state to instantiate a NodeHandle with.
-data NodeState = NodeState
-    { mempoolState    :: [API.RadTx]
-    , blockstoreState :: Blockchain API.RadTx DummySeal
-    , statestoreState :: Rad.Env
+data NodeState c = NodeState
+    { mempoolState    :: [API.RadTx c]
+    , blockstoreState :: Blockchain c (API.RadTx c) DummySeal
+    , statestoreState :: Rad.Env c
     }
 
-instance Semigroup a => Semigroup (Session a) where
+instance Semigroup a => Semigroup (Session c a) where
     (<>) = liftA2 (<>)
 
-instance (Monoid a, Semigroup a) => Monoid (Session a) where
+instance (Monoid a, Semigroup a) => Monoid (Session c a) where
     mempty = pure mempty
     mappend = (<>)
 
-instance MonadRandom Session where
+instance MonadRandom (Session c) where
     getRandomBytes = liftIO . getRandomBytes
 
-liftWaiSession :: Wai.Session a -> Session a
+liftWaiSession :: Wai.Session a -> Session c a
 liftWaiSession s = Session $ lift s
 
-emptyNodeState :: NodeState
+emptyNodeState :: IsCrypto c => NodeState c
 emptyNodeState = NodeState
     { mempoolState = mempty
     , blockstoreState = emptyBlockchain
     , statestoreState = Rad.pureEnv
     }
 
-nodeState :: [API.RadTx] -> Blockchain API.RadTx DummySeal -> Rad.Env -> NodeState
+nodeState
+    :: [API.RadTx c]
+    -> Blockchain c (API.RadTx c) DummySeal
+    -> Rad.Env c
+    -> NodeState c
 nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, statestoreState = st }
 
-withNode :: NodeState -> (NodeHandle -> IO a) -> IO a
+withNode :: IsCrypto c => NodeState c -> (NodeHandle c -> IO a) -> IO a
 withNode NodeState{..} k = do
     let env    = Testing
         logger = Log.noLogger
@@ -152,7 +156,7 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    BlockStore.Concrete.STM.withBlockStore blockstoreState defaultScoreFunction noValidation $ \bsh -> do
+    BlockStore.Concrete.STM.withBlockStore blockstoreState defaultScoreFunction $ \bsh -> do
         sth <- liftIO $ StateStore.fromStateM statestoreState
 
         Node.withNode
@@ -165,37 +169,43 @@ withNode NodeState{..} k = do
             (trivialConsensus "")
             k
 
-liftNode :: Node a -> Session a
+liftNode :: Node c a -> Session c a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
 
-genDummyTx :: MonadIO m => PropertyM m (Hashed API.RadTx, API.RadTx)
+genDummyTx
+    :: (IsCrypto c, MonadIO m)
+    => PropertyM m (Hashed c (API.RadTx c), API.RadTx c)
 genDummyTx = do
     radValue <- pick arbitrary
     createValidTx radValue
 
-createValidTx :: MonadIO m => Rad.Value -> m (Hashed API.RadTx, API.RadTx)
+createValidTx
+    :: forall c m.
+       (IsCrypto c, MonadIO m)
+    => Rad.Value
+    -> m (Hashed c (API.RadTx c), API.RadTx c)
 createValidTx radValue = liftIO $ do
     (pubKey, priKey) <- Crypto.generateKeyPair
     signed           <- Crypto.sign priKey radValue
 
-    let tx :: API.RadTx = mkTx signed pubKey
-    let txHash          = Crypto.hash tx
+    let tx :: (API.RadTx c) = mkTx signed pubKey
+    let txHash              = Crypto.hash tx
 
     pure (txHash, tx)
 
 -- | Creates a new empty blockchain with a dummy seal.
-emptyBlockchain :: Blockchain API.RadTx DummySeal
+emptyBlockchain :: IsCrypto c => Blockchain c (API.RadTx c) DummySeal
 emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch)
 
 -- | Create a Radicle environment with the given bindings
-initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env
+initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env c
 initRadicleEnv bindings =
     Rad.Env $ foldl' addBinding Radicle.pureEnv bindings
   where
     addBinding env (id, value) = Radicle.addBinding (Radicle.unsafeToIdent id) value env
 
 -- | Adds a reference holding @value@ and binds @name@ to the reference
-addRadicleRef :: Text -> Radicle.Value -> Rad.Env -> Rad.Env
+addRadicleRef :: Text -> Radicle.Value -> Rad.Env c -> Rad.Env c
 addRadicleRef name value (Rad.Env env) =
     Rad.Env env'
   where
@@ -205,7 +215,7 @@ addRadicleRef name value (Rad.Env env) =
 
 
 -- | Run a 'Session' with the given initial node state
-runSession :: NodeState -> Session () -> Assertion
+runSession :: IsCrypto c => NodeState c -> Session c () -> Assertion
 runSession nst (Session sess) =
     withNode nst $ \nh -> do
         app <- API.app nh
@@ -213,7 +223,7 @@ runSession nst (Session sess) =
 
 -- | Run a 'Session' so that the blockchain state is the given
 -- Radicle environment
-runSessionEnv :: Rad.Env -> Session () -> Assertion
+runSessionEnv :: IsCrypto c => Rad.Env c -> Session c () -> Assertion
 runSessionEnv env (Session sess) = do
     let nst = nodeState [] (fromGenesis $ genesisBlock [] env "" epoch) env
     withNode nst $ \nh -> do
@@ -223,24 +233,24 @@ runSessionEnv env (Session sess) = do
 
 -- | Run a 'Session' so that the blockchain state has the given
 -- Radicle bindings.
-runSessionBindings :: [(Text, Rad.Value)] -> Session () -> Assertion
+runSessionBindings :: IsCrypto c => [(Text, Rad.Value)] -> Session c () -> Assertion
 runSessionBindings bindings = runSessionEnv (initRadicleEnv bindings)
 
 -- | Run a 'Session' with an empty node state. That is the node mempool
 -- is empty and the blockchain has only the genesis block with a pure
 -- Radicle environment.
-runEmptySession :: Session () -> Assertion
+runEmptySession :: IsCrypto c => Session c () -> Assertion
 runEmptySession = runSessionEnv Rad.pureEnv
 
 
-assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session ()
+assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session c ()
 assertStatus want (Wai.simpleStatus -> have) = have @?= want
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
 assertResultOK
     :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a)
-    => a -> Wai.SResponse -> Session ()
+    => a -> Wai.SResponse -> Session c ()
 assertResultOK expected response = do
     result <- assertResponseBody response
     case result of
@@ -251,7 +261,7 @@ assertResultOK expected response = do
 -- and @actual@ equals @expected@.
 assertResultErr
     :: (HasCallStack)
-    => Text -> Wai.SResponse -> Session ()
+    => Text -> Wai.SResponse -> Session c ()
 assertResultErr expected response = do
     result <- assertResponseBody @(API.Result ()) response
     case result of
@@ -260,7 +270,7 @@ assertResultErr expected response = do
 
 assertResponseBody
     :: (HasCallStack, FromJSON a, Serialise a)
-    => Wai.SResponse -> Session a
+    => Wai.SResponse -> Session c a
 assertResponseBody response =
     case responseBody response of
         Left err -> assertFailure $ show err
@@ -274,7 +284,7 @@ request
     -> Text                              -- ^ Request path
     -> HTTP.RequestHeaders               -- ^ Request headers
     -> Maybe a                           -- ^ Request body
-    -> Session Wai.SResponse
+    -> Session c Wai.SResponse
 request method (encodeUtf8 -> path) headers mb
     | Nothing <- mb = liftWaiSession $ req LBS.empty
     | Just b  <- mb = case supportedContentType headers of
@@ -332,21 +342,21 @@ responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
     Left err -> Left err
     Right ct -> decode ct $ Wai.simpleBody resp
 
-get :: HasCallStack => Codec -> Text -> Session Wai.SResponse
+get :: HasCallStack => Codec -> Text -> Session c Wai.SResponse
 get = withoutBody GET
 
 post
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => Codec -> Text -> a -> Session Wai.SResponse
+    => Codec -> Text -> a -> Session c Wai.SResponse
 post = withBody POST
 
-withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Session Wai.SResponse
+withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Session c Wai.SResponse
 withoutBody method Codec{..} path =
     request method path [acceptHeader codecAccept] noBody
 
 withBody
     :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => HTTP.StdMethod -> Codec -> Text -> a -> Session Wai.SResponse
+    => HTTP.StdMethod -> Codec -> Text -> a -> Session c Wai.SResponse
 withBody method codec path body' =
     request method path (codecHeaders codec) $ Just body'
 

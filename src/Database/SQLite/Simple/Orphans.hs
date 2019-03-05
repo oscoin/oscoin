@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.SQLite.Simple.Orphans where
 
@@ -26,7 +27,10 @@ fromFieldSerial f =
         SQLBlob bs -> Ok $ CBOR.deserialise (LBS.fromStrict bs)
         _          -> returnError ConversionFailed f "couldn't convert from CBOR"
 
-instance FromField s => FromRow (BlockHeader s) where
+instance ( Crypto.HasHashing c
+         , FromField (Crypto.Hash c)
+         , FromField s
+         ) => FromRow (BlockHeader c s) where
     fromRow = BlockHeader
         <$> fieldWith fromPrevHashField
         <*> field
@@ -35,7 +39,11 @@ instance FromField s => FromRow (BlockHeader s) where
         <*> field
         <*> field
 
-instance FromRow RadTx where
+instance ( CBOR.Serialise (Crypto.PK c)
+         , CBOR.Serialise (Crypto.Signature c)
+         , Typeable c
+         , FromField (BlockHash c)
+         ) => FromRow (RadTx c) where
     fromRow = Tx
         <$> field
         <*> field
@@ -45,25 +53,48 @@ instance FromRow RadTx where
 
 -- | Convert a SQL parent hash field to a 'Crypto.Hash'. The SQL value is
 -- 'SQLNull' in the case of the genesis block.
-fromPrevHashField :: Field -> Ok Crypto.Hash
+fromPrevHashField
+    :: ( FromField (Crypto.Hash c)
+       , Crypto.HasHashing c
+       )
+    => Field
+    -> Ok (Crypto.Hash c)
 fromPrevHashField f =
     case fieldData f of
         SQLNull -> Ok Crypto.zeroHash
         _       -> fromField f
 
-instance ToRow RadTx where
+instance ( Crypto.HasHashing c
+         , ToField (Crypto.Hashed c (RadTx c))
+         , ToField (BlockHash c)
+         , CBOR.Serialise (BlockHash c)
+         , CBOR.Serialise (Crypto.PK c)
+         , CBOR.Serialise (Crypto.Signature c)
+         ) => ToRow (RadTx c) where
     toRow tx@Tx{..} =
-        [ toField (Crypto.hash tx), toField txMessage, toField txPubKey
+        [ toField (Crypto.hash @c tx), toField txMessage, toField txPubKey
         , toField txChainId, toField txNonce, toField txContext ]
 
-instance (CBOR.Serialise msg, Typeable msg) => FromField (Crypto.Signed msg) where
+instance ( CBOR.Serialise (Crypto.Signature c)
+         , CBOR.Serialise msg
+         , Typeable c
+         , Typeable msg
+         ) => FromField (Crypto.Signed c msg) where
     fromField = fromFieldSerial
 
-instance (CBOR.Serialise msg) => ToField (Crypto.Signed msg) where
+instance ( CBOR.Serialise msg
+         , CBOR.Serialise (Crypto.Signature c)
+         ) => ToField (Crypto.Signed c msg) where
     toField = toFieldSerial
 
-instance FromField Crypto.PublicKey where
+instance (CBOR.Serialise (Crypto.PK c), Typeable c) => FromField (Crypto.PK c) where
     fromField = fromFieldSerial
 
-instance ToField Crypto.PublicKey where
+instance CBOR.Serialise (Crypto.PK c) => ToField (Crypto.PK c) where
     toField = toFieldSerial
+
+instance ToField s => ToField (Sealed c s) where
+    toField (SealedWith s) = toField s
+
+instance FromField s => FromField (Sealed c s) where
+    fromField = map SealedWith . fromField

@@ -11,20 +11,21 @@ import           Oscoin.Telemetry.Metrics
 import qualified Oscoin.Telemetry.Metrics.Internal as Internal
 import           Oscoin.Telemetry.Middleware
 
+import           Oscoin.Test.Crypto
 import qualified Oscoin.Test.HTTP.Helpers as HTTP
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
 
-tests :: [TestTree]
-tests = [ testCase "Histogram works as expected" testHistogram
-        , testGroup "Middleware"
-            [ testCase "Smoke test" smokeTestMiddleware
-            , testCase "Rendering a counter works" testRenderCounter
-            , testCase "Rendering multiple label works" testMultipleLabels
-            , testCase "Rendering a gauge works"   testRenderGauge
-            , testCase "Rendering an histogram works" testRenderHistogram
-            ]
-        ]
+tests :: forall c. Dict (IsCrypto c) -> [TestTree]
+tests d = [ testCase "Histogram works as expected" testHistogram
+          , testGroup "Middleware"
+              [ testCase "Smoke test" (smokeTestMiddleware d)
+              , testCase "Rendering a counter works" testRenderCounter
+              , testCase "Rendering multiple label works" testMultipleLabels
+              , testCase "Rendering a gauge works"   testRenderGauge
+              , testCase "Rendering an histogram works" testRenderHistogram
+              ]
+          ]
 
 -- | We test the 'Histogram' against the go implementation, using the
 -- documented example as a blueprint
@@ -58,8 +59,8 @@ newExampleHistogram = do
         observeHistogram h (30.0 + v)
     pure h
 
-smokeTestMiddleware :: Assertion
-smokeTestMiddleware = HTTP.runSession HTTP.emptyNodeState $
+smokeTestMiddleware :: forall c. Dict (IsCrypto c) -> Assertion
+smokeTestMiddleware Dict = HTTP.runSession @c HTTP.emptyNodeState $
     HTTP.get (HTTP.newCodec "text/plain" "text/plain") "/metrics"
         >>= HTTP.assertStatus ok200
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.P2P
     (-- * Gossip
       GossipT
@@ -9,12 +11,19 @@ module Oscoin.P2P
     , module Oscoin.P2P.Types
     ) where
 
-import           Oscoin.Prelude hiding (show)
+import           Oscoin.Prelude hiding (length, show)
 
 import           Oscoin.Clock (MonadClock)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, blockHash, blockHeader, blockPrevHash)
+                 ( Block
+                 , BlockHash
+                 , Sealed
+                 , blockHash
+                 , blockHeader
+                 , blockPrevHash
+                 )
 import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import           Oscoin.Telemetry (NotableEvent(..), emit)
@@ -35,22 +44,38 @@ import qualified Network.Gossip.Plumtree as Bcast
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
+import           Data.ByteArray (ByteArrayAccess(..))
 import           Data.ByteString.Lazy (fromStrict, toStrict)
+import           Data.Hashable (Hashable)
+import           Formatting.Buildable (Buildable)
 import           Network.Socket (SockAddr, Socket)
 
-type Wire = Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer NodeId))
+type Wire c =
+    Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer (NodeId c)))
 
-newtype GossipT m a = GossipT (ReaderT (Gossip.Run.Env NodeId) m a)
+instance ( Hashable (Crypto.PK c)
+         , Eq (Crypto.PK c)
+         , Serialise (Crypto.PK c)
+         ) => ByteArrayAccess (Wire c) where
+    length           = length . toStrict . CBOR.serialise
+    withByteArray ba = withByteArray (toStrict $ CBOR.serialise ba)
+
+newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeId c)) m a)
     deriving ( Functor
              , Applicative
              , Alternative
              , Monad
              , MonadIO
              , MonadTrans
-             , MonadReader (Gossip.Run.Env NodeId)
+             , MonadReader (Gossip.Run.Env (NodeId c))
              )
 
-instance MonadIO m => MonadBroadcast (GossipT m) where
+instance ( Hashable (Crypto.PK c)
+         , Eq (Crypto.PK c)
+         , Eq (Crypto.Hash c)
+         , Serialise (Crypto.Hash c)
+         , MonadIO m
+         ) => MonadBroadcast c (GossipT c m) where
     broadcast msg = do
         env <- ask
         liftIO $
@@ -58,32 +83,39 @@ instance MonadIO m => MonadBroadcast (GossipT m) where
                 . bimap toStrict toStrict . (,CBOR.serialise msg)
                 $ case msg of
                     BlockMsg blk -> CBOR.serialise $ blockHash blk
-                    TxMsg    tx  -> CBOR.serialise $ Crypto.hash tx
+                    TxMsg    tx  -> CBOR.serialise $ Crypto.hash @c tx
     {-# INLINE broadcast #-}
 
-instance MonadClock m => MonadClock (GossipT m)
+instance MonadClock m => MonadClock (GossipT c m)
 
-runGossipT :: Gossip.Run.Env NodeId -> GossipT m a -> m a
+runGossipT :: Gossip.Run.Env (NodeId c) -> GossipT c m a -> m a
 runGossipT r (GossipT ma) = runReaderT ma r
 
 -- | Start listening to gossip and pass the gossip handle to the runner.
 --
 -- When the runner returns we stop listening and return the runner result.
 withGossip
-    :: ( Serialise s
-       , Serialise       tx
-       , Crypto.Hashable tx
+    :: forall c tx e s o a.
+       ( Crypto.Hashable c tx
+       , Hashable (Crypto.PK c)
+       , Crypto.Hashable c (Crypto.PK c)
+       , Eq (Crypto.PK c)
        , Exception e
+       , Buildable (Crypto.Hash c)
+       , Eq (BlockHash c)
+       , Serialise s
+       , Serialise tx
        , Serialise o
+       , Serialise (BlockHash c)
        )
     => Telemetry.Handle
-    -> NodeAddr
+    -> NodeAddr c
     -- ^ Node identity (\"self\")
-    -> [NodeAddr]
+    -> [NodeAddr c]
     -- ^ Initial peers to connect to
-    -> Storage tx s IO
-    -> Handshake e NodeId Wire o
-    -> (Gossip.Run.Env NodeId -> IO a)
+    -> Storage c tx s IO
+    -> Handshake e (NodeId c) (Wire c) o
+    -> (Gossip.Run.Env (NodeId c) -> IO a)
     -> IO a
 withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
     (self:peers) <-
@@ -94,7 +126,7 @@ withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
         Membership.defaultConfig
         Periodic.defaultConfig
         scheduleInterval
-        (wrapHandshake telemetryStore handshake)
+        (wrapHandshake @c telemetryStore handshake)
         (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
         (wrapLookup storageLookupBlock storageLookupTx)
         (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
@@ -106,23 +138,26 @@ withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
 --------------------------------------------------------------------------------
 
 wrapHandshake
-    :: ( Exception e
+    :: forall c e o.
+       ( Crypto.Hashable c (Crypto.PK c)
+       , Exception e
        , Serialise o
+       , Buildable (Crypto.Hash c)
        )
     => Telemetry.Handle
-    -> Handshake e NodeId Wire o
+    -> Handshake e (NodeId c) (Wire c) o
     -> Gossip.Socket.HandshakeRole
     -> Socket
     -> SockAddr
-    -> Maybe NodeId
-    -> IO (Gossip.Socket.Connection NodeId Wire)
+    -> Maybe (NodeId c)
+    -> IO (Gossip.Socket.Connection (NodeId c) (Wire c))
 wrapHandshake telemetry handshake role sock addr psk = do
     hres <-
         runHandshakeT (Transport.framed sock) $
             handshake (mapHandshakeRole role) psk
     case hres of
         Left  e -> do
-            emit telemetry . Telemetry.HandshakeEvent $
+            emit telemetry . Telemetry.HandshakeEvent @c $
                 HandshakeError addr (toException e)
             throwM e
         Right r -> do
@@ -145,14 +180,18 @@ wrapHandshake telemetry handshake role sock addr psk = do
     mapHandshakeRole Gossip.Socket.Connector = Connector
 
 wrapApply
-    :: ( Serialise       s
-       , Serialise       tx
-       , Crypto.Hashable tx
+    :: forall c tx s.
+       ( Crypto.Hashable c tx
+       , Buildable (Crypto.Hash c)
+       , Eq (BlockHash c)
+       , Serialise s
+       , Serialise tx
+       , Serialise (BlockHash c)
        )
     => Telemetry.Handle
-    -> (BlockHash   -> IO (Maybe (Block tx s)))
-    -> (Block tx s  -> IO Storage.ApplyResult)
-    -> (tx          -> IO Storage.ApplyResult)
+    -> (BlockHash c             -> IO (Maybe (Block c tx (Sealed c s))))
+    -> (Block c tx (Sealed c s) -> IO Storage.ApplyResult)
+    -> (tx                      -> IO Storage.ApplyResult)
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
@@ -165,7 +204,7 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
             case msg of
                 TxMsg    tx  -> do
                     result <- applyTx tx
-                    forM_ (TxReceivedEvent (Crypto.hash tx) : telemetryEvents result)
+                    forM_ (TxReceivedEvent (Crypto.hash @c tx) : telemetryEvents result)
                           (emit telemetryStore)
                     (,) Nothing <$> pure result
                 BlockMsg blk ->
@@ -194,9 +233,14 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
         Storage.Error   _ -> Bcast.Error
 
 wrapLookup
-    :: (Serialise tx, Serialise s)
-    => (BlockHash -> IO (Maybe (Block tx s)))
-    -> (Crypto.Hashed tx -> IO (Maybe tx))
+    :: ( Crypto.HasHashing c
+       , Serialise s
+       , Serialise tx
+       , Serialise (BlockHash c)
+       , Eq (BlockHash c)
+       )
+    => (BlockHash c -> IO (Maybe (Block c tx s)))
+    -> (Crypto.Hashed c tx -> IO (Maybe tx))
     -> Bcast.MessageId
     -> IO (Maybe ByteString)
 wrapLookup lookupBlock lookupTx mid =
@@ -206,10 +250,15 @@ wrapLookup lookupBlock lookupTx mid =
         Left _ -> pure Nothing
 
 fromGossip
-    :: (Serialise s, Serialise tx, Crypto.Hashable tx)
+    :: ( Crypto.Hashable c tx
+       , Serialise s
+       , Eq (BlockHash c)
+       , Serialise tx
+       , Serialise (BlockHash c)
+       )
     => Bcast.MessageId
     -> ByteString
-    -> Either ConversionError (Msg tx s)
+    -> Either ConversionError (Msg c tx s)
 fromGossip mid payload = do
     mid' <- first DeserialiseFailure $ deserialiseMessageId mid
     msg  <- first DeserialiseFailure $ deserialisePayload payload
@@ -220,13 +269,20 @@ fromGossip mid payload = do
         _ -> Left IdPayloadMismatch
 
 deserialiseMessageId
-    :: Serialise tx
+    :: ( Serialise tx
+       , Serialise (BlockHash c)
+       )
     => Bcast.MessageId
-    -> Either CBOR.DeserialiseFailure (MsgId tx)
+    -> Either CBOR.DeserialiseFailure (MsgId c tx)
 deserialiseMessageId = CBOR.deserialiseOrFail . fromStrict
 
 deserialisePayload
-    :: (Serialise tx, Serialise s)
+    :: ( Crypto.HasHashing c
+       , Serialise tx
+       , Serialise s
+       , Serialise (BlockHash c)
+       , Eq (BlockHash c)
+       )
     => ByteString
-    -> Either CBOR.DeserialiseFailure (Msg tx s)
+    -> Either CBOR.DeserialiseFailure (Msg c tx s)
 deserialisePayload = CBOR.deserialiseOrFail . fromStrict

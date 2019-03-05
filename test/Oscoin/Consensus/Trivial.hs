@@ -7,19 +7,40 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types (Consensus(..))
 import           Oscoin.Crypto.Blockchain (Blockchain, height)
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHeader, Depth)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, Depth, Sealed, Unsealed, sealBlock)
+import           Oscoin.Crypto.Hash (HasHashing, Hash)
+
+import           Codec.Serialise (Serialise)
 
 -- | Trivial consensus always mines a block immediately and uses chain height as
 -- its score.
-trivialConsensus :: (Monad m) => s -> Consensus tx s m
+trivialConsensus
+    :: ( Monad m
+       , Serialise s
+       , Serialise (Hash c)
+       , HasHashing c
+       )
+    => s
+    -> Consensus c tx s m
 trivialConsensus seal = Consensus
     { cScore = comparing chainScore
     , cMiner = mineBlock seal
     , cValidate = \_ _ -> Right ()
     }
 
-chainScore :: Blockchain tx s -> Int
+chainScore :: Blockchain c tx s -> Int
 chainScore = fromIntegral . height
 
-mineBlock :: Applicative m => s -> (Depth -> m [Block tx s]) -> BlockHeader a -> m (Maybe (BlockHeader s))
-mineBlock seal _ bh = pure . Just $ bh $> seal
+mineBlock
+    :: ( Serialise s
+       , Serialise (Hash c)
+       , Applicative m
+       , HasHashing c
+       )
+    => s
+    -> (Depth -> m [Block c tx (Sealed c s)])
+    -> Block c tx Unsealed
+    -> m (Maybe (Block c tx (Sealed c s)))
+mineBlock seal _ blk =
+    pure . Just . sealBlock seal $ blk

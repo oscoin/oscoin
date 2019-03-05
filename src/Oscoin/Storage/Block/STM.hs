@@ -5,10 +5,9 @@ module Oscoin.Storage.Block.STM
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block, Score)
-import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Blockchain.Block (Block, Score, Sealed)
+import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
 
@@ -19,23 +18,20 @@ import           Control.Concurrent.STM (TVar, modifyTVar', newTVarIO, readTVar)
 -- (or blocks): the /pure/ implementation uses a `ScoringFunction` whereas
 -- things like the SQLite backend uses a `Block -> Score` function. We should
 -- unify the two.
-withBlockStore :: Hashable tx
-               => Blockchain tx s
+withBlockStore :: (Ord (Hash c), Hashable c tx)
+               => Blockchain c tx s
                -- ^ The initial blockchain to initialise this store with
-               -> (Block tx s -> Score)
+               -> (Block c tx (Sealed c s) -> Score)
                -- ^ A block scoring function
-               -> Validate tx s
-               -- ^ A block validation function
-               -> (Abstract.BlockStore tx s IO -> IO b)
+               -> (Abstract.BlockStore c tx s IO -> IO b)
                -- ^ Action to use the 'BlockStore'.
                -> IO b
-withBlockStore chain score validate action = do
+withBlockStore chain score action = do
     hdl <- newTVarIO (Pure.initWithChain' chain score)
     let modifyHandle = atomically . modifyTVar' hdl
         newBlockStore  =
                 Abstract.BlockStore {
                   Abstract.scoreBlock      = score
-                , Abstract.validateBlock   = validate
                 , Abstract.insertBlock     = modifyHandle . Pure.insert
                 , Abstract.getGenesisBlock = withHandle Pure.getGenesisBlock hdl
                 , Abstract.lookupBlock     = \h -> withHandle (Pure.lookupBlock h) hdl
@@ -46,5 +42,5 @@ withBlockStore chain score validate action = do
                 }
     action newBlockStore
   where
-      withHandle :: (Pure.Handle tx s -> a) -> TVar (Pure.Handle tx s) -> IO a
+      withHandle :: (Pure.Handle c tx s -> a) -> TVar (Pure.Handle c tx s) -> IO a
       withHandle f h = atomically (f <$> readTVar h)

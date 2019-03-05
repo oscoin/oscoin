@@ -13,16 +13,16 @@ import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Prelude
 
-class (Monad m) => MonadReceiptStore tx o m | m -> tx o where
-    addReceipt :: Receipt tx o -> m ()
-    lookupReceipt :: Crypto.Hashed tx -> m (Maybe (Receipt tx o))
+class (Monad m) => MonadReceiptStore c tx o m | m -> tx o where
+    addReceipt :: Receipt c tx o -> m ()
+    lookupReceipt :: Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
 
     default addReceipt
-        :: (MonadReceiptStore tx o m', MonadTrans t, m ~ t m')
-        => Receipt tx o -> m ()
+        :: (MonadReceiptStore c tx o m', MonadTrans t, m ~ t m')
+        => Receipt c tx o -> m ()
     addReceipt = lift . addReceipt
 
     default lookupReceipt
-        :: (MonadReceiptStore tx o m', MonadTrans t, m ~ t m')
-        => Crypto.Hashed tx -> m (Maybe (Receipt tx o))
+        :: (MonadReceiptStore c tx o m', MonadTrans t, m ~ t m')
+        => Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
     lookupReceipt = lift . lookupReceipt

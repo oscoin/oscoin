@@ -19,6 +19,7 @@ module Oscoin.Node.Mempool
 
 import           Oscoin.Prelude hiding (toList)
 
+import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 import           Oscoin.Node.Mempool.Internal (Mempool)
@@ -29,59 +30,73 @@ import qualified Control.Concurrent.STM as STM
 import qualified Data.Foldable as Fold
 
 -- | Handle to a mutable 'Mempool'.
-data Handle tx = Handle
-    { hMempool   :: TVar (Mempool tx)
+data Handle c tx = Handle
+    { hMempool   :: TVar (Mempool c tx)
     , hBroadcast :: Channel tx
     }
 
 -- | Create a new 'Handle' with an underlying empty mempool.
-new :: STM (Handle tx)
+new :: Ord (Hash c) => STM (Handle c tx)
 new = do
     hMempool   <- STM.newTVar mempty
     hBroadcast <- STM.newBroadcastTChan
     pure Handle{..}
 
 -- | Like 'new', but without running a transaction.
-newIO :: IO (Handle tx)
+newIO :: Ord (Hash c) => IO (Handle c tx)
 newIO = do
     hMempool   <- STM.newTVarIO mempty
     hBroadcast <- STM.newBroadcastTChanIO
     pure Handle{..}
 
-insert :: Crypto.Hashable tx => Handle tx -> tx -> STM ()
+insert :: (Ord (Hash c), Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
 insert Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.insert tx)
     STM.writeTChan hBroadcast (Insert [tx])
 
-insertMany :: (Crypto.Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+insertMany
+    :: ( Ord (Hash c)
+       , Crypto.Hashable c tx
+       , Foldable t
+       )
+    => Handle c tx
+    -> t tx
+    -> STM ()
 insertMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.insertMany txs)
     STM.writeTChan hBroadcast (Insert (Fold.toList txs))
 
-remove :: Crypto.Hashable tx => Handle tx -> tx -> STM ()
+remove :: (Ord (Hash c), Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
 remove Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.removeTxs [tx])
     STM.writeTChan hBroadcast (Remove [tx])
 
-removeMany :: (Crypto.Hashable tx, Foldable t) => Handle tx -> t tx -> STM ()
+removeMany
+    :: ( Ord (Hash c)
+       , Crypto.Hashable c tx
+       , Foldable t
+       )
+    => Handle c tx
+    -> t tx
+    -> STM ()
 removeMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.removeTxs txs)
     STM.writeTChan hBroadcast (Remove (Fold.toList txs))
 
-member :: Handle tx -> Crypto.Hashed tx -> STM Bool
+member :: Ord (Hash c) => Handle c tx -> Crypto.Hashed c tx -> STM Bool
 member hdl tx = Internal.member tx <$> snapshot hdl
 
-lookup :: Handle tx -> Crypto.Hashed tx -> STM (Maybe tx)
+lookup :: Ord (Hash c) => Handle c tx -> Crypto.Hashed c tx -> STM (Maybe tx)
 lookup hdl tx = Internal.lookup tx <$> snapshot hdl
 
-size :: Handle tx -> STM Int
+size :: Handle c tx -> STM Int
 size hdl = Internal.size <$> snapshot hdl
 
-toList :: Handle tx -> STM [(Crypto.Hashed tx, tx)]
+toList :: Handle c tx -> STM [(Crypto.Hashed c tx, tx)]
 toList hdl = Internal.toList <$> snapshot hdl
 
-subscribe :: Handle tx -> STM (TChan (Event tx))
+subscribe :: Handle c tx -> STM (TChan (Event tx))
 subscribe = STM.dupTChan . hBroadcast
 
-snapshot :: Handle tx -> STM (Mempool tx)
+snapshot :: Handle c tx -> STM (Mempool c tx)
 snapshot = STM.readTVar . hMempool

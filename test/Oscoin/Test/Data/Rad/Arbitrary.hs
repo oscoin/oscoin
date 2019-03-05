@@ -25,7 +25,7 @@ import           Radicle
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
-instance Arbitrary Rad.Env where
+instance Arbitrary (Rad.Env c) where
     arbitrary = pure Rad.pureEnv
 
 instance Arbitrary r => Arbitrary (Radicle.Env r) where

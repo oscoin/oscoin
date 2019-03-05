@@ -10,6 +10,7 @@ import           Oscoin.Prelude
 
 import           GHC.Exception
 
+import           Data.ByteArray.Orphans ()
 import qualified Data.List as List
 import qualified Data.Text as T
 import           Oscoin.API.Types (RadTx)
@@ -18,6 +19,7 @@ import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
@@ -26,14 +28,14 @@ import           Oscoin.Test.Util (Condensed(..), showOrphans)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-tests :: [TestTree]
-tests =
-    [ testProperty "getTip . insertBlock equivalence"  propInsertGetTipEquivalence
-    , testProperty "(forks) getTip . insertBlock equivalence"  propForksInsertGetTipEquivalence
+tests :: Dict (IsCrypto c) -> [TestTree]
+tests d =
+    [ testProperty "getTip . insertBlock equivalence"  (propInsertGetTipEquivalence d)
+    , testProperty "(forks) getTip . insertBlock equivalence"  (propForksInsertGetTipEquivalence d)
     ]
 
 -- | Classify a 'Blockchain' based on its length.
-classifyChain :: Blockchain tx s -> Property -> Property
+classifyChain :: Blockchain c tx s -> Property -> Property
 classifyChain chain =
     let chainLen = length (blocks chain)
     in classify (chainLen <= 10) "small chains  (< 10 blocks)" .
@@ -46,9 +48,9 @@ classifyChain chain =
 
 -- | Check that given a random 'Blockchain', we can insert a bunch of blocks
 -- and get the tip, and that both stores agree on the result.
-propInsertGetTipEquivalence :: Property
-propInsertGetTipEquivalence =
-    forAllShrink (resize 25 $ genBlockchainFrom defaultGenesis) genericShrink $ \chain ->
+propInsertGetTipEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propInsertGetTipEquivalence Dict =
+    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
                 p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks chain)
@@ -61,11 +63,11 @@ propInsertGetTipEquivalence =
 --    necessary to make them non-orphans;
 -- 3. We insert the orphan chain.
 -- 4. We add the \"missing link\", assessing the tip coincides.
-propForksInsertGetTipEquivalence :: Property
-propForksInsertGetTipEquivalence = do
+propForksInsertGetTipEquivalence :: forall c. Dict (IsCrypto c) -> Property
+propForksInsertGetTipEquivalence Dict = do
     let forkParams = ForkParams 0 10 3  -- 3 forks of max 10 blocks.
         generator = do
-            chain <- resize 15 $ genBlockchainFrom defaultGenesis
+            chain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAllShow generator showOrphans $ \(chain, orphansWithLink) ->
@@ -85,23 +87,33 @@ propForksInsertGetTipEquivalence = do
   Useful combinators
 ------------------------------------------------------------------------------}
 
-type StoresUnderTest tx s m =
-    (Abstract.BlockStore tx s m, Abstract.BlockStore tx s m)
+type StoresUnderTest c tx s m =
+    (Abstract.BlockStore c tx s m, Abstract.BlockStore c tx s m)
 
 -- | Initialises both the SQL and the STM store and pass them to the 'action'.
-withStores :: (StoresUnderTest RadTx DummySeal IO -> IO a) -> IO a
+withStores
+    :: IsCrypto c
+    => (StoresUnderTest c (RadTx c) DummySeal IO -> IO a)
+    -> IO a
 withStores action =
-    SQLite.withBlockStore ":memory:" defaultGenesis blockScore noValidation $ \sqlStore ->
-        STM.withBlockStore (fromGenesis defaultGenesis) blockScore noValidation $ \stmStore ->
+    SQLite.withBlockStore ":memory:" defaultGenesis blockScore $ \sqlStore ->
+        STM.withBlockStore (fromGenesis defaultGenesis) blockScore $ \stmStore ->
             action (sqlStore, stmStore)
 
 -- | When given a function from a 'BlockStore' operation to a result 'a', it
 -- calls the function over both stores and returns whether or not the result
 -- matches.
-apiCheck :: forall tx s m b. (HasCallStack, Monad m, Eq b, Show b, Condensed b)
-         => StoresUnderTest tx s m
-         -> (Abstract.BlockStore tx s m -> m b)
-         -> m Property
+apiCheck
+    :: forall c tx s m b.
+       ( HasCallStack
+       , Monad m
+       , Eq b
+       , Show b
+       , Condensed b
+       )
+    => StoresUnderTest c tx s m
+    -> (Abstract.BlockStore c tx s m -> m b)
+    -> m Property
 apiCheck (store1, store2) apiCall =
     withFrozenCallStack $ do
         res1 <- apiCall store1

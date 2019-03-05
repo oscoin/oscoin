@@ -15,9 +15,12 @@ module Oscoin.Consensus.Simple
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Crypto.Hash as Crypto
+
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), BlockHeader(..))
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block(..), BlockHeader(..), Sealed(..), sealBlock)
 import           Oscoin.Time
 
 
@@ -39,9 +42,11 @@ blockTime :: Duration
 blockTime = 1 * seconds
 
 simpleConsensus
-    :: (MonadLastTime m)
+    :: ( MonadLastTime m
+       , Crypto.Hashable c (BlockHeader c (Sealed c PoA))
+       )
     => Position
-    -> Consensus tx PoA m
+    -> Consensus c tx PoA m
 simpleConsensus position = Consensus
     { cScore = comparing chainScore
     , cMiner = mineSimple position
@@ -49,19 +54,22 @@ simpleConsensus position = Consensus
     }
 
 mineSimple
-    :: (MonadLastTime m)
+    :: ( MonadLastTime m
+       , Crypto.Hashable c (BlockHeader c (Sealed c PoA))
+       )
     => Position
-    -> Miner PoA m
-mineSimple position _chain bh@BlockHeader{blockTimestamp} = do
+    -> Miner c PoA m
+mineSimple position _chain unsealedBlock = do
+    let bh = blockHeader unsealedBlock
     lastBlk <- getLastBlockTick
-    if shouldCutBlock position lastBlk blockTimestamp
+    if shouldCutBlock position lastBlk (blockTimestamp bh)
     then do
-        setLastBlockTick blockTimestamp
-        pure $ Just $ void bh
+        setLastBlockTick (blockTimestamp bh)
+        pure $ Just $ sealBlock () unsealedBlock
     else
         pure Nothing
 
-chainScore :: Blockchain tx s -> Int
+chainScore :: Blockchain c tx s -> Int
 chainScore bc =
     (bigMagicNumber * h) - steps
   where

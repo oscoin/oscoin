@@ -85,6 +85,7 @@ library:
     - wai
     - wai-middleware-static
     - writer-cps-mtl
+    - xxhash-ffi
     - yaml
 
 executables:
@@ -134,6 +135,7 @@ tests:
       - QuickCheck
       - aeson
       - async
+      - avl-auth
       - binary
       - bytestring
       - cacophony
@@ -165,6 +167,7 @@ tests:
       - safe-exceptions
       - scientific
       - serialise
+      - sqlite-simple
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1

@@ -23,6 +23,7 @@ import           Oscoin.Storage.Block.SQLite as Sqlite
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 import qualified Oscoin.Time as Time
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
@@ -33,7 +34,7 @@ import           Test.QuickCheck.Monadic
 type DummySeal = Text
 
 -- | Generates a genesis block with a slightly more realistic 'Difficulty'.
-defaultGenesis :: Block tx DummySeal
+defaultGenesis :: IsCrypto c => Block c tx (Sealed c DummySeal)
 defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
 
 {------------------------------------------------------------------------------
@@ -41,41 +42,49 @@ defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
 ------------------------------------------------------------------------------}
 
 -- | Bracket-style initialiser for a SQLite DB.
-withSqliteDB :: Show a
-             => (Block RadTx DummySeal -> Gen a)
-             -> (a -> Sqlite.Handle RadTx DummySeal -> IO ())
-             -> Property
+withSqliteDB
+    :: ( IsCrypto c
+       , Show a
+       )
+    => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
+    -> (a -> Sqlite.Handle c (RadTx c) DummySeal -> IO ())
+    -> Property
 withSqliteDB genTestData action = once $ monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
     liftIO $
-        bracket (open ":memory:" blockScore blockValidate >>= initialize defaultGenesis)
+        bracket (open ":memory:" blockScore >>= initialize defaultGenesis)
                 close
                 (action testData)
-  where
-    blockValidate _ _ = Right ()
 
 -- | Bracket-style initialiser for a SQLite-backed 'BlockStore'.
-withMemStore :: Show a
-             => (Block RadTx DummySeal -> Gen a)
-             -> (a -> Abstract.BlockStore RadTx DummySeal IO -> IO ())
-             -> Property
+withMemStore
+    :: ( IsCrypto c
+       , Show a
+       )
+    => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
+    -> (a -> Abstract.BlockStore c (RadTx c) DummySeal IO -> IO ())
+    -> Property
 withMemStore genTestData action = once $ monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
     liftIO $
-        Sqlite.withBlockStore ":memory:" defaultGenesis blockScore blockValidate $ action testData
-  where
-    blockValidate _ _ = Right ()
+        Sqlite.withBlockStore ":memory:" defaultGenesis blockScore $ action testData
 
 -- | Inserts all the given blocks in the 'Orphanage'.
-insertOrphans :: [Block tx s] -> Orphanage tx s -> Orphanage tx s
+insertOrphans
+    :: IsCrypto c
+    => [Block c tx (Sealed c s)]
+    -> Orphanage c tx s
+    -> Orphanage c tx s
 insertOrphans xs o =
     foldl' (flip insertOrphan) o xs
 
 -- | Iterate over all the input chains and select the one with the best score.
-bestChainOracle :: BlockHash
-                -- ^ The hash of the adopted block this chain originates from.
-                -> [(Shuffled (Blockchain tx s), Blockchain tx s, Block tx s)]
-                -> Maybe (ChainCandidate s)
+bestChainOracle
+    :: IsCrypto c
+    => BlockHash c
+    -- ^ The hash of the adopted block this chain originates from.
+    -> [(Shuffled (Blockchain c tx s), Blockchain c tx s, Block c tx (Sealed c s))]
+    -> Maybe (ChainCandidate c s)
 bestChainOracle _ [] = Nothing
 bestChainOracle root xs =
     let (_shuffledChain, chain, lnk) =
@@ -94,10 +103,16 @@ newtype Shuffled a = Shuffled { fromShuffled :: a }
 
 -- | Returns a list of /shuffled/ orphans chains and, for conveniency, also
 -- the original, ordered one.
-shuffledOrphanChains :: (Arbitrary tx, Arbitrary s, Serialise tx, Serialise s)
-                     => ForkParams
-                     -> Blockchain tx s
-                     -> Gen [(Shuffled (Blockchain tx s), Blockchain tx s, Block tx s)]
+shuffledOrphanChains
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       )
+    => ForkParams
+    -> Blockchain c tx s
+    -> Gen [(Shuffled (Blockchain c tx s), Blockchain c tx s, Block c tx (Sealed c s))]
 shuffledOrphanChains params initialChain = do
     xs <- genOrphanChainsFrom params initialChain
     forM xs (\(c,b) -> (,c,b) . Shuffled . unsafeToBlockchain <$> shuffle (blocks c))

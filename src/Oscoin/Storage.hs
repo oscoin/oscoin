@@ -32,17 +32,18 @@ import           Oscoin.Telemetry (NotableEvent(..))
 import           Codec.Serialise (Serialise)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 import           Data.Foldable (toList)
+import           Formatting.Buildable (Buildable)
 
 -- | Package up the storage operations in a dictionary
-data Storage tx s f = Storage
-    { storageApplyBlock  :: Block tx s  -> f ApplyResult
-    , storageApplyTx     :: tx          -> f ApplyResult
-    , storageLookupBlock :: BlockHash   -> f (Maybe (Block tx s))
-    , storageLookupTx    :: Hashed tx   -> f (Maybe tx)
+data Storage c tx s f = Storage
+    { storageApplyBlock  :: Block c tx (Sealed c s) -> f ApplyResult
+    , storageApplyTx     :: tx                      -> f ApplyResult
+    , storageLookupBlock :: BlockHash c             -> f (Maybe (Block c tx (Sealed c s)))
+    , storageLookupTx    :: Hashed c tx             -> f (Maybe tx)
     }
 
 -- | Transform the 'Storage' monad
-hoistStorage :: (forall a. m a -> n a) -> Storage tx s m -> Storage tx s n
+hoistStorage :: (forall a. m a -> n a) -> Storage c tx s m -> Storage c tx s n
 hoistStorage f s = s
     { storageApplyBlock  = f . storageApplyBlock  s
     , storageApplyTx     = f . storageApplyTx     s
@@ -56,17 +57,22 @@ data ApplyResult =
     | Error   [NotableEvent]
 
 applyBlock
-    :: ( MonadStateStore st   m
-       , MonadMempool    tx   m
-       , Crypto.Hashable tx
-       , Serialise       tx
-       , Serialise       s
+    :: forall c st tx s o m.
+       ( Eq (Crypto.Hash c)
+       , Serialise tx
+       , Serialise s
+       , Serialise (Crypto.Hash c)
+       , MonadStateStore c st   m
+       , MonadMempool    c tx   m
+       , Crypto.Hashable c tx
+       , Crypto.Hashable c (BlockHeader c (Sealed c s))
+       , Buildable (Crypto.Hash c)
        )
-    => BlockStore tx s m
-    -> Evaluator st tx o
-    -> Validate     tx s
+    => BlockStore c tx s m
+    -> Evaluator    st tx o
+    -> Validate   c tx s
     -> Consensus.Config
-    -> Block        tx s
+    -> Block      c tx (Sealed c s)
     -> m ApplyResult
 applyBlock bs eval validate config blk = do
     let blkHash = blockHash blk
@@ -94,8 +100,9 @@ applyBlock bs eval validate config blk = do
                             pure $ Error [BlockEvaluationFailedEvent blkHash err]
                         Right st' -> do
                             lift $ StateStore.storeState st'
+                            let hashes = map (Crypto.fromHashed . Crypto.hash @c) $ toList txs
                             let events = [ BlockAppliedEvent blkHash
-                                         , TxsRemovedFromMempoolEvent (toList txs)
+                                         , TxsRemovedFromMempoolEvent hashes
                                          ]
                             pure $ Applied events
 
@@ -107,10 +114,11 @@ applyBlock bs eval validate config blk = do
        | otherwise -> pure $ Stale [BlockStaleEvent blkHash]
 
 applyTx
-    :: ( MonadMempool    tx   m
-       , Crypto.Hashable tx
+    :: ( MonadMempool    c tx   m
+       , Crypto.Hashable c tx
+       , Buildable (Crypto.Hash c)
        )
-    => BlockStore tx s m
+    => BlockStore c tx s m
     -> tx
     -> m ApplyResult
 applyTx bs tx = do
@@ -120,9 +128,9 @@ applyTx bs tx = do
        | otherwise -> pure $ Stale [TxStaleEvent txHash]
 
 lookupTx
-    :: ( MonadMempool    tx   m )
-    => BlockStore tx s m
-    -> Hashed tx
+    :: ( MonadMempool c tx m )
+    => BlockStore c tx s m
+    -> Hashed c tx
     -> m (Maybe tx)
 lookupTx bs hsh =
     runMaybeT $
@@ -131,5 +139,5 @@ lookupTx bs hsh =
 
 --------------------------------------------------------------------------------
 
-isNovelTx :: MonadMempool tx m => BlockStore tx s m -> Hashed tx -> m Bool
+isNovelTx :: MonadMempool c tx m => BlockStore c tx s m -> Hashed c tx -> m Bool
 isNovelTx bs = map isNothing . lookupTx bs

@@ -31,11 +31,13 @@ import           Oscoin.Crypto.Blockchain.Block
                  , BlockHash
                  , BlockHeader(..)
                  , Depth
+                 , Sealed
                  , StateHash
+                 , Unsealed
                  , blockHash
                  )
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
-import           Oscoin.Crypto.Hash (Hashable, Hashed, formatHash)
+import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Environment as Env
 import           Oscoin.Node.Mempool (Mempool)
@@ -61,18 +63,20 @@ import qualified Radicle.Extended as Rad
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
+import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
 import           Lens.Micro ((^.))
 
 withNode
-    :: Config
+    :: Log.Buildable (Hash c)
+    => Config
     -> i
-    -> Mempool.Handle tx
-    -> StateStore.Handle st
-    -> BlockStore tx s IO
+    -> Mempool.Handle c tx
+    -> StateStore.Handle c st
+    -> BlockStore c tx s IO
     -> Evaluator st tx Rad.Value
-    -> Consensus tx s (NodeT tx st s i IO)
-    -> (Handle tx st s i -> IO c)
-    -> IO c
+    -> Consensus c tx s (NodeT c tx st s i IO)
+    -> (Handle c tx st s i -> IO a)
+    -> IO a
 withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     bracket open close
   where
@@ -90,15 +94,20 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
     close = const $ pure ()
 
 miner
-    :: ( MonadIO            m
-       , P2P.MonadBroadcast m
-       , MonadClock         m
-       , Serialise tx
-       , Hashable  tx
+    :: ( MonadIO              m
+       , P2P.MonadBroadcast c m
+       , MonadClock           m
+       , Serialise   tx
+       , Hashable  c tx
        , Serialise s
-       , Hashable  st
+       , Hashable  c st
+       , Ord (Hash c)
+       , Serialise (Hash c)
+       , Serialise Unsealed
+       , AuthTree.MerkleHash (Hash c)
+       , Log.Buildable (Hash c)
        )
-    => NodeT tx st s i m a
+    => NodeT c tx st s i m a
 miner = do
     Handle{hEval, hConsensus, hConfig, hBlockStore} <- ask
     let telemetryHandle = cfgTelemetry hConfig
@@ -121,11 +130,14 @@ mineBlock
     :: ( MonadIO m
        , MonadClock m
        , Serialise tx
-       , Serialise s
-       , Hashable tx
-       , Hashable st
+       , Hashable c tx
+       , Hashable c st
+       , Ord (Hash c)
+       , Serialise (Hash c)
+       , Serialise Unsealed
+       , AuthTree.MerkleHash (Hash c)
        )
-    => NodeT tx st s i m (Maybe (Block tx s))
+    => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
     Handle{hEval, hConsensus, hBlockStore} <- ask
     time <- currentTick
@@ -133,15 +145,18 @@ mineBlock = do
 
 storage
     :: ( MonadIO m
-       , Hashable  tx
-       , Hashable  st
+       , Hashable  c tx
+       , Hashable  c st
        , Serialise tx
        , Serialise s
+       , Serialise (Hash c)
+       , Log.Buildable (Hash c)
+       , Ord (StateHash c)
        )
     => Evaluator st tx o
-    -> Validate tx s
+    -> Validate c tx s
     -> Consensus.Config
-    -> Storage tx s (NodeT tx st s i m)
+    -> Storage c tx s (NodeT c tx st s i m)
 storage eval validate config = Storage
     { storageApplyBlock = \blk -> do
         bs <- asks hBlockStore
@@ -157,18 +172,30 @@ storage eval validate config = Storage
         Storage.lookupTx (hoistBlockStore liftIO bs) tx
     }
 
-getMempool :: MonadIO m => NodeT tx st s i m (Mempool tx)
+getMempool :: MonadIO m => NodeT c tx st s i m (Mempool c tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 
 -- | Get a value from the given state hash.
-getPath :: (Query st, Hashable st, MonadIO m) => StateHash -> STree.Path -> NodeT tx st s i m (Maybe (QueryVal st))
+getPath
+    :: ( Query st
+       , Hashable c st
+       , MonadIO m
+       , Ord (StateHash c)
+       )
+    => StateHash c
+    -> STree.Path
+    -> NodeT c tx st s i m (Maybe (QueryVal st))
 getPath sh p = queryM (sh, p)
 
 -- | Get a value from the latest state.
 getPathLatest
-    :: (MonadIO m, Query st, Hashable st)
+    :: ( MonadIO m
+       , Query st
+       , Hashable c st
+       , Ord (StateHash c)
+       )
     => STree.Path
-    -> NodeT tx st s i m (Maybe (StateHash, QueryVal st))
+    -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))
 getPathLatest path = do
     bs <- asks hBlockStore
     stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip (hoistBlockStore liftIO bs)
@@ -176,11 +203,14 @@ getPathLatest path = do
     for result $ \v ->
         pure (stateHash, v)
 
-getBlocks :: (MonadIO m) => Depth -> NodeT tx st s i m [Block tx s]
+getBlocks :: (MonadIO m) => Depth -> NodeT c tx st s i m [Block c tx (Sealed c s)]
 getBlocks d = withBlockStore (`BlockStore.getBlocks` d)
 
-lookupTx :: (MonadIO m) => Hashed tx -> NodeT tx st s i m (Maybe (TxLookup tx))
+lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
 lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)
 
-lookupBlock :: (MonadIO m) => BlockHash -> NodeT tx st s i m (Maybe (Block tx s))
+lookupBlock
+    :: (MonadIO m)
+    => BlockHash c
+    -> NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 lookupBlock h = withBlockStore (`BlockStore.lookupBlock` h)

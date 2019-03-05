@@ -18,11 +18,13 @@ import           Oscoin.Crypto.Blockchain (blockHash, tip, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block
                  , BlockHash
+                 , Unsealed
                  , blockPrevHash
                  , blockTimestamp
                  , emptyGenesisBlock
                  , emptyHeader
                  , mkBlock
+                 , sealBlock
                  )
 import           Oscoin.Storage.Block.Pure
                  (genesisBlockStore, getBlocks, insert, orphans)
@@ -33,41 +35,42 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 
+import           Oscoin.Test.Crypto
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
-tests :: Consensus.Config -> [TestTree]
-tests config =
+tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> [TestTree]
+tests Dict config =
     [ testGroup "With Partitions"
         [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @Simple.PoA @SimpleNodeState
+            propNetworkNodesConverge @c @Simple.PoA @(SimpleNodeState c)
                                      testableInit
                                      (arbitraryPartitionedNetwork Simple.blockTime)
                                      config
         , testProperty "Nodes converge (nakamoto)" $
-            propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
+            propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
                                      testableInit
                                      (arbitraryPartitionedNetwork Nakamoto.blockTime)
                                      config
         ]
     , testGroup "Without Partitions"
         [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @Simple.PoA @SimpleNodeState
+            propNetworkNodesConverge @c @Simple.PoA @(SimpleNodeState c)
                                      testableInit
                                      (arbitraryHealthyNetwork Simple.blockTime)
                                      config
         , testProperty "Nodes converge (nakamoto)" $
-            propNetworkNodesConverge @Nakamoto.PoW @NakamotoNodeState
+            propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
                                      testableInit
                                      (arbitraryHealthyNetwork Nakamoto.blockTime)
                                      config
         ]
     , testGroup "BlockStore"
         [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk = emptyGenesisBlock epoch :: Block () ()
-                nextBlk = mkBlock emptyHeader
+            let genBlk  = sealBlock () (emptyGenesisBlock epoch :: Block c () Unsealed)
+                nextBlk = sealBlock () $ mkBlock emptyHeader
                     { blockTimestamp = fromEpoch (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
@@ -80,11 +83,11 @@ tests config =
     ]
 
 propNetworkNodesConverge
-    :: forall s a m
-     . (Serialise s, Ord s, TestableNode s m a)
-    => (TestNetwork s () -> TestNetwork s a) -- ^ Network initialization function
-    -> Gen (TestNetwork s ())                -- ^ TestNetwork generator
-    -> Consensus.Config                      -- ^ Static protocol configuration.
+    :: forall c s a m
+     . (IsCrypto c, Serialise s, Ord s, TestableNode c s m a)
+    => (TestNetwork c s () -> TestNetwork c s a) -- ^ Network initialization function
+    -> Gen (TestNetwork c s ())                  -- ^ TestNetwork generator
+    -> Consensus.Config                          -- ^ Static protocol configuration.
     -> Property
 propNetworkNodesConverge tnInit genNetworks config =
     forAllShrink genNetworks shrink $ \tn ->
@@ -180,7 +183,15 @@ falloff :: Float -> Float
 falloff x = -x ** 4 + 1
 
 -- | Return a pretty-printed TestNetwork for counter-examples.
-prettyCounterexample :: (Ord s, TestableNode s m a) => TestNetwork s a -> [DummyTx] -> Float -> Text
+prettyCounterexample
+    :: ( Ord s
+       , TestableNode c s m a
+       , IsCrypto c
+       )
+    => TestNetwork c s a
+    -> [DummyTx]
+    -> Float
+    -> Text
 prettyCounterexample tn@TestNetwork{..} txsReplicated score =
     prettyLog <> prettyInfo <> prettyNodes <> prettyStats
   where
@@ -196,11 +207,14 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated score =
                                 " scheduled:\n"     <> T.unlines (prettyMsgs (Set.filter (not . isTick) tnScheduled))]
     prettyMsgs ms = reverse ["  " <> prettyScheduled l | l <- reverse $ sort $ toList ms]
 
-longestChain :: (TestableNode s m a) => TestNetwork s a -> [BlockHash]
+longestChain
+    :: (TestableNode c s m a)
+    => TestNetwork c s a
+    -> [BlockHash c]
 longestChain tn = maximumBy (comparing length) (nodePrefixes tn)
 
 -- | The longest chain prefixes of all nodes in the network.
-nodePrefixes :: (TestableNode s m a) => TestNetwork s a -> [[BlockHash]]
+nodePrefixes :: (TestableNode c s m a) => TestNetwork c s a -> [[BlockHash c]]
 nodePrefixes TestNetwork{..} =
     -- Nb. We reverse the list to check the prefix, since the head
     -- of the list is the tip of the chain, not the genesis.

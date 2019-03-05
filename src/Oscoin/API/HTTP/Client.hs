@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 -- | Implementation of 'MonadClient' using the HTTP API and
 -- "Network.Http.Client".
 --
@@ -22,10 +23,13 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
 import           Oscoin.API.Types
-import           Oscoin.Crypto.Hash (fromHashed)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Hash (Hash, fromHashed)
+import           Oscoin.Crypto.PubKey (PK, Signature)
 
 import           Codec.Serialise
 import qualified Data.Text as T
+import           Formatting.Buildable (Buildable)
 import qualified Network.HTTP.Client as Client
 import           Network.HTTP.Types.Header
 import           Network.HTTP.Types.Method
@@ -53,14 +57,20 @@ newtype HttpClientT m a = HttpClientT (ReaderT (Requester m) m a)
 instance MonadTrans HttpClientT where
     lift ma = HttpClientT $ lift ma
 
-instance (Monad m, MonadIO m) => MonadClient (HttpClientT m) where
+instance ( Buildable (Hash c)
+         , Serialise (BlockHash c)
+         , Serialise (PK c)
+         , Serialise (Signature c)
+         , Monad m
+         , MonadIO m
+         ) => MonadClient c (HttpClientT m) where
     submitTransaction tx =
         post "/transactions" tx
 
     getTransaction txId =
         get $ "/transactions/" <> toUrlPiece (fromHashed txId)
 
-    getState key =
+    getState Proxy key =
         get $ "/state?q=[" <> T.intercalate "," key <> "]"
 
 

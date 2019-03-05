@@ -4,8 +4,13 @@ module Oscoin.Test.Util where
 import           Oscoin.Prelude
 
 import           Oscoin.API.Types (RadTx)
+import           Oscoin.Crypto
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.PubKey
+import           Oscoin.Crypto.PubKey.Internal (PrivateKey(..))
+import           Oscoin.Crypto.PubKey.Mock
+import           Oscoin.Crypto.PubKey.RealWorld
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Set as Set
@@ -26,6 +31,9 @@ instance Condensed Integer where
 instance Condensed Int where
     condensed = show
 
+instance Condensed Char where
+    condensed = show
+
 instance Condensed a => Condensed (Set a) where
     condensed = condensed . Set.toList
 
@@ -36,6 +44,10 @@ instance Condensed a => Condensed (Maybe a) where
     condensed Nothing  = "Nothing"
     condensed (Just x) = condensed x
 
+instance (Condensed a, Condensed b) => Condensed (Either a b) where
+    condensed (Left e)  = "L(" <> condensed e <> ")"
+    condensed (Right x) = "R(" <> condensed x <> ")"
+
 instance (Condensed a, Condensed b) => Condensed (a, b) where
     condensed (a,b) = "(" <> condensed a <> "," <> condensed b <> ")"
 
@@ -45,17 +57,42 @@ instance (Condensed a, Condensed b, Condensed c) => Condensed (a, b, c) where
 instance Condensed a => Condensed [a] where
     condensed xs = "[" <> T.intercalate "," (map condensed xs) <> "]"
 
-instance Condensed BlockHash where
+instance Crypto.HasHashing c => Condensed (BlockHash c) where
     condensed h = F.sformat F.string (C8.unpack . Crypto.shortHash $ h)
 
-instance Condensed (Block tx s) where
+instance Crypto.HasHashing c => Condensed (Block c tx s) where
     condensed = showBlockDigest
 
-instance Condensed (Blockchain tx s) where
+instance Crypto.HasHashing c => Condensed (Blockchain c tx s) where
     condensed = showChainDigest
 
-showOrphans :: (Blockchain RadTx s, [(Blockchain RadTx s, Block RadTx s)])
-            -> String
+instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
+    condensed = decodeUtf8 . Crypto.shortHash . Crypto.fromHashed
+
+instance Condensed (PK Crypto) where
+    condensed = show
+
+-- NOTE(adn) It's a bit of a security hazard to implement a 'Show' instance
+-- for a private key, as that might end up in public logs and other crazy things.
+-- This is why we define (in the tests only) such 'Condensed' instance.
+instance Condensed (SK Crypto) where
+    condensed (SK (PrivateKey k)) = show k
+
+instance Condensed (PK MockCrypto) where
+    condensed = show
+
+instance Condensed (SK MockCrypto) where
+    condensed (MockSK (PrivateKey k)) = show k
+
+instance Show (Signature c) => Condensed (Signed c Text) where
+    condensed = show
+
+showOrphans
+    :: Crypto.HasHashing c
+    => ( Blockchain c (RadTx c) s
+       , [(Blockchain c (RadTx c) s, Block c (RadTx c) (Sealed c s))]
+       )
+    -> String
 showOrphans (initialChain, orphansWithLinks) =
     "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
     "orphans:\n- " <> T.unpack showOrphanAndLinks
@@ -63,3 +100,8 @@ showOrphans (initialChain, orphansWithLinks) =
       showOrphanAndLinks =
           T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")
                              $ orphansWithLinks
+
+-- The Ed's Kmett one weird trick.
+
+data Dict a where
+    Dict :: a => Dict a

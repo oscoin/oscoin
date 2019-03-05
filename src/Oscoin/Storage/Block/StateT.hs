@@ -5,31 +5,28 @@ module Oscoin.Storage.Block.StateT
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Validate)
-import           Oscoin.Crypto.Blockchain.Block (Block, Score)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Block, BlockHash, Score, Sealed)
 import           Oscoin.Crypto.Hash (Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
 
-type Handle tx s m = StateT (Pure.Handle tx s) m
+type Handle c tx s m = StateT (Pure.Handle c tx s) m
 
 -- | A bracket-style initialiser for an in-memory block store.
-withBlockStore :: (Monad m, Hashable tx)
-               => Block tx s
+withBlockStore :: (Ord (BlockHash c), Monad m, Hashable c tx)
+               => Block c tx (Sealed c s)
                -- ^ The genesis block (used to initialise the store)
-               -> (Block tx s -> Score)
+               -> (Block c tx (Sealed c s) -> Score)
                -- ^ A block scoring function
-               -> Validate tx s
-               -- ^ A block validation function
-               -> (Abstract.BlockStore tx s (Handle tx s m) -> Handle tx s m b)
+               -> (Abstract.BlockStore c tx s (Handle c tx s m) -> Handle c tx s m b)
                -- ^ Action to use the 'BlockStore'.
                -> m b
-withBlockStore gen score validate action =
+withBlockStore gen score action =
     let hdl = Pure.genesisBlockStore gen
         newBlockStore  =
                 Abstract.BlockStore {
                   Abstract.scoreBlock      = score
-                , Abstract.validateBlock   = validate
                 , Abstract.insertBlock     = modify . Pure.insert
                 , Abstract.getGenesisBlock = gets Pure.getGenesisBlock
                 , Abstract.lookupBlock     = gets . Pure.lookupBlock

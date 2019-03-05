@@ -8,8 +8,9 @@ import           Oscoin.CLI.Parser (environmentParser, keyPathParser)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain (fromGenesis)
-import           Oscoin.Crypto.Blockchain.Block (Block)
+import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
@@ -102,6 +103,8 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> showDefault
             )
 
+type GenesisBlock =
+    Block Crypto (RadTx Crypto) (Sealed Crypto Nakamoto.PoW)
 
 main :: IO ()
 main = do
@@ -112,7 +115,7 @@ main = do
     keys        <- runReaderT readKeyPair keysPath
     nid         <- pure (mkNodeId $ fst keys)
     mem         <- Mempool.newIO
-    gen         <- Yaml.decodeFileThrow genesis :: IO (Block RadTx Nakamoto.PoW)
+    gen         <- Yaml.decodeFileThrow genesis :: IO GenesisBlock
     genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
     stStore     <- StateStore.fromStateM genState
 
@@ -125,7 +128,7 @@ main = do
     withStdLogger  Log.defaultConfig { Log.cfgLevel = Log.Debug -- TODO(adn) Make it configurable
                                      , Log.cfgStyle = Log.styleFromEnvironment environment
                                      } $ \lgr -> Log.withExceptionLogged lgr $
-        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) defaultScoreFunction Nakamoto.validateBlock $ \blkStore -> do
+        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) defaultScoreFunction $ \blkStore -> do
             let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
             withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
                      nid

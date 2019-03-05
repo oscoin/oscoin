@@ -14,6 +14,7 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Time
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Time ()
 import           Test.QuickCheck
@@ -42,17 +43,23 @@ genDifficultyFrom (fromDifficulty -> prevDifficulty) =
 
 -- | Generates an arbitrary but valid block, linked against the input one
 -- and cointaining the txs specified as input.
-genBlockWith :: (Arbitrary s, Serialise s, Serialise tx)
-             => Block tx s
-             -> [tx]
-             -> Gen (Block tx s)
+genBlockWith
+    :: forall c s tx.
+       ( Arbitrary s
+       , Serialise s
+       , Serialise tx
+       , IsCrypto c
+       )
+    => Block c tx s
+    -> [tx]
+    -> Gen (Block c tx s)
 genBlockWith parentBlock txs =  do
     let prevHeader = blockHeader parentBlock
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- arbitrary
     blockDiffi <- genDifficultyFrom (blockTargetDifficulty prevHeader)
-    let header = emptyHeader
+    let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockPrevHash         = headerHash prevHeader
                , blockDataHash         = hashTxs txs
                , blockStateHash        = hashState blockState
@@ -63,9 +70,15 @@ genBlockWith parentBlock txs =  do
     pure $ mkBlock header txs
 
 --- | Generates an arbitrary but valid block, linked against the input one.
-genBlockFrom :: (Arbitrary tx, Arbitrary s, Serialise s, Serialise tx)
-             => Block tx s
-             -> Gen (Block tx s)
+genBlockFrom
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise s
+       , Serialise tx
+       )
+    => Block c tx s
+    -> Gen (Block c tx s)
 genBlockFrom parentBlock = do
     txs <- arbitrary
     genBlockWith parentBlock txs
@@ -75,19 +88,22 @@ genBlockFrom parentBlock = do
 ------------------------------------------------------------------------------}
 
 genNakamotoBlockWith
-    :: forall tx. (Serialise tx)
-    => NonEmpty (Block tx Nakamoto.PoW)
+    :: forall c tx.
+       ( Serialise tx
+       , IsCrypto c
+       )
+    => NonEmpty (Block c tx (Sealed c Nakamoto.PoW))
     -- ^ A non-empty list of blocks preceeding this one, needed for an
     -- accurate difficulty calculation.
     -> [tx]
-    -> Gen (Block tx Nakamoto.PoW)
+    -> Gen (Block c tx (Sealed c Nakamoto.PoW))
 genNakamotoBlockWith prefix@(parent:|_) txs = do
     let prevHeader = blockHeader parent
     elapsed    <- choose (60 * seconds, 120 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- arbitrary
     blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
-    let header = emptyHeader
+    let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockPrevHash         = headerHash prevHeader
                , blockDataHash         = hashTxs txs
                , blockStateHash        = hashState blockState
@@ -98,9 +114,12 @@ genNakamotoBlockWith prefix@(parent:|_) txs = do
     pure $ mkBlock header txs
 
 genNakamotoBlockFrom
-    :: (Arbitrary tx, Serialise tx)
-    => NonEmpty (Block tx Nakamoto.PoW)
-    -> Gen (Block tx Nakamoto.PoW)
+    :: ( Arbitrary tx
+       , Serialise tx
+       , IsCrypto c
+       )
+    => NonEmpty (Block c tx (Sealed c Nakamoto.PoW))
+    -> Gen (Block c tx (Sealed c Nakamoto.PoW))
 genNakamotoBlockFrom ancestors = do
     txs <- arbitrary
     genNakamotoBlockWith ancestors txs

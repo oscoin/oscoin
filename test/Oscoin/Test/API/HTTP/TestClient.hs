@@ -25,12 +25,12 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 
 
-type TestClient = HttpClientT Session
+type TestClient c = HttpClientT (Session c)
 
-run :: TestClient a -> Session a
+run :: TestClient c a -> Session c a
 run = runHttpClientT' makeWaiRequest
 
-makeWaiRequest :: Request -> Session Response
+makeWaiRequest :: Request -> Session c Response
 makeWaiRequest Request{..} = liftWaiSession $ fromSresp <$> Wai.srequest sreq
   where
     sreq = Wai.SRequest req requestBody

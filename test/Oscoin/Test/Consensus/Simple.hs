@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Test.Consensus.Simple
     ( SimpleNodeState
     ) where
@@ -8,6 +9,7 @@ import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Simple
 import           Oscoin.Crypto.Blockchain.Block (sealBlock)
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
+import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
@@ -15,6 +17,7 @@ import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Node
+import           Oscoin.Test.Crypto
 
 import           Control.Monad.State (modify')
 import qualified Data.Map.Strict as Map
@@ -49,30 +52,32 @@ instance Monad m => MonadLastTime (SimpleT tx i m) where
     getLastAskTick        = gets ltLastAsk
     setLastAskTick tick   = modify' (\s -> s { ltLastAsk = tick })
 
-instance MonadMempool      tx    m => MonadMempool      tx    (SimpleT tx i m)
-instance MonadReceiptStore tx () m => MonadReceiptStore tx () (SimpleT tx i m)
-instance MonadStateStore   S     m => MonadStateStore    S    (SimpleT tx i m)
+instance (IsCrypto c, MonadMempool c tx m) => MonadMempool c tx   (SimpleT tx i m)
+instance MonadReceiptStore c tx () m => MonadReceiptStore c tx () (SimpleT tx i m)
+instance MonadStateStore   c S     m => MonadStateStore   c  S    (SimpleT tx i m)
 
 runSimpleT :: Position -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
 runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt
 
 -- Simple Node -----------------------------------------------------------------
 
-type SimpleNode = SimpleT DummyTx DummyNodeId (TestNodeT PoA Identity)
+type SimpleNode c = SimpleT DummyTx DummyNodeId (TestNodeT c PoA Identity)
 
-data SimpleNodeState = SimpleNodeState
+data SimpleNodeState c = SimpleNodeState
     { snsPosition :: (Int, Int)
-    , snsNode     :: TestNodeState PoA
+    , snsNode     :: TestNodeState c PoA
     , snsLast     :: LastTime
-    } deriving Show
+    }
 
-instance HasTestNodeState PoA SimpleNodeState where
+deriving instance Show (Crypto.Hash c) => Show (SimpleNodeState c)
+
+instance HasTestNodeState c PoA (SimpleNodeState c) where
     testNodeStateL = lens snsNode (\s snsNode -> s { snsNode })
 
-instance LiftTestNodeT PoA SimpleNode where
+instance LiftTestNodeT c PoA (SimpleNode c) where
     liftTestNodeT = lift
 
-instance TestableNode PoA SimpleNode SimpleNodeState where
+instance (IsCrypto c) => TestableNode c PoA (SimpleNode c) (SimpleNodeState c) where
     testableTick tick = do
         position <- ask
         withTestBlockStore $ \bs ->
@@ -82,7 +87,11 @@ instance TestableNode PoA SimpleNode SimpleNodeState where
     testableRun  = runSimpleNode
     testableScore = const chainScore
 
-simpleNode :: DummyNodeId -> Set DummyNodeId -> SimpleNodeState
+simpleNode
+    :: (IsCrypto c)
+    => DummyNodeId
+    -> Set DummyNodeId
+    -> SimpleNodeState c
 simpleNode nid peers = SimpleNodeState
     { snsPosition = (ourOffset, nTotalPeers)
     , snsNode = emptyTestNodeState (sealBlock ()) nid
@@ -92,7 +101,10 @@ simpleNode nid peers = SimpleNodeState
     nTotalPeers = 1 + Set.size peers
     ourOffset   = Set.size $ Set.filter (< nid) peers
 
-initSimpleNodes :: TestNetwork PoA a -> TestNetwork PoA SimpleNodeState
+initSimpleNodes
+    :: (IsCrypto c)
+    => TestNetwork c PoA a
+    -> TestNetwork c PoA (SimpleNodeState c)
 initSimpleNodes tn@TestNetwork{tnNodes} =
     let nodes   = Map.keysSet tnNodes
         !nodes' = Map.fromList
@@ -100,7 +112,7 @@ initSimpleNodes tn@TestNetwork{tnNodes} =
                 $ toList nodes
      in tn { tnNodes = nodes' }
 
-runSimpleNode :: SimpleNodeState -> SimpleNode a -> (a, SimpleNodeState)
+runSimpleNode :: SimpleNodeState c -> SimpleNode c a -> (a, SimpleNodeState c)
 runSimpleNode s@SimpleNodeState{..} ma = (a, s { snsNode = tns, snsLast = lt })
   where
     ((a, lt), tns) =

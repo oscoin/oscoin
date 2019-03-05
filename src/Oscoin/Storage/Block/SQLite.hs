@@ -7,10 +7,15 @@ module Oscoin.Storage.Block.SQLite
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus (Validate)
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHash, BlockHeader(..), Score, mkBlock)
+                 ( Block(..)
+                 , BlockHash
+                 , BlockHeader(..)
+                 , Score
+                 , Sealed
+                 , mkBlock
+                 )
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import qualified Oscoin.Storage.Block.Abstract as Abstract
@@ -34,27 +39,29 @@ import           Codec.Serialise (Serialise)
 -- migration strategy/initialisation here.
 withBlockStore :: ( ToField s
                   , FromField s
+                  , ToField (Crypto.Hash c)
+                  , FromField (Crypto.Hash c)
                   , Serialise s
+                  , Serialise (Crypto.Hash c)
                   , Ord s
+                  , Ord (BlockHash c)
                   , ToRow tx
                   , FromRow tx
+                  , Crypto.HasHashing c
                   )
                => String
                -- ^ The path where the DB will live on disk
-               -> Block tx s
+               -> Block c tx (Sealed c s)
                -- ^ The genesis block (used to initialise the store)
-               -> (Block tx s -> Score)
+               -> (Block c tx (Sealed c s) -> Score)
                -- ^ A block scoring function
-               -> Validate tx s
-               -- ^ A block validation function
-               -> (Abstract.BlockStore tx s IO -> IO b)
+               -> (Abstract.BlockStore c tx s IO -> IO b)
                -- ^ Action which uses the 'BlockStore'.
                -> IO b
-withBlockStore path genesisBlock score validate action =
+withBlockStore path genesisBlock score action =
     let newBlockStore internalHandle =
             ( Abstract.BlockStore {
                   Abstract.scoreBlock      = hScoreFn internalHandle
-                , Abstract.validateBlock   = hValidFn internalHandle
                 , Abstract.insertBlock     = storeBlock internalHandle
                 , Abstract.getGenesisBlock = getGenesisBlock (hConn internalHandle)
                 , Abstract.lookupBlock     = lookupBlock internalHandle
@@ -65,14 +72,26 @@ withBlockStore path genesisBlock score validate action =
                 }
             , internalHandle
             )
-    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path score validate))
+    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path score))
                (close . snd)
                (action . fst)
 
 
-lookupBlock :: forall tx s. (Serialise s, FromField s, FromRow tx) => Handle tx s -> BlockHash -> IO (Maybe (Block tx s))
+lookupBlock
+    :: forall c tx s.
+       ( Serialise s
+       , Serialise (Crypto.Hash c)
+       , ToField (Crypto.Hash c)
+       , FromField (Sealed c s)
+       , FromField (Crypto.Hash c)
+       , FromRow tx
+       , Crypto.HasHashing c
+       )
+    => Handle c tx s
+    -> BlockHash c
+    -> IO (Maybe (Block c tx (Sealed c s)))
 lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
-    result :: Maybe (BlockHeader s) <- listToMaybe <$> Sql.query hConn
+    result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> Sql.query hConn
         [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
                 FROM blocks
                WHERE hash = ? |] (Only h)
@@ -84,7 +103,14 @@ lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
 
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.
-lookupTx :: FromRow tx => Handle tx s -> Crypto.Hashed tx -> IO (Maybe (TxLookup tx))
+lookupTx
+    :: ( Crypto.HasHashing c
+       , FromRow tx
+       , ToField (Crypto.Hashed c tx)
+       )
+    => Handle c tx s
+    -> Crypto.Hashed c tx
+    -> IO (Maybe (TxLookup c tx))
 lookupTx Handle{hConn} h = do
     res <- Sql.query hConn
         [sql| SELECT message, author, chainid, nonce, context
