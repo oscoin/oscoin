@@ -19,14 +19,14 @@ tests =
 
 testStartsOK :: Assertion
 testStartsOK =
-    -- Generates a temporary directory where to store some ephimeral keys, which
+    -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
-    withSystemTempDirectory "Oscoin.Ephimeral.Keys" $ \keyPath -> do
+    withSystemTempDirectory "Oscoin.Ephemeral.Keys" $ \keyPath -> do
         -- First, generate the keys with the CLI
         withSandbox "oscoin-cli" ["keypair", "generate", "--keys", keyPath] defaultSandboxOptions $
             \_ _ -> pure ()
         -- Then, run the test.
-        withSandbox "oscoin" ["--api-port", "9999", "--keys", keyPath] defaultSandboxOptions $
+        withSandbox "oscoin" ["--api-port", "0", "--keys", keyPath, "--seed", "127.0.0.1:6942"] defaultSandboxOptions $
             \stdoutHandle _stdErrHandle -> do
                 -- TODO(adn) In the future we want a better handshake string here.
                 actual <- C8.hGet stdoutHandle 100
