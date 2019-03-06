@@ -1,0 +1,41 @@
+name: oscoin-deps-13.10
+resolver: lts-13.10
+
+packages:
+- base58-bytestring-0.1.0
+- ekg-0.4.0.15@sha256:f52d7c00654d72d2ab988255f30adba95a52484ac310bab9c136c64732e69f4b
+- ekg-json-0.1.0.6@sha256:4ff2e9cac213a5868ae8b4a7c72a16a9a76fac14d944ae819b3d838a9725569b
+- focus-0.1.5.2@sha256:fc5c76a5be3a9a1c456106d6f389939299c7e05a1a24938b909f043e36a3e37b
+- github-0.20
+- pretty-terminal-0.1.0.0
+- primitive-extras-0.7.1@sha256:23905c57089418b1a2d324cfee3e81bbd5a344a0fa56a827867b2dce275fdb5e
+- reroute-0.5.0.0
+- sandi-0.5@sha256:b278d072ca717706ea38f9bd646e023f7f2576a778fb43565b434f93638849aa
+- Spock-0.13.0.0
+- Spock-core-0.13.0.0
+- stm-containers-0.2.16@sha256:e98efa8dcf0045ea8a78a04b4e2763cf2d8bc33aad0750e2f30a67f8f4e933b1
+- tasty-fail-fast-0.0.3
+- tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
+- xxhash-ffi-0.2.0.0
+
+- git: http://github.com/oscoin/radicle
+  commit: eaf70a9e0b36af44d02d0372bc0ac2dcc3d1b29c
+
+- git: https://github.com/oscoin/avl-auth
+  commit: c28e58e5de980697add9905845c82c844f2928b0
+
+- git: https://github.com/oscoin/gossip
+  commit: 7da6fed6821cc0452ef194522c3cc59019ab7f53
+
+- git: https://github.com/oscoin/ipfs
+  commit: 30a67159d5b58cf63be903920d6349f0be15cd46
+  subdirs:
+      - binary-varint
+      - ipld-cid
+      - multibase
+      - multihash-cryptonite
+      - multihash-serialise
+
+flags:
+  sandi:
+    with-conduit: false

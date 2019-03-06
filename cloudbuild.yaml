@@ -1,4 +1,6 @@
-timeout: 3600s # Cache misses are slow to rebuild
+timeout: 7200s # Cache misses are slow to rebuild
+options:
+  machineType: N1_HIGHCPU_8
 steps:
   - id: "Format (shell scripts)"
     waitFor: ["-"]
@@ -15,6 +17,8 @@ steps:
   - id: "Load cache"
     name: gcr.io/cloud-builders/gsutil
     entrypoint: "bash"
+    env:
+    - BRANCH_NAME=$BRANCH_NAME
     args:
     - "-c"
     - |
@@ -22,30 +26,55 @@ steps:
       load-cache
 
   - id: "Build deps"
-    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
-    env: ["STACK_ROOT=/workspace/.stack"]
+    name: "haskell:8.6.3"
+    env:
+    - STACK_ROOT=/workspace/.stack
     entrypoint: "bash"
-    dir: "/tmp"
     args:
     - "-c"
     - |
-      stack config set system-ghc --global true
+      set -euxo pipefail
+
+      rm -rfv /workspace/.stack/global-project
+
+      stack config set system-ghc  --global true
       stack config set install-ghc --global false
-      stack install stylish-haskell hlint weeder
+
+      stack build --no-terminal stylish-haskell hlint weeder
+      stack build --no-terminal --test --dependencies-only
+
+  - id: "Save cache"
+    name: gcr.io/cloud-builders/gsutil
+    entrypoint: "bash"
+    env:
+    - BRANCH_NAME=$BRANCH_NAME
+    args:
+    - "-c"
+    - |
+      source scripts/ci-cache.sh
+      save-cache
 
   - id: "Format (haskell)"
-    waitFor: ["Build deps"]
-    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
-    args: ["./scripts/check-haskell-format.sh"]
+    waitFor:
+    - Save cache
+    name: "haskell:8.6.3"
+    env:
+    - STACK_ROOT=/workspace/.stack
+    args:
+    - ./scripts/check-haskell-format.sh
 
   - id: "Lint (hlint)"
-    waitFor: ["Build deps"]
-    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
-    args: ["/builder/home/.local/bin/hlint", "."]
+    waitFor:
+    - Save cache
+    name: "haskell:8.6.3"
+    env:
+    - STACK_ROOT=/workspace/.stack
+    args: ["stack", "exec", "--", "hlint", "."]
 
   - id: "Test & Build"
-    waitFor: ["Build deps"]
-    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
+    waitFor:
+    - Save cache
+    name: "haskell:8.6.3"
     entrypoint: "bash"
     env:
     - STACK_ROOT=/workspace/.stack
@@ -70,12 +99,16 @@ steps:
       fi
 
   - id: "Lint (weeder)"
-    name: "eu.gcr.io/opensourcecoin/haskell:8.4.4"
-    env: ["STACK_ROOT=/workspace/.stack"] # weeder uses stack under the hood
-    args: ["/builder/home/.local/bin/weeder", "."]
+    waitFor:
+    - Test & Build
+    name: "haskell:8.6.3"
+    env:
+    - STACK_ROOT=/workspace/.stack # weeder uses stack under the hood
+    args: ["stack", "exec", "--", "weeder", "."]
 
   - id: "Publish images"
-    waitFor: ["Lint (weeder)"]
+    waitFor:
+    - Lint (weeder)
     name: gcr.io/cloud-builders/docker
     entrypoint: "bash"
     env:
@@ -97,7 +130,8 @@ steps:
       fi
 
   - id: "Publish Haddocks"
-    waitFor: ["Lint (weeder)"]
+    waitFor:
+    - Lint (weeder)
     name: gcr.io/cloud-builders/gsutil
     entrypoint: "bash"
     env:
@@ -106,17 +140,8 @@ steps:
     args:
     - "-c"
     - |
-      set -euo pipefail
+      set -euxo pipefail
 
       if [ "$BRANCH_NAME" == "master" ]; then
         gsutil -m rsync -d -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
       fi
-
-  - id: "Save cache"
-    name: gcr.io/cloud-builders/gsutil
-    entrypoint: "bash"
-    args:
-    - "-c"
-    - |
-      source scripts/ci-cache.sh
-      save-cache

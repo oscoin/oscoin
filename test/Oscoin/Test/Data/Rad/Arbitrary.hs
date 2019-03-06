@@ -5,7 +5,8 @@ module Oscoin.Test.Data.Rad.Arbitrary
 
 import           Oscoin.Prelude
 
-import           Oscoin.Data.RadicleTx as Rad
+import           Oscoin.Data.RadicleTx as Rad.Tx
+import qualified Radicle.Extended as RadX
 
 import           Data.Either (fromRight)
 import           Data.Functor.Identity (Identity(..))
@@ -16,29 +17,30 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 import           Text.Read (readMaybe)
 
-import qualified Radicle.Extended as Rad
-import           Radicle.Internal.Parse (isValidIdentFirst, isValidIdentRest)
-import           Radicle.Internal.PrimFns (purePrimFns)
-
 import           Radicle
+import qualified Radicle.Internal.Core as Radicle
+import qualified Radicle.Internal.Doc as Radicle
+import           Radicle.Internal.Identifier
+                 (isValidIdentFirst, isValidIdentRest)
+import           Radicle.Internal.PrimFns (purePrimFns)
 
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
 
-instance Arbitrary (Rad.Env c) where
-    arbitrary = pure Rad.pureEnv
+instance Arbitrary (Rad.Tx.Env c) where
+    arbitrary = pure Rad.Tx.pureEnv
 
 instance Arbitrary r => Arbitrary (Radicle.Env r) where
-    arbitrary = Radicle.Env <$> arbitrary
+    arbitrary = Radicle.Env . Map.map (Radicle.Docd Nothing) <$> arbitrary
 
 instance Arbitrary Value where
     -- We have to untag/tagDefault to make sure there's no traces of the original
     -- parsed value in the AST annotations.
-    arbitrary = Rad.tagDefault
-              . Rad.untag
-              . fromRight (Rad.List [])
-              . Rad.parse "Arbitray"
-              . Rad.prettyValue
+    arbitrary = RadX.tagDefault
+              . Radicle.untag
+              . fromRight (Radicle.List [])
+              . Radicle.parse "Arbitray"
+              . RadX.prettyValue
             <$> sized go
       where
         -- There's no literal syntax for dicts, only the 'dict' primop. If we
@@ -63,13 +65,13 @@ instance Arbitrary Value where
             k <- choose (0, n)
             scale (`div` (k + 1)) $ vectorOf k arbitrary
 
-        prims :: Rad.PrimFns Identity
+        prims :: Radicle.PrimFns Identity
         prims = purePrimFns
 
         isPrimop x = x `elem` Map.keys (getPrimFns prims)
         isNum x = isJust (readMaybe (toS $ fromIdent x) :: Maybe Scientific)
 
-instance Arbitrary Rad.Ident where
+instance Arbitrary Radicle.Ident where
     arbitrary = ((:) <$> firstL <*> rest) `suchThatMap` (mkIdent . toS)
       where
         allChars = take 100 ['!' .. maxBound]
@@ -78,9 +80,14 @@ instance Arbitrary Rad.Ident where
             k <- choose (0, n)
             vectorOf k . elements $ filter isValidIdentRest allChars
 
-instance Arbitrary a => Arbitrary (Rad.Bindings a) where
+instance Arbitrary a => Arbitrary (Radicle.Bindings a) where
     arbitrary = do
-        refs <- arbitrary
-        env <- arbitrary
+        refs  <- arbitrary
+        env   <- arbitrary
         prims <- arbitrary
-        pure $ Rad.Bindings env prims (IntMap.fromList $ zip [0..] refs) (length refs)
+        pure Radicle.emptyBindings
+            { Radicle.bindingsEnv     = env
+            , Radicle.bindingsPrimFns = prims
+            , Radicle.bindingsRefs    = IntMap.fromList $ zip [0..] refs
+            , Radicle.bindingsNextRef = length refs
+            }

@@ -1,31 +1,34 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -euxo pipefail
+
+deps_hash=$(cat package.yaml snapshot.yaml | sha256sum | cut -d' ' -f1)
+bucket="gs://oscoin-build-cache/v4"
+local_cache_archive="stack-root.tar.gz"
+remote_cache_master="${bucket}/stack-root-master.tar.gz"
+remote_cache_hashed="${bucket}/stack-root-${deps_hash}.tar.gz"
 
 function load-cache() {
-  bucket="gs://oscoin-build-cache"
-  key="stack-work-$(sha256sum < stack.yaml | cut -d ' ' -f 1)".tar.gz
-  gsutil -m cp -r "$bucket/v3/*" "$bucket/$key" . || true
-  for f in stack.tar.gz "$key"; do
-    if [[ -e $f ]]; then
-      tar xzf "$f"
-    fi
-  done
+  if gsutil -q ls "$remote_cache_hashed"; then
+    echo "Using hashed stack cache"
+    gsutil cat "$remote_cache_hashed" | tar -xz
+  elif gsutil -q ls "$remote_cache_master"; then
+    echo "Using master stack cache"
+    gsutil cat "$remote_cache_master" | tar -xz
+  fi
 }
 
 function save-cache() {
-  bucket="gs://oscoin-build-cache"
-  key="stack-work-$(sha256sum < stack.yaml | cut -d ' ' -f 1)".tar.gz
-  if ! gsutil ls "$bucket/$key"; then
-    tar czf "$key" .stack-work
-    gsutil -m cp "$key" "$bucket/$key" || true
+  if ! gsutil -q ls "$remote_cache_hashed"; then
+    echo "Uploading stack cache"
+    # This file is not needed and unecessarily large
+    rm -rf .stack/indices/Hackage/00-index.tar*
+    tar czf $local_cache_archive .stack
+    gsutil -m cp $local_cache_archive "$remote_cache_hashed"
   fi
 
-  rm -rf .stack/indices/Hackage/00-index.tar*
-  tar czf stack.tar.gz .stack
-
-  if ! sha256sum --check stack.tar.gz.sha256; then
-    sha256sum stack.tar.gz > stack.tar.gz.sha256
-    gsutil -m cp stack.tar.gz* "$bucket/v3/" || true
+  if [ "$BRANCH_NAME" = "master" ]; then
+    echo "Setting master cache to current cache"
+    gsutil -m cp "$remote_cache_hashed" "$remote_cache_master"
   fi
 }

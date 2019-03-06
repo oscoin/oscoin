@@ -17,11 +17,12 @@ import qualified Data.Set as Set
 
 import           Radicle (FromRad(..), ToRad(..))
 import qualified Radicle.Extended as Rad
+import           Radicle.Internal.Annotation (WithPos)
 
 type Result a = Either Text a
 type Dict = Map.Map Text Rad.Value
 
-(.:) :: FromRad a => Dict -> Text -> Result a
+(.:) :: FromRad WithPos a => Dict -> Text -> Result a
 (.:) dict key =
     case Map.lookup key dict of
         Just v  -> fromRad v
@@ -43,22 +44,27 @@ typeMismatch expected actual =
     throwError $ "expected " <> expected <> ", encountered " <> name
   where
     name = case actual of
-             Rad.Atom _    -> "Atom"
-             Rad.Boolean _ -> "Boolean"
-             Rad.Dict _    -> "Dict"
-             Rad.Keyword _ -> "Keyword"
-             Rad.Lambda{}  -> "Lambda"
-             Rad.List _    -> "List"
-             Rad.Number _  -> "Number"
-             Rad.PrimFn _  -> "Primop"
-             Rad.Ref _     -> "Ref"
-             Rad.String _  -> "String"
-             Rad.Vec _     -> "Vec"
+        Rad.Atom{}       -> "Atom"
+        Rad.Boolean{}    -> "Boolean"
+        Rad.Dict{}       -> "Dict"
+        Rad.Keyword{}    -> "Keyword"
+        Rad.Lambda{}     -> "Lambda"
+        Rad.List{}       -> "List"
+        Rad.Number{}     -> "Number"
+        Rad.PrimFn{}     -> "Primop"
+        Rad.Ref{}        -> "Ref"
+        Rad.String{}     -> "String"
+        Rad.Vec{}        -> "Vec"
+        Rad.VState{}     -> "VState"
+        Rad.VEnv{}       -> "VEnv"
+        Rad.LambdaRec{}  -> "LambdaRec"
+        Rad.ProcHandle{} -> "ProcHandle"
+        Rad.Handle{}     -> "Handle"
 
-instance ToRad a => ToRad (Set a) where
+instance ToRad WithPos a => ToRad WithPos (Set a) where
     toRad = toRad . Set.toList
 
-instance (FromRad a, Ord a) => FromRad (Set a) where
+instance (FromRad WithPos a, Ord a) => FromRad WithPos (Set a) where
     fromRad val = Set.fromList <$> fromRad val
 
 parseRadicleKeyword :: Rad.Value -> Result Text

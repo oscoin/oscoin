@@ -201,7 +201,8 @@ initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env c
 initRadicleEnv bindings =
     Rad.Env $ foldl' addBinding Radicle.pureEnv bindings
   where
-    addBinding env (id, value) = Radicle.addBinding (Radicle.unsafeToIdent id) value env
+    addBinding env (id, value) =
+        Radicle.addBinding (Radicle.unsafeToIdent id) Nothing value env
 
 -- | Adds a reference holding @value@ and binds @name@ to the reference
 addRadicleRef :: Text -> Radicle.Value -> Rad.Env c -> Rad.Env c
@@ -210,7 +211,7 @@ addRadicleRef name value (Rad.Env env) =
   where
     env' = snd $ runIdentity $ Radicle.runLang env $ do
         ref <- Radicle.newRef value
-        Radicle.defineAtom (Radicle.unsafeToIdent name) ref
+        Radicle.defineAtom (Radicle.unsafeToIdent name) Nothing ref
 
 
 -- | Run a 'Session' with the given initial node state

@@ -22,6 +22,7 @@ import           Oscoin.Data.Tx (Tx(..))
 
 import           Codec.Serialise (Serialise)
 import           Data.Aeson (ToJSON, toJSON)
+import           Data.Copointed (copoint)
 import           Data.Default (Default(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
@@ -33,8 +34,7 @@ import qualified Text.Show as Show
 newtype Env c = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 
 instance Show.Show (Env c) where
-    show (Env inner) =
-        T.unpack . Rad.prettyValue . Rad.toRad $ Rad.bindingsEnv inner
+    show = show . Rad.bindingsEnv . fromEnv
 
 type RadTx c = Tx c Rad.Value
 
@@ -61,10 +61,10 @@ instance Query (Env c) where
 
     query path (Env bindings) = do
         ident <- Rad.mkIdent (T.intercalate "/" path)
-        val <- Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
-        case val of
+        val   <- Map.lookup ident (Rad.fromEnv $ Rad.bindingsEnv bindings)
+        case copoint val of
             Rad.Ref ref -> lookupReference ref bindings
-            _           -> pure val
+            val'        -> pure val'
 
 data Program c = Program
     { progValue   :: Rad.Value

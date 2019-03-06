@@ -1,4 +1,7 @@
+{-# LANGUAGE NoStrictData #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Crypto.Hash.Mock
     ( MockHash(..)
     , Hash(..)
@@ -41,7 +44,9 @@ data MockHash = MockHash deriving (Eq, Ord, Show)
 instance HasHashing MockCrypto where
     type HashAlgorithm MockCrypto = MockHash
 
-    newtype Hash MockCrypto = XxHash { fromMockHash :: Word64 } deriving (Eq, Ord)
+    -- Nb.: `NoStrictData` due to https://ghc.haskell.org/trac/ghc/ticket/16141
+    newtype Hash MockCrypto = XxHash { fromMockHash :: Word64 }
+        deriving (Eq, Ord)
 
     fromByteArray = XxHash . hashByteArray
 

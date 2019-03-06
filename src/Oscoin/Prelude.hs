@@ -368,16 +368,7 @@ import           Control.Concurrent.Async as X
                  , withAsyncOn
                  )
 import           Control.Monad.STM as X
-                 ( STM
-                 , always
-                 , alwaysSucceeds
-                 , atomically
-                 , catchSTM
-                 , check
-                 , orElse
-                 , retry
-                 , throwSTM
-                 )
+                 (STM, atomically, catchSTM, check, orElse, retry, throwSTM)
 
 import           Foreign.Ptr as X (IntPtr, WordPtr)
 import           Foreign.StablePtr as X (StablePtr)

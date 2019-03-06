@@ -1,39 +1,5 @@
-resolver: lts-12.17
-
+resolver: snapshot.yaml
 packages:
 - .
-
-extra-deps:
-- algebraic-graphs-0.1.1.1
-- base58-bytestring-0.1.0
-- cacophony-0.10.1
-- cborg-0.2.1.0
-- half-0.3
-- reroute-0.5.0.0
-- serialise-0.2.1.0
-- Spock-0.13.0.0
-- Spock-core-0.13.0.0
-- formatting-6.3.7 # Handy to have a Buildable [a] instance
-- pretty-terminal-0.1.0.0
-- tasty-fail-fast-0.0.3
-- QuickCheck-2.12.6.1
-- xxhash-ffi-0.2.0.0
-
-- git: http://git.oscoin.io/radicle
-  commit: 12707c83663909d303e4daf1806f22a779be7598
-
-- git: https://github.com/oscoin/avl-auth
-  commit: c28e58e5de980697add9905845c82c844f2928b0
-
-- git: https://github.com/oscoin/gossip
-  commit: 7da6fed6821cc0452ef194522c3cc59019ab7f53
-
-- git: https://github.com/oscoin/ipfs
-  commit: 421c5fc975b8ef030ba5e631af424be6c7fdd2bb
-  subdirs:
-      - binary-varint
-      - multihash-cryptonite
-      - multihash-serialise
-
 ghc-options:
   "$locals": -fhide-source-paths

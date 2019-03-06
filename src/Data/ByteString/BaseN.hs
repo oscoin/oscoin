@@ -305,19 +305,19 @@ decode at = case decodeAtBaseEither at (encodedBytes at) of
 -- using the functions from $decoding, and throws away the result.
 
 validBase16 :: ByteString -> Maybe (AtBase 16)
-validBase16 bs = const (BaseN bs) <$> decodeBase16 bs
+validBase16 bs = BaseN bs <$ decodeBase16 bs
 
 validBase16Either :: ByteString -> Either String (AtBase 16)
 validBase16Either bs = second (const $ BaseN bs) $ decodeBase16Either bs
 
 validBase58 :: ByteString -> Maybe (AtBase 58)
-validBase58 bs = const (BaseN bs) <$> decodeBase58 bs
+validBase58 bs = BaseN bs <$ decodeBase58 bs
 
 validBase58Either :: ByteString -> Either String (AtBase 58)
 validBase58Either bs = second (const $ BaseN bs) $ decodeBase58Either bs
 
 validBase64 :: ByteString -> Maybe (AtBase 64)
-validBase64 bs = const (BaseN bs) <$> decodeBase64 bs
+validBase64 bs = BaseN bs <$ decodeBase64 bs
 
 validBase64Either :: ByteString -> Either String (AtBase 64)
 validBase64Either bs = second (const $ BaseN bs) $ decodeBase64Either bs

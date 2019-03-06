@@ -8,7 +8,7 @@ license: BSD4
 github: oscoin/oscoin
 
 dependencies:
-  - base >=4.11.1.0 && <4.12
+  - base >=4.11.1.0 && <5
 
 data-files:
   - data/blockstore.sql
@@ -67,6 +67,7 @@ library:
     - multihash-serialise
     - network
     - optparse-applicative
+    - pointed
     - prettyprinter
     - pretty-terminal
     - protolude

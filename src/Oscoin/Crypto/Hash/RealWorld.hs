@@ -1,5 +1,8 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE NoStrictData         #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.Crypto.Hash.RealWorld where
 
 import           Oscoin.Prelude
@@ -46,6 +49,9 @@ instance HasHashing Crypto where
     --
     -- Textual representations use base-58 encoding. Serialisation and
     -- deserialisation via "Crypto.Hash.Multi".
+    --
+    -- Nb.: We need to `NoStrictData` this module due to
+    -- https://ghc.haskell.org/trac/ghc/ticket/16141
     newtype Hash Crypto =
         Hash { fromHash :: Digest (HashAlgorithm Crypto) }
         deriving (Eq, Ord, ByteArrayAccess)
