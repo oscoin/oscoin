@@ -109,10 +109,8 @@ withGossip
        , Serialise (BlockHash c)
        )
     => Telemetry.Handle
-    -> NodeAddr Identity c
-    -- ^ Node identity (\"self\")
-    -> [NodeAddr Maybe c]
-    -- ^ Initial peers to connect to
+    -> SelfAddr c
+    -> [SeedAddr c]
     -> Storage c tx s IO
     -> Handshake e (NodeId c) (Wire c) o
     -> (Gossip.Run.Env (NodeId c) -> IO a)

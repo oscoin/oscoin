@@ -41,7 +41,7 @@ data Args = Args
     { host          :: HostName
     , gossipPort    :: PortNumber
     , apiPort       :: PortNumber
-    , seeds         :: [P2P.NodeAddr Maybe Crypto]
+    , seeds         :: [P2P.SeedAddr Crypto]
     , genesis       :: FilePath
     , noEmptyBlocks :: Bool
     , keysPath      :: Maybe FilePath

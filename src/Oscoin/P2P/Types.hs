@@ -5,6 +5,8 @@ module Oscoin.P2P.Types
     , mkNodeId
     , fromNodeId
 
+    , SelfAddr
+    , SeedAddr
     , NodeAddr(..)
     , readNodeAddr
 
@@ -51,6 +53,12 @@ instance (Serialise (PK c))          => Serialise (NodeId c)
 
 mkNodeId :: PK c -> NodeId c
 mkNodeId = NodeId
+
+-- | 'NodeAddr' of this node. Must specify a 'NodeId'.
+type SelfAddr = NodeAddr Identity
+
+-- | 'NodeAddr' of a seed node. May specify a 'NodeId'.
+type SeedAddr = NodeAddr Maybe
 
 data NodeAddr f c = NodeAddr
     { nodeId   :: f (NodeId c)
