@@ -1,14 +1,13 @@
 {-# LANGUAGE UndecidableInstances #-}
--- | This module provides the 'runCLI' and 'runCLIWithState' functions
--- to run the CLI in a test environment. The test environment is a
--- state monad that mocks the API client and the Key Store.
+-- | This module provides the 'runCLI' function to run the CLI in a test
+-- environment. The test environment is a state monad that mocks the API client
+-- and the Key Store.
 --
 -- The module also exports assertions to test CLI behavior.
 module Oscoin.Test.CLI.Helpers
     (
     -- * Run the CLI
       runCLI
-    , runCLIWithState
     , TestCommandState(..)
 
     -- * Sandbox
@@ -25,7 +24,6 @@ import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
-import           Oscoin.CLI.Spinner (newTestSpinner)
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Time as Time
@@ -44,19 +42,16 @@ import           Test.Tasty.HUnit.Extended
 
 
 -- | Run the CLI in a test environment and print the result and the
--- final TestCommandState
-runCLI :: IsCrypto c => [String] -> IO (TestCommandState c)
-runCLI args = runCLIWithState args identity
-
--- | Same as @runCLI@ but accepts an additional function that allows
--- you to modify the initial state of the test environment before
--- running the command.
-runCLIWithState
+-- final TestCommandState.
+--
+-- The function argument allows to modify the initial state of the test
+-- environment before running the command.
+runCLI
     :: IsCrypto c
     => [String]
     -> (TestCommandState c -> TestCommandState c)
     -> IO (TestCommandState c)
-runCLIWithState args setupState = do
+runCLI args setupState = do
     storedKeyPair <- Crypto.generateKeyPair
     -- We don't seem to care about overriding the location of the keys for
     -- the 'TestCommandState', as the 'HOME' env var is overwritten with a
@@ -91,13 +86,11 @@ data TestCommandState c = TestCommandState
     }
 
 instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
-    sleep _ = pure ()
-    putLine t = putStr (t <> "\n")
-    putString t = modify $ \s -> s { commandOutput = commandOutput s <> t }
-    withSpinner _ _ = (newTestSpinner >>=)
-    progress _ _ = pure ()
+    sleep _       = pure ()
+    putLine t     = putStr (t <> "\n")
+    putString t   = modify $ \s -> s { commandOutput = commandOutput s <> t }
     readRadFile _ = pure $ Left "can't read file in tests"
-    getTime = pure Time.epoch
+    getTime       = pure Time.epoch
 
 
 instance MonadRandom (TestCommandRunner c) where

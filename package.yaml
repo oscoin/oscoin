@@ -13,7 +13,6 @@ dependencies:
 data-files:
   - data/blockstore.sql
   - data/config.yaml
-  - data/rad/prelude.rad
   - data/genesis.yaml
 
 flags:
@@ -27,7 +26,6 @@ library:
   dependencies:
     - Spock
     - aeson
-    - ansi-terminal
     - async
     - avl-auth
     - base16-bytestring

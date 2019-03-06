@@ -59,8 +59,10 @@ a simple CLI command, with support for flags.
 
 ```console
 docker run eu.gcr.io/opensourcecoin/oscoin --help
-Usage: oscoin [-h|--host ARG] [--gossip-port ARG] [--api-port ARG] [--seeds ARG]
-              [--prelude ARG] [--difficulty ARG]
+Usage: oscoin [-h|--host ARG] [--gossip-port ARG] [--api-port ARG]
+              --seed HOST:PORT [--genesis ARG] [--no-empty-blocks]
+              [--keys KEY-PATH (e.g. ~/.config/oscoin)] [-e|--environment ENV]
+              [--ekg-host ARG] [--ekg-port ARG]
   Oscoin Node
 
 Available options:
@@ -70,9 +72,20 @@ Available options:
   --gossip-port ARG        Port number to bind to for gossip (default: 6942)
   --api-port ARG           Port number to bind to for the HTTP
                            API (default: 8477)
-  --seeds ARG              Path to YAML file describing gossip seed nodes
-  --prelude ARG            Path to radicle prelude
-  --difficulty ARG         Mining difficulty
+  --seed HOST:PORT         One or more gossip seed nodes to connect to. The
+                           first node in a new network may use its own address.
+  --genesis ARG            Path to genesis file
+  --no-empty-blocks        Do not generate empty blocks
+  --keys KEY-PATH (e.g. ~/.config/oscoin)
+                           The optional path to the folder containing the oscoin
+                           keys. If not specified, defaults to a path inside the
+                           Xdg directory.
+  -e,--environment ENV     The environment this node is running in. One between
+                           production,development,testing. (default: development)
+  --ekg-host ARG           Host name to bind to for the EKG
+                           server (default: "0.0.0.0")
+  --ekg-port ARG           Port number to bind to for the EKG
+                           server (default: 8090)
 ```
 
 If an image expects certain paths to exists at run-time, those need to be volume mounted (e.g. private keys).

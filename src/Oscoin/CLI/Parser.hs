@@ -17,7 +17,6 @@ import           Oscoin.Environment (Environment)
 import qualified Oscoin.Environment as Env
 
 import qualified Data.Text as T
-import           Numeric.Natural
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
@@ -43,11 +42,10 @@ mainParser :: Parser CLI
 mainParser =
     CLI <$> keyPathParser
         <*> environmentParser
-        <*> subparser (
-       command "revision" (revisionParser `withInfo` "Revision commands")
-    <> command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
-    <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
-    )
+        <*> subparser
+            ( command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
+           <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
+            )
 
 keyPathParser :: Parser (Maybe FilePath)
 keyPathParser = optional (option str (
@@ -69,26 +67,6 @@ environmentParser = option (maybeReader (Env.fromText . toS)) (
                           <> value Env.Development
                           <> showDefaultWith (toS . Env.toText)
                     )
-
-
-revisionParser :: Parser Command
-revisionParser = subparser
-    $  command "create" (revisionCreate `withInfo` "Create a revision")
-    <> command "list"   (revisionList `withInfo` "List revisions")
-    <> command "merge"  (revisionMerge `withInfo` "Merge a revision")
-    where
-        revisionCreate = RevisionCreate <$> confirmationsOption
-        revisionList  = pure RevisionList
-        revisionMerge = RevisionMerge <$> argument auto (metavar "REV-ID")
-
-confirmationsOption :: Parser Natural
-confirmationsOption = option auto
-    (  long "confirmations"
-    <> help "Number of block confirmations to wait for"
-    <> value (3 :: Natural)
-    <> showDefault
-    <> metavar "N"
-    )
 
 keyPairParser :: Parser Command
 keyPairParser = subparser
