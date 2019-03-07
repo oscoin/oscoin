@@ -5,3 +5,4 @@ vendor/
 .ghci.local
 oscoin.cabal
 tags
+*.prof*

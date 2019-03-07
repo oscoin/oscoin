@@ -52,7 +52,7 @@ tests Dict =
         let accepts = ("*" // "*") : ctypes
         codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
         [ testProperty (T.unpack $ prettyCodec codec) (
-            once $ monadicIO $ do
+            monadicIO $ do
                 HTTPTest{..} <- mkTest codec
                 liftIO $ runSession testState testSession )]
 

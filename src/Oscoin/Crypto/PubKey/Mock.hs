@@ -35,8 +35,8 @@ instance HasDigitalSignature MockCrypto where
         sig == pk
 
     generateKeyPair = do
-        pk  <- getRandomBytes 16
-        sk0 <- BS.unpack <$> getRandomBytes 16
+        pk  <- getRandomBytes 8
+        sk0 <- BS.unpack <$> getRandomBytes 8
         -- Pad the SK at the end, otherwise the xor trick won't work.
         let sk = if BS.length pk > length sk0
                     then sk0 <> replicate (BS.length pk - length sk0) 0

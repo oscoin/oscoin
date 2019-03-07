@@ -8,14 +8,9 @@ import           Oscoin.Prelude
 import           Oscoin.Data.RadicleTx as Rad.Tx
 import qualified Radicle.Extended as RadX
 
-import           Data.Either (fromRight)
-import           Data.Functor.Identity (Identity(..))
 import qualified Data.IntMap as IntMap
-import qualified Data.Map as Map
-import           Data.Scientific (Scientific)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
-import           Text.Read (readMaybe)
 
 import           Radicle
 import qualified Radicle.Internal.Core as Radicle
@@ -33,43 +28,16 @@ instance Arbitrary (Rad.Tx.Env c) where
 instance Arbitrary r => Arbitrary (Radicle.Env r) where
     arbitrary = Radicle.Env . Map.map (Radicle.Docd Nothing) <$> arbitrary
 
+-- | Generating a fully-fledged and diversified radicle 'Value' is going to
+-- slow down tests considerably, therefore we stick to some trivial types.
 instance Arbitrary Value where
-    -- We have to untag/tagDefault to make sure there's no traces of the original
+    -- We have to 'tagDefault' to make sure there's no traces of the original
     -- parsed value in the AST annotations.
-    arbitrary = RadX.tagDefault
-              . Radicle.untag
-              . fromRight (Radicle.List [])
-              . Radicle.parse "Arbitray"
-              . RadX.prettyValue
-            <$> sized go
+    arbitrary = RadX.tagDefault <$> frequency freqs
       where
-        -- There's no literal syntax for dicts, only the 'dict' primop. If we
-        -- generated them directly, we would generate something that can only
-        -- be got at after an eval, and which doesn't really correspond to
-        -- anything a user can write. So we don't generate dicts directly,
-        -- instead requiring they go via the primop.
-        freqs = [ (3, Atom <$> (arbitrary `suchThat` (\x -> not (isPrimop x || isNum x))))
-                , (3, Boolean <$> arbitrary)
-                , (3, Number <$> arbitrary)
-                , (1, List <$> sizedList)
-                , (6, PrimFn <$> elements (Map.keys $ getPrimFns prims))
-                , (1, Lambda <$> sizedList
-                             <*> scale (`div` 3) arbitrary
-                             <*> scale (`div` 3) arbitrary)
+        freqs = [ (50, Boolean <$> arbitrary)
+                , (50, Number <$> arbitrary)
                 ]
-        go n | n == 0 = frequency $ first pred <$> freqs
-             | otherwise = frequency freqs
-
-        sizedList :: Arbitrary a => Gen [a]
-        sizedList = sized $ \n -> do
-            k <- choose (0, n)
-            scale (`div` (k + 1)) $ vectorOf k arbitrary
-
-        prims :: Radicle.PrimFns Identity
-        prims = purePrimFns
-
-        isPrimop x = x `elem` Map.keys (getPrimFns prims)
-        isNum x = isJust (readMaybe (toS $ fromIdent x) :: Maybe Scientific)
 
 instance Arbitrary Radicle.Ident where
     arbitrary = ((:) <$> firstL <*> rest) `suchThatMap` (mkIdent . toS)

@@ -9,6 +9,10 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 
 import           Codec.Serialise
+import qualified Codec.Serialise as CBOR
+import qualified Codec.Serialise.Decoding as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
+import           Control.Monad.Fail (fail)
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess)
@@ -53,7 +57,25 @@ instance ( Serialise (PK c)
          , Serialise (BlockHash c)
          , Serialise msg
          , Serialise (Signature c)
-         ) => Serialise (Tx c msg)
+         ) => Serialise (Tx c msg) where
+  encode Tx{..} =
+       CBOR.encodeListLen 6
+    <> CBOR.encodeWord 0
+    <> CBOR.encode txMessage
+    <> CBOR.encode txPubKey
+    <> CBOR.encode txChainId
+    <> CBOR.encode txNonce
+    <> CBOR.encode txContext
+  decode = do
+      pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+      case pre of
+          (6, 0) ->
+              Tx <$> CBOR.decode
+                 <*> CBOR.decode
+                 <*> CBOR.decode
+                 <*> CBOR.decode
+                 <*> CBOR.decode
+          e -> fail $ "Failed decoding Tx from CBOR: " ++ show e
 
 instance ( Crypto.HasHashing c
          , Crypto.Hashable c (Tx c Rad.Value)

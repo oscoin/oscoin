@@ -20,7 +20,7 @@ import           Oscoin.Crypto.PubKey (PK, unsign)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx(..))
 
-import           Codec.Serialise (Serialise)
+import           Codec.Serialise (Serialise(..))
 import           Data.Aeson (ToJSON, toJSON)
 import           Data.Copointed (copoint)
 import           Data.Default (Default(..))

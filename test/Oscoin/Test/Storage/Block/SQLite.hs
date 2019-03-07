@@ -50,7 +50,7 @@ withSqliteDB
     => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
     -> (a -> Sqlite.Handle c (RadTx c) DummySeal -> IO ())
     -> Property
-withSqliteDB genTestData action = once $ monadicIO $ do
+withSqliteDB genTestData action = monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
     liftIO $
         bracket (open ":memory:" blockScore >>= initialize defaultGenesis)
@@ -65,7 +65,7 @@ withMemStore
     => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
     -> (a -> Abstract.BlockStore c (RadTx c) DummySeal IO -> IO ())
     -> Property
-withMemStore genTestData action = once $ monadicIO $ do
+withMemStore genTestData action = monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
     liftIO $
         Sqlite.withBlockStore ":memory:" defaultGenesis blockScore $ action testData

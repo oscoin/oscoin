@@ -118,7 +118,7 @@ testSignRoundtrip Dict = do
         Crypto.fromHashed (Crypto.hash val)
 
 testOscoinMempool :: forall c. Dict (IsCrypto c) -> Property
-testOscoinMempool Dict = once $ monadicIO $ do
+testOscoinMempool Dict = monadicIO $ do
     -- Create a new mempool of account transactions.
     mp <- lift (Mempool.newIO @c)
 
@@ -153,7 +153,7 @@ testOscoinMempool Dict = once $ monadicIO $ do
     fromEvent _                    = Nothing
 
 testBlockStoreLookupBlock :: forall c. Dict (IsCrypto c) -> Property
-testBlockStoreLookupBlock Dict = once $ monadicIO $ do
+testBlockStoreLookupBlock Dict = monadicIO $ do
     blks <- pick (arbitraryBlockchain @c @() @())
     let g  = genesis blks
     let bs = BlockStore.initWithChain blks blockScore

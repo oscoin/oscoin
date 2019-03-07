@@ -13,7 +13,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Radicle.Extended as Rad
 
 instance ByteArrayAccess Rad.Value where
-    length           = length . LBS.toStrict . CBOR.serialise
+    length           = fromIntegral . LBS.length . CBOR.serialise
     withByteArray ba = withByteArray (LBS.toStrict $ CBOR.serialise ba)
 
 instance ByteArrayAccess Text where

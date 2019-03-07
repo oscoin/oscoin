@@ -14,6 +14,7 @@ import           Data.ByteArray (ByteArrayAccess, convert)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
+
 instance MonadRandom Gen where
     getRandomBytes n =
         convert <$> resize n (arbitrary :: Gen ByteString)
