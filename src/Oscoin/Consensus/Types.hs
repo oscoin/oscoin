@@ -22,12 +22,16 @@ data Consensus c tx s m = Consensus
     , cValidate :: Validate c tx s
     }
 
+-- | Scoring function for blockchains.
+type ChainScoreFn c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
+
 -- | Block validation function.
 type Validate c tx s =
        [Block c tx (Sealed c s)]     -- ^ Ancestors of block to be validated.
     -> Block c tx (Sealed c s)       -- ^ Block to be validated.
     -> Either (ValidationError c) () -- ^ Either an error or @()@.
 
+-- | A block validation error.
 data ValidationError c =
       InvalidParentHash       (Crypto.Hash c)
     -- ^ Parent block hash doesn't match

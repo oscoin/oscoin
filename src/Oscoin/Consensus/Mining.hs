@@ -65,6 +65,6 @@ mineGenesis mine blk = do
     result <- mine (\_ -> pure []) blk
     pure $ case result of
         Just sealedBlock ->
-            Right $ sealedBlock
+            Right sealedBlock
         Nothing ->
-            Left $ "can't mine genesis"
+            Left "can't mine genesis"

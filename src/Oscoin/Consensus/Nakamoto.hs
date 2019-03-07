@@ -32,17 +32,15 @@ import qualified Data.List.NonEmpty as NonEmpty
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.ToField (ToField)
 
+-- | Target block time.
 blockTime :: Duration
 blockTime = 1 * seconds
 
--- | The default difficulty at genesis.
+-- | The default target difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty
 defaultGenesisDifficulty =
     unsafeDifficulty 0x1d00ffff
     -- This is the original difficulty of Bitcoin at genesis.
-
-minGenesisDifficulty :: Difficulty
-minGenesisDifficulty = minDifficulty
 
 -- | A PoW nonce.
 type Nonce = Word32
@@ -55,6 +53,7 @@ newtype PoW = PoW Nonce
 emptyPoW :: PoW
 emptyPoW = PoW 0
 
+-- | The Nakamoto consensus definition.
 nakamotoConsensus
     :: ( Eq (Hash c)
        , AuthTree.MerkleHash (Hash c)
@@ -71,6 +70,7 @@ nakamotoConsensus = Consensus
     , cValidate = validateBlock
     }
 
+-- | Validate a 'Block' in relation with a prefix.
 validateBlock
     :: ( Eq (Hash c)
        , ByteArrayAccess (BlockHash c)
@@ -100,6 +100,7 @@ validateBlock prefix@(parent:_) blk
     t' = ts parent
     ts = sinceEpoch . blockTimestamp . blockHeader
 
+-- | Validate a 'Block' using only intrinsic block data.
 validateBlock'
     :: ( Eq (Hash c)
        , Serialise tx
@@ -121,6 +122,8 @@ validateBlock' b
   where
       bHeader = blockHeader b
 
+-- | Try to mine a Nakamoto 'Block'. Returns 'Nothing' if all possible values
+-- for the 'Nonce' have been tried without success.
 mineNakamoto
     :: forall c m.
        ( Monad m
@@ -150,10 +153,14 @@ mineNakamoto difiFn getBlocks unsealedBlock = do
 blockScore :: Block c tx s -> Score
 blockScore = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
--- | The chain score is the sum of all block scores.
+-- | Calculate the total score or \"weight\" of a chain.
 chainScore :: Blockchain c tx PoW -> Score
 chainScore = sum . map blockScore . blocks
 
+-- | Check whether or not a 'BlockHeader' has a valid proof-of-work 'Seal'.
+--
+-- For this to be the case, the actual difficulty must be below the target
+-- difficulty.
 hasPoW
     :: ( ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c s)
@@ -162,6 +169,7 @@ hasPoW
 hasPoW header =
     difficulty header < blockTargetDifficulty header
 
+-- | Calculate the actual difficulty of a block.
 difficulty
     :: ( ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c s)
@@ -171,14 +179,14 @@ difficulty
 difficulty = encodeDifficulty . os2ip . headerHash
 
 -- | Number of blocks to consider for difficulty calculation. Roughly 2 weeks
--- withh a 10 min block time.
+-- with a 10 minute block time.
 difficultyBlocks :: Depth
 difficultyBlocks = 2016
 
 -- | Calculate the difficulty of a blockchain.
 chainDifficulty :: [Block c tx s] -> Difficulty
 chainDifficulty [] =
-    minGenesisDifficulty
+    minDifficulty
 chainDifficulty (NonEmpty.fromList -> blks)
     | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 =
         encodeDifficulty $ fst (decodeDifficulty currentDifficulty)

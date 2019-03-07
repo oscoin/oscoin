@@ -20,10 +20,10 @@ module Oscoin.Storage.Block.Pure
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain.Block (Block)
-
+import           Oscoin.Consensus.Types (ChainScoreFn)
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import qualified Oscoin.Crypto.Blockchain as Blockchain
+import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed)
 
 import qualified Data.List as List

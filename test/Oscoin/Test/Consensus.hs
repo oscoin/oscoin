@@ -82,6 +82,7 @@ tests Dict config =
         ]
     ]
 
+-- | Tests whether simulated nodes converge to a single chain.
 propNetworkNodesConverge
     :: forall c s a m
      . (IsCrypto c, Serialise s, Ord s, TestableNode c s m a)

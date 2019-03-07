@@ -1,6 +1,6 @@
 -- | Loads all the consensus-related config values from a static file.
-module Oscoin.Consensus.Config (
-      Config(..)
+module Oscoin.Consensus.Config
+    ( Config(..)
     , getConfig
     ) where
 
@@ -19,9 +19,10 @@ configPath :: FilePath
 configPath = "data/config.yaml"
 
 
-data Config = Config {
-      maxBlockSize :: !Int
-    -- ^ The maximum block size (in bytes).
+-- | Consensus configuration parameters.
+data Config = Config
+    { maxBlockSize :: !Int
+    -- ^ The maximum block size in bytes.
     } deriving Show
 
 instance FromJSON Config where
@@ -29,8 +30,7 @@ instance FromJSON Config where
         maxBlockSize <- o .: "maxBlockSize"
         pure Config{..}
 
--- | Lookup the maximum size for a block (in bytes).
--- TODO(adn): Use a proper unit of measure.
+-- | Read the consensus configuration file from disk.
 getConfig :: Environment -> IO Config
 getConfig env = do
 

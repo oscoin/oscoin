@@ -1,7 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
-    , ChainScoreFn
     , TxLookup(..)
     , (|>)
     , unsafeToBlockchain
@@ -93,9 +92,6 @@ height chain = fromIntegral $ chainLength chain - 1
 -- | Returns the length of a chain, or total number of blocks including the genesis.
 chainLength :: Blockchain c tx s -> Int
 chainLength = NonEmpty.length . fromBlockchain
-
--- | Scoring function for blockchains.
-type ChainScoreFn c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
 
 data TxLookup c tx = TxLookup
     { txPayload       :: tx

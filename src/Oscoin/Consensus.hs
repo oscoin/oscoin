@@ -34,8 +34,8 @@ validateBlockchain validateBlock (Blockchain (blk :| blks)) =
     validateBlock blks blk *> validateBlockchain validateBlock (fromList blks)
 
 
--- | Validates the size (in bytes) for a block, comparing the serialised size
--- with the maximum allowed value as read from the configuration file.
+-- | Validates the size (in bytes) of a block, comparing the serialized size
+-- with the maximum allowed value as read from the configuration.
 validateBlockSize
     :: ( Serialise tx
        , Hashable c (BlockHeader c s)
