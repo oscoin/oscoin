@@ -68,6 +68,9 @@ newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeId c)) m a)
              , MonadIO
              , MonadTrans
              , MonadReader (Gossip.Run.Env (NodeId c))
+             , MonadThrow
+             , MonadCatch
+             , MonadMask
              )
 
 instance ( Hashable (Crypto.PublicKey c)
@@ -80,10 +83,10 @@ instance ( Hashable (Crypto.PublicKey c)
         env <- ask
         liftIO $
             uncurry (Gossip.Run.broadcast env)
-                . bimap toStrict toStrict . (,CBOR.serialise msg)
+                . bimap (toStrict . CBOR.serialise) (toStrict . CBOR.serialise)
                 $ case msg of
-                    BlockMsg blk -> CBOR.serialise $ blockHash blk
-                    TxMsg    tx  -> CBOR.serialise $ Crypto.hash @c tx
+                    BlockMsg blk -> (BlockId (blockHash blk),  msg)
+                    TxMsg    tx  -> (TxId (Crypto.hash @c tx), msg)
     {-# INLINE broadcast #-}
 
 instance MonadClock m => MonadClock (GossipT c m)
@@ -110,20 +113,17 @@ withGossip
        )
     => Telemetry.Handle
     -> SelfAddr c
-    -> [SeedAddr c]
+    -> Set (Maybe (NodeId c), SockAddr)
     -> Storage c tx s IO
     -> Handshake e (NodeId c) (Wire c) o
     -> (Gossip.Run.Env (NodeId c) -> IO a)
     -> IO a
-withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
+withGossip telemetryStore selfAddr peers Storage{..} handshake run = do
     self  <-
         Gossip.knownPeer
             (runIdentity (nodeId selfAddr))
-            (nodeHost selfAddr)
+            (hostToHostName (nodeHost selfAddr))
             (nodePort selfAddr)
-    peers <-
-        for peerAddrs $ \NodeAddr { nodeId, nodeHost, nodePort } ->
-            (nodeId,) <$> Gossip.resolve nodeHost nodePort
 
     Gossip.Run.withGossip
         self
@@ -134,7 +134,7 @@ withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
         (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
         (wrapLookup storageLookupBlock storageLookupTx)
         (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
-        peers
+        (toList peers) -- TODO(kim): make this a 'Set' in gossip, too
         run
   where
     scheduleInterval = 10

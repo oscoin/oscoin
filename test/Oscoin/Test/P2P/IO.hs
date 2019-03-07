@@ -19,41 +19,40 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog
 
 tests :: TestTree
-tests = testGroup "IO"
-    [ testGroup "Wire"
-        [ testProperty "Works: Streaming Server <-> Streaming Client"
-                        propStreamingHappy
-        , testProperty "Works: Framed Server <-> Framed Client"
-                        propFramedHappy
-        , testProperty "Works: Hybrid Server <-> Hybrid Client"
-                        propHybridHappy
-        , testProperty "Fails: Streaming Server <-> Framed Client"
-                        propStreamingServerFramedClient
-        , testProperty "Fails: Framed Server <-> Streaming Client"
-                        propFramedServerStreamingClient
-        ]
+tests = testGroup "Oscoin.Test.P2P.IO"
+    [ testProperty "prop_streamingHappy" prop_streamingHappy
+    , testProperty "prop_framedHappy"    prop_framedHappy
+    , testProperty "prop_hybridHappy"    prop_hybridHappy
+    , testProperty "prop_streamingServerFramedClientFails"
+                    prop_streamingServerFramedClientFails
+    , testProperty "prop_framedServerStreamingClientFails"
+                    prop_framedServerStreamingClientFails
     ]
 
 -- | For GHCi use.
 props :: IO Bool
 props = checkParallel $ Group "P2P.IO"
-    [ ("prop_streaming_happy",  propStreamingHappy)
-    , ("prop_framed_happy",     propFramedHappy)
-    , ("prop_hybrid_happy",     propHybridHappy)
-    , ("prop_streaming_framed", propStreamingServerFramedClient)
-    , ("prop_framed_streaming", propFramedServerStreamingClient)
+    [ ("prop_streamingHappy", prop_streamingHappy)
+    , ("prop_framedHappy"   , prop_framedHappy   )
+    , ("prop_hybridHappy"   , prop_hybridHappy   )
+    , ("prop_streamingServerFramedClientFails"
+      , prop_streamingServerFramedClientFails
+      )
+    , ("prop_framedServerStreamingClientFails"
+      , prop_framedServerStreamingClientFails
+      )
     ]
 
-propStreamingHappy :: Property
-propStreamingHappy = property $
+prop_streamingHappy :: Property
+prop_streamingHappy = property $
     forAll nonEmptyFrobs >>= compatible streamingServer streamingClient
 
-propFramedHappy :: Property
-propFramedHappy = property $
+prop_framedHappy :: Property
+prop_framedHappy = property $
     forAll nonEmptyFrobs >>= compatible framedServer framedClient
 
-propHybridHappy :: Property
-propHybridHappy = property $ do
+prop_hybridHappy :: Property
+prop_hybridHappy = property $ do
     framed    <- forAll nonEmptyFrobs
     streaming <- forAll nonEmptyFrobs
 
@@ -68,15 +67,15 @@ propHybridHappy = property $ do
 
     Just (framed <> streaming) === nonEmpty xs'
 
-propFramedServerStreamingClient :: Property
-propFramedServerStreamingClient = property $
+prop_framedServerStreamingClientFails :: Property
+prop_framedServerStreamingClientFails = property $
     forAll nonEmptyFrobs >>= incompatible server client
   where
     server s    = try $ framedServer s
     client p ys = streamingClient p ys `catchIO` const (pure ()) -- Ignore server disconnecting
 
-propStreamingServerFramedClient :: Property
-propStreamingServerFramedClient = property $
+prop_streamingServerFramedClientFails :: Property
+prop_streamingServerFramedClientFails = property $
     forAll nonEmptyFrobs >>= incompatible server client
   where
     server s    = try $ streamingServer s

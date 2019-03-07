@@ -44,6 +44,7 @@ library:
     - directory
     - direct-sqlite
     - dlist
+    - dns
     - ekg
     - ekg-core
     - fast-logger
@@ -52,6 +53,7 @@ library:
     - generics-sop
     - gossip
     - hashable
+    - hostname
     - http-api-data
     - http-client
     - http-media
@@ -69,9 +71,11 @@ library:
     - pointed
     - prettyprinter
     - pretty-terminal
+    - profunctors
     - protolude
     - radicle
     - random
+    - retry
     - safe-exceptions
     - semigroups
     - serialise
@@ -94,6 +98,8 @@ executables:
       ld-options: -static
     dependencies:
       - async
+      - containers
+      - iproute
       - managed
       - network
       - optparse-applicative
@@ -144,13 +150,16 @@ tests:
       - cryptonite
       - data-default
       - directory
+      - dns
       - filepath
       - formatting
       - hashable
       - hedgehog
+      - hedgehog-quickcheck
       - http-api-data
       - http-media
       - http-types
+      - iproute
       - memory
       - microlens
       - mtl
@@ -164,6 +173,7 @@ tests:
       - radicle
       - random
       - random-shuffle
+      - retry
       - safe-exceptions
       - serialise
       - sqlite-simple

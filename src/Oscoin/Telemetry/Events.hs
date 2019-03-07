@@ -2,10 +2,13 @@ module Oscoin.Telemetry.Events
     ( NotableEvent(..)
     ) where
 
+import           Oscoin.Prelude
+
 import qualified Oscoin.Consensus.Types as Consensus
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
+import qualified Oscoin.P2P.Disco as P2P.Disco
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Time (Duration)
 
@@ -24,6 +27,17 @@ data NotableEvent where
     -- | Triggered every time a new block is mined.
     BlockMinedEvent :: forall c. (Buildable (Hash c), HasHashing c)
                     => Hash c -> NotableEvent
+    -- | Triggered when broadcasting a newly mined block fails.
+    BlockBroadcastFailedEvent
+        :: forall c. (Buildable (Hash c), HasHashing c)
+        => Hash c
+        -> SomeException
+        -> NotableEvent
+    -- | Triggered when broadcasting a newly mined block succeeded.
+    BlockBroadcastEvent
+        :: forall c. (Buildable (Hash c), HasHashing c)
+        => Hash c
+        -> NotableEvent
     -- | Triggered every time a new block is (successfully) applied.
     BlockAppliedEvent :: forall c. (Buildable (Hash c), HasHashing c)
                       => Hash c -> NotableEvent
@@ -88,3 +102,5 @@ data NotableEvent where
     HandshakeEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
                    => P2P.HandshakeEvent (P2P.NodeId c)
                    -> NotableEvent
+    -- | Peer discovery discovery events
+    DiscoEvent :: P2P.Disco.DiscoEvent -> NotableEvent

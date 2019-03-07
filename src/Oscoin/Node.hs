@@ -64,6 +64,7 @@ import qualified Oscoin.Storage.State.Class as StateStoreClass
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
+import           Control.Retry (constantDelay, limitRetries, recovering)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
@@ -97,6 +98,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConse
 
 miner
     :: ( MonadIO              m
+       , MonadMask            m
        , P2P.MonadBroadcast c m
        , MonadClock           m
        , Serialise   tx
@@ -111,17 +113,42 @@ miner
     => NodeT c tx st s i m a
 miner = do
     Handle{hConfig} <- ask
-    let telemetryHandle = cfgTelemetry hConfig
+    let
+        tele :: HasCallStack => NotableEvent -> IO ()
+        tele = Telemetry.emit (cfgTelemetry hConfig)
     forever $ do
         nTxs <- Mempool.numTxs
         if nTxs == 0 && cfgNoEmptyBlocks hConfig
         then
             liftIO $ threadDelay $ 1000 * 1000
         else do
-            blk  <- mineBlock
+            blk <- mineBlock
             for_ blk $ \b -> do
-                lift   $ P2P.broadcast $ P2P.BlockMsg b
-                liftIO $ Telemetry.emit telemetryHandle (BlockMinedEvent (blockHash b))
+                let bhash = blockHash b
+                liftIO $ tele (BlockMinedEvent bhash)
+                lift (tryBroadcast b) >>= liftIO . tele . \case
+                    Left  e  -> BlockBroadcastFailedEvent bhash (toException e)
+                    Right () -> BlockBroadcastEvent bhash
+  where
+    tryBroadcast
+        :: ( MonadIO              m
+           , MonadMask            m
+           , P2P.MonadBroadcast c m
+           , Serialise s
+           , Serialise   tx
+           , Hashable  c tx
+           )
+        => Block c tx (Sealed c s)
+        -> m (Either IOException ())
+    tryBroadcast blk =
+        let
+            policy = limitRetries 5 <> constantDelay 10000
+            -- TODO(kim): gossip should allow us to intercept the `NoSuchPeer`
+            -- error here, too
+            hdlrs  = [const . Handler $ \(_ :: IOException) -> pure True]
+         in
+            try . recovering policy hdlrs . const $
+                P2P.broadcast (P2P.BlockMsg blk)
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.

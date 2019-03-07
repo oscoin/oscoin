@@ -55,4 +55,4 @@ source-repository-package
   subdir: multihash-serialise
 
 package sandi
-  flags: -with-conduit 
+  flags: -with-conduit

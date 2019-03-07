@@ -19,6 +19,8 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
+import qualified Oscoin.P2P.Disco as P2P.Disco
+import qualified Oscoin.P2P.Disco.MDns as MDns
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
@@ -31,16 +33,18 @@ import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
 import           Control.Monad.Managed (managed, runManaged)
+import           Data.IP (IP)
+import qualified Data.Set as Set
 import qualified Data.Yaml as Yaml
 import           Network.Socket (HostName, PortNumber)
 
 import           Options.Applicative
 
 data Args = Args
-    { host           :: HostName
+    { host           :: IP
     , gossipPort     :: PortNumber
     , apiPort        :: PortNumber
-    , seeds          :: [P2P.SeedAddr Crypto]
+    , discoOpts      :: P2P.Disco.Options
     , genesis        :: FilePath
     , noEmptyBlocks  :: Bool
     , keysPath       :: Maybe FilePath
@@ -54,10 +58,10 @@ args :: ParserInfo Args
 args = info (helper <*> parser) $ progDesc "Oscoin Node"
   where
     parser = Args
-        <$> option str
+        <$> option auto
             ( short 'h'
            <> long "host"
-           <> help "Host name to bind to for gossip"
+           <> help "IP address to bind to (both API and gossip)"
            <> value "127.0.0.1"
            <> showDefault
             )
@@ -73,14 +77,7 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> value 8477
            <> showDefault
             )
-        <*> some
-            ( option (eitherReader P2P.readNodeAddr)
-                ( long "seed"
-               <> help "One or more gossip seed nodes to connect to. \
-                       \The first node in a new network may use its own address."
-               <> metavar "HOST:PORT"
-                )
-            )
+        <*> P2P.Disco.discoParser
         <*> option str
             ( long "genesis"
            <> help "Path to genesis file"
@@ -171,13 +168,24 @@ main = do
                              Rad.txEval
                              consensus
 
+            disco <- managed $
+                let
+                    instr :: HasCallStack => P2P.Disco.DiscoEvent -> IO ()
+                    instr = Telemetry.emit telemetry . Telemetry.DiscoEvent
+                 in
+                    P2P.Disco.withDisco instr discoOpts $ Set.fromList
+                        [ MDns.Service "gossip" MDns.TCP host gossipPort
+                        , MDns.Service "http"   MDns.TCP host apiPort
+                        ]
+
+            seeds  <- liftIO disco
             gossip <- managed $
                 withGossip telemetry
                            P2P.NodeAddr { P2P.nodeId   = pure nid
-                                        , P2P.nodeHost = host
+                                        , P2P.nodeHost = P2P.numericHost host
                                         , P2P.nodePort = gossipPort
                                         }
-                           seeds
+                           (Set.map (Nothing,) seeds)
                            (storage node)
                            (Handshake.simpleHandshake keys)
 

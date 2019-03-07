@@ -19,22 +19,20 @@ import           Test.Tasty.Hedgehog (testProperty)
 {-# ANN module ("HLint: ignore Reduce duplication" :: String ) #-}
 
 tests :: Dict (IsCrypto c) -> TestTree
-tests d = testGroup "Handshake"
-    [ testProperty "Simple Handshake" (testSimpleHandshake d)
-    , testProperty "Secure Handshake" (testSecureHandshake d)
+tests d = testGroup "Oscoin.Test.P2P.Handshake"
+    [ testProperty "prop_simple" (prop_simpleHandshake d)
+    , testProperty "prop_secure" (prop_secureHandshake d)
     ]
 
 -- | For GHCi use.
 props :: Dict (IsCrypto c) -> IO Bool
-props d = checkParallel $ Group "P2P.Handshake"
-    [ ("test_simple", testSimpleHandshake d)
-    , ("test_secure", testSecureHandshake d)
+props d = checkParallel $ Group "Oscoin.Test.P2P.Handshake"
+    [ ("prop_simple", prop_simpleHandshake d)
+    , ("test_secure", prop_secureHandshake d)
     ]
 
-testSimpleHandshake
-    :: forall c. Dict (IsCrypto c)
-    -> Property
-testSimpleHandshake Dict = withTests 1 . property $ do
+prop_simpleHandshake :: forall c. Dict (IsCrypto c) -> Property
+prop_simpleHandshake Dict = withTests 1 . property $ do
     ((pkAlice :: PublicKey c, skAlice), (pkBob, skBob)) <- keyPairs
     ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
 
@@ -79,8 +77,8 @@ testSimpleHandshake Dict = withTests 1 . property $ do
     assertInvalidSignature x f =
         (=== Left Handshake.InvalidSignature) =<< evalIO (try (f x))
 
-testSecureHandshake :: forall c. Dict (IsCrypto c) -> Property
-testSecureHandshake Dict = withTests 1 . property $ do
+prop_secureHandshake :: forall c. Dict (IsCrypto c) -> Property
+prop_secureHandshake Dict = withTests 1 . property $ do
     ((pkAlice :: PublicKey c, skAlice), (pkBob, skBob)) <- keyPairs
     ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
 

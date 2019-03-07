@@ -18,20 +18,20 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
-tests = testGroup "Transport"
-    [ testProperty "Layered framed"    propFramed
-    , testProperty "Layered streaming" propStreaming
+tests = testGroup "Oscoin.Test.P2P.Transport"
+    [ testProperty "prop_framed"    prop_framed
+    , testProperty "prop_streaming" prop_streaming
     ]
 
 -- | For GHCi use.
 props :: IO Bool
-props = checkParallel $ Group "P2P.Transport"
-    [ ("prop_framed",    propFramed)
-    , ("prop_streaming", propStreaming)
+props = checkParallel $ Group "Oscoin.Test.P2P.Transport"
+    [ ("prop_framed",    prop_framed)
+    , ("prop_streaming", prop_streaming)
     ]
 
-propFramed :: Property
-propFramed = property $ do
+prop_framed :: Property
+prop_framed = property $ do
     bs <- forAll genBytes
     nl <- forAll $ Gen.int (Range.exponential 0 23)
     rs <-
@@ -48,8 +48,8 @@ propFramed = property $ do
   where
     mkLayer = Transport.framedEnvelope (pure . Pide) (pure . filling)
 
-propStreaming :: Property
-propStreaming = property $ do
+prop_streaming :: Property
+prop_streaming = property $ do
     bs <- forAll . map toList $ Gen.nonEmpty (Range.constant 1 42) genBytes
     rs <-
         liftIO $ do

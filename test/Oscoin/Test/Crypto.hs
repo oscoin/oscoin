@@ -22,6 +22,7 @@ import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess, convert)
 import qualified Data.Map as Map
 import           Database.SQLite.Simple.FromField
+import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.ToField
 import           Formatting.Buildable (Buildable)
 import           Oscoin.API.Types

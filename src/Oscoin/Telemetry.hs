@@ -18,12 +18,14 @@ module Oscoin.Telemetry
 
 import           Oscoin.Prelude
 
+import           Control.Concurrent.Async (AsyncCancelled(..))
 import qualified Data.Text as T
 import           Data.Text.Lazy.Builder (Builder)
 import           Formatting
 import           Formatting.Buildable as F
 import           GHC.Stack as GHC
-import           Lens.Micro
+import           Lens.Micro (SimpleGetter)
+import qualified Network.DNS as DNS
 import           Network.HTTP.Types as HTTP
 import           Network.Socket (SockAddr)
 import           Network.Wai as HTTP
@@ -40,6 +42,8 @@ import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (formatHash, formatHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey (PublicKey)
+import qualified Oscoin.P2P.Disco as Disco
+import qualified Oscoin.P2P.Disco.MDns as Disco
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
@@ -78,6 +82,15 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
         BlockMinedEvent blockHash ->
             Log.withNamespace "node" $
                 Log.infoM "mined block" fmtBlockHash blockHash
+        BlockBroadcastFailedEvent blockHash e ->
+            Log.withNamespace "node" $
+                Log.errM "block broadcast failed"
+                         (fmtBlockHash % " " % fexception)
+                         blockHash
+                         e
+        BlockBroadcastEvent blockHash ->
+            Log.withNamespace "node" $
+                Log.infoM "broadcast block" fmtBlockHash blockHash
         BlockAppliedEvent blockHash ->
             Log.withNamespace "storage" $
                 Log.debugM "applied block" fmtBlockHash blockHash
@@ -237,6 +250,56 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                          ex
             P2P.HandshakeComplete peer ->
                 Log.debugM "handshake complete" fmtPeer peer
+
+        DiscoEvent ev -> Log.withNamespace "disco" $ case ev of
+            Disco.MDnsResponderEvent r -> case r of
+                Disco.ResponderError e
+                  -- this happens on ^C, so not very interesting
+                  | Just AsyncCancelled <- fromException e -> pure ()
+                Disco.ResponderError e ->
+                  Log.errM "mDNS responder error" fexception e
+                Disco.ResponderWhatsTheQuestion _ sender ->
+                    Log.infoM "mDNS: invalid query type"
+                              (ftag "sender" % fmtSockAddr)
+                              sender
+                Disco.ResponderHaveNoAnswer q sender ->
+                    Log.infoM "mDNS: received query for unknown SRV record"
+                              ( ftag "q" % stext
+                              % " "
+                              % ftag "sender" % fmtSockAddr
+                              )
+                              (decodeUtf8With lenientDecode $ DNS.qname q)
+                              sender
+                -- TODO(kim): debug actual payload?
+                Disco.ResponderRecv _ sender ->
+                    Log.infoM "mDNS: received query"
+                              (ftag "sender" % fmtSockAddr)
+                              sender
+                Disco.ResponderSend _ recipient ->
+                    Log.debugM "mDNS: sending query"
+                               (ftag "recipient" % fmtSockAddr)
+                               recipient
+
+            Disco.MDnsResolverEvent r -> case r of
+                Disco.ResolverError e ->
+                    Log.errM "mDNS resolver error" fexception e
+                Disco.ResolverRecv _ from ->
+                    Log.infoM "mDNS: received response"
+                              (ftag "from" % fmtSockAddr)
+                              from
+
+            Disco.AddrInfoError ip port e ->
+                Log.errM "getaddrinfo failed"
+                         ( ftag "ip"   % shown
+                         % ftag "port" % shown
+                         % fexception
+                         )
+                         ip
+                         port
+                         e
+
+            Disco.DNSError e ->
+                Log.errM "DNS error" fexception e
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
@@ -256,6 +319,12 @@ toActions = \case
       ]
     BlockMinedEvent _ -> [
         CounterIncrease "oscoin.blocks_mined.total" noLabels
+      ]
+    BlockBroadcastFailedEvent _ _ -> [
+        CounterIncrease "oscoin.blocks_sent.errors.total" noLabels
+      ]
+    BlockBroadcastEvent _ -> [
+        CounterIncrease "oscoin.blocks_sent.total" noLabels
       ]
     BlockAppliedEvent _ -> [
         CounterIncrease "oscoin.blocks_applied.total" noLabels
@@ -387,6 +456,19 @@ toActions = \case
                 "oscoin.p2p.handshake.completions.total"
                 noLabels
             ]
+
+    DiscoEvent e -> case e of
+        Disco.MDnsResponderEvent Disco.ResponderError{} ->
+            [ CounterIncrease
+                "oscoin.disco.mdns_responder.errors.total"
+                noLabels
+            ]
+        Disco.MDnsResponderEvent Disco.ResponderRecv{} ->
+            [ CounterIncrease
+                "oscoin.disco.mdns_responder.requests.total"
+                noLabels
+            ]
+        _ -> []
 
 
 {------------------------------------------------------------------------------

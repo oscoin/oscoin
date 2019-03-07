@@ -4,11 +4,11 @@ module Integration.Test.Executable
 
 import           Oscoin.Prelude
 
-import           Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Char8 as C8
 
 import           System.IO (Handle)
 import           System.IO.Temp
-import           System.Random (randomRIO)
+import           System.Random (getStdGen, randomRIO, randoms)
 
 import           Test.Sandbox
 import           Test.Tasty
@@ -25,6 +25,7 @@ withOscoinExe f = do
     randomGossipPort <- randomRIO (6000, 7990)
     randomEkgPort    <- randomRIO (8000, 8990)
     randomSpockPort  <- randomRIO (9000, 10000)
+    randomNetwork    <- take 63 . randoms <$> getStdGen
 
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
@@ -40,6 +41,8 @@ withOscoinExe f = do
                                  , show (randomGossipPort :: Int)
                                  , "--keys"
                                  , keyPath
+                                 , "--network"
+                                 , randomNetwork
                                  , "--seed"
                                  , "127.0.0.1:" <> show (randomGossipPort :: Int)
                                  , "--ekg-port"
