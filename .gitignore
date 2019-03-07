@@ -6,3 +6,5 @@ vendor/
 oscoin.cabal
 tags
 *.prof*
+*.hp
+*.svg
