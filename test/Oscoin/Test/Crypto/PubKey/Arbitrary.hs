@@ -10,14 +10,29 @@ import           Oscoin.Prelude
 
 import           Crypto.Random.Types (MonadRandom(..))
 import           Data.ByteArray (ByteArrayAccess, convert)
+import qualified Data.ByteString as BS
+import qualified System.Random.SplitMix as SplitMix
 
 import           Test.QuickCheck
-import           Test.QuickCheck.Instances ()
 
 
-instance MonadRandom Gen where
-    getRandomBytes n =
-        convert <$> resize n (arbitrary :: Gen ByteString)
+newtype FastRandomBytes a = FRB (StateT SplitMix.SMGen Identity a)
+    deriving (Monad, Applicative, Functor, MonadState SplitMix.SMGen)
+
+instance MonadRandom FastRandomBytes where
+    getRandomBytes n = do
+        smgen <- get
+        let (bs, smgen') = BS.unfoldrN n gen smgen
+        put $ fromMaybe smgen smgen'
+        pure $ convert bs
+      where
+          gen :: SplitMix.SMGen -> Maybe (Word8, SplitMix.SMGen)
+          gen g =
+              let (i, g') = SplitMix.nextInt g
+              in Just (fromIntegral i, g')
+
+withFastRandomBytes :: SplitMix.SMGen -> FastRandomBytes a -> a
+withFastRandomBytes smgen (FRB m) = runIdentity $ evalStateT m smgen
 
 arbitrarySignedWith
     :: ( Arbitrary a
@@ -26,11 +41,14 @@ arbitrarySignedWith
        )
     => SK c
     -> Gen (Signed c a)
-arbitrarySignedWith pk =
-    arbitrary >>= sign pk
+arbitrarySignedWith pk = do
+    seed <- arbitrary
+    withFastRandomBytes (SplitMix.mkSMGen seed) . sign pk <$> arbitrary
 
 arbitraryKeyPair :: (HasHashing c, HasDigitalSignature c) => Gen (PK c, SK c)
-arbitraryKeyPair = generateKeyPair
+arbitraryKeyPair = do
+    seed <- arbitrary
+    pure $ withFastRandomBytes (SplitMix.mkSMGen seed) generateKeyPair
 
 arbitrarySigned
     :: forall a c.

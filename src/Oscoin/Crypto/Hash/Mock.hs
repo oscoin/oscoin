@@ -64,8 +64,8 @@ instance HasHashing MockCrypto where
 -- the xxhash.
 hashByteArray :: ByteArray ba => ba -> Word64
 hashByteArray ba =
-    let (b :: ByteString) = convert ba
-    in xxh64 b 0
+    let !(b :: ByteString) = convert ba
+    in b `deepseq` xxh64 b 0
 
 {------------------------------------------------------------------------------
   More-or-less-dubious instances

@@ -168,6 +168,7 @@ tests:
       - scientific
       - serialise
       - sqlite-simple
+      - splitmix
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1

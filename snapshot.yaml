@@ -18,6 +18,10 @@ packages:
 - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
 - xxhash-ffi-0.2.0.0
 
+  # https://github.com/nick8325/quickcheck/issues/234
+- git: https://github.com/oscoin/qc-instances
+  commit: e659eb65a421a91603de4d7645d370abf19aeeef
+
 - git: http://github.com/oscoin/radicle
   commit: eaf70a9e0b36af44d02d0372bc0ac2dcc3d1b29c
 

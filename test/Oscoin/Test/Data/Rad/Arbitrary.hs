@@ -9,6 +9,7 @@ import           Oscoin.Data.RadicleTx as Rad.Tx
 import qualified Radicle.Extended as RadX
 
 import qualified Data.IntMap as IntMap
+import qualified Data.Map.Strict as Map
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
@@ -17,7 +18,6 @@ import qualified Radicle.Internal.Core as Radicle
 import qualified Radicle.Internal.Doc as Radicle
 import           Radicle.Internal.Identifier
                  (isValidIdentFirst, isValidIdentRest)
-import           Radicle.Internal.PrimFns (purePrimFns)
 
 data Leniency = Lenient | Strict
     deriving (Eq, Show, Ord, Enum, Bounded)
