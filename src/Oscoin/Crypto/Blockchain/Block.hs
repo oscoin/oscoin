@@ -13,6 +13,7 @@ module Oscoin.Crypto.Blockchain.Block
     , Height
     , Depth
     , Score
+    , ScoreFn
     , Timestamp
 
     -- * Smart constructors and data getters
@@ -27,7 +28,6 @@ module Oscoin.Crypto.Blockchain.Block
     , headerHash
     , parentHash
     , withHeader
-    , blockScore
     , sealBlock
     , linkParent
     , emptyHeader
@@ -67,6 +67,9 @@ type Depth = Natural
 
 -- | Block score.
 type Score = Integer
+
+-- | A function that scores blocks.
+type ScoreFn tx c s = Block tx c s -> Score
 
 -- | This apparently-useless type allows us to divide the block world into
 -- two categories: unsealed vs sealed blocks. This is very useful as it creates
@@ -326,9 +329,6 @@ sealBlock seal blk =
     blk' = blk { blockHeader =
         (blockHeader blk) { blockSeal = SealedWith seal } }
 
-
-blockScore :: Block crypto tx s -> Integer
-blockScore = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
 hashState :: Crypto.Hashable c st => st -> StateHash c
 hashState = Crypto.fromHashed . Crypto.hash

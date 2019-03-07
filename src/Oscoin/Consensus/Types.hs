@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Consensus.Types
-    ( ChainScore
+    ( ChainScoreFn
     , Consensus(..)
     , Validate
     , ValidationError(..)
@@ -17,7 +17,7 @@ import qualified Generics.SOP as SOP
 
 -- | Represents an abstract consensus protocol.
 data Consensus c tx s m = Consensus
-    { cScore    :: ChainScore c tx s
+    { cScore    :: ChainScoreFn c tx s
     , cMiner    :: Miner c s m
     , cValidate :: Validate c tx s
     }
@@ -49,9 +49,6 @@ deriving instance Eq (Crypto.Hash c)   => Eq (ValidationError c)
 
 instance SOP.Generic (ValidationError c)
 instance SOP.HasDatatypeInfo (ValidationError c)
-
--- | Chain scoring function.
-type ChainScore c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
 
 -- | Block mining function.
 type Miner c s m = forall tx.

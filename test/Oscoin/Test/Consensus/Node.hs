@@ -19,6 +19,7 @@ module Oscoin.Test.Consensus.Node
 import           Oscoin.Prelude hiding (StateT, evalStateT, runStateT, show)
 
 import           Oscoin.Consensus.Class (MonadQuery(..))
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHash, Sealed, StateHash, Unsealed)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
@@ -63,7 +64,7 @@ withTestBlockStore
     -> n b
 withTestBlockStore action =
     let store = BlockStore
-          { scoreBlock      = Block.blockScore
+          { scoreBlock      = Nakamoto.blockScore
           , insertBlock     = \b ->
               modify (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
           , getGenesisBlock =
@@ -142,7 +143,7 @@ emptyTestNodeState
 emptyTestNodeState seal nid = TestNodeState
     { tnsStateStore   = StateStore.fromState genState
     , tnsMempool      = mempty
-    , tnsBlockstore   = BlockStore.Pure.genesisBlockStore genBlk
+    , tnsBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
     , tnsNodeId       = nid
     , tnsReceiptStore = ReceiptStore.emptyStore
     }

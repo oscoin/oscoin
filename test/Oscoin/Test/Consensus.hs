@@ -74,7 +74,7 @@ tests Dict config =
                     { blockTimestamp = fromEpoch (1 * seconds)
                     , blockPrevHash = blockHash genBlk
                     } []
-                blkStore = insert nextBlk $ genesisBlockStore genBlk
+                blkStore = insert nextBlk $ genesisBlockStore genBlk Nakamoto.blockScore
                 chain = unsafeToBlockchain $ getBlocks 2 blkStore
             tip chain @?= nextBlk
             orphans blkStore @?= mempty

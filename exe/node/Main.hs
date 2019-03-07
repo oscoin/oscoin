@@ -22,7 +22,6 @@ import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Storage (hoistStorage)
-import           Oscoin.Storage.Block.Abstract (defaultScoreFunction)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
@@ -127,7 +126,7 @@ main = do
     forkEkgServer metricsStore ekgHost ekgPort
 
     withStdLogger (Log.configForEnvironment environment) $ \lgr -> Log.withExceptionLogged lgr $
-        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) defaultScoreFunction $ \blkStore -> do
+        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) Nakamoto.blockScore $ \blkStore -> do
             let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
             withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
                      nid

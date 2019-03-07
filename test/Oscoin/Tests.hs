@@ -6,6 +6,7 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.Config as Consensus
+import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), genesis, height, unsafeToBlockchain)
 import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
@@ -155,7 +156,7 @@ testBlockStoreLookupBlock :: forall c. Dict (IsCrypto c) -> Property
 testBlockStoreLookupBlock Dict = once $ monadicIO $ do
     blks <- pick (arbitraryBlockchain @c @() @())
     let g  = genesis blks
-    let bs = BlockStore.initWithChain blks
+    let bs = BlockStore.initWithChain blks blockScore
     liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
 
 propOscoinBlockStore
@@ -166,7 +167,7 @@ propOscoinBlockStore chainGen =
     forAll (resize 10 chainGen) $ \chain -> do
         let foldEval x xs = Right ((), xs <> x)
         let blks = NonEmpty.toList $ fromBlockchain chain
-        let bs   = BlockStore.fromOrphans blks (genesis chain)
+        let bs   = BlockStore.fromOrphans blks (genesis chain) blockScore
         let best = BlockStore.getBlocks (fromIntegral $ height chain) bs
         let z    = snd $ evalBlockchain foldEval def (unsafeToBlockchain best)
         let txs  = concatMap (toList . blockData) $ reverse blks

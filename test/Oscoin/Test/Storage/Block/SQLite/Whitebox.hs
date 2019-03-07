@@ -10,6 +10,7 @@ import           Oscoin.Prelude
 import           Codec.Serialise
 import           Data.ByteArray.Orphans ()
 
+import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blocks, height, showChainDigest, takeBlocks)
 import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)

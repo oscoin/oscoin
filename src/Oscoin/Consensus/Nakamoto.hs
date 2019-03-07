@@ -10,6 +10,7 @@ module Oscoin.Consensus.Nakamoto
     , hasPoW
     , chainDifficulty
     , chainScore
+    , blockScore
     , blockTime
     , validateBlock
     ) where
@@ -144,8 +145,14 @@ mineNakamoto difiFn getBlocks unsealedBlock = do
         | nonce < maxBound  = mine hdr (PoW (nonce + 1))
         | otherwise         = Nothing
 
-chainScore :: Blockchain c tx PoW -> Int
-chainScore = fromIntegral . height
+-- | The block score is equivalent to the /average/ difficulty of computing
+-- its proof-of-work.
+blockScore :: Block c tx s -> Score
+blockScore = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
+
+-- | The chain score is the sum of all block scores.
+chainScore :: Blockchain c tx PoW -> Score
+chainScore = sum . map blockScore . blocks
 
 hasPoW
     :: ( ByteArrayAccess (BlockHash c)

@@ -6,7 +6,7 @@ module Oscoin.Storage.Block.StateT
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, Score, Sealed)
+                 (Block, BlockHash, ScoreFn, Sealed)
 import           Oscoin.Crypto.Hash (Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
@@ -17,14 +17,14 @@ type Handle c tx s m = StateT (Pure.Handle c tx s) m
 withBlockStore :: (Ord (BlockHash c), Monad m, Hashable c tx)
                => Block c tx (Sealed c s)
                -- ^ The genesis block (used to initialise the store)
-               -> (Block c tx (Sealed c s) -> Score)
+               -> ScoreFn c tx (Sealed c s)
                -- ^ A block scoring function
                -> (Abstract.BlockStore c tx s (Handle c tx s m) -> Handle c tx s m b)
                -- ^ Action to use the 'BlockStore'.
                -> m b
 withBlockStore gen score action =
-    let hdl = Pure.genesisBlockStore gen
-        newBlockStore  =
+    let hdl = Pure.genesisBlockStore gen score
+        newBlockStore =
                 Abstract.BlockStore {
                   Abstract.scoreBlock      = score
                 , Abstract.insertBlock     = modify . Pure.insert

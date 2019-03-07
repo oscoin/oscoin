@@ -7,7 +7,6 @@ module Oscoin.Storage.Block.Pure
     , genesisBlockStore
     , fromOrphans
     , initWithChain
-    , initWithChain'
 
     , getBlocks
     , getTip
@@ -36,7 +35,7 @@ import           Text.Show (Show(..))
 data Handle c tx s = Handle
     { hChains  :: Map (BlockHash c) (Blockchain c tx s)       -- ^ Chains leading back to genesis.
     , hOrphans :: Map (BlockHash c) (Block c tx (Sealed c s)) -- ^ Orphan blocks.
-    , hScoreFn :: ScoringFunction c tx s                      -- ^ Chain scoring function.
+    , hScoreFn :: ChainScoreFn c tx s                         -- ^ Chain scoring function.
     }
 
 instance Show (Handle c tx s) where
@@ -53,23 +52,23 @@ instance (Ord tx, Ord (Hash c), Ord s) => Monoid (Handle c tx s) where
     mempty = Handle mempty mempty (comparing height)
 
 
-genesisBlockStore :: Ord (Hash c) => Block c tx (Sealed c s) -> Handle c tx s
-genesisBlockStore gen = initWithChain $ fromGenesis gen
-
--- FIXME(adn) Fix properly as part of oscoin#367?
-initWithChain :: Ord (Hash c) => Blockchain c tx s -> Handle c tx s
-initWithChain  chain = initWithChain' chain blockScore
+genesisBlockStore
+    :: Ord (Hash c)
+    => Block c tx (Sealed c s)
+    -> ScoreFn c tx (Sealed c s)
+    -> Handle c tx s
+genesisBlockStore gen sf = initWithChain (fromGenesis gen) sf
 
 -- | Like 'initWithChain', but allows the user to override the stock
 -- 'ScoringFunction', expressed in terms of a function at the block-level.
-initWithChain'
+initWithChain
     :: Ord (Hash c)
     => Blockchain c tx s
-    -> (Block c tx (Sealed c s) -> Score)
+    -> ScoreFn c tx (Sealed c s)
     -- ^ A function to score blocks. The use of the existential is because
     -- /we do not care/ about the seal when scoring blocks together.
     -> Handle c tx s
-initWithChain' chain scoreFn =
+initWithChain chain scoreFn =
     Handle
         { hChains  = Map.singleton (blockHash $ genesis chain) chain
         , hOrphans = mempty
@@ -77,7 +76,7 @@ initWithChain' chain scoreFn =
         }
 
 compareChainsDefault :: Ord (BlockHash c)
-                     => (Block c tx (Sealed c s) -> Score)
+                     => ScoreFn c tx (Sealed c s)
                      -- ^ A function to score blocks. The use of the existential is because
                      -- /we do not care/ about the seal when scoring blocks together.
                      -> Blockchain c tx s
@@ -85,10 +84,10 @@ compareChainsDefault :: Ord (BlockHash c)
                      -> Ordering
 compareChainsDefault scoreBlock c1 c2 =
     let compareScore   = chainScore c1 `compare` chainScore c2
-        compareLength  = chainLength c1 `compare` chainLength c2
+        compareHeight  = height c1 `compare` height c2
         compareTipHash = (blockHash . tip $ c1) `compare` (blockHash . tip $ c2)
     -- If we score a draw, pick the longest.
-    in mconcat [compareScore, compareLength, compareTipHash]
+    in mconcat [compareScore, compareHeight, compareTipHash]
   where
       chainScore = sum . map scoreBlock . blocks
 
@@ -127,9 +126,10 @@ fromOrphans
     :: (Foldable t, Ord (Hash c))
     => t (Block c tx (Sealed c s))
     -> Block c tx (Sealed c s)
+    -> ScoreFn c tx (Sealed c s)
     -> Handle c tx s
-fromOrphans (toList -> blks) gen =
-    linkBlocks $ (genesisBlockStore gen) { hOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
+fromOrphans (toList -> blks) gen sf =
+    linkBlocks $ (genesisBlockStore gen sf) { hOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
 
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock

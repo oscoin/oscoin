@@ -7,8 +7,8 @@ module Oscoin.Test.Storage.Block.Orphanage
 import           Oscoin.Prelude
 
 
+import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block (blockScore)
 import           Oscoin.Storage.Block.Orphanage
 
 import           Oscoin.Test.Crypto

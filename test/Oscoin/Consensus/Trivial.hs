@@ -1,14 +1,15 @@
 module Oscoin.Consensus.Trivial
     ( trivialConsensus
+    , blockScore
     ) where
 
 
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types (Consensus(..))
-import           Oscoin.Crypto.Blockchain (Blockchain, height)
+import           Oscoin.Crypto.Blockchain (Blockchain, blocks)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, Depth, Sealed, Unsealed, sealBlock)
+                 (Block, Depth, Score, Sealed, Unsealed, sealBlock)
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
 
 import           Codec.Serialise (Serialise)
@@ -29,8 +30,11 @@ trivialConsensus seal = Consensus
     , cValidate = \_ _ -> Right ()
     }
 
-chainScore :: Blockchain c tx s -> Int
-chainScore = fromIntegral . height
+chainScore :: Blockchain c tx s -> Score
+chainScore = sum . map blockScore . blocks
+
+blockScore :: Block c tx s -> Score
+blockScore = const 1
 
 mineBlock
     :: ( Serialise s

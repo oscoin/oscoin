@@ -8,12 +8,8 @@ module Oscoin.Test.Storage.Block.Equivalence
 
 import           Oscoin.Prelude
 
-import           GHC.Exception
-
-import           Data.ByteArray.Orphans ()
-import qualified Data.List as List
-import qualified Data.Text as T
 import           Oscoin.API.Types (RadTx)
+import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.SQLite as SQLite
@@ -24,6 +20,11 @@ import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
 import           Oscoin.Test.Util (Condensed(..), showOrphans)
+
+import           Data.ByteArray.Orphans ()
+import qualified Data.List as List
+import qualified Data.Text as T
+import           GHC.Exception (srcLocFile, srcLocStartCol, srcLocStartLine)
 
 import           Test.Tasty
 import           Test.Tasty.QuickCheck

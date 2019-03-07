@@ -37,7 +37,7 @@ import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Consensus.Trivial (trivialConsensus)
+import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block
                  (emptyGenesisBlock, genesisBlock, sealBlock)
@@ -49,7 +49,6 @@ import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.Storage.Block.Abstract (defaultScoreFunction)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
@@ -156,7 +155,7 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    BlockStore.Concrete.STM.withBlockStore blockstoreState defaultScoreFunction $ \bsh -> do
+    BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \bsh -> do
         sth <- liftIO $ StateStore.fromStateM statestoreState
 
         Node.withNode

@@ -15,6 +15,7 @@ import qualified Prelude
 import           Codec.Serialise
 import qualified Data.Sequence as Seq
 
+import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain hiding (genesisBlock)
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract

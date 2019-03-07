@@ -11,7 +11,6 @@ module Oscoin.Storage.Block.Abstract
 
     , hoistBlockStore
     , noValidation
-    , defaultScoreFunction
     , insertBlocksNaive
     , isNovelBlock
     ) where
@@ -66,9 +65,6 @@ hoistBlockStore natTrans bs = BlockStore
 
 noValidation :: Validate c tx s
 noValidation _ _ = Right ()
-
-defaultScoreFunction :: Block c tx s -> Score
-defaultScoreFunction = fst . decodeDifficulty . blockTargetDifficulty . blockHeader
 
 -- | /O(n)/. A naive function to store blocks in linear time.
 -- Useful for testing but discouraged for any serious production use.

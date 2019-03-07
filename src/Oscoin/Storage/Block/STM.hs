@@ -6,7 +6,7 @@ module Oscoin.Storage.Block.STM
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block, Score, Sealed)
+import           Oscoin.Crypto.Blockchain.Block (ScoreFn, Sealed)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
@@ -21,13 +21,13 @@ import           Control.Concurrent.STM (TVar, modifyTVar', newTVarIO, readTVar)
 withBlockStore :: (Ord (Hash c), Hashable c tx)
                => Blockchain c tx s
                -- ^ The initial blockchain to initialise this store with
-               -> (Block c tx (Sealed c s) -> Score)
+               -> ScoreFn c tx (Sealed c s)
                -- ^ A block scoring function
                -> (Abstract.BlockStore c tx s IO -> IO b)
                -- ^ Action to use the 'BlockStore'.
                -> IO b
 withBlockStore chain score action = do
-    hdl <- newTVarIO (Pure.initWithChain' chain score)
+    hdl <- newTVarIO (Pure.initWithChain chain score)
     let modifyHandle = atomically . modifyTVar' hdl
         newBlockStore  =
                 Abstract.BlockStore {

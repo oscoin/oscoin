@@ -37,6 +37,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block
                  , BlockHash
+                 , Score
                  , Sealed
                  , blockData
                  , blockHash
@@ -78,7 +79,7 @@ class
 
     testableTick         :: Timestamp -> m (Maybe (Block c DummyTx (Sealed c s)))
     testableRun          :: a -> m b -> (b, a)
-    testableScore        :: a -> Blockchain c DummyTx s -> Int
+    testableScore        :: a -> Blockchain c DummyTx s -> Score
 
 testableLongestChain :: TestableNode c s m a => a -> [BlockHash c]
 testableLongestChain =

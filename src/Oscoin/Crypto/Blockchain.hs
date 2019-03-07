@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Blockchain
     ( Blockchain(..)
-    , ScoringFunction
+    , ChainScoreFn
     , TxLookup(..)
     , (|>)
     , unsafeToBlockchain
@@ -95,7 +95,7 @@ chainLength :: Blockchain c tx s -> Int
 chainLength = NonEmpty.length . fromBlockchain
 
 -- | Scoring function for blockchains.
-type ScoringFunction c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
+type ChainScoreFn c tx s = Blockchain c tx s -> Blockchain c tx s -> Ordering
 
 data TxLookup c tx = TxLookup
     { txPayload       :: tx

@@ -20,7 +20,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Consensus.Types (Consensus(..), Miner)
 import           Oscoin.Crypto.Blockchain (Blockchain, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHeader(..), Sealed(..), sealBlock)
+                 (Block(..), BlockHeader(..), Score, Sealed(..), sealBlock)
 import           Oscoin.Time
 
 
@@ -69,7 +69,7 @@ mineSimple position _chain unsealedBlock = do
     else
         pure Nothing
 
-chainScore :: Blockchain c tx s -> Int
+chainScore :: Blockchain c tx s -> Score
 chainScore bc =
     (bigMagicNumber * h) - steps
   where
