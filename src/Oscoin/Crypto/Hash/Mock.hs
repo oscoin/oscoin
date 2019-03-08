@@ -118,11 +118,11 @@ instance FromHttpApiData (Hash MockCrypto) where
           Nothing  -> Left $ "FromHttpApiData (Hash MockCrypto) failed for " <> t
 
 instance MerkleHash (Hash MockCrypto) where
-    emptyHash                            = 
+    emptyHash                            =
         FnvHash (FnvHash64 minBound)
-    hashLeaf k v                         = 
+    hashLeaf k v                         =
         FnvHash $ hashByteArray @ByteString (convert k <> convert v)
-    concatHashes (FnvHash (FnvHash64 d1)) (FnvHash (FnvHash64 d2)) = 
+    concatHashes (FnvHash (FnvHash64 d1)) (FnvHash (FnvHash64 d2)) =
         FnvHash $ FnvHash64 (d1 + d2)
 
 instance Buildable (Hash MockCrypto) where

@@ -34,7 +34,7 @@ import           Data.ByteArray.Hash
 -- Ad-hoc instances for testing purposes
 
 instance Semigroup (Hash MockCrypto) where
-    (<>) (FnvHash (FnvHash64 a)) (FnvHash (FnvHash64 b)) = 
+    (<>) (FnvHash (FnvHash64 a)) (FnvHash (FnvHash64 b)) =
         FnvHash $ FnvHash64 $ a + b -- Sums the `Word64` together.
 
 instance Semigroup (Hash Crypto) where
