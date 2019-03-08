@@ -35,8 +35,9 @@ instance Arbitrary Value where
     -- parsed value in the AST annotations.
     arbitrary = RadX.tagDefault <$> frequency freqs
       where
-        freqs = [ (50, Boolean <$> arbitrary)
-                , (50, Number <$> arbitrary)
+        freqs = [ (20, Boolean <$> arbitrary)
+                , (20, Number <$> arbitrary)
+                , (60, Atom <$> arbitrary)
                 ]
 
 instance Arbitrary Radicle.Ident where

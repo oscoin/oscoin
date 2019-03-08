@@ -59,6 +59,14 @@
           # BEGIN debug functions
           - props
           # END debug functions
+      - module:
+        - name: Oscoin.Test.Crypto.PubKey.Arbitrary
+        - identifier:
+          # BEGIN false positives
+          - FRB
+          - FastRandomBytes
+          - withFastRandomBytes
+          # END debug functions
 - package:
   - name: oscoin
   - section:

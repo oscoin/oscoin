@@ -165,7 +165,6 @@ tests:
       - random
       - random-shuffle
       - safe-exceptions
-      - scientific
       - serialise
       - sqlite-simple
       - splitmix
