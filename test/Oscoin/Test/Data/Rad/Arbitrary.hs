@@ -36,8 +36,7 @@ instance Arbitrary Value where
     arbitrary = RadX.tagDefault <$> frequency freqs
       where
         freqs = [ (20, Boolean <$> arbitrary)
-                , (20, Number <$> arbitrary)
-                , (60, Atom <$> arbitrary)
+                , (60, Number <$> arbitrary)
                 ]
 
 instance Arbitrary Radicle.Ident where
@@ -45,9 +44,7 @@ instance Arbitrary Radicle.Ident where
       where
         allChars = take 100 ['!' .. maxBound]
         firstL = elements $ filter isValidIdentFirst allChars
-        rest = sized $ \n -> do
-            k <- choose (0, n)
-            vectorOf k . elements $ filter isValidIdentRest allChars
+        rest = sublistOf =<< shuffle (filter isValidIdentRest allChars)
 
 instance Arbitrary a => Arbitrary (Radicle.Bindings a) where
     arbitrary = do

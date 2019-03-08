@@ -16,7 +16,6 @@ packages:
 - stm-containers-0.2.16@sha256:e98efa8dcf0045ea8a78a04b4e2763cf2d8bc33aad0750e2f30a67f8f4e933b1
 - tasty-fail-fast-0.0.3
 - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
-- xxhash-ffi-0.2.0.0
 
   # https://github.com/nick8325/quickcheck/issues/234
 - git: https://github.com/oscoin/qc-instances

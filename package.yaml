@@ -85,7 +85,6 @@ library:
     - wai
     - wai-middleware-static
     - writer-cps-mtl
-    - xxhash-ffi
     - yaml
 
 executables:

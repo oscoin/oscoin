@@ -29,10 +29,13 @@ import qualified Oscoin.Data.RadicleTx as Rad
 import qualified Oscoin.State.Tree as STree
 import           Web.HttpApiData (FromHttpApiData(..))
 
+import           Data.ByteArray.Hash
+
 -- Ad-hoc instances for testing purposes
 
 instance Semigroup (Hash MockCrypto) where
-    (<>) (XxHash a) (XxHash b) = XxHash $ a + b -- Sums the `Word32` together.
+    (<>) (FnvHash (FnvHash64 a)) (FnvHash (FnvHash64 b)) = 
+        FnvHash $ FnvHash64 $ a + b -- Sums the `Word64` together.
 
 instance Semigroup (Hash Crypto) where
     (<>) a b = fromByteArray @Crypto @ByteString $ on (<>) convert a b

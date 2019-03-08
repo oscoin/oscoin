@@ -27,7 +27,7 @@ import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed)
 
 import qualified Data.List as List
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           Text.Show (Show(..))
 
