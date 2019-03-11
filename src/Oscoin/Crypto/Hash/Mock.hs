@@ -37,7 +37,7 @@ import           Web.HttpApiData (FromHttpApiData(..))
 -- For the mock crypto we use the FNV-1 hashing function.
 -- Unfortunately using something faster like xxhash would generate
 -- too many collisions.
-import           Data.ByteArray.Hash
+import           Data.ByteArray.Hash (FnvHash64(..), fnv1a_64Hash)
 
 
 data MockHash = MockHash deriving (Eq, Ord, Show)
