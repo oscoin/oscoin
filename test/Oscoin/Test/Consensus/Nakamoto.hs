@@ -13,7 +13,7 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import           Oscoin.State.Tree (Tree)
+import           Oscoin.Node.Tree (Tree)
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore)
 

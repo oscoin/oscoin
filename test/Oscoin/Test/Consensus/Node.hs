@@ -28,7 +28,7 @@ import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
 import           Oscoin.Data.Query (query)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
-import qualified Oscoin.State.Tree as STree
+import qualified Oscoin.Node.Tree as STree
 import           Oscoin.Storage.Block.Abstract (BlockStore(..), hoistBlockStore)
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
@@ -206,4 +206,3 @@ instance ( Monad m
 
 runTestNodeT :: TestNodeState c s -> TestNodeT c s m a -> m (a, TestNodeState c s)
 runTestNodeT s (TestNodeT ma) = runStateT ma s
-

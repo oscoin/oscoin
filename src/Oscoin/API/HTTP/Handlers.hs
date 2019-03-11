@@ -15,7 +15,7 @@ import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.State.Tree (Key)
+import           Oscoin.Node.Tree (Key)
 import           Oscoin.Storage.Receipt.Class
 import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
