@@ -13,10 +13,8 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
-import           Crypto.Random.Types (MonadRandom(..))
 import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess)
-import           Data.Text.Prettyprint.Doc
 
 import qualified Radicle.Extended as Rad
 
@@ -106,9 +104,6 @@ instance ( FromJSON (BlockHash c)
         txContext <- o .: "ctx"
         pure Tx{..}
 
-instance Pretty msg => Pretty (Tx c msg) where
-    pretty Tx{txMessage} = pretty txMessage
-
 mkTx :: Crypto.HasHashing c => Signed c msg -> PK c -> Tx c msg
 mkTx sm pk = Tx
     { txMessage = sm
@@ -121,20 +116,6 @@ mkTx sm pk = Tx
 
 txMessageContent :: Tx c a -> a
 txMessageContent = sigMessage . txMessage
-
--- | Create a 'Tx' from a 'Serialise' message and key pair.
-createTx
-    :: ( HasDigitalSignature c
-       , Crypto.HasHashing c
-       , MonadRandom m
-       , ByteArrayAccess msg
-       )
-    => KeyPair c
-    -> msg
-    -> m (Tx c msg)
-createTx (pk, sk) val = do
-    sval <- sign sk val
-    pure $ mkTx sval pk
 
 verifyTx
     :: ( HasDigitalSignature c
