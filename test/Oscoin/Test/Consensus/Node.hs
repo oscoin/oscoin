@@ -18,14 +18,12 @@ module Oscoin.Test.Consensus.Node
 
 import           Oscoin.Prelude hiding (StateT, evalStateT, runStateT, show)
 
-import           Oscoin.Consensus.Class (MonadQuery(..))
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, Sealed, StateHash, Unsealed)
+                 (Block, BlockHash, Sealed, Unsealed)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
-import           Oscoin.Data.Query (query)
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
 import qualified Oscoin.Node.Tree as STree
@@ -174,19 +172,6 @@ instance ( Ord (Hash c)
     {-# INLINE getTxs #-}
     {-# INLINE delTxs #-}
     {-# INLINE numTxs #-}
-
-instance ( IsCrypto c
-         , Monad m
-         ) => MonadQuery (TestNodeT c s m) where
-    type Key (TestNodeT c s m) = (StateHash c, STree.Path)
-    type Val (TestNodeT c s m) = STree.Val
-
-    -- TODO(alexis): This is the same code as in 'Oscoin.Node'.
-    queryM (sh, k) = do
-        result <- lookupState sh
-        pure $ query k =<< result
-
-    {-# INLINE queryM #-}
 
 instance ( Ord (Hash c)
          , Monad m

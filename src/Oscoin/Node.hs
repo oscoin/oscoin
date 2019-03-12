@@ -21,9 +21,9 @@ module Oscoin.Node
 
 import           Oscoin.Prelude
 
+import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Consensus (Consensus(..), Validate)
 import qualified Oscoin.Consensus as Consensus
-import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
@@ -49,6 +49,7 @@ import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
+import           Oscoin.Storage.State.Class (MonadStateStore(..))
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
@@ -184,7 +185,9 @@ getPath
     => StateHash c
     -> STree.Path
     -> NodeT c tx st s i m (Maybe (QueryVal st))
-getPath sh p = queryM (sh, p)
+getPath sh p = do
+    result <- lookupState sh
+    pure $ query p =<< result
 
 -- | Get a value from the latest state.
 getPathLatest
