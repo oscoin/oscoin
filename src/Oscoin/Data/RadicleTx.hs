@@ -3,6 +3,8 @@
 module Oscoin.Data.RadicleTx
     ( Env(..)
     , RadTx
+    , Message
+    , Output
     , RadEvaluator
     , txEval
     , pureEnv
@@ -36,9 +38,13 @@ newtype Env c = Env { fromEnv :: Rad.Bindings (Rad.PrimFns Identity) }
 instance Show.Show (Env c) where
     show = show . Rad.bindingsEnv . fromEnv
 
-type RadTx c = Tx c Rad.Value
+type Message = Rad.Value
 
-type RadEvaluator c = Evaluator (Env c) (RadTx c) Rad.Value
+type Output = Rad.Value
+
+type RadTx c = Tx c Message
+
+type RadEvaluator c = Evaluator (Env c) (RadTx c) Output
 
 pureEnv :: Env c
 pureEnv = Env Radicle.pureEnv

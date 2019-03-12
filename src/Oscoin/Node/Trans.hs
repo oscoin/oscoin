@@ -17,6 +17,7 @@ import           Oscoin.Crypto.Blockchain.Block (StateHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Data.Query
+import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Environment
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -27,8 +28,6 @@ import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
 import qualified Oscoin.Telemetry as Telemetry
-
-import qualified Radicle.Extended as Rad
 
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
@@ -63,9 +62,9 @@ data Handle c tx st s i = Handle
     , hStateStore   :: StateStore.Handle c st
     , hBlockStore   :: Abstract.BlockStore c tx s IO
     , hMempool      :: Mempool.Handle c tx
-    , hEval         :: Evaluator st tx Rad.Value
+    , hEval         :: Evaluator st tx RadicleTx.Message
     , hConsensus    :: Consensus c tx s (NodeT c tx st s i IO)
-    , hReceiptStore :: ReceiptStore.Handle c tx Rad.Value
+    , hReceiptStore :: ReceiptStore.Handle c tx RadicleTx.Output
     }
 
 -------------------------------------------------------------------------------
@@ -73,7 +72,7 @@ data Handle c tx st s i = Handle
 instance Telemetry.HasTelemetry (Handle c tx st s i) where
     telemetryStoreL = to (cfgTelemetry . hConfig)
 
-instance ReceiptStore.HasHandle c tx Rad.Value (Handle c tx st s i) where
+instance ReceiptStore.HasHandle c tx RadicleTx.Output (Handle c tx st s i) where
     handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
 instance ( Ord (Hash c)
@@ -118,7 +117,7 @@ instance ( Ord (StateHash c)
 
 instance MonadClock m => MonadClock (NodeT c tx st s i m)
 
-instance (Ord (Hash c), MonadIO m) => MonadReceiptStore c tx Rad.Value (NodeT c tx st s i m) where
+instance (Ord (Hash c), MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (NodeT c tx st s i m) where
     addReceipt = ReceiptStore.addWithHandle
     lookupReceipt = ReceiptStore.lookupWithHandle
 

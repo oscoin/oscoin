@@ -39,6 +39,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
+import qualified Oscoin.Data.RadicleTx as RadicleTx
 import qualified Oscoin.Environment as Env
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
@@ -58,8 +59,6 @@ import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 
-import qualified Radicle.Extended as Rad
-
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
@@ -73,7 +72,7 @@ withNode
     -> Mempool.Handle c tx
     -> StateStore.Handle c st
     -> BlockStore c tx s IO
-    -> Evaluator st tx Rad.Value
+    -> Evaluator st tx RadicleTx.Output
     -> Consensus c tx s (NodeT c tx st s i IO)
     -> (Handle c tx st s i -> IO a)
     -> IO a

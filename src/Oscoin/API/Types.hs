@@ -14,7 +14,8 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PK, Signature)
-import           Oscoin.Data.Tx (Tx)
+import           Oscoin.Data.RadicleTx (RadTx)
+import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Node.Tree (Key)
 import           Oscoin.Prelude
 import qualified Radicle.Extended as Rad
@@ -32,9 +33,6 @@ import           Data.Aeson
                  )
 import           Lens.Micro
 import           Numeric.Natural
-
--- | The type of a block transaction in the API.
-type RadTx c = Tx c Rad.Value
 
 data Result a =
       Ok  a
@@ -58,11 +56,11 @@ resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
 data TxLookupResponse c = TxLookupResponse
-    { txHash          :: Hashed c (RadTx c)
+    { txHash          :: Hashed c (RadicleTx.RadTx c)
     -- ^ Hash of the transaction.
     , txBlockHash     :: Maybe (BlockHash c)
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
-    , txOutput        :: Maybe (Either EvalError Rad.Value)
+    , txOutput        :: Maybe (Either EvalError RadicleTx.Output)
     -- ^ Output of the transaction if it was evaluated. If the
     -- evaluation was successful the transaction is included in the
     -- block 'txBlockHash'.
@@ -70,7 +68,7 @@ data TxLookupResponse c = TxLookupResponse
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
     -- the 'Block' referenced by 'txBlockHash'.
-    , txPayload       :: RadTx c
+    , txPayload       :: RadicleTx.RadTx c
     -- ^ The transaction itself.
     } deriving (Generic)
 
