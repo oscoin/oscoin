@@ -1,6 +1,9 @@
 module Oscoin.Node.Tree
     ( Handle
     , Path
+    , Key
+    , Tree
+    , Val
     , new
     , close
     , getPath
@@ -9,33 +12,36 @@ module Oscoin.Node.Tree
 
 import           Oscoin.Data.Query
 import           Oscoin.Prelude
-import           Oscoin.State.Tree (Path)
 
 import           Control.Concurrent.STM.TVar
+import qualified Data.ByteString.Lazy as LBS
 
--- | Database connection.
-type Connection = ()
+type Key = Text
+type Path = [Text]
+type Val = LBS.ByteString
+
+-- | Key/value tree data-structure.
+type Tree = Map Path Val
+
 
 -- | State tree handle.
-data Handle s = Handle
-    { hTree :: TVar s            -- ^ In-memory representation of the state tree.
-    , hConn :: Connection        -- ^ Connection to database.
+newtype Handle = Handle
+    { hTree :: TVar Tree            -- ^ In-memory representation of the state tree.
     }
 
-new :: MonadIO m => s -> m (Handle s)
-new s = do
-    ref <- liftIO $ newTVarIO s
+new :: MonadIO m => Tree -> m Handle
+new tree = do
+    ref <- liftIO $ newTVarIO tree
     pure Handle
         { hTree = ref
-        , hConn = ()
         }
 
-close :: MonadIO m => Handle s -> m ()
+close :: MonadIO m => Handle -> m ()
 close _ = pass
 
-getPath :: (Query s, MonadIO m) => Handle s -> Path -> m (Maybe (QueryVal s))
+getPath :: (MonadIO m) => Handle -> Path -> m (Maybe Val)
 getPath Handle{hTree} k =
     query k <$> liftIO (readTVarIO hTree)
 
-updateTree :: Handle s -> s -> STM ()
+updateTree :: Handle -> Tree -> STM ()
 updateTree = writeTVar . hTree

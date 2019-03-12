@@ -15,8 +15,8 @@ import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PK, Signature)
 import           Oscoin.Data.Tx (Tx)
+import           Oscoin.Node.Tree (Key)
 import           Oscoin.Prelude
-import           Oscoin.State.Tree (Key)
 import qualified Radicle.Extended as Rad
 
 import qualified Codec.Serialise as Serial
