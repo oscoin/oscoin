@@ -26,7 +26,6 @@ import           Database.SQLite.Simple.ToField
 import           Formatting.Buildable (Buildable)
 import           Oscoin.API.Types
 import qualified Oscoin.Data.RadicleTx as Rad
-import qualified Oscoin.Node.Tree as STree
 import           Web.HttpApiData (FromHttpApiData(..))
 
 import           Data.ByteArray.Hash
@@ -82,7 +81,6 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Condensed (PK c)
                   , Condensed (SK c)
                   , Hashable c (Signed c Text)
-                  , Hashable c STree.Tree
                   , Hashable c [Word8]
                   , Hashable c Word8
                   , Hashable c Text

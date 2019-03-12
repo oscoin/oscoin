@@ -45,7 +45,6 @@ import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Node.Trans
-import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
@@ -183,7 +182,7 @@ getPath
        , Ord (StateHash c)
        )
     => StateHash c
-    -> STree.Path
+    -> [Text]
     -> NodeT c tx st s i m (Maybe (QueryVal st))
 getPath sh p = do
     result <- lookupState sh
@@ -196,7 +195,7 @@ getPathLatest
        , Hashable c st
        , Ord (StateHash c)
        )
-    => STree.Path
+    => [Text]
     -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))
 getPathLatest path = do
     bs <- asks hBlockStore
