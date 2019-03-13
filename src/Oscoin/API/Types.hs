@@ -7,7 +7,6 @@ module Oscoin.API.Types
     , isErr
     , resultToEither
     , TxSubmitResponse(..)
-    , Key
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
@@ -16,7 +15,6 @@ import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PK, Signature)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
-import           Oscoin.Node.Tree (Key)
 import           Oscoin.Prelude
 import qualified Radicle.Extended as Rad
 

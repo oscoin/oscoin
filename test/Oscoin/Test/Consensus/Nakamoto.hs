@@ -13,7 +13,6 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import           Oscoin.Node.Tree (Tree)
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore)
 
@@ -52,7 +51,7 @@ instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx m)
 instance MonadMempool    c   tx     m => MonadMempool   c    tx      (NakamotoT tx m)
 instance MonadReceiptStore c tx ()  m => MonadReceiptStore c tx ()   (NakamotoT tx m)
 
-instance MonadStateStore c Tree m => MonadStateStore c Tree (NakamotoT tx m)
+instance MonadStateStore c st m => MonadStateStore c st (NakamotoT tx m)
 
 runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
 runNakamotoT rng (NakamotoT ma) = runStateT ma rng

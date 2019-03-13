@@ -26,7 +26,6 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
-import qualified Oscoin.Node.Tree as STree
 import           Oscoin.Storage.Block.Abstract (BlockStore(..), hoistBlockStore)
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
@@ -84,7 +83,7 @@ newtype DummyTx = DummyTx Word8
 
 deriving instance (HasHashing c, Hashable c Word8) => Hashable c DummyTx
 
-type DummyState = STree.Tree
+type DummyState = ()
 
 type DummyOutput = ()
 

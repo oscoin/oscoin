@@ -26,8 +26,6 @@ import           Lens.Micro
 
 type Position = (Int, Int)
 
-type S = Map [Text] LByteString
-
 data LastTime = LastTime
     { ltLastBlk :: Timestamp
     , ltLastAsk :: Timestamp
@@ -54,7 +52,7 @@ instance Monad m => MonadLastTime (SimpleT tx i m) where
 
 instance (IsCrypto c, MonadMempool c tx m) => MonadMempool c tx   (SimpleT tx i m)
 instance MonadReceiptStore c tx () m => MonadReceiptStore c tx () (SimpleT tx i m)
-instance MonadStateStore   c S     m => MonadStateStore   c  S    (SimpleT tx i m)
+instance MonadStateStore   c st    m => MonadStateStore   c st    (SimpleT tx i m)
 
 runSimpleT :: Position -> LastTime -> SimpleT tx i m a -> m (a, LastTime)
 runSimpleT env lt (SimpleT ma) = runStateT (runReaderT ma env) lt

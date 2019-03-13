@@ -15,7 +15,6 @@ import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.Node.Tree (Key)
 import           Oscoin.Storage.Receipt.Class
 import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
@@ -147,7 +146,7 @@ getStatePath
     :: ( Ord (StateHash c)
        , Crypto.HasHashing c
        )
-    => Key
+    => Text
     -> ApiAction c s i ()
 getStatePath _chain = do
     path <- listParam "q"
