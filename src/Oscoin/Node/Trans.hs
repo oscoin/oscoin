@@ -10,18 +10,16 @@ module Oscoin.Node.Trans
 
 import           Oscoin.Prelude
 
+import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Consensus (Consensus)
-import           Oscoin.Consensus.Class (MonadClock(..), MonadQuery(..))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block (StateHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
-import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Environment
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import qualified Oscoin.Node.Tree as STree
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
@@ -100,20 +98,6 @@ withBlockStore
 withBlockStore f = do
     bs <- asks hBlockStore
     liftIO $ f bs
-
-instance ( Ord (StateHash c)
-         , Monad m
-         , MonadIO m
-         , Query st
-         , Hashable c st
-         ) => MonadQuery (NodeT c tx st s i m) where
-    type Key (NodeT c tx st s i m) = (StateHash c, STree.Path)
-    type Val (NodeT c tx st s i m) = QueryVal st
-
-    queryM (sh, k) = do
-        result <- lookupState sh
-        pure $ query k =<< result
-    {-# INLINE queryM #-}
 
 instance MonadClock m => MonadClock (NodeT c tx st s i m)
 
