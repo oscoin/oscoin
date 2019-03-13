@@ -36,6 +36,23 @@ Then run ``:main`` from the repl to run the tests, and reload with ``:r`` as
 necessary. You can run a subset of tests with ``:main -p "test
 pattern"``.
 
+Test organization
+~~~~~~~~~~~~~~~~~
+
+All tests are contained in the ``test`` directory. The tests contained
+in a module are exported through the ``tests`` value. The ``tests``
+export defines a is a ``tasty`` test group with with the same name as
+the module name minus the ``Test`` prefix. Tests from test modules are
+imported and collected in the ``Main`` module.
+
+For unit tests there is a one-to-one correspondence between the tested
+module and the test module. . For example the tests for the code in
+module ``A.B.C`` are contained in ``Test.A.B.C`` which exports
+
+.. code-block:: haskell
+
+   tests = testGroup "A.B.C" [ someTest ]
+
 Profiling
 ---------
 To profile the test-suite, run::
