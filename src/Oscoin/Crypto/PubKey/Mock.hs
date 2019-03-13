@@ -8,7 +8,7 @@ import           Oscoin.Crypto (MockCrypto)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.Mock ()
 import           Oscoin.Crypto.PubKey
-import           Oscoin.Crypto.PubKey.Internal (PrivateKey(..), PublicKey(..))
+import           Oscoin.Crypto.PubKey.Internal (PK(..), SK(..))
 
 import           Codec.Serialise
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
@@ -24,55 +24,55 @@ instance Crypto.Hashable MockCrypto MockKey where
 
 instance HasDigitalSignature MockCrypto where
 
-    newtype PK MockCrypto =
-        MockPK (PublicKey MockCrypto MockKey) deriving Eq
-    newtype SK MockCrypto = MockSK (PrivateKey (MockKey, [Word8]))
+    newtype PublicKey MockCrypto =
+        MockPK (PK MockCrypto MockKey) deriving Eq
+    newtype PrivateKey MockCrypto = MockSK (SK (MockKey, [Word8]))
 
     newtype Signature MockCrypto =
         MockSignature [Word8] deriving (Eq, Show)
 
-    sign (MockSK (PrivateKey (MockKey pkSkXored, sk))) bytes = do
+    sign (MockSK (SK (MockKey pkSkXored, sk))) bytes = do
         let !sig = zipWith xor pkSkXored sk
         sig `deepseq` pure $! Signed bytes (MockSignature sig)
 
-    verify (MockPK (PublicKey (MockKey pk) _)) (Signed _ (MockSignature sig)) =
+    verify (MockPK (PK (MockKey pk) _)) (Signed _ (MockSignature sig)) =
         sig == pk
 
     generateKeyPair = do
         pk  <- BS.unpack <$> getRandomBytes 8
         sk0 <- BS.unpack <$> getRandomBytes 8
-        -- Pad the SK at the end, otherwise the xor trick won't work.
+        -- Pad the PrivateKey at the end, otherwise the xor trick won't work.
         let sk = if length pk > length sk0
                     then sk0 <> replicate (length pk - length sk0) 0
                     else sk0
-        let !mockPk = MockPK $ PublicKey (MockKey pk) (Crypto.hash (MockKey pk))
-        let !mockSk = MockSK $ PrivateKey (MockKey $ zipWith xor pk sk, sk)
+        let !mockPk = MockPK $ PK (MockKey pk) (Crypto.hash (MockKey pk))
+        let !mockSk = MockSK $ SK (MockKey $ zipWith xor pk sk, sk)
         pure ( mockPk, mockSk )
 
-deriving instance Show (Crypto.Hash MockCrypto) => Show (PK MockCrypto)
+deriving instance Show (Crypto.Hash MockCrypto) => Show (PublicKey MockCrypto)
 
-instance H.Hashable (PK MockCrypto) where
-    hashWithSalt salt (MockPK (PublicKey _ h)) = H.hashWithSalt salt . Crypto.fromHashed $ h
+instance H.Hashable (PublicKey MockCrypto) where
+    hashWithSalt salt (MockPK (PK _ h)) = H.hashWithSalt salt . Crypto.fromHashed $ h
 
-instance Serialise (PK MockCrypto) where
-    encode (MockPK (PublicKey (MockKey pk) _)) = encode pk
-    decode = (\pk -> MockPK $ PublicKey @MockCrypto (MockKey pk) (Crypto.hash (MockKey pk))) <$> decode
+instance Serialise (PublicKey MockCrypto) where
+    encode (MockPK (PK (MockKey pk) _)) = encode pk
+    decode = (\pk -> MockPK $ PK @MockCrypto (MockKey pk) (Crypto.hash (MockKey pk))) <$> decode
 
-instance ToJSON (PK MockCrypto) where
+instance ToJSON (PublicKey MockCrypto) where
     toJSON = serialiseToJSON
 
-instance FromJSON (PK MockCrypto) where
+instance FromJSON (PublicKey MockCrypto) where
     parseJSON = deserialiseParseJSON
 
-instance Eq a => Eq (PublicKey MockCrypto a) where
-    (PublicKey a1 b1) == (PublicKey a2 b2) = a1 == a2 && b1 == b2
+instance Eq a => Eq (PK MockCrypto a) where
+    (PK a1 b1) == (PK a2 b2) = a1 == a2 && b1 == b2
 
 instance Serialise (Signature MockCrypto) where
     encode (MockSignature bs) = encode bs
     decode = MockSignature <$> decode
 
-instance Crypto.Hashable MockCrypto (PK MockCrypto) where
-    hash (MockPK (PublicKey _ h)) = Crypto.toHashed $ Crypto.fromHashed h
+instance Crypto.Hashable MockCrypto (PublicKey MockCrypto) where
+    hash (MockPK (PK _ h)) = Crypto.toHashed $ Crypto.fromHashed h
 
 instance ToJSON (Signature MockCrypto) where
     toJSON = serialiseToJSON

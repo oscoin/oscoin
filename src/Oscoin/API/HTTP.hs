@@ -54,17 +54,17 @@ run port hdl =
 
 app
     :: ( ToJSON (Sealed c s)
-       , ToJSON (Crypto.PK c)
+       , ToJSON (Crypto.PublicKey c)
        , Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
        , FromJSON (BlockHash c)
-       , FromJSON (Crypto.PK c)
+       , FromJSON (Crypto.PublicKey c)
        , FromJSON (Crypto.Signature c)
        , Ord (Crypto.Hash c)
        , Buildable (Crypto.Hash c)
@@ -87,17 +87,17 @@ staticFilePolicy =
 -- | Entry point for API.
 api
     :: ( ToJSON (Sealed c s)
-       , ToJSON (Crypto.PK c)
+       , ToJSON (Crypto.PublicKey c)
        , Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
        , FromJSON (BlockHash c)
-       , FromJSON (Crypto.PK c)
+       , FromJSON (Crypto.PublicKey c)
        , FromJSON (Crypto.Signature c)
        , Ord (Crypto.Hash c)
        , Buildable (Crypto.Hash c)

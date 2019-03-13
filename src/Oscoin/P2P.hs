@@ -53,9 +53,9 @@ import           Network.Socket (SockAddr, Socket)
 type Wire c =
     Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer (NodeId c)))
 
-instance ( Hashable (Crypto.PK c)
-         , Eq (Crypto.PK c)
-         , Serialise (Crypto.PK c)
+instance ( Hashable (Crypto.PublicKey c)
+         , Eq (Crypto.PublicKey c)
+         , Serialise (Crypto.PublicKey c)
          ) => ByteArrayAccess (Wire c) where
     length           = length . toStrict . CBOR.serialise
     withByteArray ba = withByteArray (toStrict $ CBOR.serialise ba)
@@ -70,8 +70,8 @@ newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeId c)) m a)
              , MonadReader (Gossip.Run.Env (NodeId c))
              )
 
-instance ( Hashable (Crypto.PK c)
-         , Eq (Crypto.PK c)
+instance ( Hashable (Crypto.PublicKey c)
+         , Eq (Crypto.PublicKey c)
          , Eq (Crypto.Hash c)
          , Serialise (Crypto.Hash c)
          , MonadIO m
@@ -97,9 +97,9 @@ runGossipT r (GossipT ma) = runReaderT ma r
 withGossip
     :: forall c tx e s o a.
        ( Crypto.Hashable c tx
-       , Hashable (Crypto.PK c)
-       , Crypto.Hashable c (Crypto.PK c)
-       , Eq (Crypto.PK c)
+       , Hashable (Crypto.PublicKey c)
+       , Crypto.Hashable c (Crypto.PublicKey c)
+       , Eq (Crypto.PublicKey c)
        , Exception e
        , Buildable (Crypto.Hash c)
        , Eq (BlockHash c)
@@ -143,7 +143,7 @@ withGossip telemetryStore selfAddr peerAddrs Storage{..} handshake run = do
 
 wrapHandshake
     :: forall c e o.
-       ( Crypto.Hashable c (Crypto.PK c)
+       ( Crypto.Hashable c (Crypto.PublicKey c)
        , Exception e
        , Serialise o
        , Buildable (Crypto.Hash c)

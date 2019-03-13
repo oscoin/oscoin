@@ -20,7 +20,7 @@ import qualified Radicle.Extended as Rad
 
 data Tx c msg = Tx
     { txMessage :: Signed c msg
-    , txPubKey  :: PK c
+    , txPubKey  :: PublicKey c
     , txChainId :: Word16
     , txNonce   :: Word32
     , txContext :: BlockHash c
@@ -29,29 +29,29 @@ data Tx c msg = Tx
 deriving instance ( Show (Signature c)
                   , Show (BlockHash c)
                   , Crypto.HasHashing c
-                  , Show (PK c)
+                  , Show (PublicKey c)
                   , Show msg
                   ) => Show (Tx c msg)
 deriving instance ( Eq (Signature c)
                   , Eq (BlockHash c)
-                  , Eq (PK c)
+                  , Eq (PublicKey c)
                   , Eq msg
                   )  => Eq (Tx c msg)
 deriving instance ( Ord (Signature c)
                   , Ord (BlockHash c)
-                  , Ord (PK c)
+                  , Ord (PublicKey c)
                   , Ord msg
                   ) => Ord (Tx c msg)
 
 instance ( Crypto.HasHashing c
-         , Serialise (PK c)
+         , Serialise (PublicKey c)
          , Serialise (BlockHash c)
          , Serialise msg
          , Serialise (Signature c)
          ) => Crypto.Hashable c (Tx c msg) where
     hash = Crypto.hashSerial
 
-instance ( Serialise (PK c)
+instance ( Serialise (PublicKey c)
          , Serialise (BlockHash c)
          , Serialise msg
          , Serialise (Signature c)
@@ -77,7 +77,7 @@ instance ( Serialise (PK c)
 
 instance ( Crypto.HasHashing c
          , Crypto.Hashable c (Tx c Rad.Value)
-         , ToJSON (PK c)
+         , ToJSON (PublicKey c)
          , ToJSON (Crypto.Hash c)
          , ToJSON (Signature c)
          ) => ToJSON (Tx c Rad.Value) where
@@ -92,7 +92,7 @@ instance ( Crypto.HasHashing c
                   ]
 
 instance ( FromJSON (BlockHash c)
-         , FromJSON (PK c)
+         , FromJSON (PublicKey c)
          , FromJSON (Signature c)
          ) => FromJSON (Tx c Rad.Value) where
     parseJSON = withObject "Tx" $ \o -> do
@@ -104,7 +104,7 @@ instance ( FromJSON (BlockHash c)
         txContext <- o .: "ctx"
         pure Tx{..}
 
-mkTx :: Crypto.HasHashing c => Signed c msg -> PK c -> Tx c msg
+mkTx :: Crypto.HasHashing c => Signed c msg -> PublicKey c -> Tx c msg
 mkTx sm pk = Tx
     { txMessage = sm
     , txPubKey  = pk

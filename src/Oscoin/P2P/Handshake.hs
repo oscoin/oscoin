@@ -44,11 +44,11 @@ instance Exception HandshakeError
 -- This is not a secure protocol, as all communication is in clear text.
 simpleHandshake
     :: forall p c.
-       ( Serialise (Crypto.PK c)
+       ( Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , ByteArrayAccess p
        , Crypto.HasDigitalSignature c
-       , Eq (Crypto.PK c)
+       , Eq (Crypto.PublicKey c)
        )
     => Crypto.KeyPair c
     -> Handshake SimpleError (NodeId c) p (Crypto.Signed c p)
@@ -64,9 +64,9 @@ simpleHandshake keys role peerId = do
 -- \"Channel Binding\" in the Noise spec (Section 11.2).
 secureHandshake
     :: ( Serialise p
-       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Eq (Crypto.PK c)
+       , Eq (Crypto.PublicKey c)
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c
@@ -90,9 +90,9 @@ secureHandshake keys role (map fromNodeId -> peer) = do
 
 signedHandshakeHash
     :: Crypto.HasDigitalSignature c
-    => Crypto.SK c
-    -> HandshakeResult i o                                       (Crypto.PK c, NoiseHandshakeHash)
-    -> HandshakeResult i (Crypto.Signed c NoiseHandshakeHash, o) (Crypto.PK c)
+    => Crypto.PrivateKey c
+    -> HandshakeResult i o                                       (Crypto.PublicKey c, NoiseHandshakeHash)
+    -> HandshakeResult i (Crypto.Signed c NoiseHandshakeHash, o) (Crypto.PublicKey c)
 signedHandshakeHash sk hr = map fst $ mapOutput send recv hr
   where
     (theirPK, handhakeHash) = hrPeerId hr

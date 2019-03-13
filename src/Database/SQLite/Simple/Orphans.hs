@@ -39,7 +39,7 @@ instance ( Crypto.HasHashing c
         <*> field
         <*> field
 
-instance ( CBOR.Serialise (Crypto.PK c)
+instance ( CBOR.Serialise (Crypto.PublicKey c)
          , CBOR.Serialise (Crypto.Signature c)
          , Typeable c
          , FromField (BlockHash c)
@@ -68,7 +68,7 @@ instance ( Crypto.HasHashing c
          , ToField (Crypto.Hashed c (RadTx c))
          , ToField (BlockHash c)
          , CBOR.Serialise (BlockHash c)
-         , CBOR.Serialise (Crypto.PK c)
+         , CBOR.Serialise (Crypto.PublicKey c)
          , CBOR.Serialise (Crypto.Signature c)
          ) => ToRow (RadTx c) where
     toRow tx@Tx{..} =
@@ -87,10 +87,10 @@ instance ( CBOR.Serialise msg
          ) => ToField (Crypto.Signed c msg) where
     toField = toFieldSerial
 
-instance (CBOR.Serialise (Crypto.PK c), Typeable c) => FromField (Crypto.PK c) where
+instance (CBOR.Serialise (Crypto.PublicKey c), Typeable c) => FromField (Crypto.PublicKey c) where
     fromField = fromFieldSerial
 
-instance CBOR.Serialise (Crypto.PK c) => ToField (Crypto.PK c) where
+instance CBOR.Serialise (Crypto.PublicKey c) => ToField (Crypto.PublicKey c) where
     toField = toFieldSerial
 
 instance ToField s => ToField (Sealed c s) where

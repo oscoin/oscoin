@@ -5,7 +5,7 @@ module Oscoin.Telemetry.Events
 import qualified Oscoin.Consensus.Types as Consensus
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
-import           Oscoin.Crypto.PubKey (PK)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Time (Duration)
 
@@ -80,11 +80,11 @@ data NotableEvent where
     -- ^ Triggered every time the P2P layer returns a 'ConversionError'.
     HttpApiRequest :: HTTP.Request -> HTTP.Status -> Duration -> NotableEvent
     -- ^ Triggered every time a new HTTP request is issued to the node's API.
-    GossipEvent :: forall c. (Hashable c (PK c), Buildable (Hash c))
+    GossipEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
                 => Gossip.Traceable (P2P.NodeId c)
                 -> NotableEvent
     -- ^ Events emitted by the @gossip@ library
-    HandshakeEvent :: forall c. (Hashable c (PK c), Buildable (Hash c))
+    HandshakeEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
                    => P2P.HandshakeEvent (P2P.NodeId c)
                    -> NotableEvent
     -- ^ Events emitted during the p2p handshake phase

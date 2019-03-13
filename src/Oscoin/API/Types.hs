@@ -12,7 +12,7 @@ module Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
-import           Oscoin.Crypto.PubKey (PK, Signature)
+import           Oscoin.Crypto.PubKey (PublicKey, Signature)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Prelude
@@ -93,7 +93,7 @@ instance (FromJSON (RadTx c), FromJSON (Hash c)) => FromJSON (TxLookupResponse c
 
 
 instance ( Serial.Serialise (Hash c)
-         , Serial.Serialise (PK c)
+         , Serial.Serialise (PublicKey c)
          , Serial.Serialise (Signature c)
          ) => Serial.Serialise (TxLookupResponse c)
 

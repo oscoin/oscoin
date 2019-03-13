@@ -18,7 +18,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), Evaluator)
 import           Oscoin.Crypto.Hash
-import           Oscoin.Crypto.PubKey (PK, unsign)
+import           Oscoin.Crypto.PubKey (PublicKey, unsign)
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx (Tx(..))
 
@@ -74,7 +74,7 @@ instance Query (Env c) where
 
 data Program c = Program
     { progValue   :: Rad.Value
-    , progAuthor  :: Hashed c (PK c)
+    , progAuthor  :: Hashed c (PublicKey c)
     , progChainId :: Word16
     , progNonce   :: Word32
     } deriving (Generic)
@@ -83,7 +83,7 @@ deriving instance Show (Hash c) => Show (Program c)
 instance Serialise (Hash c) => Serialise (Program c)
 
 -- | Convert a 'Tx' to a Radicle 'Program'.
-txToProgram :: Hashable c (PK c) => RadTx c -> Program c
+txToProgram :: Hashable c (PublicKey c) => RadTx c -> Program c
 txToProgram Tx{..} =
     Program
         { progValue   = unsign txMessage
@@ -92,7 +92,7 @@ txToProgram Tx{..} =
         , progNonce   = txNonce
         }
 
-txEval :: Hashable c (PK c) => Evaluator (Env c) (RadTx c) Rad.Value
+txEval :: Hashable c (PublicKey c) => Evaluator (Env c) (RadTx c) Rad.Value
 txEval tx st = radicleEval (txToProgram tx) st
 
 radicleEval :: Evaluator (Env c) (Program c) Rad.Value

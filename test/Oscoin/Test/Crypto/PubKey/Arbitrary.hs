@@ -9,7 +9,13 @@ module Oscoin.Test.Crypto.PubKey.Arbitrary (
 import           Oscoin.Test.Crypto
 
 import           Oscoin.Crypto.PubKey
-                 (HasDigitalSignature, PK, SK, Signed, generateKeyPair, sign)
+                 ( HasDigitalSignature
+                 , PrivateKey
+                 , PublicKey
+                 , Signed
+                 , generateKeyPair
+                 , sign
+                 )
 import           Oscoin.Prelude
 
 import           Crypto.Random.Types (MonadRandom(..))
@@ -43,13 +49,13 @@ arbitrarySignedWith
        , ByteArrayAccess a
        , HasDigitalSignature c
        )
-    => SK c
+    => PrivateKey c
     -> Gen (Signed c a)
 arbitrarySignedWith pk = do
     seed <- arbitrary
     withFastRandomBytes (SplitMix.mkSMGen seed) . sign pk <$> arbitrary
 
-arbitraryKeyPair :: (HasHashing c, HasDigitalSignature c) => Gen (PK c, SK c)
+arbitraryKeyPair :: (HasHashing c, HasDigitalSignature c) => Gen (PublicKey c, PrivateKey c)
 arbitraryKeyPair = do
     seed <- arbitrary
     pure $ withFastRandomBytes (SplitMix.mkSMGen seed) generateKeyPair
@@ -62,5 +68,5 @@ arbitrarySigned
        ) => Proxy c
          -> Gen (Signed c a)
 arbitrarySigned Proxy = do
-    (_, priv :: SK c) <- arbitraryKeyPair
+    (_, priv :: PrivateKey c) <- arbitraryKeyPair
     arbitrarySignedWith priv

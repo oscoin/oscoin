@@ -8,7 +8,7 @@ import           Oscoin.Crypto
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
-import           Oscoin.Crypto.PubKey.Internal (PrivateKey(..))
+import           Oscoin.Crypto.PubKey.Internal (SK(..))
 import           Oscoin.Crypto.PubKey.Mock
 import           Oscoin.Crypto.PubKey.RealWorld
 
@@ -69,20 +69,20 @@ instance Crypto.HasHashing c => Condensed (Blockchain c tx s) where
 instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
     condensed = decodeUtf8 . Crypto.shortHash . Crypto.fromHashed
 
-instance Condensed (PK Crypto) where
+instance Condensed (PublicKey Crypto) where
     condensed = show
 
 -- NOTE(adn) It's a bit of a security hazard to implement a 'Show' instance
 -- for a private key, as that might end up in public logs and other crazy things.
 -- This is why we define (in the tests only) such 'Condensed' instance.
-instance Condensed (SK Crypto) where
-    condensed (SK (PrivateKey k)) = show k
+instance Condensed (PrivateKey Crypto) where
+    condensed (PrivateKey (SK k)) = show k
 
-instance Condensed (PK MockCrypto) where
+instance Condensed (PublicKey MockCrypto) where
     condensed = show
 
-instance Condensed (SK MockCrypto) where
-    condensed (MockSK (PrivateKey k)) = show k
+instance Condensed (PrivateKey MockCrypto) where
+    condensed (MockSK (SK k)) = show k
 
 instance Show (Signature c) => Condensed (Signed c Text) where
     condensed = show

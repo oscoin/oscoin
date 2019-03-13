@@ -80,8 +80,8 @@ testOscoinCrypto d = [
       testCase     "fnord roundtrip" (testSignRoundtrip d)
     , testProperty "CBOR.decode Hash . CBOR.encode Hash  == id" (testSerialiseHashRoundtrip d)
     , testProperty "CBOR.decode Signed . CBOR.encode Signed  == id" (testSerialiseSignedRoundtrip d)
-    , testProperty "CBOR.decode PK . CBOR.encode PK  == id" (testSerialisePkRoundtrip d)
-    , testProperty "JSON.fromJSON  PK . JSON.toJSON PK  == id" (testJsonPkRoundtrip d)
+    , testProperty "CBOR.decode PublicKey . CBOR.encode PublicKey  == id" (testSerialisePkRoundtrip d)
+    , testProperty "JSON.fromJSON  PublicKey . JSON.toJSON PublicKey  == id" (testJsonPkRoundtrip d)
     ]
 
 testSerialiseHashRoundtrip :: forall c. Dict (IsCrypto c) -> Property

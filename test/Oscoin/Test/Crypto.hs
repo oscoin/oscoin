@@ -62,31 +62,31 @@ type IsCrypto c = ( HasDigitalSignature c
                   , HasHashing c
 
                   , ToJSON (Hash c)
-                  , ToJSON (PK c)
+                  , ToJSON (PublicKey c)
                   , ToJSON (Signature c)
-                  , FromJSON (PK c)
+                  , FromJSON (PublicKey c)
                   , FromJSON (Signature c)
                   , FromJSON (BlockHash c)
                   , FromHttpApiData (BlockHash c)
                   , Typeable c
-                  , Serialise (PK c)
+                  , Serialise (PublicKey c)
                   , Serialise (Signature c)
                   , Serialise (BlockHash c)
-                  , Eq (PK c)
+                  , Eq (PublicKey c)
                   , Eq (Signature c)
-                  , Show (PK c)
+                  , Show (PublicKey c)
                   , Show (Signature c)
                   , Show (Hash c)
                   , Semigroup (Hash c)
-                  , Condensed (PK c)
-                  , Condensed (SK c)
+                  , Condensed (PublicKey c)
+                  , Condensed (PrivateKey c)
                   , Hashable c (Signed c Text)
                   , Hashable c [Word8]
                   , Hashable c Word8
                   , Hashable c Text
                   , Hashable c ByteString
                   , Hashable c LByteString
-                  , Hashable c (PK c)
+                  , Hashable c (PublicKey c)
                   , Hashable c (Rad.Env c)
                   , AuthTree.MerkleHash (Hash c)
                   , Ord (Hash c)

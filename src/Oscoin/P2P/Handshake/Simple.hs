@@ -22,13 +22,13 @@ import           Data.ByteArray.Orphans ()
 
 
 data HandshakeMessage c =
-      Hai (Crypto.PK c)
+      Hai (Crypto.PublicKey c)
     -- ^ Present a pubkey and random value.
     | Bai SimpleError
     -- ^ At any point, either side may bail oout.
     deriving (Generic)
 
-instance Serialise (Crypto.PK c) => Serialise (HandshakeMessage c)
+instance Serialise (Crypto.PublicKey c) => Serialise (HandshakeMessage c)
 
 data SimpleError =
       InvalidSignature
@@ -42,7 +42,7 @@ data SimpleError =
 instance Exception SimpleError
 instance Serialise SimpleError
 
--- | Exchanges the 'Crypto.PK's of the participants.
+-- | Exchanges the 'Crypto.PublicKey's of the participants.
 --
 -- Chained 'Handshake's will sign outgoing messages, and verify incoming ones.
 --
@@ -52,13 +52,13 @@ instance Serialise SimpleError
 -- signed, avoiding multiple signatures.
 keyExchange
     :: forall c p.
-       ( Serialise (Crypto.PK c)
+       ( Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Eq (Crypto.PK c)
+       , Eq (Crypto.PublicKey c)
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c
-    -> Handshake SimpleError (Crypto.PK c) p p
+    -> Handshake SimpleError (Crypto.PublicKey c) p p
 keyExchange (myPK, mySK) _role peerId = do
     handshakeSend $ Hai myPK
     hai <- handshakeRecv mapRecvError
@@ -79,9 +79,9 @@ keyExchange (myPK, mySK) _role peerId = do
 
 signedPayloads
     :: (ByteArrayAccess o, Crypto.HasDigitalSignature c)
-    => Crypto.SK c
-    -> HandshakeResult i o                   (Crypto.PK c)
-    -> HandshakeResult i (Crypto.Signed c o) (Crypto.PK c)
+    => Crypto.PrivateKey c
+    -> HandshakeResult i o                   (Crypto.PublicKey c)
+    -> HandshakeResult i (Crypto.Signed c o) (Crypto.PublicKey c)
 signedPayloads sk hr = mapOutput (sign sk) (verify (hrPeerId hr)) hr
 
 -- | Transform a 'Handshake' with a lookup action for the obtained 'hrPeerId'.
@@ -89,7 +89,7 @@ signedPayloads sk hr = mapOutput (sign sk) (verify (hrPeerId hr)) hr
 -- If the 'hrPeerId' is not found by the lookup action (ie. it returns 'IO
 -- False'), the handshake is aborted with 'Unauthorized'.
 whitelist
-    :: (Eq n, Serialise (Crypto.PK c))
+    :: (Eq n, Serialise (Crypto.PublicKey c))
     => Proxy c
     -> (n -> IO Bool) -- ^ 'True' if this peer id is granted access, 'False' otherwise
     -> Handshake SimpleError n i o
@@ -108,7 +108,7 @@ mapRecvError = \case
     Transport.RecvConnReset -> Gone
 
 guardPeerId
-    :: forall i o n c. (Eq n, Serialise (Crypto.PK c))
+    :: forall i o n c. (Eq n, Serialise (Crypto.PublicKey c))
     => Proxy c
     -> Maybe n
     -> HandshakeResult i o n
@@ -121,14 +121,14 @@ guardPeerId _ _ res = pure res
 
 sign
     :: (Crypto.HasDigitalSignature c, ByteArrayAccess a)
-    => Crypto.SK c
+    => Crypto.PrivateKey c
     -> a
     -> IO (Crypto.Signed c a)
 sign = Crypto.sign
 
 verify
     :: (Crypto.HasDigitalSignature c, ByteArrayAccess a)
-    => Crypto.PK c
+    => Crypto.PublicKey c
     -> Crypto.Signed c a
     -> IO a
 verify theirPK signed =

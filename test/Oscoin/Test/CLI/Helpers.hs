@@ -81,7 +81,7 @@ newtype TestCommandRunner c a = TestCommandRunner
 
 data TestCommandState c = TestCommandState
     { transactions  :: Map.Map (Hashed c (RadTx c)) (RadTx c)
-    , storedKeyPair :: Maybe (Crypto.PK c, Crypto.SK c)
+    , storedKeyPair :: Maybe (Crypto.PublicKey c, Crypto.PrivateKey c)
     , commandOutput :: Text
     }
 

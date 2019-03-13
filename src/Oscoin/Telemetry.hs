@@ -35,7 +35,7 @@ import           Oscoin.Crypto.Blockchain.Block (prettyDifficulty)
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (formatHash, formatHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Crypto.PubKey (PK)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
@@ -440,7 +440,7 @@ fmtDuration = mapf Time.prettyDuration stext
 fmtNodeId
     :: forall c r.
        ( Buildable (Crypto.Hash c)
-       , Crypto.Hashable c (PK c)
+       , Crypto.Hashable c (PublicKey c)
        )
     => Format r (P2P.NodeId c -> r)
 fmtNodeId = mapf (Crypto.hash @c . P2P.fromNodeId) formatHashed
@@ -450,7 +450,7 @@ fmtSockAddr = shown -- FIXME(kim)
 
 fmtPeer
     :: forall c r.
-       ( Crypto.Hashable c (PK c)
+       ( Crypto.Hashable c (PublicKey c)
        , Buildable (Crypto.Hash c)
        )
     => Format r (Gossip.Peer (P2P.NodeId c) -> r)

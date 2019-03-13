@@ -35,7 +35,7 @@ testSimpleHandshake
     :: forall c. Dict (IsCrypto c)
     -> Property
 testSimpleHandshake Dict = withTests 1 . property $ do
-    ((pkAlice :: PK c, skAlice), (pkBob, skBob)) <- keyPairs
+    ((pkAlice :: PublicKey c, skAlice), (pkBob, skBob)) <- keyPairs
     ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
 
     let nidAlice = mkNodeId pkAlice
@@ -81,7 +81,7 @@ testSimpleHandshake Dict = withTests 1 . property $ do
 
 testSecureHandshake :: forall c. Dict (IsCrypto c) -> Property
 testSecureHandshake Dict = withTests 1 . property $ do
-    ((pkAlice :: PK c, skAlice), (pkBob, skBob)) <- keyPairs
+    ((pkAlice :: PublicKey c, skAlice), (pkBob, skBob)) <- keyPairs
     ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
 
     let nidAlice = mkNodeId pkAlice
@@ -141,7 +141,7 @@ keyPairs = liftA2 (,) gen gen
     gen = evalIO Crypto.generateKeyPair
 
 nidHash
-    :: Crypto.Hashable c (PK c)
+    :: Crypto.Hashable c (PublicKey c)
     => NodeId c
-    -> Crypto.Hashed c (PK c)
+    -> Crypto.Hashed c (PublicKey c)
 nidHash = Crypto.hash . fromNodeId

@@ -25,7 +25,7 @@ import           Oscoin.API.Client
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (Hash, fromHashed)
-import           Oscoin.Crypto.PubKey (PK, Signature)
+import           Oscoin.Crypto.PubKey (PublicKey, Signature)
 
 import           Codec.Serialise
 import qualified Data.Text as T
@@ -59,7 +59,7 @@ instance MonadTrans HttpClientT where
 
 instance ( Buildable (Hash c)
          , Serialise (BlockHash c)
-         , Serialise (PK c)
+         , Serialise (PublicKey c)
          , Serialise (Signature c)
          , Monad m
          , MonadIO m

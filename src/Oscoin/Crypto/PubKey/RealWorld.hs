@@ -21,29 +21,29 @@ import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.RealWorld ()
 import           Oscoin.Crypto.PubKey
-import           Oscoin.Crypto.PubKey.Internal (PrivateKey(..), PublicKey(..))
+import           Oscoin.Crypto.PubKey.Internal (PK(..), SK(..))
 
 instance HasDigitalSignature Crypto where
 
-    newtype PK Crypto =
-        PK (PublicKey Crypto ECDSA.PublicKey) deriving (Show, Eq)
+    newtype PublicKey Crypto =
+        PublicKey (PK Crypto ECDSA.PublicKey) deriving (Show, Eq)
 
-    newtype SK Crypto = SK (PrivateKey ECDSA.PrivateKey)
+    newtype PrivateKey Crypto = PrivateKey (SK ECDSA.PrivateKey)
 
     newtype Signature Crypto =
         Signature ECDSA.Signature deriving (Show, Eq)
 
-    sign (SK (PrivateKey sk)) bytes =
+    sign (PrivateKey (SK sk)) bytes =
         let (alg :: HashAlgorithm Crypto) = hashAlgorithm
          in Signed bytes . Signature <$> ECDSA.sign sk alg bytes
 
-    verify (PK (PublicKey pk _)) (Signed bytes (Signature sig)) =
+    verify (PublicKey (PK pk _)) (Signed bytes (Signature sig)) =
         let (alg :: HashAlgorithm Crypto) = hashAlgorithm
          in ECDSA.verify alg pk sig bytes
 
     generateKeyPair = do
         (pk, sk) <- generate (getCurveByName SEC_p256k1)
-        pure (PK $ PublicKey pk (hash pk), SK $ PrivateKey sk)
+        pure (PublicKey $ PK pk (hash pk), PrivateKey $ SK sk)
 
 
 {------------------------------------------------------------------------------
@@ -74,23 +74,23 @@ instance Serialise (Signature Crypto) where
                 liftA2 ECDSA.Signature CBOR.decodeInteger CBOR.decodeInteger
             _ -> fail "CBOR Signature: invalid ECDSA signature"
 
-instance Eq (PublicKey Crypto ECDSA.PublicKey) where
-    (PublicKey a1 b1) == (PublicKey a2 b2) = a1 == a2 && b1 == b2
+instance Eq (PK Crypto ECDSA.PublicKey) where
+    (PK a1 b1) == (PK a2 b2) = a1 == a2 && b1 == b2
 
-instance H.Hashable (PK Crypto) where
-    hashWithSalt salt (PK (PublicKey _ h)) = H.hashWithSalt salt . fromHashed $ h
+instance H.Hashable (PublicKey Crypto) where
+    hashWithSalt salt (PublicKey (PK _ h)) = H.hashWithSalt salt . fromHashed $ h
 
-instance Serialise (PK Crypto) where
-    encode (PK (PublicKey pk _)) = encode pk
-    decode = (\pk -> PK $ PublicKey @Crypto pk (hash pk)) <$> decode
+instance Serialise (PublicKey Crypto) where
+    encode (PublicKey (PK pk _)) = encode pk
+    decode = (\pk -> PublicKey $ PK @Crypto pk (hash pk)) <$> decode
 
-instance Hashable Crypto (PK Crypto) where
-    hash (PK (PublicKey _ h)) = toHashed $ fromHashed h
+instance Hashable Crypto (PublicKey Crypto) where
+    hash (PublicKey (PK _ h)) = toHashed $ fromHashed h
 
-instance ToJSON (PK Crypto) where
+instance ToJSON (PublicKey Crypto) where
     toJSON = serialiseToJSON
 
-instance FromJSON (PK Crypto) where
+instance FromJSON (PublicKey Crypto) where
     parseJSON = deserialiseParseJSON
 
 
@@ -98,8 +98,8 @@ instance FromJSON (PK Crypto) where
   Utility functions
 -------------------------------------------------------------------------------}
 
-serialisePrivateKey :: SK Crypto -> LBS.ByteString
-serialisePrivateKey (SK (PrivateKey sk)) =
+serialisePrivateKey :: PrivateKey Crypto -> LBS.ByteString
+serialisePrivateKey (PrivateKey (SK sk)) =
     CBOR.toLazyByteString $
        CBOR.encodeListLen 3
     <> CBOR.encodeWord 0
@@ -108,12 +108,12 @@ serialisePrivateKey (SK (PrivateKey sk)) =
 
 deserialisePrivateKey
     :: LBS.ByteString
-    -> Either CBOR.DeserialiseFailure (SK Crypto)
+    -> Either CBOR.DeserialiseFailure (PrivateKey Crypto)
 deserialisePrivateKey bs = second snd $ CBOR.deserialiseFromBytes decoder bs
   where
     decoder = do
         pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
         case pre of
             (3, 0) ->
-                SK . PrivateKey <$> (ECDSA.PrivateKey <$> decode <*> CBOR.decodeInteger)
-            _ -> fail "CBOR: Invalid PrivateKey"
+                PrivateKey . SK <$> (ECDSA.PrivateKey <$> decode <*> CBOR.decodeInteger)
+            _ -> fail "CBOR: Invalid SK"

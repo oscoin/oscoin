@@ -28,7 +28,7 @@ import           Data.Text.Prettyprint.Doc
  Types
 ------------------------------------------------------------------------------}
 
-type KeyPair c = (PK c, SK c)
+type KeyPair c = (PublicKey c, PrivateKey c)
 
 data Signed c msg = Signed
     { sigMessage   :: msg
@@ -44,12 +44,12 @@ deriving instance (Ord (Signature c), Ord msg) => Ord (Signed c msg)
 ------------------------------------------------------------------------------}
 
 class HasDigitalSignature c where
-    data family PK c :: *
-    data family SK c :: *
+    data family PublicKey c :: *
+    data family PrivateKey c :: *
     data family Signature c :: *
 
-    sign   :: (ByteArrayAccess msg, MonadRandom m) => SK c -> msg -> m (Signed c msg)
-    verify :: ByteArrayAccess msg => PK c -> Signed c msg -> Bool
+    sign   :: (ByteArrayAccess msg, MonadRandom m) => PrivateKey c -> msg -> m (Signed c msg)
+    verify :: ByteArrayAccess msg => PublicKey c -> Signed c msg -> Bool
 
     -- | Generate a new random keypair.
     generateKeyPair :: (Crypto.HasHashing c, MonadRandom m) => m (KeyPair c)

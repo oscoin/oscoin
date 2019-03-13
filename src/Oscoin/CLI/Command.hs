@@ -52,13 +52,13 @@ data Command =
 
 dispatchCommand
     :: ( MonadCLI c m
-       , Yaml.ToJSON (Crypto.PK c)
+       , Yaml.ToJSON (Crypto.PublicKey c)
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Crypto.HasDigitalSignature c
-       , Crypto.Hashable c (Crypto.PK c)
+       , Crypto.Hashable c (Crypto.PublicKey c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.Signature c)
@@ -90,13 +90,13 @@ printGenesisYaml
     :: forall c m.
        ( MonadCLI c m
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PK c)
+       , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
-       , Crypto.Hashable c (Crypto.PK c)
+       , Crypto.Hashable c (Crypto.PublicKey c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
-       , Yaml.ToJSON (Crypto.PK c)
+       , Yaml.ToJSON (Crypto.PublicKey c)
        , Yaml.ToJSON (Crypto.Signature c)
        )
     => [API.RadTx c]

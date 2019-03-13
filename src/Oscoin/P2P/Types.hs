@@ -24,7 +24,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hash, Hashed)
-import           Oscoin.Crypto.PubKey (PK)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Telemetry.Logging as Log
 
 import qualified Network.Gossip.IO.Peer as Gossip (Peer)
@@ -38,20 +38,20 @@ import           Formatting as F
 import qualified Generics.SOP as SOP
 import           Network.Socket (HostName, PortNumber, SockAddr)
 
-newtype NodeId c = NodeId { fromNodeId :: PK c }
+newtype NodeId c = NodeId { fromNodeId :: PublicKey c }
     deriving (Generic)
 
-deriving instance Show (PK c)     => Show (NodeId c)
-deriving instance FromJSON (PK c) => FromJSON (NodeId c)
-deriving instance ToJSON (PK c)   => ToJSON (NodeId c)
+deriving instance Show (PublicKey c)     => Show (NodeId c)
+deriving instance FromJSON (PublicKey c) => FromJSON (NodeId c)
+deriving instance ToJSON (PublicKey c)   => ToJSON (NodeId c)
 
-deriving instance Eq (PK c)  => Eq (NodeId c)
-deriving instance Ord (PK c) => Ord (NodeId c)
+deriving instance Eq (PublicKey c)  => Eq (NodeId c)
+deriving instance Ord (PublicKey c) => Ord (NodeId c)
 
-deriving instance (Hashable (PK c))  => Hashable  (NodeId c)
-instance (Serialise (PK c))          => Serialise (NodeId c)
+deriving instance (Hashable (PublicKey c))  => Hashable  (NodeId c)
+instance (Serialise (PublicKey c))          => Serialise (NodeId c)
 
-mkNodeId :: PK c -> NodeId c
+mkNodeId :: PublicKey c -> NodeId c
 mkNodeId = NodeId
 
 -- | 'NodeAddr' of this node. Must specify a 'NodeId'.

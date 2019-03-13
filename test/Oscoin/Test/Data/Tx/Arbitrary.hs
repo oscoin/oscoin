@@ -3,7 +3,7 @@
 module Oscoin.Test.Data.Tx.Arbitrary where
 
 import           Oscoin.Crypto.Hash (fromHashed, hash)
-import           Oscoin.Crypto.PubKey (PK)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Data.Tx
 import           Oscoin.Prelude
 import           Oscoin.Test.Crypto
@@ -15,7 +15,7 @@ import           Test.QuickCheck.Instances.ByteString ()
 
 instance (IsCrypto c, ByteArrayAccess a, Arbitrary a) => Arbitrary (Tx c a) where
     arbitrary = do
-        (pub :: PK c, priv) <- arbitraryKeyPair
+        (pub :: PublicKey c, priv) <- arbitraryKeyPair
         msg           <- arbitrarySignedWith priv
         randomNonce   <- arbitrary
         randomChainId <- arbitrary
