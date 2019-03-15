@@ -30,10 +30,11 @@ Run the tests with file-watching with::
 
 To load the tests in the repl, run::
 
-  stack repl --test --main-is oscoin:test:test
+  stack repl oscoin:lib oscoin:test
 
-Then call the ``main`` function to run them, and reload with ``:r`` as
-necessary.
+Then run ``:main`` from the repl to run the tests, and reload with ``:r`` as
+necessary. You can run a subset of tests with ``:main -p "test
+pattern"``.
 
 Profiling
 ---------
