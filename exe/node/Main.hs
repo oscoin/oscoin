@@ -23,7 +23,7 @@ import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
-import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
+import qualified Oscoin.Storage.Block.STM as BlockStore.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
@@ -31,8 +31,8 @@ import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
 import qualified Control.Concurrent.Async as Async
+import           Control.Monad.Managed (managed, runManaged)
 import qualified Data.Yaml as Yaml
-import           GHC.Generics (Generic)
 import           Network.Socket (HostName, PortNumber)
 
 import           Options.Applicative
@@ -48,7 +48,7 @@ data Args = Args
     , environment   :: Environment
     , ekgHost       :: HostName
     , ekgPort       :: PortNumber
-    } deriving (Generic, Show)
+    }
 
 args :: ParserInfo Args
 args = info (helper <*> parser) $ progDesc "Oscoin Node"
@@ -115,40 +115,66 @@ main = do
 
     let consensus = Consensus.nakamotoConsensus
 
-    keys        <- runReaderT readKeyPair keysPath
-    nid         <- pure (mkNodeId $ fst keys)
-    mem         <- Mempool.newIO
-    gen         <- Yaml.decodeFileThrow genesis :: IO GenesisBlock
-    genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
-    stStore     <- StateStore.fromStateM genState
-    let config  = Consensus.getConfig environment
-
+    keys         <- runReaderT readKeyPair keysPath
+    nid          <- pure (mkNodeId $ fst keys)
+    mem          <- Mempool.newIO
+    gen          <- Yaml.decodeFileThrow genesis :: IO GenesisBlock
+    genState     <- either (die . fromEvalError) pure $
+                        evalBlock Rad.txEval Rad.pureEnv gen
+    stStore      <- StateStore.fromStateM genState
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
-    forkEkgServer metricsStore ekgHost ekgPort
+    let consensusConfig = Consensus.getConfig environment
 
-    withStdLogger (Log.configForEnvironment environment) $ \lgr -> Log.withExceptionLogged lgr $
-        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) Nakamoto.blockScore $ \blkStore@(publicBlockStore, _) -> do
-            let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
-            runProtocol Nakamoto.validateFull Nakamoto.blockScore telemetryHandle blkStore config $ \proto ->
-                withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
-                         nid
-                         mem
-                         stStore
-                         publicBlockStore
-                         proto
-                         Rad.txEval
-                         consensus                                      $ \nod ->
-                    withGossip telemetryHandle
-                               P2P.NodeAddr { P2P.nodeId   = pure nid
-                                            , P2P.nodeHost = host
-                                            , P2P.nodePort = gossipPort
-                                            }
-                               seeds
-                               (storage nod)
-                               (Handshake.simpleHandshake keys)         $ \gos ->
-                        Async.runConcurrently $
-                                 Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
-                              <> Async.Concurrently (miner nod gos)
+    res :: Either SomeException () <-
+          try
+        $ withStdLogger (Log.configForEnvironment environment) $ \lgr ->
+          Log.withExceptionLogged lgr
+        . runManaged
+        $ do
+            let telemetry = Telemetry.newTelemetryStore lgr metricsStore
+
+            blkStore@(blkStoreReader,_) <- managed $
+                BlockStore.STM.withBlockStore (fromGenesis gen)
+                                              Nakamoto.blockScore
+
+            proto <- managed $
+                runProtocol Nakamoto.validateFull
+                            Nakamoto.blockScore
+                            telemetry
+                            blkStore
+                            consensusConfig
+
+            node <- managed $
+                let config = mkNodeConfig environment
+                                          telemetry
+                                          noEmptyBlocks
+                                          consensusConfig
+                 in withNode config
+                             nid
+                             mem
+                             stStore
+                             blkStoreReader
+                             proto
+                             Rad.txEval
+                             consensus
+
+            gossip <- managed $
+                withGossip telemetry
+                           P2P.NodeAddr { P2P.nodeId   = pure nid
+                                        , P2P.nodeHost = host
+                                        , P2P.nodePort = gossipPort
+                                        }
+                           seeds
+                           (storage node)
+                           (Handshake.simpleHandshake keys)
+
+            liftIO $ do
+                forkEkgServer metricsStore ekgHost ekgPort
+                Async.runConcurrently $
+                         Async.Concurrently (HTTP.run (fromIntegral apiPort) node)
+                      <> Async.Concurrently (miner node gossip)
+
+    either (const exitFailure) (const exitSuccess) res
   where
     mkNodeConfig env telemetryHandle neb config = Node.Config
         { Node.cfgEnv = env

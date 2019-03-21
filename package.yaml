@@ -94,6 +94,7 @@ executables:
       ld-options: -static
     dependencies:
       - async
+      - managed
       - network
       - optparse-applicative
       - oscoin
