@@ -24,7 +24,6 @@ import           Oscoin.Prelude
 import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Consensus (Consensus(..), ValidationError)
 import qualified Oscoin.Consensus as Consensus
-import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
@@ -168,15 +167,14 @@ storage
        , Log.Buildable (Hash c)
        , Ord (StateHash c)
        )
-    => Evaluator st tx o
-    -> (Block c tx (Sealed c s) -> Either (ValidationError c) ())
-    -> Consensus.Config
+    => (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Storage c tx s (NodeT c tx st s i m)
-storage eval validateBasic config = Storage
+storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
-        dispatchBlock <- asks (Protocol.dispatchBlockAsync . hProtocol)
-        bs <- asks hBlockStore
-        Storage.applyBlock (hoistBlockStoreReader liftIO bs) (liftIO . dispatchBlock) eval validateBasic config blk
+        Handle{hProtocol, hBlockStore, hEval, hConfig} <- ask
+        let dispatchBlock = liftIO . Protocol.dispatchBlockAsync hProtocol
+        let consensusConfig =  cfgConsensusConfig hConfig
+        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock hEval validateBasic consensusConfig blk
     , storageApplyTx     = \tx -> do
         bs <- asks hBlockStore
         Storage.applyTx (hoistBlockStoreReader liftIO bs) tx
