@@ -5,21 +5,28 @@ packages:
 - base58-bytestring-0.1.0
 - ekg-0.4.0.15@sha256:f52d7c00654d72d2ab988255f30adba95a52484ac310bab9c136c64732e69f4b
 - ekg-json-0.1.0.6@sha256:4ff2e9cac213a5868ae8b4a7c72a16a9a76fac14d944ae819b3d838a9725569b
-- focus-0.1.5.2@sha256:fc5c76a5be3a9a1c456106d6f389939299c7e05a1a24938b909f043e36a3e37b
 - github-0.20
 - pretty-terminal-0.1.0.0
 - primitive-extras-0.7.1@sha256:23905c57089418b1a2d324cfee3e81bbd5a344a0fa56a827867b2dce275fdb5e
 - reroute-0.5.0.0
 - sandi-0.5@sha256:b278d072ca717706ea38f9bd646e023f7f2576a778fb43565b434f93638849aa
-- Spock-0.13.0.0
-- Spock-core-0.13.0.0
-- stm-containers-0.2.16@sha256:e98efa8dcf0045ea8a78a04b4e2763cf2d8bc33aad0750e2f30a67f8f4e933b1
+- stm-containers-1.1.0.2@sha256:8976df591e61f378ef29dc0443dbe2d5d34818c898093af3ca138ea1d013b5eb
+- focus-1.0.1.2@sha256:5399f2957b2a4ad2f15fb21f3da4ff5ed6c4394f9d4a32504c19ca48ac61109f
+- stm-hamt-1.2.0.2@sha256:18126db7bf2d9c967a6020c677b3005dd957a4c39d69aeaea3c29c90de8f6124
 - tasty-fail-fast-0.0.3
 - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
 
   # https://github.com/nick8325/quickcheck/issues/234
 - git: https://github.com/oscoin/qc-instances
   commit: e659eb65a421a91603de4d7645d370abf19aeeef
+
+  # 0.13.0.1
+  # https://github.com/agrafix/Spock/pull/152 (Bump to stm-containers >= 1)
+- git: https://github.com/agrafix/Spock
+  commit: 4eb322398ce9e9b8f0a851955bcc963ae1fedc34
+  subdirs:
+      - Spock
+      - Spock-core
 
 - git: http://github.com/oscoin/radicle
   commit: eaf70a9e0b36af44d02d0372bc0ac2dcc3d1b29c
@@ -28,7 +35,7 @@ packages:
   commit: dfc468845a82cdd7d759943b20853999bc026505
 
 - git: https://github.com/oscoin/gossip
-  commit: 7da6fed6821cc0452ef194522c3cc59019ab7f53
+  commit: 78e457dc23f7225d8956381eb5312aa2a0d98356
 
 - git: https://github.com/oscoin/ipfs
   commit: 30a67159d5b58cf63be903920d6349f0be15cd46
