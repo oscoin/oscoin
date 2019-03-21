@@ -144,7 +144,7 @@ main = do
                                             , P2P.nodePort = gossipPort
                                             }
                                seeds
-                               (storage nod config)
+                               (storage nod)
                                (Handshake.simpleHandshake keys)         $ \gos ->
                         Async.runConcurrently $
                                  Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
@@ -158,5 +158,5 @@ main = do
         }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
-    storage nod config =
-        hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBasic config)
+    storage nod =
+        hoistStorage (runNodeT nod) (Node.storage Nakamoto.validateBasic)
