@@ -7,37 +7,59 @@
 -}
 
 module Oscoin.Storage.Block.Abstract
-    ( BlockStore(..)
+    ( BlockStoreReader(..)
+    , BlockStore
 
-    , hoistBlockStore
-    , noValidation
+    , hoistBlockStoreReader
     , insertBlocksNaive
     , isNovelBlock
+
+    -- * Internals
+    , BlockStoreWriter(..)
+    , hoistBlockStoreWriter
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Types (Validate)
 import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Time.Chrono (NewestFirst, OldestFirst)
 
--- | An handle over a block storage backend.
-data BlockStore c tx s m = BlockStore
-    { scoreBlock      :: Block c tx (Sealed c s) -> Score
-    -- ^ When given a 'Block', return its 'Score'.
-    , insertBlock     :: Block c tx (Sealed c s) -> m ()
-    -- ^ Inserts a 'Block' into the store.
-    , getGenesisBlock :: m (Block c tx (Sealed c s))
+-- The full 'BlockStore' API is the composition of its public and private parts.
+-- Morally, the 'BlockStore' offers an opaque interface to some kind of
+-- persistent storage for blocks, with a set of operations to insert,
+-- remove and retrieve them.
+type BlockStore c tx s m =
+    ( BlockStoreReader c tx s m
+    , BlockStoreWriter c tx s m
+    )
+
+-- | The internals for this 'BlockStore', i.e. the private API which shouldn't
+-- be visible to \"read-only consumers\".
+data BlockStoreWriter c tx s m = BlockStoreWriter
+    { insertBlock     :: Block c tx (Sealed c s) -> m ()
+    -- ^ Inserts a 'Block' into the store. Generally speaking, application code
+    -- is not expected to call this function directly, as it assumes that the
+    -- parent of this input 'Block' is the same returned by 'getTip'.
+    , switchToFork    :: Depth -> OldestFirst NonEmpty (Block c tx (Sealed c s)) -> m ()
+    -- ^ @switchToFork n bs@ removes the @n@ latest blocks and calls
+    -- 'insertBlock' for each block in @bs@ starting from the first
+    -- (i.e. the oldest) in the list.
+    }
+
+-- | An handle over a block storage backend, namely to its public API.
+data BlockStoreReader c tx s m = BlockStoreReader
+    { getGenesisBlock :: m (Block c tx (Sealed c s))
     -- ^ Get the genesis block.
     , lookupBlock     :: BlockHash c -> m (Maybe (Block c tx (Sealed c s)))
     -- ^ Lookups a 'Block' from the store when given its hash.
     , lookupTx        :: Hashed c tx -> m (Maybe (TxLookup c tx))
     -- ^ Lookups a transaction by its hash.
-    , getOrphans      :: m (Set (BlockHash c))
-    -- ^ The 'Hashed BlockHeader's of 'Block's for which we do not have a parent.
-    , getBlocks       :: Depth -> m [Block c tx (Sealed c s)]
-    -- ^ Returns the last N blocks, given a depth.
+    , getBlocksByDepth :: Depth -> m (NewestFirst [] (Block c tx (Sealed c s)))
+    -- ^ Returns the last N blocks, given the 'Depth'.
+    , getBlocksByParentHash :: BlockHash c -> m (NewestFirst [] (Block c tx (Sealed c s)))
+    -- ^ Returns the blocks starting from the input parent hash.
     , getTip          :: m (Block c tx (Sealed c s))
     -- ^ Returns the tip of the chain.
     }
@@ -48,23 +70,27 @@ Extra operations on the BlockStore, which are implementation-independent.
 
 -- | Given a natural transformation from @n@ to @m@, hoists a 'BlockStore'
 -- initialised with a monad @n@ to work in the monad @m@.
-hoistBlockStore
+hoistBlockStoreReader
     :: forall c tx s n m. (forall a. n a -> m a)
-    -> BlockStore c tx s n
-    -> BlockStore c tx s m
-hoistBlockStore natTrans bs = BlockStore
-    { scoreBlock      = scoreBlock bs
-    , insertBlock     = natTrans . insertBlock bs
-    , getGenesisBlock = natTrans (getGenesisBlock bs)
-    , lookupBlock     = natTrans . lookupBlock bs
-    , lookupTx        = natTrans . lookupTx bs
-    , getOrphans      = natTrans (getOrphans bs)
-    , getBlocks       = natTrans . getBlocks bs
-    , getTip          = natTrans (getTip bs)
+    -> BlockStoreReader c tx s n
+    -> BlockStoreReader c tx s m
+hoistBlockStoreReader natTrans bs = BlockStoreReader
+    { getGenesisBlock       = natTrans (getGenesisBlock bs)
+    , lookupBlock           = natTrans . lookupBlock bs
+    , lookupTx              = natTrans . lookupTx bs
+    , getBlocksByDepth      = natTrans . getBlocksByDepth bs
+    , getBlocksByParentHash = natTrans . getBlocksByParentHash bs
+    , getTip                = natTrans (getTip bs)
     }
 
-noValidation :: Validate c tx s
-noValidation _ _ = Right ()
+hoistBlockStoreWriter
+    :: forall c tx s n m. (forall a. n a -> m a)
+    -> BlockStoreWriter c tx s n
+    -> BlockStoreWriter c tx s m
+hoistBlockStoreWriter natTrans bs = BlockStoreWriter
+    { insertBlock  = natTrans . insertBlock bs
+    , switchToFork = \d -> natTrans . switchToFork bs d
+    }
 
 -- | /O(n)/. A naive function to store blocks in linear time.
 -- Useful for testing but discouraged for any serious production use.
@@ -73,10 +99,10 @@ noValidation _ _ = Right ()
 -- can decide how to implement it efficiently.
 insertBlocksNaive
     :: Monad m
-    => BlockStore c tx s m
-    -> [Block c tx (Sealed c s)]
+    => BlockStoreWriter c tx s m
+    -> OldestFirst [] (Block c tx (Sealed c s))
     -> m ()
-insertBlocksNaive bs = traverse_ (insertBlock bs) . reverse
+insertBlocksNaive bs = traverse_ (insertBlock bs)
 
-isNovelBlock :: Functor m => BlockStore c tx s m -> BlockHash c -> m Bool
+isNovelBlock :: Functor m => BlockStoreReader c tx s m -> BlockHash c -> m Bool
 isNovelBlock bs = map isNothing . lookupBlock bs

@@ -7,25 +7,24 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Storage.Block.Abstract (BlockStore)
+import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import qualified Oscoin.Storage.State.Class as StateStore
+import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator, buildBlock)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt, buildBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.Storage.Receipt.Class
 
 import           Codec.Serialise (Serialise)
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 
 -- | Mine a block with the given 'Consensus' on top of the best chain obtained
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
 mineBlock
     :: ( MonadMempool      c tx   m
-       , MonadReceiptStore c tx b m
        , MonadStateStore   c st   m
        , Serialise         tx
        , Crypto.Hashable   c tx
@@ -33,11 +32,11 @@ mineBlock
        , Crypto.Hashable   c (BlockHeader c Unsealed)
        , AuthTree.MerkleHash (Crypto.Hash c)
        )
-    => BlockStore c tx s m
+    => BlockStoreReader c tx s m
     -> Consensus c tx s m
     -> Evaluator st tx b
     -> Timestamp
-    -> m (Maybe (Block c tx (Sealed c s)))
+    -> m (Maybe (Block c tx (Sealed c s), st, [Receipt c tx b]))
 mineBlock bs Consensus{cMiner} eval time = do
     txs <- (map . map) snd Mempool.getTxs
     parent <- BlockStore.getTip bs
@@ -45,13 +44,8 @@ mineBlock bs Consensus{cMiner} eval time = do
     case maybeState of
         Just st -> do
             let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
-            maybeSealedBlock <- cMiner (BlockStore.getBlocks bs) blockCandidate
-            for maybeSealedBlock $ \blk -> do
-                Mempool.delTxs (blockData blk)
-                BlockStore.insertBlock bs blk
-                StateStore.storeState st'
-                for_ receipts addReceipt
-                pure blk
+            maybeSealedBlock <- cMiner (map toNewestFirst . BlockStore.getBlocksByDepth bs) blockCandidate
+            pure $ liftA3 (,,) maybeSealedBlock (Just st') (Just receipts)
         Nothing ->
             pure Nothing
 

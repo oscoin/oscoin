@@ -14,26 +14,39 @@ module Oscoin.Test.Consensus.Node
     , runTestNodeT
     , LiftTestNodeT(..)
     , withTestBlockStore
+    , stepTestProtocol
     ) where
 
 import           Oscoin.Prelude hiding (StateT, evalStateT, runStateT, show)
 
+import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto (blockScore)
+import           Oscoin.Consensus.Types (Validate)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, Sealed, Unsealed)
+                 (Block, BlockHash, Score, Sealed, Unsealed)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
-import           Oscoin.Storage.Block.Abstract (BlockStore(..), hoistBlockStore)
+import           Oscoin.Protocol (protoOrphanage, stepProtocol, withProtocol)
+import           Oscoin.Storage.Block.Abstract
+                 ( BlockStore
+                 , BlockStoreReader(..)
+                 , BlockStoreWriter(..)
+                 , hoistBlockStoreReader
+                 , hoistBlockStoreWriter
+                 )
+import           Oscoin.Storage.Block.Orphanage (Orphanage, emptyOrphanage)
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import           Oscoin.Telemetry.Logging (Buildable)
 import           Oscoin.Test.Crypto
 import           Oscoin.Time
+import           Oscoin.Time.Chrono as Chrono
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.State.Strict
@@ -49,7 +62,6 @@ import           Test.QuickCheck
 class Monad m => LiftTestNodeT c s m | m -> s where
     liftTestNodeT :: TestNodeT c s Identity a -> m a
 
-
 -- | Runs the given action against a test 'BlockStore' which is baked by
 -- a pure, in-memory 'Handle', kept around as part of the 'NodeTestState'.
 withTestBlockStore
@@ -60,22 +72,60 @@ withTestBlockStore
     => (BlockStore c DummyTx s n -> n b)
     -> n b
 withTestBlockStore action =
-    let store = BlockStore
-          { scoreBlock      = Nakamoto.blockScore
-          , insertBlock     = \b ->
-              modify (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
-          , getGenesisBlock =
-              gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
-          , lookupBlock     = \h ->
-              BlockStore.Pure.lookupBlock h <$> gets tnsBlockstore
-          , lookupTx        = \tx ->
-              gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
-          , getOrphans      = gets (BlockStore.Pure.orphans . tnsBlockstore)
-          , getBlocks       = \d ->
-              gets (BlockStore.Pure.getBlocks d . tnsBlockstore)
-          , getTip          = gets (BlockStore.Pure.getTip . tnsBlockstore)
-          }
-    in action (hoistBlockStore liftTestNodeT store)
+    let publicAPI = BlockStoreReader
+            { getGenesisBlock =
+                gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
+            , lookupBlock     = \h ->
+                BlockStore.Pure.lookupBlock h <$> gets tnsBlockstore
+            , lookupTx        = \tx ->
+                gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
+            -- The pure store doesn't guarantee block ordering as 'getBlocks'
+            -- sorts using the score function.
+            , getBlocksByDepth = \d ->
+                  Chrono.NewestFirst <$> gets (BlockStore.Pure.getBlocks d . tnsBlockstore)
+            , getBlocksByParentHash = \h ->
+                  Chrono.NewestFirst <$> gets (BlockStore.Pure.getChainSuffix h . tnsBlockstore)
+            , getTip          = gets (BlockStore.Pure.getTip . tnsBlockstore)
+            }
+        privateAPI = BlockStoreWriter
+            { insertBlock     = \b ->
+                modify' (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
+            , switchToFork = \_ _ -> pure ()
+            }
+    in action ( hoistBlockStoreReader liftTestNodeT publicAPI
+              , hoistBlockStoreWriter liftTestNodeT privateAPI
+              )
+
+-- | Internally builds a 'Protocol' and steps it, making sure the state is
+-- persisted in the underlying monad.
+-- a pure, in-memory 'BlockStore', kept around as part of the 'NodeTestState'.
+stepTestProtocol
+    :: ( LiftTestNodeT c s n
+       , Ord (BlockHash c)
+       , Hashable c Word8
+       , Ord s
+       , Buildable (Hash c)
+       )
+    => BlockStore c DummyTx s n
+    -> n (Maybe (Block c DummyTx (Sealed c s)))
+    -- ^ An action to fetch the next block, if any.
+    -> Validate c DummyTx s
+    -> (Block c DummyTx (Sealed c s) -> Score)
+    -> n ()
+stepTestProtocol fullBlockStore fetchNextBlock validateFull scoreBlock = do
+   -- The Consensus config is hardcoded for now, but it's fairly easy
+   -- to pass externally.
+   let config = Consensus.Config 1024 10
+
+   -- Execute the action and step the protocol
+   o              <- liftTestNodeT $ gets tnsOrphanage
+   mbBlock        <- fetchNextBlock
+   case mbBlock of
+     Nothing -> pure ()
+     Just blk -> do
+         (protocol', _) <- withProtocol o validateFull scoreBlock fullBlockStore config $ \protocol ->
+             stepProtocol protocol blk
+         liftTestNodeT $ modify' $ \st -> st { tnsOrphanage = protoOrphanage protocol' }
 
 
 newtype DummyTx = DummyTx Word8
@@ -115,6 +165,7 @@ data TestNodeState c s = TestNodeState
     , tnsMempool      :: Mempool.Mempool c DummyTx
     , tnsStateStore   :: StateStore.StateStore c DummyState
     , tnsBlockstore   :: BlockStore.Pure.Handle c DummyTx s
+    , tnsOrphanage    :: Orphanage c DummyTx s
     , tnsReceiptStore :: ReceiptStore.Store c DummyTx DummyOutput
     }
 
@@ -141,6 +192,7 @@ emptyTestNodeState seal nid = TestNodeState
     { tnsStateStore   = StateStore.fromState genState
     , tnsMempool      = mempty
     , tnsBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
+    , tnsOrphanage    = emptyOrphanage Nakamoto.blockScore
     , tnsNodeId       = nid
     , tnsReceiptStore = ReceiptStore.emptyStore
     }

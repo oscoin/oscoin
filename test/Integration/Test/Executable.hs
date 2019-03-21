@@ -20,11 +20,12 @@ tests =
     , testCase "the miner produces blocks" testMinerOK
     ]
 
+withOscoinExe :: (Handle -> Handle -> Assertion) -> Assertion
+withOscoinExe f = do
+    randomGossipPort <- randomRIO (6000, 7990)
+    randomEkgPort    <- randomRIO (8000, 8990)
+    randomSpockPort  <- randomRIO (9000, 10000)
 
-withOscoinExe :: Int -> (Handle -> Handle -> Assertion) -> Assertion
-withOscoinExe gossipPort f = do
-    randomisedSpockPort <- randomRIO (9000, 10000)
-    randomisedEkgPort   <- randomRIO (8000, 8999)
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
     withSystemTempDirectory "Oscoin.Ephemeral.Keys" $ \keyPath -> do
@@ -33,21 +34,21 @@ withOscoinExe gossipPort f = do
             \_ _ -> pure ()
         -- Then, run the test.
         withSandbox "oscoin" [ "--api-port"
-                             , show (randomisedSpockPort :: Int)
+                             , show (randomSpockPort :: Int)
                              , "--gossip-port"
-                             , show gossipPort
+                             , show (randomGossipPort :: Int)
                              , "--keys"
                              , keyPath
                              , "--seed"
-                             , "127.0.0.1:" <> show gossipPort
+                             , "127.0.0.1:" <> show (randomGossipPort :: Int)
                              , "--ekg-port"
-                             , show (randomisedEkgPort :: Int)
+                             , show (randomEkgPort :: Int)
                              ] defaultSandboxOptions $
             \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
 
 testStartsOK :: Assertion
 testStartsOK =
-    withOscoinExe 6942 $ \stdoutHandle _stdErrHandle -> do
+    withOscoinExe $ \stdoutHandle _stdErrHandle -> do
         -- TODO(adn) In the future we want a better handshake string here.
         actual <- C8.hGet stdoutHandle 100
         assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
@@ -55,7 +56,7 @@ testStartsOK =
 
 testMinerOK :: Assertion
 testMinerOK =
-    withOscoinExe 6943 $ \stdoutHandle _stdErrHandle -> do
+    withOscoinExe $ \stdoutHandle _stdErrHandle -> do
         actual <- C8.hGet stdoutHandle 2000
         assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
                    ("mined block" `C8.isInfixOf` actual)

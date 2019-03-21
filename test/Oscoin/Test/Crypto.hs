@@ -17,7 +17,7 @@ import           Oscoin.Crypto.PubKey
 import           Oscoin.Test.Util
 
 import           Codec.Serialise (Serialise)
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess, convert)
 import qualified Data.Map as Map
@@ -72,8 +72,8 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Serialise (PublicKey c)
                   , Serialise (Signature c)
                   , Serialise (BlockHash c)
-                  , Eq (PublicKey c)
-                  , Eq (Signature c)
+                  , Ord (PublicKey c)
+                  , Ord (Signature c)
                   , Show (PublicKey c)
                   , Show (Signature c)
                   , Show (Hash c)

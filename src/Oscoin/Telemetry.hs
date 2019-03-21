@@ -7,6 +7,10 @@ module Oscoin.Telemetry
     , newTelemetryStore
     , emit
 
+    -- * Formatters
+    , fmtBlockHash
+    , fmtValidationError
+
     -- * Handy re-exports
     , module Oscoin.Telemetry.Events
 

@@ -12,7 +12,8 @@ module Oscoin.Consensus.Nakamoto
     , chainScore
     , blockScore
     , blockTime
-    , validateBlock
+    , validateBasic
+    , validateFull
     ) where
 
 import           Oscoin.Prelude
@@ -24,7 +25,7 @@ import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Aeson (FromJSON, ToJSON)
 import           Data.ByteArray (ByteArrayAccess)
@@ -67,11 +68,11 @@ nakamotoConsensus
 nakamotoConsensus = Consensus
     { cScore = comparing chainScore
     , cMiner = mineNakamoto chainDifficulty
-    , cValidate = validateBlock
+    , cValidate = validateFull
     }
 
 -- | Validate a 'Block' in relation with a prefix.
-validateBlock
+validateFull
     :: ( Eq (Hash c)
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
@@ -79,9 +80,9 @@ validateBlock
        , Serialise tx
        )
     => Validate c tx PoW
-validateBlock [] blk =
-    validateBlock' blk
-validateBlock prefix@(parent:_) blk
+validateFull [] blk =
+    validateBasic blk
+validateFull prefix@(parent:_) blk
     | h <- blockPrevHash (blockHeader blk)
     , h /= blockHash parent =
         Left $ InvalidParentHash h
@@ -94,14 +95,14 @@ validateBlock prefix@(parent:_) blk
     | t - t' > 2 * hours =
         Left $ InvalidBlockTimestamp $ t' - t
     | otherwise =
-        validateBlock' blk
+        validateBasic blk
   where
     t  = ts blk
     t' = ts parent
     ts = sinceEpoch . blockTimestamp . blockHeader
 
 -- | Validate a 'Block' using only intrinsic block data.
-validateBlock'
+validateBasic
     :: ( Eq (Hash c)
        , Serialise tx
        , ByteArrayAccess (BlockHash c)
@@ -110,7 +111,7 @@ validateBlock'
        )
     => Block c tx (Sealed c PoW)     -- ^ Block to validate.
     -> Either (ValidationError c) () -- ^ Either a validation error, or success.
-validateBlock' b
+validateBasic b
     | h <- blockDataHash bHeader
     , h /= hashTxs (blockData b) =
         Left $ InvalidDataHash h

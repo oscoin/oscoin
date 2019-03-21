@@ -78,7 +78,7 @@ testValidateBlock
 testValidateBlock Dict config = testGroup "Nakamoto: validateBlockchain"
     [ testProperty "Valid blockchains validate" $
         forAllShow (arbitraryNakamotoBlockchain @c @Text) (toS . showChainDigest) $
-            \blks -> let result = validateBlockchain Nakamoto.validateBlock blks
+            \blks -> let result = validateBlockchain Nakamoto.validateFull blks
                      in counterexample (show result) (result == Right ())
     , testProperty "Blocks bigger than the maximum size won't validate" $
         forAll (arbitrary @(Block c Text Nakamoto.PoW)) $

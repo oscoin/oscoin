@@ -12,16 +12,19 @@ module Oscoin.Storage.Block.Orphanage
     , ChainCandidate(..)
     ) where
 
+import           Oscoin.Prelude
+import qualified Prelude
+
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import           Data.Sequence (Seq, ViewL(..), ViewR(..), (<|), (><), (|>))
 import qualified Data.Sequence as Seq
-import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain hiding (parentHash, (|>))
 import qualified Oscoin.Crypto.Blockchain as Block
 import           Oscoin.Crypto.Hash (Hash)
+import           Oscoin.Time.Chrono
 
 {------------------------------------------------------------------------------
   Types
@@ -47,6 +50,10 @@ data Orphanage c tx s = Orphanage
     , scoreBlock :: Block c tx (Sealed c s) -> Score
     -- ^ A function to assign a 'Score' to a block.
     }
+
+-- Bogus instance created only to please the test code.
+instance Show (Orphanage c tx s) where
+    show _ = "<orphanage>"
 
 -- | A 'ChainCandidate' is a sequence of blocks and a partially-accumulated
 -- 'Score', used to compute the best chain in 'selectBestChain'. The chain
@@ -107,10 +114,10 @@ toBlocksOldestFirst
     :: Ord (BlockHash c)
     => Orphanage c tx s
     -> ChainCandidate c s
-    -> [Block c tx (Sealed c s)]
+    -> OldestFirst NonEmpty (Block c tx (Sealed c s))
 toBlocksOldestFirst Orphanage{orphans} ChainCandidate{candidateChain} =
-    fromMaybe (panic "toBlocksOldestFirst: the candidate chain was empty.") $
-        traverse (`Map.lookup` orphans) (toList candidateChain)
+    OldestFirst $ fromMaybe (panic "toBlocksOldestFirst: the candidate chain was empty.")
+                $ traverse (`Map.lookup` orphans) (NonEmpty.fromList . toList $ candidateChain)
 
 -- | /O(1)/. Looks up the tip (i.e. the newest) block for this 'ChainCandidate'.
 lookupChainTip :: ChainCandidate c s -> Maybe (BlockHash c)

@@ -24,8 +24,9 @@ import           Oscoin.Prelude hiding (log, show)
 
 import           Oscoin.Test.Consensus.Node
 import           Oscoin.Test.Crypto
+import           Oscoin.Time.Chrono (toNewestFirst)
 
-import           Oscoin.Consensus (Validate)
+import           Oscoin.Consensus (ValidationError)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
                  ( Blockchain
@@ -84,6 +85,7 @@ class
 testableLongestChain :: TestableNode c s m a => a -> [BlockHash c]
 testableLongestChain =
       map blockHash
+    . toNewestFirst
     . blocks
     . testableBestChain
 
@@ -155,7 +157,8 @@ data TestNetwork c s a = TestNetwork
 type DummyEval = Evaluator DummyState DummyTx ()
 
 -- | Test block validator.
-type DummyValidate c s = Validate c DummyTx s
+type DummyValidate c s =
+    (Block c DummyTx (Sealed c s) -> Either (ValidationError c) ())
 
 -- | Network partitions is a map of node id to a set of node ids _not_
 -- reachable from that node id.
@@ -248,6 +251,7 @@ applyMessage
     :: ( IsCrypto c
        , TestableNode c s m a
        , Serialise s
+       , Ord s
        )
     => Consensus.Config
     -> DummyNodeId
@@ -256,14 +260,18 @@ applyMessage
     -> Msg c s
     -> m [Msg c s]
 applyMessage _ _ _ _ msg@(TxMsg tx) = do
-    result <- withTestBlockStore $ \bs -> Storage.applyTx bs tx
+    result <- withTestBlockStore $ \(bs, _privateAPI) ->
+        Storage.applyTx bs tx
     pure $ case result of
         Storage.Applied _ -> [msg]
         _                 -> []
-applyMessage config to validate eval msg@(BlockMsg blk) = do
-    (result, parentMissing) <- withTestBlockStore $ \bs ->
-        (,) <$> Storage.applyBlock bs eval validate config blk
-            <*> map isNothing (Abstract.lookupBlock bs parentHash)
+applyMessage config to validateBasic eval msg@(BlockMsg blk) = do
+    (result, parentMissing) <- withTestBlockStore $ \(publicAPI, privateAPI) -> do
+        -- NOTE (adn): We are bypassing the protocol at the moment, but we
+        -- probably shouldn't.
+        let callback = Abstract.insertBlock privateAPI
+        (,) <$> Storage.applyBlock publicAPI callback eval validateBasic config blk
+            <*> map isNothing (Abstract.lookupBlock publicAPI parentHash)
 
     -- If the parent block is missing, request it from the network.
     pure $ case result of
@@ -274,7 +282,8 @@ applyMessage config to validate eval msg@(BlockMsg blk) = do
   where
     parentHash = blockPrevHash $ blockHeader blk
 applyMessage _ _ _ _ (ReqBlockMsg from bh) = do
-    mblk <- withTestBlockStore $ \bs -> Abstract.lookupBlock bs bh
+    mblk <- withTestBlockStore $ \(publicAPI, _privateAPI) ->
+        Abstract.lookupBlock publicAPI bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
 applyMessage config to validate eval (ResBlockMsg _ blk) =
     applyMessage config to validate eval (BlockMsg blk)

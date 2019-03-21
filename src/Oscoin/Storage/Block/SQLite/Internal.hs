@@ -11,16 +11,13 @@ module Oscoin.Storage.Block.SQLite.Internal
     , initialize
     , isStored
     , isConflicting
-    , storeOrphan
     , getGenesisBlock
     , getTip
     , getBlockTxs
     , getBlocks
-    , getChainScore
-    , getChainSuffixScore
+    , getChainSuffix
     , getChainHashes
-    , getOrphans
-    , rollbackBlocks
+    , switchToFork
     , storeBlock
     ) where
 
@@ -31,7 +28,6 @@ import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
                  , BlockHeader(..)
-                 , Score
                  , Sealed
                  , blockHash
                  , isGenesisBlock
@@ -39,13 +35,11 @@ import           Oscoin.Crypto.Blockchain.Block
                  , parentHash
                  )
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
-import           Oscoin.Storage.Block.Orphanage (Orphanage)
-import qualified Oscoin.Storage.Block.Orphanage as O
 import           Oscoin.Time (Timestamp)
+import           Oscoin.Time.Chrono (OldestFirst(..))
+import           Oscoin.Time.Chrono as Chrono
 
 import           Paths_oscoin
-
-import qualified Data.List.NonEmpty as NonEmpty
 
 import           Database.SQLite.Simple as Sql ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
@@ -58,25 +52,22 @@ import           Database.SQLite.Simple.ToRow (ToRow)
 import qualified Database.SQLite3 as Sql3
 
 import           Codec.Serialise
-import           Control.Concurrent.STM
+import           Oscoin.Storage.Block.Cache (BlockCache)
+import qualified Oscoin.Storage.Block.Cache as BlockCache
 
 -- | A handle to an on-disk block store.
 data Handle c tx s = Handle
-    { hConn    :: Connection                        -- ^ Connection to on-disk storage for non-orphan blocks.
-    , hOrphans :: TVar (Orphanage c tx s)           -- ^ In-memory storage for orphans.
-    , hScoreFn :: Block c tx (Sealed c s) -> Score  -- ^ Block scoring function.
+    { hConn       :: Connection                    -- ^ Connection to on-disk storage for non-orphan blocks.
+    , hBlockCache :: BlockCache c tx (Sealed c s)  -- ^ In-memory cache for most recent blocks.
     }
 
 -- | Opens a connection to the SQLite DB.
 open
-    :: Ord (Hash c)
-    => String
-    -> (Block c tx (Sealed c s) -> Score)
+    :: String
     -> IO (Handle c tx s)
-open path score =
+open path =
     Handle <$> (Sql.open path >>= setupConnection)
-           <*> newTVarIO (O.emptyOrphanage score)
-           <*> pure score
+           <*> BlockCache.newBlockCache 2016 -- TODO(and) pass this parameter externally
   where
     setupConnection conn = do
         enableForeignKeys conn
@@ -130,7 +121,8 @@ isConflicting conn block =
         (Only $ blockPrevHash $ blockHeader block)
 
 -- | Store a block, along with its transactions in the block store.
--- Invariant: the input block must have been validate (cfr. 'applyBlock').
+-- Invariant: the input block must have passed \"basic\" validation.
+-- (cfr. 'applyBlock').
 storeBlock
     :: forall c tx s.
         ( ToField (Sealed c s)
@@ -141,7 +133,6 @@ storeBlock
         , Serialise (Hash c)
         , FromField (Sealed c s)
         , FromField (Hash c)
-        , Ord s
         , Ord (BlockHash c)
         , HasHashing c
         ) => Handle c tx s
@@ -155,78 +146,12 @@ storeBlock h@Handle{..} blk =
 
         if not blockExists && extendsTip currentTip && not blockConflicts
             then storeBlock' h blk
-            -- NOTE(adn) This is a side effect of the fact that storing
-            -- the genesis as an orphan would insert it into the orphanage with
-            -- its parent hash, which means that we won't be able to retrieve
-            -- a potentiol candidate branching off from genesis in our 'selectBestChain'
-            -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
-            -- inserting the genesis block into the orphanage in the first place;
-            -- After all, the genesis block should never be considered at orphan.
-            else unless (isGenesisBlock blk) $ storeOrphan h blk
+            else pure ()
 
-        -- Fork selection starts now.
-        selectBestChain h
   where
     extendsTip :: Block c tx (Sealed c s) -> Bool
     extendsTip currentTip = blockHash currentTip == parentHash blk
 
-selectBestChain
-    :: forall c tx s.
-       ( Eq s
-       , FromRow tx
-       , Serialise s
-       , Serialise (Hash c)
-       , FromField (Sealed c s)
-       , FromField (Hash c)
-       , ToField (Hash c)
-       , ToField (Sealed c s)
-       , ToRow tx
-       , Ord (BlockHash c)
-       , HasHashing c
-       )
-    => Handle c tx s -> IO ()
-selectBestChain h@Handle{..} = do
-    -- FIXME(adn) (Temporary hack) The idea here is to grab the last 2016
-    -- blocks, which are considered the \"mutable\" part of the chain and
-    -- compare each root hash to see if there is any fork originating from that.
-    mutableBlockHashes <- reverse <$> getChainHashes hConn 2016
-
-    orphans <- readTVarIO hOrphans
-
-    for_ (O.selectBestChain mutableBlockHashes orphans) $ \(rootHash, bc) -> do
-        -- Compare the orphan best chain with the chain suffix currently adopted
-        chainSuffix <- getChainSuffix hConn rootHash
-
-        -- Switch-to-better-chain condition: either the chain suffix is
-        -- empty, which means we are extending directly the tip, or if we
-        -- found a better candidate.
-        let newChainFound = null chainSuffix
-                         || O.fromChainSuffix hScoreFn (NonEmpty.fromList chainSuffix) < bc
-
-        when newChainFound $
-            switchToFork rootHash bc orphans chainSuffix
-
-  where
-    switchToFork rootHash fork orphans chainSuffix = do
-        rollbackBlocks hConn (fromIntegral $ length chainSuffix)
-        storeBlocksOldestFirst h (O.toBlocksOldestFirst orphans fork)
-        -- Prune the chain which won, /as well as/ every dangling orphan
-        -- originating from the suffix chain which has been replaced.
-        atomically $ writeTVar hOrphans $
-              foldl' (\acc blockInSuffix ->
-                         O.pruneOrphanage (blockHash blockInSuffix)
-                                          (O.fromChainSuffix hScoreFn (blockInSuffix NonEmpty.:| []))
-                                          $ acc
-                     ) (O.pruneOrphanage rootHash fork orphans) chainSuffix
-
-
--- | Store an orphan in memory.
-storeOrphan
-    :: Ord (BlockHash c)
-    => Handle c tx s
-    -> Block c tx (Sealed c s)
-    -> IO ()
-storeOrphan Handle{..} = atomically . modifyTVar hOrphans . O.insertOrphan
 
 getGenesisBlock
     :: forall c s tx.
@@ -263,11 +188,6 @@ getBlockTxs conn h =
                 FROM transactions
                WHERE blockhash = ? |] (Only h)
 
--- | Get the total score of the chain.
-getChainScore :: Connection -> IO Integer
-getChainScore conn =
-     queryOne_ conn [sql| SELECT SUM(score) FROM blocks |]
-
 -- | Get the chain starting from a given hash up to the tip
 getChainSuffix
     :: ( FromRow tx
@@ -280,35 +200,19 @@ getChainSuffix
        )
     => Connection
     -> BlockHash c
-    -> IO [Block c tx s]
+    -> IO (NewestFirst [] (Block c tx s))
 getChainSuffix conn hsh = do
     result <- lookupBlockTimestamp conn hsh
     case result of
-        Nothing -> pure []
+        Nothing -> pure mempty
         Just t -> do
             rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
                 [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
                          FROM blocks WHERE timestamp > ?
                      ORDER BY timestamp DESC
                         |] (Only t)
-            for rows $ \(Only h :. bh) ->
+            map NewestFirst <$> for rows $ \(Only h :. bh) ->
                 mkBlock bh <$> getBlockTxs conn h
-
--- | Get the score of the chain starting from a given hash.
-getChainSuffixScore
-    :: ToField (Hash c)
-    => Connection
-    -> BlockHash c
-    -> IO Integer
-getChainSuffixScore conn hsh = do
-    result <- lookupBlockTimestamp conn hsh
-
-    case result of
-        Just t ->
-            queryOne conn
-                [sql| SELECT SUM(score) FROM blocks WHERE timestamp > ? |] (Only t)
-        Nothing ->
-            pure 0
 
 getChainHashes
     :: FromField (Hash c)
@@ -319,31 +223,30 @@ getChainHashes conn (fromIntegral -> depth :: Integer) =
     map fromOnly <$>
       Sql.query conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC LIMIT ? |] (Only depth)
 
-getOrphans :: Handle c tx s -> IO (Set (BlockHash c))
-getOrphans Handle{..} =
-    O.getOrphans <$> readTVarIO hOrphans
-
 -- | Rollback 'n' blocks.
-rollbackBlocks :: Connection -> Depth -> IO ()
-rollbackBlocks conn (fromIntegral -> depth :: Integer) =
-    Sql.execute conn
+rollbackBlocks :: Handle c tx s -> Depth -> IO ()
+rollbackBlocks Handle{..} (fromIntegral -> depth :: Integer) = do
+    Sql.execute hConn
         [sql| DELETE FROM blocks WHERE hash IN
               (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)
         |] (Only depth)
+    BlockCache.invalidate hBlockCache
 
--- | When given a list of blocks ordered by /oldest first/, it inserts them
--- into the store.
-storeBlocksOldestFirst
+switchToFork
     :: ( ToRow tx
-       , ToField (Sealed c s)
+       , ToField s
        , ToField (Hash c)
        , HasHashing c
        , Eq (Hash c)
        )
     => Handle c tx s
-    -> [Block c tx (Sealed c s)]
+    -> Depth
+    -> OldestFirst NonEmpty (Block c tx (Sealed c s))
     -> IO ()
-storeBlocksOldestFirst h = traverse_ (storeBlock' h)
+switchToFork h@Handle{..} depth newChain =
+    Sql.withTransaction hConn $ do
+        rollbackBlocks h depth
+        traverse_ (storeBlock' h) (toOldestFirst newChain)
 
 lookupBlockTimestamp
     :: ToField (Hash c)
@@ -381,11 +284,15 @@ storeBlock' Handle{..} blk = do
     -- Nb. To relate transactions with blocks, we store an extra block hash field
     -- for each row in the transactions table.
     Sql.execute hConn
-        [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal, score)
-              VALUES              (?, ?, ?, ?, ?, ?, ?, ?) |] row
+        [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
+              VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
     Sql.executeMany hConn
         [sql| INSERT INTO transactions  (hash, message, author, chainid, nonce, context, blockhash)
               VALUES                    (?, ?, ?, ?, ?, ?, ?) |] txs
+
+    -- Cache the block
+    BlockCache.consBlock hBlockCache blk
+
   where
     row = ( blockHash blk
           , blockTimestamp bh
@@ -394,7 +301,6 @@ storeBlock' Handle{..} blk = do
           , blockStateHash bh
           , blockTargetDifficulty bh
           , blockSeal bh
-          , hScoreFn blk
           )
 
     bh = blockHeader blk
@@ -405,18 +311,6 @@ storeBlock' Handle{..} blk = do
         if isGenesisBlock blk
            then Nothing
            else Just $ blockPrevHash bh
-
--- | Query a single row and panic if it doesn't exist.
-queryOne :: (HasCallStack, ToRow args, FromField b) => Connection -> Sql.Query -> args -> IO b
-queryOne conn q args =
-    headDef (panic "Oscoin.Storage.Block.SQLite.queryOne: table is empty")
-        . map fromOnly <$> Sql.query conn q args
-
--- | Query a single row without parameters and panic if it doesn't exist.
-queryOne_ :: (HasCallStack, FromField b) => Connection -> Sql.Query -> IO b
-queryOne_ conn q =
-    headDef (panic "Oscoin.Storage.Block.SQLite.queryOne_: table is empty")
-        . map fromOnly <$> Sql.query_ conn q
 
 getBlocks
     :: ( Serialise s
@@ -429,16 +323,18 @@ getBlocks
        )
     => Handle c tx s
     -> Depth
-    -> IO [Block c tx (Sealed c s)]
-getBlocks Handle{hConn} (fromIntegral -> depth :: Integer) = do
-    rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query hConn
-        [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
-                 FROM blocks
-             ORDER BY timestamp DESC
-                LIMIT ? |] (Only depth)
+    -> IO (NewestFirst [] (Block c tx (Sealed c s)))
+getBlocks Handle{..} (fromIntegral -> depth :: Int) =
+    -- Hit the cache first
+    BlockCache.cached hBlockCache depth (\backFillSize -> do
+        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query hConn
+            [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+                     FROM blocks
+                 ORDER BY timestamp DESC
+                    LIMIT ? |] (Only (fromIntegral backFillSize :: Integer))
 
-    for rows $ \(Only h :. bh) ->
-        mkBlock bh <$> getBlockTxs hConn h
+        Chrono.NewestFirst <$>
+            for rows (\(Only h :. bh) -> mkBlock bh <$> getBlockTxs hConn h))
 
 getTip
     :: ( Serialise s
@@ -452,4 +348,4 @@ getTip
     => Handle c tx s
     -> IO (Block c tx (Sealed c s))
 getTip h =
-    headDef (panic "No blocks in storage!") <$> getBlocks h 1
+    headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocks h 1

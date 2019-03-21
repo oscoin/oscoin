@@ -26,7 +26,7 @@ import           Oscoin.Crypto.PubKey.Internal (PK(..), SK(..))
 instance HasDigitalSignature Crypto where
 
     newtype PublicKey Crypto =
-        PublicKey (PK Crypto ECDSA.PublicKey) deriving (Show, Eq)
+        PublicKey (PK Crypto ECDSA.PublicKey) deriving (Show, Eq, Ord)
 
     newtype PrivateKey Crypto = PrivateKey (SK ECDSA.PrivateKey)
 
@@ -76,6 +76,9 @@ instance Serialise (Signature Crypto) where
 
 instance Eq (PK Crypto ECDSA.PublicKey) where
     (PK a1 b1) == (PK a2 b2) = a1 == a2 && b1 == b2
+
+instance Ord (PK Crypto ECDSA.PublicKey) where
+    compare (PK _ b1) (PK _ b2) = b1 `compare` b2
 
 instance H.Hashable (PublicKey Crypto) where
     hashWithSalt salt (PublicKey (PK _ h)) = H.hashWithSalt salt . fromHashed $ h

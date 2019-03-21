@@ -11,6 +11,7 @@ import           Oscoin.Crypto.Blockchain.Block (sealBlock)
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore(..))
 import           Oscoin.Time
@@ -78,8 +79,15 @@ instance LiftTestNodeT c PoA (SimpleNode c) where
 instance (IsCrypto c) => TestableNode c PoA (SimpleNode c) (SimpleNodeState c) where
     testableTick tick = do
         position <- ask
-        withTestBlockStore $ \bs ->
-          mineBlock bs (simpleConsensus position) identityEval tick
+        withTestBlockStore $ \(publicAPI, privateAPI) -> do
+            -- NOTE (adn): We are bypassing the protocol at the moment, but we
+            -- probably shouldn't.
+            res <- mineBlock publicAPI (simpleConsensus position) identityEval tick
+            case res of
+              Nothing -> pure Nothing
+              Just (blk, _,_) -> do
+                  Abstract.insertBlock privateAPI blk
+                  pure (Just blk)
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode

@@ -22,7 +22,7 @@ module Oscoin.Node
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Consensus (Consensus(..), Validate)
+import           Oscoin.Consensus (Consensus(..), ValidationError)
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
@@ -33,7 +33,6 @@ import           Oscoin.Crypto.Blockchain.Block
                  , Depth
                  , Sealed
                  , StateHash
-                 , Unsealed
                  , blockHash
                  )
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -53,16 +52,20 @@ import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
 import qualified Oscoin.Telemetry.Logging as Log
+import qualified Oscoin.Time.Chrono as Chrono
 
-import           Oscoin.Storage.Block.Abstract (BlockStore, hoistBlockStore)
+import qualified Oscoin.Protocol as Protocol
+import           Oscoin.Storage.Block.Abstract
+                 (BlockStoreReader, hoistBlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
+import qualified Oscoin.Storage.State.Class as StateStoreClass
 
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
 withNode
@@ -71,12 +74,13 @@ withNode
     -> i
     -> Mempool.Handle c tx
     -> StateStore.Handle c st
-    -> BlockStore c tx s IO
+    -> BlockStoreReader c tx s IO
+    -> Protocol.Handle c tx s IO
     -> Evaluator st tx RadicleTx.Output
     -> Consensus c tx s (NodeT c tx st s i IO)
     -> (Handle c tx st s i -> IO a)
     -> IO a
-withNode hConfig hNodeId hMempool hStateStore hBlockStore hEval hConsensus =
+withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConsensus =
     bracket open close
   where
     open = do
@@ -102,13 +106,12 @@ miner
        , Hashable  c st
        , Ord (Hash c)
        , Serialise (Hash c)
-       , Serialise Unsealed
        , AuthTree.MerkleHash (Hash c)
        , Log.Buildable (Hash c)
        )
     => NodeT c tx st s i m a
 miner = do
-    Handle{hEval, hConsensus, hConfig, hBlockStore} <- ask
+    Handle{hConfig} <- ask
     let telemetryHandle = cfgTelemetry hConfig
     forever $ do
         nTxs <- Mempool.numTxs
@@ -116,9 +119,7 @@ miner = do
         then
             liftIO $ threadDelay $ 1000 * 1000
         else do
-            time <- currentTick
-            blk <- hoist liftIO $ Consensus.mineBlock (hoistBlockStore lift hBlockStore) hConsensus hEval time
-
+            blk  <- mineBlock
             for_ blk $ \b -> do
                 lift   $ P2P.broadcast $ P2P.BlockMsg b
                 liftIO $ Telemetry.emit telemetryHandle (BlockMinedEvent (blockHash b))
@@ -133,14 +134,29 @@ mineBlock
        , Hashable c st
        , Ord (Hash c)
        , Serialise (Hash c)
-       , Serialise Unsealed
        , AuthTree.MerkleHash (Hash c)
        )
     => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
-    Handle{hEval, hConsensus, hBlockStore} <- ask
+    Handle{hEval, hConsensus, hBlockStore, hProtocol} <- ask
     time <- currentTick
-    hoist liftIO $ Consensus.mineBlock (hoistBlockStore lift hBlockStore) hConsensus hEval time
+    res  <- hoist liftIO $ Consensus.mineBlock (hoistBlockStoreReader lift hBlockStore)
+                                               hConsensus
+                                               hEval
+                                               time
+    case res of
+      Nothing -> pure Nothing
+      Just (blk, st', receipts) -> do
+          -- NOTE(adn) Here we should dispatch the block and wait for the
+          -- result: if the block hasn't been inserted (for example due to
+          -- a validation error) we shouldn't proceed with all these other
+          -- side effects. Ideally 'dispatchBlockSync' should return some kind
+          -- of 'Either Error ()'.
+          liftIO $ Protocol.dispatchBlockSync hProtocol blk
+          Mempool.delTxs (blockData blk)
+          StateStoreClass.storeState st'
+          for_ receipts ReceiptStore.addReceipt
+          pure (Just blk)
 
 storage
     :: ( MonadIO m
@@ -153,22 +169,23 @@ storage
        , Ord (StateHash c)
        )
     => Evaluator st tx o
-    -> Validate c tx s
+    -> (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Consensus.Config
     -> Storage c tx s (NodeT c tx st s i m)
-storage eval validate config = Storage
+storage eval validateBasic config = Storage
     { storageApplyBlock = \blk -> do
+        dispatchBlock <- asks (Protocol.dispatchBlockAsync . hProtocol)
         bs <- asks hBlockStore
-        Storage.applyBlock (hoistBlockStore liftIO bs) eval validate config blk
+        Storage.applyBlock (hoistBlockStoreReader liftIO bs) (liftIO . dispatchBlock) eval validateBasic config blk
     , storageApplyTx     = \tx -> do
         bs <- asks hBlockStore
-        Storage.applyTx (hoistBlockStore liftIO bs) tx
+        Storage.applyTx (hoistBlockStoreReader liftIO bs) tx
     , storageLookupBlock = \blk -> do
         bs <- asks hBlockStore
-        BlockStore.lookupBlock (hoistBlockStore liftIO bs) blk
+        BlockStore.lookupBlock (hoistBlockStoreReader liftIO bs) blk
     , storageLookupTx    = \tx -> do
         bs <- asks hBlockStore
-        Storage.lookupTx (hoistBlockStore liftIO bs) tx
+        Storage.lookupTx (hoistBlockStoreReader liftIO bs) tx
     }
 
 getMempool :: MonadIO m => NodeT c tx st s i m (Mempool c tx)
@@ -199,13 +216,17 @@ getPathLatest
     -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))
 getPathLatest path = do
     bs <- asks hBlockStore
-    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip (hoistBlockStore liftIO bs)
+    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip (hoistBlockStoreReader liftIO bs)
     result <- getPath stateHash path
     for result $ \v ->
         pure (stateHash, v)
 
-getBlocks :: (MonadIO m) => Depth -> NodeT c tx st s i m [Block c tx (Sealed c s)]
-getBlocks d = withBlockStore (`BlockStore.getBlocks` d)
+getBlocks
+    :: MonadIO m
+    => Depth
+    -> NodeT c tx st s i m [Block c tx (Sealed c s)]
+getBlocks d =
+  Chrono.toNewestFirst <$> withBlockStore (`BlockStore.getBlocksByDepth` d)
 
 lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
 lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)

@@ -50,7 +50,7 @@ import qualified Codec.Serialise.Decoding as Serialise
 import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Lazy as LBS
@@ -87,7 +87,7 @@ data Unsealed = Unsealed deriving (Generic, Show)
 instance Serialise Unsealed
 
 newtype Sealed c s = SealedWith s
-    deriving (Eq, Generic, Show, Serialise)
+    deriving (Eq, Ord, Generic, Show, Serialise)
 
 -- | Block header.
 data BlockHeader crypto s = BlockHeader

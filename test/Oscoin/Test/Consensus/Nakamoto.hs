@@ -13,6 +13,7 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State.Class (MonadStateStore)
 
@@ -33,7 +34,7 @@ nakConsensus = Consensus
     { cScore = comparing Nakamoto.chainScore
     , cMiner = \_chain blk -> do gen <- state split
                                  pure $ mineBlockRandom gen blk
-    , cValidate = Nakamoto.validateBlock
+    , cValidate = Nakamoto.validateFull
     }
 
 newtype NakamotoT tx m a =
@@ -84,7 +85,16 @@ instance HasTestNodeState c PoW (NakamotoNodeState c) where
 
 instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
     testableTick tn =
-        withTestBlockStore $ \bs -> mineBlock bs nakConsensus dummyEval tn
+        withTestBlockStore $ \(publicAPI, privateAPI) -> do
+            -- NOTE (adn): We are bypassing the protocol at the moment, but we
+            -- probably shouldn't.
+            res <- mineBlock publicAPI nakConsensus dummyEval tn
+            case res of
+              Nothing -> pure Nothing
+              Just (blk, _,_) -> do
+                  Abstract.insertBlock privateAPI blk
+                  pure (Just blk)
+
     testableInit    = initNakamotoNodes
     testableRun     = runNakamotoNode
     testableScore   = const Nakamoto.chainScore

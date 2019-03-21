@@ -14,12 +14,12 @@ module Oscoin.Storage
 
 import           Oscoin.Prelude
 
-import           Oscoin.Storage.Block.Abstract (BlockStore, isNovelBlock)
+import           Oscoin.Storage.Block.Abstract (BlockStoreReader, isNovelBlock)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Storage.State.Class as StateStore
 
-import           Oscoin.Consensus (Validate, validateBlockSize)
+import           Oscoin.Consensus (ValidationError, validateBlockSize)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, evalBlock)
@@ -68,22 +68,26 @@ applyBlock
        , Crypto.Hashable c (BlockHeader c (Sealed c s))
        , Buildable (Crypto.Hash c)
        )
-    => BlockStore c tx s m
+    => BlockStoreReader c tx s m
+    -> (Block c tx (Sealed c s) -> m ())
+    -- ^ A function to dispatch the block outside.
     -> Evaluator    st tx o
-    -> Validate   c tx s
+    -> (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Consensus.Config
     -> Block      c tx (Sealed c s)
     -> m ApplyResult
-applyBlock bs eval validate config blk = do
+applyBlock bs dispatchBlock eval validateBasic config blk = do
     let blkHash = blockHash blk
     novel <- isNovelBlock bs blkHash
-    if | novel -> do
-        blks <- BlockStore.getBlocks bs 2016 -- XXX(alexis)
-        case validateBlockSize config blk >>= const (validate blks blk) of
+    if | novel ->
+        -- Performs a basic validation on the incoming block, and push it
+        -- into the queue for the 'StorageManager' to process it.
+        case validateBlockSize config blk >>= const (validateBasic blk) of
             Left err -> pure $ Error [BlockValidationFailedEvent blkHash err]
             Right () -> do
                 let txs = blockData blk
-                BlockStore.insertBlock bs blk
+
+                dispatchBlock blk
                 Mempool.delTxs txs
 
                 -- Try to find the parent state of the block, and if found,
@@ -118,7 +122,7 @@ applyTx
        , Crypto.Hashable c tx
        , Buildable (Crypto.Hash c)
        )
-    => BlockStore c tx s m
+    => BlockStoreReader c tx s m
     -> tx
     -> m ApplyResult
 applyTx bs tx = do
@@ -129,7 +133,7 @@ applyTx bs tx = do
 
 lookupTx
     :: ( MonadMempool c tx m )
-    => BlockStore c tx s m
+    => BlockStoreReader c tx s m
     -> Hashed c tx
     -> m (Maybe tx)
 lookupTx bs hsh =
@@ -139,5 +143,5 @@ lookupTx bs hsh =
 
 --------------------------------------------------------------------------------
 
-isNovelTx :: MonadMempool c tx m => BlockStore c tx s m -> Hashed c tx -> m Bool
+isNovelTx :: MonadMempool c tx m => BlockStoreReader c tx s m -> Hashed c tx -> m Bool
 isNovelTx bs = map isNothing . lookupTx bs

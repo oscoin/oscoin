@@ -9,6 +9,7 @@ module Oscoin.Storage.Block.Pure
     , initWithChain
 
     , getBlocks
+    , getChainSuffix
     , getTip
     , getGenesisBlock
     , insert
@@ -25,6 +26,7 @@ import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed)
+import           Oscoin.Time.Chrono (toNewestFirst)
 
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
@@ -99,6 +101,16 @@ getBlocks (fromIntegral -> d) Handle{..} =
     takeBlocks d . maximumBy hScoreFn . Map.elems $ hChains
 -- Nb. we guarantee that there is at least one chain in the store by exposing
 -- only the 'genesisHandle' smart constructor.
+
+-- | Gets a suffix of the 'Blockchain' originating from the input 'BlockHash'.
+-- Returns a list of blocks ordered from newest-to-oldest.
+getChainSuffix
+    :: (Ord (BlockHash c))
+    => BlockHash c
+    -> Handle c tx s
+    -> [Block c tx (Sealed c s)]
+getChainSuffix rootHash Handle{..} =
+    maybe mempty (toNewestFirst . blocks) . Map.lookup rootHash $ hChains
 
 getTip :: Handle c tx s -> Block c tx (Sealed c s)
 getTip = tip . getBestChain

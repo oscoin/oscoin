@@ -9,11 +9,15 @@ module Oscoin.Test.Storage.Block.Equivalence
 import           Oscoin.Prelude
 
 import           Oscoin.API.Types (RadTx)
+import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Protocol
 import           Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Storage.Block.Orphanage
 import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
+import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
@@ -21,6 +25,7 @@ import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
 import           Oscoin.Test.Util (Condensed(..), showOrphans)
 
+import           Control.Monad.State (modify')
 import           Data.ByteArray.Orphans ()
 import qualified Data.List as List
 import qualified Data.Text as T
@@ -51,11 +56,12 @@ classifyChain chain =
 -- and get the tip, and that both stores agree on the result.
 propInsertGetTipEquivalence :: forall c.  Dict (IsCrypto c) -> Property
 propInsertGetTipEquivalence Dict =
-    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
+    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain -> do
+        let orphanage  = emptyOrphanage blockScore
         classifyChain chain $
-            ioProperty $ withStores $ \stores -> do
-                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks chain)
-                p2 <- apiCheck stores Abstract.getTip
+            ioProperty $ withStores orphanage $ \stores -> do
+                p1 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
+                p2 <- publicApiCheck stores Abstract.getTip
                 pure (p1 .&&. p2)
 
 -- | In this 'Property', we do the following:
@@ -67,20 +73,21 @@ propInsertGetTipEquivalence Dict =
 propForksInsertGetTipEquivalence :: forall c. Dict (IsCrypto c) -> Property
 propForksInsertGetTipEquivalence Dict = do
     let forkParams = ForkParams 0 10 3  -- 3 forks of max 10 blocks.
+        orphanage  = emptyOrphanage blockScore
         generator = do
             chain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAllShow generator showOrphans $ \(chain, orphansWithLink) ->
-        ioProperty $ withStores $ \stores -> do
+        ioProperty $ withStores orphanage $ \stores -> do
             -- Step 1: Store the chain in both stores.
-            p0 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks chain)
+            p0 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
             ps <- forM orphansWithLink $ \(orphans, missingLink) -> do
                 -- Step 2: Store the orphan chains
-                p1 <- apiCheck stores (`Abstract.insertBlocksNaive` blocks orphans)
+                p1 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) orphans)
                 -- Step 3: Add the missing link and check the tip
-                p2 <- apiCheck stores (`Abstract.insertBlocksNaive` [missingLink])
-                p3 <- apiCheck stores Abstract.getTip
+                p2 <- privateApiCheck stores (`Abstract.insertBlocksNaive` Chrono.OldestFirst [missingLink])
+                p3 <- publicApiCheck stores Abstract.getTip
                 pure [p1,p2,p3]
             pure $ foldl' (.&&.) p0 (mconcat ps)
 
@@ -91,20 +98,47 @@ propForksInsertGetTipEquivalence Dict = do
 type StoresUnderTest c tx s m =
     (Abstract.BlockStore c tx s m, Abstract.BlockStore c tx s m)
 
--- | Initialises both the SQL and the STM store and pass them to the 'action'.
-withStores
-    :: IsCrypto c
-    => (StoresUnderTest c (RadTx c) DummySeal IO -> IO a)
-    -> IO a
-withStores action =
-    SQLite.withBlockStore ":memory:" defaultGenesis blockScore $ \sqlStore ->
-        STM.withBlockStore (fromGenesis defaultGenesis) blockScore $ \stmStore ->
-            action (sqlStore, stmStore)
+-- | The monad whe stores runs in, which keeps around an 'Orphanage' to be
+-- used internally for the SQLite store implementation (cfr. 'withStores').
+type StoreM c = StateT (Orphanage c (RadTx c) DummySeal) IO
 
--- | When given a function from a 'BlockStore' operation to a result 'a', it
--- calls the function over both stores and returns whether or not the result
--- matches.
-apiCheck
+-- | Initialises both the SQL and the STM store and pass them to the 'action'.
+-- For the SQL store, we need to cheat: due to the fact we /do not/ want to
+-- run the 'Protocol' chain selection on both stores (or it would defy the
+-- purpose of these tests) we need to override the 'insertBlock' for the
+-- SQLite store to pass through chain selection.
+withStores
+    :: forall c a.
+       IsCrypto c
+    => Orphanage c (RadTx c) DummySeal
+    -> (StoresUnderTest c (RadTx c) DummySeal (StoreM c) -> StoreM c a)
+    -> IO a
+withStores orphanage action =
+    SQLite.withBlockStore ":memory:" defaultGenesis $ \sqlStore ->
+        STM.withBlockStore (fromGenesis defaultGenesis) blockScore $ \stmStore ->
+            evalStateT (action (wrapProto (hoistStore sqlStore), hoistStore stmStore)) orphanage
+  where
+      hoistStore
+          :: BlockStore c (RadTx c) DummySeal IO
+          -> BlockStore c (RadTx c) DummySeal (StoreM c)
+      hoistStore (public, private) =
+          (hoistBlockStoreReader liftIO public, hoistBlockStoreWriter liftIO private)
+
+      -- Overrides the 'insertBlock' to pass via chain selection.
+      wrapProto
+          :: BlockStore c (RadTx c) DummySeal (StoreM c)
+          -> BlockStore c (RadTx c) DummySeal (StoreM c)
+      wrapProto bs@(public, private) =
+          let cfg = Consensus.Config 1024 2016
+              noValidation _ _ = Right ()
+          in (public, private { insertBlock = \b -> do
+                                    o  <- get
+                                    (p', _) <- withProtocol o noValidation blockScore bs cfg $ \p ->
+                                                   stepProtocol p b
+                                    modify' (const (protoOrphanage p'))
+                              })
+
+publicApiCheck
     :: forall c tx s m b.
        ( HasCallStack
        , Monad m
@@ -113,24 +147,49 @@ apiCheck
        , Condensed b
        )
     => StoresUnderTest c tx s m
-    -> (Abstract.BlockStore c tx s m -> m b)
+    -> (Abstract.BlockStoreReader c tx s m -> m b)
     -> m Property
-apiCheck (store1, store2) apiCall =
+publicApiCheck (store1, store2) apiCall =
     withFrozenCallStack $ do
-        res1 <- apiCall store1
-        res2 <- apiCall store2
+        res1 <- apiCall (fst store1)
+        res2 <- apiCall (fst store2)
         pure $ counterexample (apiMismatch callStack res1 res2) (res1 === res2)
-  where
-    apiMismatch :: CallStack -> b -> b -> String
-    apiMismatch cs res1 res2 =
-        let calledAt = case getCallStack cs of
-                         [(_, loc)] -> srcLocFile loc <> ":" <>
-                                       show (srcLocStartLine loc) <> ":" <>
-                                       show (srcLocStartCol loc)
-                         _          -> "(unknown)"
-        in List.unlines [
-                 "api call at " <> calledAt <> " yielded a result mismatch!\n"
-               , "sqlStore  = " <> T.unpack (condensed res1) <> "\n"
-               , "pureStore = " <> T.unpack (condensed res2) <> "\n"
-               , "Counterexample is:"
-               ]
+
+privateApiCheck
+    :: forall c tx s m b.
+       ( HasCallStack
+       , Monad m
+       , Eq b
+       , Show b
+       , Condensed b
+       )
+    => StoresUnderTest c tx s m
+    -> (Abstract.BlockStoreWriter c tx s m -> m b)
+    -> m Property
+privateApiCheck (store1, store2) apiCall =
+    withFrozenCallStack $ do
+        res1 <- apiCall (snd store1)
+        res2 <- apiCall (snd store2)
+        pure $ counterexample (apiMismatch callStack res1 res2) (res1 === res2)
+
+-- | When given a function from a 'BlockStore' operation to a result 'a', it
+-- calls the function over both stores and returns whether or not the result
+-- matches.
+apiMismatch
+    :: Condensed b
+    => CallStack
+    -> b
+    -> b
+    -> String
+apiMismatch cs res1 res2 =
+    let calledAt = case getCallStack cs of
+                     [(_, loc)] -> srcLocFile loc <> ":" <>
+                                   show (srcLocStartLine loc) <> ":" <>
+                                   show (srcLocStartCol loc)
+                     _          -> "(unknown)"
+    in List.unlines [
+             "api call at " <> calledAt <> " yielded a result mismatch!\n"
+           , "sqlStore  = " <> T.unpack (condensed res1) <> "\n"
+           , "pureStore = " <> T.unpack (condensed res2) <> "\n"
+           , "Counterexample is:"
+           ]

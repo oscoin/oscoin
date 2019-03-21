@@ -9,13 +9,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHash
-                 , BlockHeader(..)
-                 , Score
-                 , Sealed
-                 , mkBlock
-                 )
+                 (Block(..), BlockHash, BlockHeader(..), Sealed, mkBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import qualified Oscoin.Storage.Block.Abstract as Abstract
@@ -37,42 +31,42 @@ import           Codec.Serialise (Serialise)
 -- than starting from scratch. In practice, /for now/, we should be OK as
 -- 'initialize' should be idempotent, but nevertheless we need a better
 -- migration strategy/initialisation here.
-withBlockStore :: ( ToField s
-                  , FromField s
-                  , ToField (Crypto.Hash c)
-                  , FromField (Crypto.Hash c)
-                  , Serialise s
-                  , Serialise (Crypto.Hash c)
-                  , Ord s
-                  , Ord (BlockHash c)
-                  , ToRow tx
-                  , FromRow tx
-                  , Crypto.HasHashing c
-                  )
-               => String
-               -- ^ The path where the DB will live on disk
-               -> Block c tx (Sealed c s)
-               -- ^ The genesis block (used to initialise the store)
-               -> (Block c tx (Sealed c s) -> Score)
-               -- ^ A block scoring function
-               -> (Abstract.BlockStore c tx s IO -> IO b)
-               -- ^ Action which uses the 'BlockStore'.
-               -> IO b
-withBlockStore path genesisBlock score action =
+withBlockStore
+    :: ( ToField s
+       , FromField s
+       , ToField (Crypto.Hash c)
+       , FromField (Crypto.Hash c)
+       , Serialise s
+       , Serialise (Crypto.Hash c)
+       , Ord (BlockHash c)
+       , ToRow tx
+       , FromRow tx
+       , Crypto.HasHashing c
+       )
+    => String
+    -- ^ The path where the DB will live on disk
+    -> Block c tx (Sealed c s)
+    -- ^ The genesis block (used to initialise the store)
+    -> (Abstract.BlockStore c tx s IO -> IO b)
+    -- ^ Action which uses the 'BlockStore'.
+    -> IO b
+withBlockStore path genesisBlock action =
     let newBlockStore internalHandle =
-            ( Abstract.BlockStore {
-                  Abstract.scoreBlock      = hScoreFn internalHandle
-                , Abstract.insertBlock     = storeBlock internalHandle
-                , Abstract.getGenesisBlock = getGenesisBlock (hConn internalHandle)
-                , Abstract.lookupBlock     = lookupBlock internalHandle
-                , Abstract.lookupTx        = lookupTx internalHandle
-                , Abstract.getOrphans      = getOrphans internalHandle
-                , Abstract.getBlocks       = getBlocks internalHandle
-                , Abstract.getTip          = getTip internalHandle
+            ( (Abstract.BlockStoreReader {
+                  Abstract.getGenesisBlock       = getGenesisBlock (hConn internalHandle)
+                , Abstract.lookupBlock           = lookupBlock internalHandle
+                , Abstract.lookupTx              = lookupTx internalHandle
+                , Abstract.getBlocksByDepth      = getBlocks internalHandle
+                , Abstract.getBlocksByParentHash = getChainSuffix (hConn internalHandle)
+                , Abstract.getTip                = getTip internalHandle
                 }
+            , Abstract.BlockStoreWriter {
+                  Abstract.insertBlock     = storeBlock internalHandle
+                , Abstract.switchToFork    = switchToFork internalHandle
+                })
             , internalHandle
             )
-    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path score))
+    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path))
                (close . snd)
                (action . fst)
 

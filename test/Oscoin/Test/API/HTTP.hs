@@ -16,6 +16,7 @@ import           Oscoin.Test.Crypto.Blockchain.Arbitrary
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
+import           Oscoin.Time.Chrono (toNewestFirst)
 
 import qualified Data.Aeson as Aeson
 import           Data.Default (def)
@@ -151,11 +152,11 @@ getBestChain codec = do
     liftIO $ httpTest (nodeState mempty chain def) $ do
         get codec "/blockchain/best?depth=1" >>=
             assertStatus ok200 <>
-            assertResultOK (take 1 $ blocks chain)
+            assertResultOK (take 1 . toNewestFirst $ blocks chain)
 
         get codec "/blockchain/best" >>=
             assertStatus ok200 <>
-            assertResultOK (take 3 $ blocks chain)
+            assertResultOK (take 3 . toNewestFirst $ blocks chain)
 
 encodeDecodeTx :: IsCrypto c => API.RadTx c -> Property
 encodeDecodeTx tx =

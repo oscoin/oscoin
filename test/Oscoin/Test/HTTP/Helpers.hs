@@ -49,6 +49,7 @@ import           Oscoin.Data.Tx (mkTx)
 import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
+import           Oscoin.Protocol (runProtocol)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
@@ -141,7 +142,7 @@ withNode :: IsCrypto c => NodeState c -> (NodeHandle c -> IO a) -> IO a
 withNode NodeState{..} k = do
     let env    = Testing
         logger = Log.noLogger
-    config <- Consensus.getConfig env
+    let config = Consensus.getConfig env
     metricsStore <- Metrics.newMetricsStore Metrics.noLabels
     let handle = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env
@@ -155,18 +156,20 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \bsh -> do
-        sth <- liftIO $ StateStore.fromStateM statestoreState
+    BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \blkStore@(bsh, _privateAPI) ->
+        runProtocol (\_ _ -> Right ()) blockScore handle blkStore config $ \dispatchBlock -> do
+            sth <- liftIO $ StateStore.fromStateM statestoreState
 
-        Node.withNode
-            cfg
-            42
-            mph
-            sth
-            bsh
-            Rad.txEval
-            (trivialConsensus "")
-            k
+            Node.withNode
+                cfg
+                42
+                mph
+                sth
+                bsh
+                dispatchBlock
+                Rad.txEval
+                (trivialConsensus "")
+                k
 
 liftNode :: Node c a -> Session c a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)

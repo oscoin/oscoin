@@ -11,8 +11,8 @@ import qualified Prelude
 import           Codec.Serialise
 import qualified Codec.Serialise.Multihash as Multihash.CBOR
 import           Control.Monad.Fail (fail)
+import           Crypto.Data.Auth.Tree.Class (MerkleHash(..))
 import qualified Crypto.Data.Auth.Tree.Cryptonite as Cryptonite
-import           Crypto.Data.Auth.Tree.Internal (MerkleHash(..))
 import           Crypto.Hash (Blake2b_256(..), Digest)
 import qualified Crypto.Hash as Crypto
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText)

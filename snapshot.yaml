@@ -25,7 +25,7 @@ packages:
   commit: eaf70a9e0b36af44d02d0372bc0ac2dcc3d1b29c
 
 - git: https://github.com/oscoin/avl-auth
-  commit: c28e58e5de980697add9905845c82c844f2928b0
+  commit: dfc468845a82cdd7d759943b20853999bc026505
 
 - git: https://github.com/oscoin/gossip
   commit: 7da6fed6821cc0452ef194522c3cc59019ab7f53

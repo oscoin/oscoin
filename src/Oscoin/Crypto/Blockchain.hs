@@ -24,6 +24,7 @@ import           Oscoin.Prelude hiding (toList)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
+import           Oscoin.Time.Chrono (NewestFirst(..), toNewestFirst)
 
 import           Control.Monad (guard)
 import qualified Data.ByteString.Char8 as C8
@@ -63,8 +64,8 @@ unsafeToBlockchain :: [Block c tx (Sealed c s)] -> Blockchain c tx s
 unsafeToBlockchain blks =
     Blockchain $ NonEmpty.fromList blks
 
-blocks :: Blockchain c tx s -> [Block c tx (Sealed c s)]
-blocks = NonEmpty.toList . fromBlockchain
+blocks :: Blockchain c tx s -> NewestFirst [] (Block c tx (Sealed c s))
+blocks = NewestFirst . NonEmpty.toList . fromBlockchain
 
 takeBlocks :: Int -> Blockchain c tx s -> [Block c tx (Sealed c s)]
 takeBlocks n = NonEmpty.take n . fromBlockchain
@@ -104,7 +105,7 @@ lookupTx
     => Crypto.Hashed c tx
     -> Blockchain c tx s
     -> Maybe (TxLookup c tx)
-lookupTx h (blocks -> chain) = listToMaybe $ do
+lookupTx h (toNewestFirst . blocks -> chain) = listToMaybe $ do
     (i, block) <- zip [1..] chain
     tx <- toList $ blockData block
     guard (Crypto.hash tx == h)

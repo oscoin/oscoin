@@ -13,7 +13,7 @@ import           Oscoin.Crypto
 import           Oscoin.Crypto.Hash
 
 import           Codec.Serialise
-import           Crypto.Data.Auth.Tree.Internal (MerkleHash(..))
+import           Crypto.Data.Auth.Tree.Class (MerkleHash(..))
 import           Data.Aeson hiding (decode, encode)
 import           Data.Aeson.Types (typeMismatch)
 import           Data.ByteArray (ByteArray, ByteArrayAccess(..), convert)

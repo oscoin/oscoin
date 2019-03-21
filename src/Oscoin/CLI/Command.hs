@@ -22,7 +22,7 @@ import           Oscoin.Time (Timestamp)
 
 
 import           Codec.Serialise (Serialise)
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Crypto.Random.Types (MonadRandom)
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.ByteArray.Orphans ()

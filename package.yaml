@@ -12,7 +12,6 @@ dependencies:
 
 data-files:
   - data/blockstore.sql
-  - data/config.yaml
   - data/genesis.yaml
 
 flags:
@@ -81,7 +80,7 @@ library:
     - tagged
     - text
     - transformers
-    - unordered-containers
+    - vector
     - wai
     - wai-middleware-static
     - writer-cps-mtl

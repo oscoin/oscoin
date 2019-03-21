@@ -17,6 +17,7 @@ import           GHC.Natural
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
+import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
@@ -128,7 +129,10 @@ genOrphanChainsFrom
     -- the missing link that, upon insertion, will
     -- yield a fork.
 genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
-    let genesisFirst = reverse . toList . blocks $ inputChain
+    let genesisFirst = Chrono.toOldestFirst
+                     . Chrono.reverse
+                     . blocks
+                     $ inputChain
     events <- genChainEvents (length genesisFirst) forkParams
     go (zip events genesisFirst) [] -- Starts with genesis first
     where
@@ -147,7 +151,8 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
                   let (blks, orphanChain) = map (unsafeToBlockchain . reverse)
                                           . splitAt 1
                                           . drop 1 -- drop the tip, which is 'x'.
-                                          . reverse
+                                          . Chrono.toOldestFirst
+                                          . Chrono.reverse
                                           . blocks
                                           $ fork
                   -- NOTE(adn) Ignoring for now more complicated scenarios

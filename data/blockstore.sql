@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS "blocks" (
   "timestamp"     integer       NOT NULL UNIQUE,
   "difficulty"    integer       NOT NULL,
   "seal"          blob          NOT NULL,
-  "score"         integer       NOT NULL,
 
   -- NOTE: The "timestamp" and "parenthash" fields carry an invariant that is
   -- not checked here: the timestamp of a row must always be greater than

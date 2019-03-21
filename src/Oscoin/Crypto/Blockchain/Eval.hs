@@ -19,9 +19,10 @@ import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
 import           Oscoin.Crypto.Blockchain.Block hiding (parentHash)
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Codec.Serialise (Serialise)
-import qualified Crypto.Data.Auth.Tree.Internal as AuthTree
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Data.Aeson
                  (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Generics.SOP as SOP
@@ -175,7 +176,7 @@ evalBlockchain
     -> st
     -> Blockchain c tx s
     -> ([(tx, Either EvalError o)], st)
-evalBlockchain eval st (blocks -> blks) =
+evalBlockchain eval st (toNewestFirst . blocks -> blks) =
     evalTraverse eval (concatMap (toList . blockData) (reverse blks)) st
 
 -- Internal ------------------------------------------------------

@@ -4,12 +4,13 @@ module Oscoin.Test.Storage.Block.Orphanage
     ( tests
     ) where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (reverse)
 
 
 import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Storage.Block.Orphanage
+import           Oscoin.Time.Chrono (reverse, toNewestFirst)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
@@ -52,8 +53,8 @@ propInsertOrphans Dict = do
     forAllShow (genOrphanChainsFrom forkParams initialChain) showIt $ \chains ->
         monadic runIdentity $ do
             ps <- forM chains $ \(orphanChain, _missingLink) -> do
-                     let actual = toList $ getOrphans (insertOrphans (blocks orphanChain) orphanage)
-                     pure (sort actual === sort (map blockHash (blocks orphanChain)))
+                     let actual = toList $ getOrphans (insertOrphans (toNewestFirst $ blocks orphanChain) orphanage)
+                     pure (sort actual === sort (map blockHash (toNewestFirst $ blocks orphanChain)))
             pure $ foldl' (.&&.) (property True) ps
 
 -- Generates a bunch of candidates and check the best one is selected.
@@ -71,14 +72,17 @@ propSelectBestCandidateSingleChoice Dict = do
                 -- First of all, we insert all the orphans up to the missing
                 -- link, and we assess that the best chain must be 'Nothing',
                 -- as we don't have any candidate linking to the main chain.00
-                let orphanage' = insertOrphans (blocks orphanChain) orphanage
+                let orphanage' = insertOrphans (toNewestFirst $ blocks orphanChain) orphanage
                 let p1 = selectBestChain [blockHash defaultGenesis] orphanage' === Nothing
                 -- Now we insert the missing link and we check the chain is
                 -- what we expect.
                 let orphanage'' = insertOrphans [missingLink] orphanage'
-                let bestChain = reverse . toBlocksOldestFirst orphanage'' . snd <$>
-                      selectBestChain [blockHash defaultGenesis] orphanage''
-                let p2 = bestChain === Just (blocks orphanChain <> [missingLink])
+                let bestChain = toList
+                              . toNewestFirst
+                              . reverse
+                              . toBlocksOldestFirst orphanage''
+                              . snd <$> selectBestChain [blockHash defaultGenesis] orphanage''
+                let p2 = bestChain === Just ((toNewestFirst . blocks) orphanChain <> [missingLink])
                 pure [p1, p2]
             pure $ classifyChainsByScore chains $
                        foldl' (.&&.) (property True) (mconcat ps)
@@ -95,7 +99,7 @@ propSelectBestCandidateMultipleChoice Dict = do
     forAllShow (resize 3 $ shuffledOrphanChains forkParams initialChain) showIt $ \chains ->
             let finalOrphanage =
                   foldl' (\o (shuffledChain, _, missingLink) ->
-                            insertOrphans (blocks $ fromShuffled shuffledChain)
+                            insertOrphans (toNewestFirst . blocks $ fromShuffled shuffledChain)
                           . insertOrphans [missingLink]
                           $ o -- Order of insertion shouldn't matter!
                         ) orphanage chains
@@ -116,7 +120,7 @@ propSelectBestCandidateComplex Dict = do
     forAllShow generator showIt $ \(_initialChain, chains) ->
             let (finalOrphanage, allLinks) =
                   foldl' (\(o,ls) (shuffledChain, _, missingLink) -> (
-                            insertOrphans (blocks $ fromShuffled shuffledChain)
+                            insertOrphans (toNewestFirst . blocks $ fromShuffled shuffledChain)
                           . insertOrphans [missingLink]
                           $ o, missingLink : ls)
                         ) (orphanage, mempty) chains
@@ -137,7 +141,7 @@ classifyChainsByScore
 classifyChainsByScore chains = tabulate "Chain Score" scores
   where
       scores :: [String]
-      scores = map (\(c,lnk) -> toScore (lnk : blocks c)) chains
+      scores = map (\(c,lnk) -> toScore (lnk : toNewestFirst (blocks c))) chains
 
       toScore :: [Block c tx (Sealed c s)] -> String
       toScore blks = case totalScore blks of

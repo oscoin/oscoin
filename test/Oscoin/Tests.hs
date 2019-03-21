@@ -30,6 +30,7 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Environment as Environment
 import qualified Oscoin.Test.P2P as P2P
+import qualified Oscoin.Test.Storage.Block.Cache as BlockCache
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
 import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
@@ -66,6 +67,7 @@ tests d@Dict config = testGroup "Oscoin"
     , testProperty   "JSON instance of Signed"        (propSignedJSON d)
     , testGroup      "Consensus"                      (Consensus.tests d config)
     , testGroup      "P2P"                            (P2P.tests d)
+    , testGroup      "Storage Cache"                  (BlockCache.tests d)
     , testGroup      "Storage Orphanage"              (Orphanage.tests d)
     , testGroup      "Storage equivalence checking"   (StorageEquivalence.tests d)
     , testGroup      "SQLite Storage blackbox"        (SQLite.Blackbox.tests d)

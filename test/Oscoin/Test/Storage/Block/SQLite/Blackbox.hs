@@ -11,10 +11,10 @@ import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
+import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary
-                 (arbitraryBlock, arbitraryBlockWith)
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary (arbitraryBlock)
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
@@ -22,7 +22,6 @@ import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
 
 import           Data.ByteArray.Orphans ()
-import qualified Data.Set as Set
 
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
@@ -35,7 +34,6 @@ tests Dict =
         , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
         , testProperty "Get Genesis Block"  (withMemStore (const arbitrary) (testGetGenesisBlock @c))
         , testProperty "Get blocks"         (withMemStore genGetBlocks (testGetBlocks @c))
-        , testProperty "Orphans"            (withMemStore (const (vectorOf 10 (arbitraryBlockWith []))) (testOrphans @c))
         ]
     ]
 
@@ -70,9 +68,9 @@ testStoreLookupBlock
     => Block c (RadTx c) (Sealed c DummySeal)
     -> Abstract.BlockStore c (RadTx c) DummySeal IO
     -> Assertion
-testStoreLookupBlock blk h = do
-    Abstract.insertBlock h blk
-    Just blk' <- Abstract.lookupBlock h (blockHash blk)
+testStoreLookupBlock blk (publicAPI, privateAPI) = do
+    Abstract.insertBlock privateAPI blk
+    Just blk' <- Abstract.lookupBlock publicAPI (blockHash blk)
 
     blk' @?= blk
 
@@ -81,13 +79,13 @@ testStoreLookupTx
     => Block c (RadTx c) (Sealed c DummySeal)
     -> Abstract.BlockStore c (RadTx c) DummySeal IO
     -> Assertion
-testStoreLookupTx blk h = do
-    Abstract.insertBlock h blk
+testStoreLookupTx blk (publicAPI, privateAPI) = do
+    Abstract.insertBlock privateAPI blk
 
     let tx = headDef (panic "No transactions!")
            $ toList $ blockData blk
 
-    Just tx' <- Abstract.lookupTx h (Crypto.hash tx)
+    Just tx' <- Abstract.lookupTx publicAPI (Crypto.hash tx)
 
     txPayload tx' @?= tx
 
@@ -95,32 +93,21 @@ testGetGenesisBlock
     :: IsCrypto c
     => ()
     -> Abstract.BlockStore c (RadTx c) DummySeal IO -> Assertion
-testGetGenesisBlock () h = do
-    blk <- Abstract.getGenesisBlock h
+testGetGenesisBlock () (publicAPI, _privateAPI) = do
+    blk <- Abstract.getGenesisBlock publicAPI
     defaultGenesis @?= blk
-
-testOrphans
-    :: IsCrypto c
-    => [Block c (RadTx c) (Sealed c DummySeal)]
-    -> Abstract.BlockStore c (RadTx c) DummySeal IO
-    -> Assertion
-testOrphans blks h = do
-    for_ blks (Abstract.insertBlock h)
-    blks' <- Abstract.getOrphans h
-
-    blks' @?= Set.fromList (map blockHash blks)
 
 testGetBlocks
     :: IsCrypto c
     => (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
     -> Abstract.BlockStore c (RadTx c) DummySeal IO
     -> Assertion
-testGetBlocks (block, chain) h = do
-    Abstract.insertBlocksNaive h (initDef [] $ blocks chain)
+testGetBlocks (block, chain) (publicAPI, privateAPI) = do
+    Abstract.insertBlocksNaive privateAPI (Chrono.reverse $ blocks chain)
 
     -- This orphan block shouldn't be returned by 'maximumChainBy'.
-    Abstract.insertBlock h block
+    Abstract.insertBlock privateAPI block
 
-    blks' <- Abstract.getBlocks h (fromIntegral $ chainLength chain)
+    blks' <- Abstract.getBlocksByDepth publicAPI (fromIntegral $ chainLength chain)
 
     blocks chain @?= blks'

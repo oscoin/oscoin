@@ -20,6 +20,7 @@ import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Environment
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
@@ -58,7 +59,8 @@ data Handle c tx st s i = Handle
     { hConfig       :: Config
     , hNodeId       :: i
     , hStateStore   :: StateStore.Handle c st
-    , hBlockStore   :: Abstract.BlockStore c tx s IO
+    , hBlockStore   :: Abstract.BlockStoreReader c tx s IO
+    , hProtocol     :: Protocol.Handle c tx s IO
     , hMempool      :: Mempool.Handle c tx
     , hEval         :: Evaluator st tx RadicleTx.Message
     , hConsensus    :: Consensus c tx s (NodeT c tx st s i IO)
@@ -93,7 +95,7 @@ instance ( Ord (Hash c)
 
 withBlockStore
     :: MonadIO m
-    => (Abstract.BlockStore c tx s IO -> IO b)
+    => (Abstract.BlockStoreReader c tx s IO -> IO b)
     -> NodeT c tx st s i m b
 withBlockStore f = do
     bs <- asks hBlockStore

@@ -21,6 +21,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
+import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import qualified Oscoin.Storage.State as StateStore
@@ -120,32 +121,34 @@ main = do
     gen         <- Yaml.decodeFileThrow genesis :: IO GenesisBlock
     genState    <- either (die . fromEvalError) pure (evalBlock Rad.txEval Rad.pureEnv gen)
     stStore     <- StateStore.fromStateM genState
-    config      <- Consensus.getConfig environment
+    let config  = Consensus.getConfig environment
 
     metricsStore <- newMetricsStore $ labelsFromList [("env", toText environment)]
     forkEkgServer metricsStore ekgHost ekgPort
 
     withStdLogger (Log.configForEnvironment environment) $ \lgr -> Log.withExceptionLogged lgr $
-        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) Nakamoto.blockScore $ \blkStore -> do
+        BlockStore.Concrete.STM.withBlockStore (fromGenesis gen) Nakamoto.blockScore $ \blkStore@(publicBlockStore, _) -> do
             let telemetryHandle = Telemetry.newTelemetryStore lgr metricsStore
-            withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
-                     nid
-                     mem
-                     stStore
-                     blkStore
-                     Rad.txEval
-                     consensus                                      $ \nod ->
-                withGossip telemetryHandle
-                           P2P.NodeAddr { P2P.nodeId   = pure nid
-                                        , P2P.nodeHost = host
-                                        , P2P.nodePort = gossipPort
-                                        }
-                           seeds
-                           (storage nod config)
-                           (Handshake.simpleHandshake keys)         $ \gos ->
-                    Async.runConcurrently $
-                             Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
-                          <> Async.Concurrently (miner nod gos)
+            runProtocol Nakamoto.validateFull Nakamoto.blockScore telemetryHandle blkStore config $ \proto ->
+                withNode (mkNodeConfig environment telemetryHandle noEmptyBlocks config)
+                         nid
+                         mem
+                         stStore
+                         publicBlockStore
+                         proto
+                         Rad.txEval
+                         consensus                                      $ \nod ->
+                    withGossip telemetryHandle
+                               P2P.NodeAddr { P2P.nodeId   = pure nid
+                                            , P2P.nodeHost = host
+                                            , P2P.nodePort = gossipPort
+                                            }
+                               seeds
+                               (storage nod config)
+                               (Handshake.simpleHandshake keys)         $ \gos ->
+                        Async.runConcurrently $
+                                 Async.Concurrently (HTTP.run (fromIntegral apiPort) nod)
+                              <> Async.Concurrently (miner nod gos)
   where
     mkNodeConfig env telemetryHandle neb config = Node.Config
         { Node.cfgEnv = env
@@ -156,4 +159,4 @@ main = do
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
     storage nod config =
-        hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBlock config)
+        hoistStorage (runNodeT nod) (Node.storage Rad.txEval Nakamoto.validateBasic config)

@@ -17,7 +17,7 @@ import           Data.Aeson hiding (decode, encode)
 import qualified Data.ByteString as BS
 import qualified Data.Hashable as H
 
-newtype MockKey = MockKey [Word8] deriving (Eq, Show)
+newtype MockKey = MockKey [Word8] deriving (Eq, Ord, Show)
 
 instance Crypto.Hashable MockCrypto MockKey where
     hash (MockKey w8s) = Crypto.toHashed . Crypto.fromHashed . Crypto.hash . BS.pack $ w8s
@@ -25,11 +25,11 @@ instance Crypto.Hashable MockCrypto MockKey where
 instance HasDigitalSignature MockCrypto where
 
     newtype PublicKey MockCrypto =
-        MockPK (PK MockCrypto MockKey) deriving Eq
+        MockPK (PK MockCrypto MockKey) deriving (Eq, Ord)
     newtype PrivateKey MockCrypto = MockSK (SK (MockKey, [Word8]))
 
     newtype Signature MockCrypto =
-        MockSignature [Word8] deriving (Eq, Show)
+        MockSignature [Word8] deriving (Eq, Show, Ord)
 
     sign (MockSK (SK (MockKey pkSkXored, sk))) bytes = do
         let !sig = zipWith xor pkSkXored sk
@@ -66,6 +66,10 @@ instance FromJSON (PublicKey MockCrypto) where
 
 instance Eq a => Eq (PK MockCrypto a) where
     (PK a1 b1) == (PK a2 b2) = a1 == a2 && b1 == b2
+
+instance Ord a => Ord (PK MockCrypto a) where
+    compare (PK a1 b1) (PK a2 b2) =
+        mconcat [a1 `compare` a2, b1 `compare` b2]
 
 instance Serialise (Signature MockCrypto) where
     encode (MockSignature bs) = encode bs
