@@ -11,3 +11,4 @@ tags
 dist-newstyle
 dist
 .ghc.environment*
+blockstore.db

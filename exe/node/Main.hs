@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Blockchain (fromGenesis)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
@@ -23,7 +22,7 @@ import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
-import qualified Oscoin.Storage.Block.STM as BlockStore.STM
+import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
 import qualified Oscoin.Storage.State as StateStore
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
@@ -38,16 +37,17 @@ import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Args = Args
-    { host          :: HostName
-    , gossipPort    :: PortNumber
-    , apiPort       :: PortNumber
-    , seeds         :: [P2P.SeedAddr Crypto]
-    , genesis       :: FilePath
-    , noEmptyBlocks :: Bool
-    , keysPath      :: Maybe FilePath
-    , environment   :: Environment
-    , ekgHost       :: HostName
-    , ekgPort       :: PortNumber
+    { host           :: HostName
+    , gossipPort     :: PortNumber
+    , apiPort        :: PortNumber
+    , seeds          :: [P2P.SeedAddr Crypto]
+    , genesis        :: FilePath
+    , noEmptyBlocks  :: Bool
+    , keysPath       :: Maybe FilePath
+    , environment    :: Environment
+    , ekgHost        :: HostName
+    , ekgPort        :: PortNumber
+    , blockStorePath :: FilePath
     }
 
 args :: ParserInfo Args
@@ -105,6 +105,17 @@ args = info (helper <*> parser) $ progDesc "Oscoin Node"
            <> value 8090
            <> showDefault
             )
+        <*> blockStorePathParser
+
+    blockStorePathParser :: Parser FilePath
+    blockStorePathParser = option str (
+                                 long "blockstore"
+                              <> help "The path to the database storing the blocks. "
+                              <> metavar "FILEPATH"
+                              <> value "blockstore.db"
+                              <> showDefault
+                              )
+
 
 type GenesisBlock =
     Block Crypto (RadTx Crypto) (Sealed Crypto Nakamoto.PoW)
@@ -137,8 +148,7 @@ main = do
             let telemetry = Telemetry.newTelemetryStore lgr metricsStore
 
             blkStore@(blkStoreReader,_) <- managed $
-                BlockStore.STM.withBlockStore (fromGenesis gen)
-                                              Nakamoto.blockScore
+                BlockStore.SQLite.withBlockStore blockStorePath gen
 
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)

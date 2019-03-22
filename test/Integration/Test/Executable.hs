@@ -28,23 +28,26 @@ withOscoinExe f = do
 
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
-    withSystemTempDirectory "Oscoin.Ephemeral.Keys" $ \keyPath -> do
-        -- First, generate the keys with the CLI
-        withSandbox "oscoin-cli" ["keypair", "generate", "--keys", keyPath] defaultSandboxOptions $
-            \_ _ -> pure ()
-        -- Then, run the test.
-        withSandbox "oscoin" [ "--api-port"
-                             , show (randomSpockPort :: Int)
-                             , "--gossip-port"
-                             , show (randomGossipPort :: Int)
-                             , "--keys"
-                             , keyPath
-                             , "--seed"
-                             , "127.0.0.1:" <> show (randomGossipPort :: Int)
-                             , "--ekg-port"
-                             , show (randomEkgPort :: Int)
-                             ] defaultSandboxOptions $
-            \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
+    withSystemTempDirectory "Oscoin.Ephemeral.Keys" $ \keyPath ->
+        withSystemTempFile "blockstore.db" $ \dbPath _ -> do
+            -- First, generate the keys with the CLI
+            withSandbox "oscoin-cli" ["keypair", "generate", "--keys", keyPath] defaultSandboxOptions $
+                \_ _ -> pure ()
+            -- Then, run the test.
+            withSandbox "oscoin" [ "--api-port"
+                                 , show (randomSpockPort :: Int)
+                                 , "--gossip-port"
+                                 , show (randomGossipPort :: Int)
+                                 , "--keys"
+                                 , keyPath
+                                 , "--seed"
+                                 , "127.0.0.1:" <> show (randomGossipPort :: Int)
+                                 , "--ekg-port"
+                                 , show (randomEkgPort :: Int)
+                                 , "--blockstore"
+                                 , dbPath
+                                 ] defaultSandboxOptions $
+                \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
 
 testStartsOK :: Assertion
 testStartsOK =

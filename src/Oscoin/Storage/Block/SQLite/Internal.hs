@@ -93,10 +93,11 @@ initialize
     -> IO (Handle c tx s)
 initialize gen h@Handle{hConn} =
     getDataFileName "data/blockstore.sql" >>=
-        readFile >>=
-        Sql3.exec (Sql.connectionHandle hConn) >>
-            storeBlock' h gen >>
-                pure h
+        readFile >>= \schema -> do
+          Sql3.exec (Sql.connectionHandle hConn) schema
+          unlessM (isStored hConn (blockHash gen)) $
+              storeBlock' h gen
+          pure h
 
 -- | Check whether a given block hash exists.
 isStored
