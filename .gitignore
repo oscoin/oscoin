@@ -8,3 +8,6 @@ tags
 *.prof*
 *.hp
 *.svg
+dist-newstyle
+dist
+.ghc.environment*
