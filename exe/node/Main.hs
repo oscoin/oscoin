@@ -14,7 +14,7 @@ import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
-import           Oscoin.Environment (Environment, toText)
+import           Oscoin.Environment (Environment(..), toText)
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -113,7 +113,10 @@ main :: IO ()
 main = do
     Args{..} <- execParser args
 
-    let consensus = Consensus.nakamotoConsensus
+    let consensus = case environment of
+                      Production  -> Consensus.nakamotoConsensus
+                      Development -> Consensus.nakamotoConsensusLenient
+                      Testing     -> Consensus.nakamotoConsensusLenient
 
     keys         <- runReaderT readKeyPair keysPath
     nid          <- pure (mkNodeId $ fst keys)
@@ -138,7 +141,7 @@ main = do
                                               Nakamoto.blockScore
 
             proto <- managed $
-                runProtocol Nakamoto.validateFull
+                runProtocol (Consensus.cValidate consensus)
                             Nakamoto.blockScore
                             telemetry
                             blkStore

@@ -19,12 +19,14 @@ module Oscoin.Consensus.Nakamoto
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
+import           Oscoin.Consensus.Validation
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
+import           Control.Monad.Except (liftEither, runExcept)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Crypto.Number.Serialize (os2ip)
 import           Data.Aeson (FromJSON, ToJSON)
@@ -82,21 +84,18 @@ validateFull
     => Validate c tx PoW
 validateFull [] blk =
     validateBasic blk
-validateFull prefix@(parent:_) blk
-    | h <- blockPrevHash (blockHeader blk)
-    , h /= blockHash parent =
-        Left $ InvalidParentHash h
-    | actual <- blockTargetDifficulty (blockHeader blk)
-    , expected <- chainDifficulty prefix
-    , actual /= expected =
-        Left $ InvalidTargetDifficulty expected actual
-    | t < t' =
-        Left $ InvalidBlockTimestamp $ t - t'
-    | t - t' > 2 * hours =
-        Left $ InvalidBlockTimestamp $ t' - t
-    | otherwise =
-        validateBasic blk
+validateFull prefix@(parent:_) blk = runExcept $ do
+    validateParentHash parent blk
+    validateDifficulty chainDifficulty prefix blk
+    validateTimestamp  parent blk
+    validateBlockAge
+    liftEither (validateBasic blk)
   where
+    validateBlockAge
+      | t - t' > 2 * hours =
+          throwError (InvalidBlockTimestamp $ t' - t)
+      | otherwise = pure ()
+
     t  = ts blk
     t' = ts parent
     ts = sinceEpoch . blockTimestamp . blockHeader
