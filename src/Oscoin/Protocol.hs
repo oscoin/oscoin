@@ -231,7 +231,10 @@ selectBestChain mgr = do
             let scoreFn       = protoScoreBlock mgr
                 newChainFound =
                     null chainSuffix
-                 || bestFork > O.fromChainSuffix scoreFn (NonEmpty.fromList . toNewestFirst $ chainSuffix)
+                 || bestFork > O.fromChainSuffix scoreFn (OldestFirst . NonEmpty.reverse
+                                                                      . NonEmpty.fromList
+                                                                      . toNewestFirst $ chainSuffix
+                                                         )
 
             when newChainFound $
                 switchToFork bestFork chainSuffix
@@ -241,7 +244,7 @@ selectBestChain mgr = do
                   -- originating from the suffix chain which has been replaced.
                   foldl' (\acc blockInSuffix ->
                              O.pruneOrphanage (blockHash blockInSuffix)
-                                              (O.fromChainSuffix scoreFn (blockInSuffix NonEmpty.:| []))
+                                              (O.fromChainSuffix scoreFn (OldestFirst $ blockInSuffix NonEmpty.:| []))
                                               $ acc
                          ) (O.pruneOrphanage parentHash bestFork orphanage) chainSuffix
             pure $ mgr { protoOrphanage = orphanage' }

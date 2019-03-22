@@ -100,9 +100,9 @@ chainCandidate scoreBlock b = ChainCandidate
 -- a chain suffix on the main chain into a 'ChainCandidate' for comparison,
 -- to determine which of the two won.
 fromChainSuffix :: (Block c tx (Sealed c s) -> Score)
-                -> NonEmpty (Block c tx (Sealed c s))
+                -> OldestFirst NonEmpty (Block c tx (Sealed c s))
                 -> ChainCandidate c s
-fromChainSuffix scoreBlock blks = ChainCandidate
+fromChainSuffix scoreBlock (toOldestFirst -> blks) = ChainCandidate
     { candidateChain = Seq.fromList . NonEmpty.toList . map blockHash $ blks
     , candidateTipHeader = blockHeader . NonEmpty.head $ blks
     , candidateScore = sum (map scoreBlock blks)
