@@ -3,7 +3,6 @@
 module Oscoin.Test.HTTP.Helpers
     ( Codec
     , newCodec
-    , prettyCodec
 
     , NodeState(..)
     , nodeState
@@ -321,11 +320,6 @@ data Codec = Codec
     { codecAccept      :: HTTP.MediaType
     , codecContentType :: HTTP.MediaType
     } deriving (Show)
-
-prettyCodec :: Codec -> Text
-prettyCodec Codec{..} =
-    "(Accept: " <> show codecAccept <>
-    ", Content-Type: " <> show codecContentType <> ")"
 
 newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
 newCodec accept ctype = Codec

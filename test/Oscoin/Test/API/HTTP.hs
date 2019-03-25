@@ -20,9 +20,7 @@ import           Oscoin.Time.Chrono (toNewestFirst)
 
 import qualified Data.Aeson as Aeson
 import           Data.Default (def)
-import qualified Data.Text as T
 
-import           Network.HTTP.Media ((//))
 import           Network.HTTP.Types.Status
 import           Web.HttpApiData (toUrlPiece)
 
@@ -48,14 +46,10 @@ tests Dict =
         ]
     ]
   where
-    test name mkTest = testGroup name $ do
-        let ctypes  = fromMediaType <$> [ JSON, CBOR ]
-        let accepts = ("*" // "*") : ctypes
-        codec <- [ newCodec accept content | content <- ctypes, accept <- accepts ]
-        [ testProperty (T.unpack $ prettyCodec codec) (
-            monadicIO $ do
-                HTTPTest{..} <- mkTest codec
-                liftIO $ runSession testState testSession )]
+    test name mkTest =
+        testProperty name $ monadicIO $ do
+            HTTPTest{..} <- mkTest $ newCodec (fromMediaType CBOR) (fromMediaType CBOR)
+            liftIO $ runSession testState testSession
 
 data HTTPTest c = HTTPTest
     { testState   :: NodeState c
