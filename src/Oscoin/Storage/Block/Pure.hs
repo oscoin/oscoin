@@ -5,7 +5,6 @@
 module Oscoin.Storage.Block.Pure
     ( Handle
     , genesisBlockStore
-    , fromOrphans
     , initWithChain
 
     , getBlocks
@@ -15,8 +14,6 @@ module Oscoin.Storage.Block.Pure
     , insert
     , lookupBlock
     , lookupTx
-    , orphans
-    , chainStateHash
     ) where
 
 import           Oscoin.Prelude
@@ -30,7 +27,6 @@ import           Oscoin.Time.Chrono (toNewestFirst)
 
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import           Text.Show (Show(..))
 
 -- | Store of 'Block's and 'Blockchain's.
@@ -134,15 +130,6 @@ insert
 insert blk bs@Handle{..} =
     linkBlocks $ bs { hOrphans = Map.insert (blockHash blk) blk hOrphans }
 
-fromOrphans
-    :: (Foldable t, Ord (Hash c))
-    => t (Block c tx (Sealed c s))
-    -> Block c tx (Sealed c s)
-    -> ScoreFn c tx (Sealed c s)
-    -> Handle c tx s
-fromOrphans (toList -> blks) gen sf =
-    linkBlocks $ (genesisBlockStore gen sf) { hOrphans = Map.fromList [(blockHash b, b) |b <- blks] }
-
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock
     :: Ord (BlockHash c)
@@ -153,12 +140,6 @@ lookupBlock h Handle{..} =
         Map.lookup h hOrphans
     <|> List.find ((== h) . blockHash) (foldMap blocks $ Map.elems hChains)
 
-orphans :: Ord (Hash c) => Handle c tx s -> Set (BlockHash c)
-orphans Handle{hOrphans} =
-    let parentHashes   = Set.fromList $ map (blockPrevHash . blockHeader) (Map.elems hOrphans)
-        danglingHashes = Map.keysSet hOrphans
-     in Set.difference parentHashes danglingHashes
-
 -- | Lookup a transaction in the 'Handle'. Only considers transactions in
 -- the best chain.
 lookupTx
@@ -167,11 +148,6 @@ lookupTx
     -> Handle c tx s
     -> Maybe (TxLookup c tx)
 lookupTx h = Blockchain.lookupTx h . getBestChain
-
--- | The state hash of the chain.
-chainStateHash :: Handle c tx s -> StateHash c
-chainStateHash =
-    blockStateHash . blockHeader . getTip
 
 -- | Link as many orphans as possible to one of the existing chains. If the
 -- linking of an orphan to its parent fails, the block is discarded.
