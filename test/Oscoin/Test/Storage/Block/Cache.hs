@@ -58,7 +58,7 @@ worksRingBufferProp Dict = monadicIO $ do
 -- II. A list of blocks which length is the \"backfill\" size.
 --
 -- After doing that, we request the 'BlockCache' exactly 'size' blocks, and
--- we expect the 'cached' function to backfill correctly.
+-- we expect the 'cached' function to lookup from disk correctly.
 cachedWorksProp :: forall c. Dict (IsCrypto c) -> Positive Int -> Property
 cachedWorksProp Dict (getPositive -> size) = monadicIO $ do
     cache <- liftIO (newBlockCache (fromIntegral size))
@@ -69,8 +69,17 @@ cachedWorksProp Dict (getPositive -> size) = monadicIO $ do
 
     forAllM lessThanSize $ \(blks :: [Block c Text Text]) ->
         forAllM (backfill blks) $ \backfilled -> do
-            cachedBlocks <- liftIO $ do
+            -- We first ask < size elements, and we expect the cache to return
+            -- them.
+            blocksFromCache <- liftIO $ do
                 forM_ (reverse blks) (consBlock cache)
+                cached cache (length blks) (const (pure backfilled))
+            assert $ length blocksFromCache == length blks
+            assert $ blocksFromCache == NewestFirst blks
+
+            -- Then, we test that if the cache doesn't have enough blocks,
+            -- we hit the disk.
+            blocksFromDisk <- liftIO $
                 cached cache size (const (pure backfilled))
-            assert $ length cachedBlocks == size
-            assert $ head (toNewestFirst cachedBlocks) == head backfilled
+            assert $ length blocksFromDisk == length backfilled
+            assert $ blocksFromDisk == backfilled

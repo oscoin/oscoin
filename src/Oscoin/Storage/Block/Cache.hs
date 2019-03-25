@@ -29,17 +29,18 @@ cached
     -> Int
     -- ^ The number of requested elements
     -> (Int -> IO (NewestFirst [] (Block c tx s)))
-    -- ^ A function to \"backfill\" the cache by the number of missing
-    -- elements.
+    -- ^ A function to lookup the requested elements on disk, if the cache
+    -- cannot serve all of them directly.
     -> IO (NewestFirst [] (Block c tx s))
-cached (BlockCache bc) requestedElements backFill =
+cached (BlockCache bc) requestedElements lookupOnDisk =
     modifyMVar bc $ \cseq -> do
         let currentSize = CSeq.getSize cseq
+        -- If the cache has enough elements, serve them.
         if currentSize < requestedElements
           then do
-              newElements <- backFill (requestedElements - currentSize)
-              let cseq' = foldr (CSeq.<|) cseq newElements
-              pure (cseq', NewestFirst $ take requestedElements $ CSeq.toList cseq')
+              -- Otherwise, hit the disk.
+              newElements <- lookupOnDisk requestedElements
+              pure (cseq, newElements)
           else pure (cseq, NewestFirst $ take requestedElements (CSeq.toList cseq))
 
 newBlockCache :: Natural -> IO (BlockCache c tx s)
