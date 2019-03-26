@@ -3,6 +3,9 @@
 -- | Disk-backed block storage using SQLite.
 module Oscoin.Storage.Block.SQLite
     ( withBlockStore
+    , StorableTx
+    , IsTxRow(..)
+    , TxRow(..)
     ) where
 
 import           Oscoin.Prelude
@@ -18,10 +21,8 @@ import           Oscoin.Storage.Block.SQLite.Internal
 import           Database.SQLite.Simple (Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
-import           Database.SQLite.Simple.FromRow (FromRow)
 import           Database.SQLite.Simple.QQ
 import           Database.SQLite.Simple.ToField (ToField)
-import           Database.SQLite.Simple.ToRow (ToRow)
 
 import           Codec.Serialise (Serialise)
 
@@ -34,14 +35,10 @@ import           Codec.Serialise (Serialise)
 withBlockStore
     :: ( ToField s
        , FromField s
-       , ToField (Crypto.Hash c)
        , FromField (Crypto.Hash c)
        , Serialise s
-       , Serialise (Crypto.Hash c)
        , Ord (BlockHash c)
-       , ToRow tx
-       , FromRow tx
-       , Crypto.HasHashing c
+       , StorableTx c tx
        )
     => String
     -- ^ The path where the DB will live on disk
@@ -74,12 +71,9 @@ withBlockStore path genesisBlock action =
 lookupBlock
     :: forall c tx s.
        ( Serialise s
-       , Serialise (Crypto.Hash c)
-       , ToField (Crypto.Hash c)
        , FromField (Sealed c s)
        , FromField (Crypto.Hash c)
-       , FromRow tx
-       , Crypto.HasHashing c
+       , StorableTx c tx
        )
     => Handle c tx s
     -> BlockHash c
@@ -97,19 +91,9 @@ lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
 
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.
-lookupTx
-    :: ( Crypto.HasHashing c
-       , FromRow tx
-       , ToField (Crypto.Hashed c tx)
-       )
-    => Handle c tx s
-    -> Crypto.Hashed c tx
-    -> IO (Maybe (TxLookup c tx))
-lookupTx Handle{hConn} h = do
-    res <- Sql.query hConn
-        [sql| SELECT message, author, chainid, nonce, context
-                FROM transactions
-               WHERE hash = ? |] (Only h)
-    pure $ case listToMaybe res of
+lookupTx :: (StorableTx c tx) => Handle c tx s -> Crypto.Hashed c tx -> IO (Maybe (TxLookup c tx))
+lookupTx Handle{hConn} hash = do
+    maybeTx <- getTx hConn (Crypto.fromHashed hash)
+    pure $ case maybeTx of
         Nothing -> Nothing
         Just tx -> Just $ TxLookup tx Crypto.zeroHash 0

@@ -25,7 +25,6 @@ import           Oscoin.Consensus.Types (Validate)
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHash, Score, Sealed, Unsealed)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
@@ -48,13 +47,13 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Time
 import           Oscoin.Time.Chrono as Chrono
 
-import           Codec.Serialise (Serialise)
 import           Control.Monad.State.Strict
 import           Data.Binary (Binary)
 import qualified Data.Hashable as Hashable
 import           Lens.Micro
 import           Text.Show (Show(..))
 
+import           Test.Oscoin.DummyLedger
 import           Test.QuickCheck
 
 -- Type class which serves as an evidence that we can hoist a 'TestNodeT'
@@ -128,26 +127,7 @@ stepTestProtocol fullBlockStore fetchNextBlock validateFull scoreBlock = do
          liftTestNodeT $ modify' $ \st -> st { tnsOrphanage = protoOrphanage protocol' }
 
 
-newtype DummyTx = DummyTx Word8
-    deriving (Eq, Ord, Hashable.Hashable, Binary, Serialise)
-
-deriving instance (HasHashing c, Hashable c Word8) => Hashable c DummyTx
-
-type DummyState = ()
-
-type DummyOutput = ()
-
 type DummySeal = Text
-
-
-dummyEval :: Evaluator DummyState DummyTx DummyOutput
-dummyEval _ s = Right ((), s)
-
-instance Show DummyTx where
-    show (DummyTx x) = show x
-
-instance Arbitrary DummyTx where
-    arbitrary = DummyTx <$> arbitrary
 
 newtype DummyNodeId = DummyNodeId Word8
     deriving (Eq, Ord, Num, Hashable.Hashable, Binary)
