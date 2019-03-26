@@ -16,7 +16,7 @@ import           Codec.Serialise
 import           Crypto.Data.Auth.Tree.Class (MerkleHash(..))
 import           Data.Aeson hiding (decode, encode)
 import           Data.Aeson.Types (typeMismatch)
-import           Data.ByteArray (ByteArray, ByteArrayAccess(..), convert)
+import           Data.ByteArray (ByteArrayAccess(..), convert)
 import           Data.ByteArray.Orphans ()
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.BaseN as BaseN
@@ -49,7 +49,9 @@ instance HasHashing MockCrypto where
     newtype Hash MockCrypto = FnvHash { fromMockHash :: FnvHash64 }
         deriving (Eq, Ord)
 
-    fromByteArray = FnvHash . hashByteArray
+    -- | Hash anything which is an instance of 'ByteArray' into a 'Word64' using
+    -- the xxhash.
+    hashByteArray = FnvHash . fnv1a_64Hash
 
     hashAlgorithm = MockHash
     zeroHash = FnvHash (FnvHash64 minBound)
@@ -60,11 +62,6 @@ instance HasHashing MockCrypto where
                                         . BL.toLazyByteString
                                         . BL.word64LE
                                         $ w64
-
--- | Hash anything which is an instance of 'ByteArray' into a 'Word64' using
--- the xxhash.
-hashByteArray :: ByteArrayAccess ba => ba -> FnvHash64
-hashByteArray = fnv1a_64Hash
 
 {------------------------------------------------------------------------------
   More-or-less-dubious instances
@@ -87,16 +84,16 @@ instance ByteArrayAccess (Hash MockCrypto) where
         withByteArray (LBS.toStrict . BL.toLazyByteString . BL.word64LE $ w64)
 
 instance Hashable MockCrypto ByteString where
-    hash = toHashed . FnvHash . hashByteArray
+    hash = toHashed . hashByteArray
 
 instance Hashable MockCrypto LByteString where
-    hash = toHashed . FnvHash . hashByteArray @ByteString . toS
+    hash = toHashed . hashByteArray . LBS.toStrict
 
 instance Hashable MockCrypto Word8 where
-    hash = toHashed . FnvHash . hashByteArray . BS.singleton
+    hash = toHashed . hashByteArray . BS.singleton
 
 instance Hashable MockCrypto Text where
-    hash = toHashed . FnvHash . hashByteArray . encodeUtf8
+    hash = toHashed . hashByteArray . encodeUtf8
 
 instance H.Hashable (Hash MockCrypto) where
     hashWithSalt salt = H.hashWithSalt salt . shortHash
@@ -121,7 +118,7 @@ instance MerkleHash (Hash MockCrypto) where
     emptyHash                            =
         FnvHash (FnvHash64 minBound)
     hashLeaf k v                         =
-        FnvHash $ hashByteArray @ByteString (convert k <> convert v)
+        hashByteArray ((convert k <> convert v) :: ByteString)
     concatHashes (FnvHash (FnvHash64 d1)) (FnvHash (FnvHash64 d2)) =
         FnvHash $ FnvHash64 (d1 + d2)
 

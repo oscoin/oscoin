@@ -37,8 +37,8 @@ instance Semigroup (Hash MockCrypto) where
         FnvHash $ FnvHash64 $ a + b -- Sums the `Word64` together.
 
 instance Semigroup (Hash Crypto) where
-    (<>) a b = fromByteArray @Crypto @ByteString $ on (<>) convert a b
-    sconcat  = fromByteArray @Crypto @ByteString . foldMap convert
+    (<>) a b = hashByteArray @Crypto @ByteString $ on (<>) convert a b
+    sconcat  = hashByteArray @Crypto @ByteString . foldMap convert
 
 instance (HasHashing c, Semigroup (Hash c)) => Monoid (Hash c) where
     mempty = zeroHash
