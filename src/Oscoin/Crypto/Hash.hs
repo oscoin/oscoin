@@ -82,7 +82,7 @@ class HasHashing crypto where
     -- the hash pre-image is not known or cannot be typed.
     data family Hash crypto :: *
 
-    fromByteArray :: forall ba. ByteArray.ByteArray ba => ba -> Hash crypto
+    fromByteArray :: forall ba. ByteArray.ByteArrayAccess ba => ba -> Hash crypto
 
     hashAlgorithm :: HashAlgorithm crypto
 

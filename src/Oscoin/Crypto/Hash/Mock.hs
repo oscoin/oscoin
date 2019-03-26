@@ -63,7 +63,7 @@ instance HasHashing MockCrypto where
 
 -- | Hash anything which is an instance of 'ByteArray' into a 'Word64' using
 -- the xxhash.
-hashByteArray :: ByteArray ba => ba -> FnvHash64
+hashByteArray :: ByteArrayAccess ba => ba -> FnvHash64
 hashByteArray = fnv1a_64Hash
 
 {------------------------------------------------------------------------------
