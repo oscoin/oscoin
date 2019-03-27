@@ -9,6 +9,7 @@
 module Oscoin.Storage.Block.Abstract
     ( BlockStoreReader(..)
     , BlockStore
+    , hoistBlockStore
 
     , hoistBlockStoreReader
     , insertBlocksNaive
@@ -91,6 +92,14 @@ hoistBlockStoreWriter natTrans bs = BlockStoreWriter
     { insertBlock  = natTrans . insertBlock bs
     , switchToFork = \d -> natTrans . switchToFork bs d
     }
+
+hoistBlockStore
+    :: forall c tx s n m. (forall a. n a -> m a)
+    -> BlockStore c tx s n
+    -> BlockStore c tx s m
+hoistBlockStore natTrans (public, private) =
+  (hoistBlockStoreReader natTrans public, hoistBlockStoreWriter natTrans private)
+
 
 -- | /O(n)/. A naive function to store blocks in linear time.
 -- Useful for testing but discouraged for any serious production use.
