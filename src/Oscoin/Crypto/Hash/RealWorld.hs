@@ -56,7 +56,7 @@ instance HasHashing Crypto where
         Hash { fromHash :: Digest (HashAlgorithm Crypto) }
         deriving (Eq, Ord, ByteArrayAccess)
 
-    fromByteArray = Hash . Crypto.hash
+    hashByteArray = Hash . Crypto.hash
 
     hashAlgorithm = Blake2b_256
 
@@ -167,4 +167,3 @@ shortHashRealWorld (Hash d) =
     . BaseN.encodeBase58
     . convert
     $ d
-

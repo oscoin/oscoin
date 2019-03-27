@@ -82,7 +82,7 @@ class HasHashing crypto where
     -- the hash pre-image is not known or cannot be typed.
     data family Hash crypto :: *
 
-    fromByteArray :: forall ba. ByteArray.ByteArray ba => ba -> Hash crypto
+    hashByteArray :: forall ba. ByteArray.ByteArrayAccess ba => ba -> Hash crypto
 
     hashAlgorithm :: HashAlgorithm crypto
 
@@ -126,11 +126,11 @@ formatHashed = Fmt.mapf fromHashed fmtB58
 
 -- | Hash a value's 'Binary' represenation.
 hashBinary :: (HasHashing crypto, Binary a) => a -> Hashed crypto a
-hashBinary = Hashed . fromByteArray . LBS.toStrict . Binary.encode
+hashBinary = Hashed . hashByteArray . LBS.toStrict . Binary.encode
 
 -- | Hash a values's 'Serialise' (CBOR) representation.
 hashSerial :: (HasHashing crypto, Serialise a) => a -> Hashed crypto a
-hashSerial = Hashed . fromByteArray . LBS.toStrict . Serial.serialise
+hashSerial = Hashed . hashByteArray . LBS.toStrict . Serial.serialise
 
 instance HasHashing crypto => Hashable crypto () where
     hash () = toHashed zeroHash
