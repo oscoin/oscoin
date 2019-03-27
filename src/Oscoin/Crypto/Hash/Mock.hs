@@ -50,7 +50,7 @@ instance HasHashing MockCrypto where
         deriving (Eq, Ord)
 
     -- | Hash anything which is an instance of 'ByteArray' into a 'Word64' using
-    -- the xxhash.
+    -- FNV-1.
     hashByteArray = FnvHash . fnv1a_64Hash
 
     hashAlgorithm = MockHash
