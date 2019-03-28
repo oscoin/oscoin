@@ -56,10 +56,9 @@ classifyChain chain =
 -- and get the tip, and that both stores agree on the result.
 propInsertGetTipEquivalence :: forall c.  Dict (IsCrypto c) -> Property
 propInsertGetTipEquivalence Dict =
-    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain -> do
-        let orphanage  = emptyOrphanage blockScore
+    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
         classifyChain chain $
-            ioProperty $ withStores orphanage $ \stores -> do
+            ioProperty $ withStores $ \stores -> do
                 p1 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
                 p2 <- publicApiCheck stores Abstract.getTip
                 pure (p1 .&&. p2)
@@ -79,7 +78,7 @@ propForksInsertGetTipEquivalence Dict = do
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAll generator $ \(chain, orphansWithLink) ->
-        ioProperty $ withStores orphanage $ \stores -> do
+        ioProperty $ withStoresAndProto orphanage $ \stores -> do
             -- Step 1: Store the chain in both stores.
             p0 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
             ps <- forM orphansWithLink $ \(orphans, missingLink) -> do
@@ -102,6 +101,7 @@ type StoresUnderTest c tx s m =
 -- used internally for the SQLite store implementation (cfr. 'withStores').
 type StoreM c = StateT (Orphanage c DummyTx DummySeal) IO
 
+
 -- | Initialises both the SQL and the STM store and pass them to the 'action'.
 -- For the SQL store, we need to cheat: due to the fact we /do not/ want to
 -- run the 'Protocol' chain selection on both stores (or it would defy the
@@ -110,20 +110,24 @@ type StoreM c = StateT (Orphanage c DummyTx DummySeal) IO
 withStores
     :: forall c a.
        IsCrypto c
+    => (StoresUnderTest c DummyTx DummySeal IO -> IO a)
+    -> IO a
+withStores action =
+    SQLite.withBlockStore ":memory:" defaultGenesis $ \sqlStore ->
+        STM.withBlockStore (fromGenesis defaultGenesis) blockScore $ \stmStore ->
+            action (sqlStore, stmStore)
+
+withStoresAndProto
+    :: forall c a.
+       IsCrypto c
     => Orphanage c DummyTx DummySeal
     -> (StoresUnderTest c DummyTx DummySeal (StoreM c) -> StoreM c a)
     -> IO a
-withStores orphanage action =
+withStoresAndProto orphanage action =
     SQLite.withBlockStore ":memory:" defaultGenesis $ \sqlStore ->
         STM.withBlockStore (fromGenesis defaultGenesis) blockScore $ \stmStore ->
-            evalStateT (action (wrapProto (hoistStore sqlStore), hoistStore stmStore)) orphanage
+            evalStateT (action (wrapProto (hoistBlockStore liftIO sqlStore), hoistBlockStore liftIO stmStore)) orphanage
   where
-      hoistStore
-          :: BlockStore c DummyTx DummySeal IO
-          -> BlockStore c DummyTx DummySeal (StoreM c)
-      hoistStore (public, private) =
-          (hoistBlockStoreReader liftIO public, hoistBlockStoreWriter liftIO private)
-
       -- Overrides the 'insertBlock' to pass via chain selection.
       wrapProto
           :: BlockStore c DummyTx DummySeal (StoreM c)
