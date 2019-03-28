@@ -91,7 +91,7 @@ instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState 
             res <- mineBlock publicAPI nakConsensus dummyEval tn
             case res of
               Nothing -> pure Nothing
-              Just (blk, _,_) -> do
+              Just blk -> do
                   Abstract.insertBlock privateAPI blk
                   pure (Just blk)
 

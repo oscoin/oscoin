@@ -85,7 +85,7 @@ instance (IsCrypto c) => TestableNode c PoA (SimpleNode c) (SimpleNodeState c) w
             res <- mineBlock publicAPI (simpleConsensus position) identityEval tick
             case res of
               Nothing -> pure Nothing
-              Just (blk, _,_) -> do
+              Just blk -> do
                   Abstract.insertBlock privateAPI blk
                   pure (Just blk)
 
