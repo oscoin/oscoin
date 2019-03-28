@@ -190,10 +190,10 @@ storage
     -> Storage c tx s (NodeT c tx st s i m)
 storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
-        Handle{hProtocol, hBlockStore, hEval, hConfig} <- ask
+        Handle{hProtocol, hBlockStore, hConfig} <- ask
         let dispatchBlock = liftIO . Protocol.dispatchBlockAsync hProtocol
         let consensusConfig =  cfgConsensusConfig hConfig
-        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock hEval validateBasic consensusConfig blk
+        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock validateBasic consensusConfig blk
     , storageApplyTx     = \tx -> do
         bs <- asks hBlockStore
         Storage.applyTx (hoistBlockStoreReader liftIO bs) tx

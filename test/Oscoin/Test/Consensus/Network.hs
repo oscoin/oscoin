@@ -229,9 +229,9 @@ deliver
     -> Maybe (Msg c s)
     -> TestNetwork c s a
     -> TestNetwork c s a
-deliver config tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnValidate, tnEval}
+deliver config tick to msg tn@TestNetwork{tnNodes, tnMsgCount, tnValidate}
     | Just node <- Map.lookup to tnNodes =
-        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage config to tnValidate tnEval) msg
+        let (outgoing, a) = testableRun node $ maybe (applyTick tick) (applyMessage config to tnValidate) msg
             tnMsgCount'   = case msg of Just (BlockMsg _) -> tnMsgCount + 1;
                                                         _ -> tnMsgCount
             tn'           = tn { tnNodes    = Map.insert to a tnNodes
@@ -256,21 +256,20 @@ applyMessage
     => Consensus.Config
     -> DummyNodeId
     -> DummyValidate c s
-    -> DummyEval
     -> Msg c s
     -> m [Msg c s]
-applyMessage _ _ _ _ msg@(TxMsg tx) = do
+applyMessage _ _ _ msg@(TxMsg tx) = do
     result <- withTestBlockStore $ \(bs, _privateAPI) ->
         Storage.applyTx bs tx
     pure $ case result of
         Storage.Applied _ -> [msg]
         _                 -> []
-applyMessage config to validateBasic eval msg@(BlockMsg blk) = do
+applyMessage config to validateBasic msg@(BlockMsg blk) = do
     (result, parentMissing) <- withTestBlockStore $ \(publicAPI, privateAPI) -> do
         -- NOTE (adn): We are bypassing the protocol at the moment, but we
         -- probably shouldn't.
         let callback = Abstract.insertBlock privateAPI
-        (,) <$> Storage.applyBlock publicAPI callback eval validateBasic config blk
+        (,) <$> Storage.applyBlock publicAPI callback validateBasic config blk
             <*> map isNothing (Abstract.lookupBlock publicAPI parentHash)
 
     -- If the parent block is missing, request it from the network.
@@ -281,12 +280,12 @@ applyMessage config to validateBasic eval msg@(BlockMsg blk) = do
         _ -> []
   where
     parentHash = blockPrevHash $ blockHeader blk
-applyMessage _ _ _ _ (ReqBlockMsg from bh) = do
+applyMessage _ _ _ (ReqBlockMsg from bh) = do
     mblk <- withTestBlockStore $ \(publicAPI, _privateAPI) ->
         Abstract.lookupBlock publicAPI bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
-applyMessage config to validate eval (ResBlockMsg _ blk) =
-    applyMessage config to validate eval (BlockMsg blk)
+applyMessage config to validate (ResBlockMsg _ blk) =
+    applyMessage config to validate (BlockMsg blk)
 
 -- | Schedules a list of messages to be delivered by the simulation to a set
 -- of random nodes at some point in the future.
