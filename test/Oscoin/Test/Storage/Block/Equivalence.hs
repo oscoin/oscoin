@@ -8,7 +8,6 @@ module Oscoin.Test.Storage.Block.Equivalence
 
 import           Oscoin.Prelude
 
-import           Oscoin.API.Types (RadTx)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
@@ -23,7 +22,7 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
-import           Oscoin.Test.Util (Condensed(..), showOrphans)
+import           Oscoin.Test.Util (Condensed(..))
 
 import           Control.Monad.State (modify')
 import           Data.ByteArray.Orphans ()
@@ -31,6 +30,7 @@ import qualified Data.List as List
 import qualified Data.Text as T
 import           GHC.Exception (srcLocFile, srcLocStartCol, srcLocStartLine)
 
+import           Test.Oscoin.DummyLedger
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
@@ -78,7 +78,7 @@ propForksInsertGetTipEquivalence Dict = do
             chain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
-    forAllShow generator showOrphans $ \(chain, orphansWithLink) ->
+    forAll generator $ \(chain, orphansWithLink) ->
         ioProperty $ withStores orphanage $ \stores -> do
             -- Step 1: Store the chain in both stores.
             p0 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
@@ -100,7 +100,7 @@ type StoresUnderTest c tx s m =
 
 -- | The monad whe stores runs in, which keeps around an 'Orphanage' to be
 -- used internally for the SQLite store implementation (cfr. 'withStores').
-type StoreM c = StateT (Orphanage c (RadTx c) DummySeal) IO
+type StoreM c = StateT (Orphanage c DummyTx DummySeal) IO
 
 -- | Initialises both the SQL and the STM store and pass them to the 'action'.
 -- For the SQL store, we need to cheat: due to the fact we /do not/ want to
@@ -110,8 +110,8 @@ type StoreM c = StateT (Orphanage c (RadTx c) DummySeal) IO
 withStores
     :: forall c a.
        IsCrypto c
-    => Orphanage c (RadTx c) DummySeal
-    -> (StoresUnderTest c (RadTx c) DummySeal (StoreM c) -> StoreM c a)
+    => Orphanage c DummyTx DummySeal
+    -> (StoresUnderTest c DummyTx DummySeal (StoreM c) -> StoreM c a)
     -> IO a
 withStores orphanage action =
     SQLite.withBlockStore ":memory:" defaultGenesis $ \sqlStore ->
@@ -119,15 +119,15 @@ withStores orphanage action =
             evalStateT (action (wrapProto (hoistStore sqlStore), hoistStore stmStore)) orphanage
   where
       hoistStore
-          :: BlockStore c (RadTx c) DummySeal IO
-          -> BlockStore c (RadTx c) DummySeal (StoreM c)
+          :: BlockStore c DummyTx DummySeal IO
+          -> BlockStore c DummyTx DummySeal (StoreM c)
       hoistStore (public, private) =
           (hoistBlockStoreReader liftIO public, hoistBlockStoreWriter liftIO private)
 
       -- Overrides the 'insertBlock' to pass via chain selection.
       wrapProto
-          :: BlockStore c (RadTx c) DummySeal (StoreM c)
-          -> BlockStore c (RadTx c) DummySeal (StoreM c)
+          :: BlockStore c DummyTx DummySeal (StoreM c)
+          -> BlockStore c DummyTx DummySeal (StoreM c)
       wrapProto bs@(public, private) =
           let cfg = Consensus.Config 1024 2016
               noValidation _ _ = Right ()

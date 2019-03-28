@@ -6,6 +6,9 @@
 -- the timestamp of its parent.
 module Oscoin.Storage.Block.SQLite.Internal
     ( Handle(..)
+    , TxRow(..)
+    , IsTxRow(..)
+    , StorableTx
     , open
     , close
     , initialize
@@ -15,6 +18,7 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getTip
     , getBlockTxs
     , getBlocks
+    , getTx
     , getChainSuffix
     , getChainHashes
     , switchToFork
@@ -34,7 +38,8 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  , parentHash
                  )
-import           Oscoin.Crypto.Hash (HasHashing, Hash)
+import           Oscoin.Crypto.Hash (Hash)
+import           Oscoin.Storage.Block.SQLite.Transaction
 import           Oscoin.Time (Timestamp)
 import           Oscoin.Time.Chrono (OldestFirst(..))
 import           Oscoin.Time.Chrono as Chrono
@@ -44,11 +49,9 @@ import           Paths_oscoin
 import           Database.SQLite.Simple as Sql ((:.)(..), Connection, Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
-import           Database.SQLite.Simple.FromRow (FromRow)
 import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.QQ
 import           Database.SQLite.Simple.ToField (ToField)
-import           Database.SQLite.Simple.ToRow (ToRow)
 import qualified Database.SQLite3 as Sql3
 
 import           Codec.Serialise
@@ -82,10 +85,8 @@ close Handle{..} = Sql.close hConn
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.
 initialize
-    :: ( ToRow tx
+    :: ( StorableTx c tx
        , ToField (Sealed c s)
-       , ToField (Hash c)
-       , HasHashing c
        , Eq (Hash c)
        )
     => Block c tx (Sealed c s)
@@ -127,15 +128,11 @@ isConflicting conn block =
 storeBlock
     :: forall c tx s.
         ( ToField (Sealed c s)
-        , ToField (Hash c)
-        , FromRow tx
-        , ToRow tx
+        , StorableTx c tx
         , Serialise s
-        , Serialise (Hash c)
         , FromField (Sealed c s)
         , FromField (Hash c)
         , Ord (BlockHash c)
-        , HasHashing c
         ) => Handle c tx s
           -> Block c tx (Sealed c s)
           -> IO ()
@@ -158,11 +155,8 @@ getGenesisBlock
     :: forall c s tx.
        ( Serialise s
        , FromField s
-       , FromRow tx
-       , HasHashing c
-       , Serialise (Hash c)
+       , StorableTx c tx
        , FromField (Hash c)
-       , ToField (Hash c)
        )
     => Connection
     -> IO (Block c tx s)
@@ -175,29 +169,12 @@ getGenesisBlock conn = do
     bTxs <- getBlockTxs @c conn bHash
     pure $ mkBlock bHeader bTxs
 
--- | Get the transactions belonging to a block.
-getBlockTxs
-    :: ( ToField (Hash c)
-       , FromRow tx
-       )
-    => Connection
-    -> BlockHash c
-    -> IO [tx]
-getBlockTxs conn h =
-    Sql.query conn
-        [sql| SELECT message, author, chainid, nonce, context
-                FROM transactions
-               WHERE blockhash = ? |] (Only h)
-
 -- | Get the chain starting from a given hash up to the tip
 getChainSuffix
-    :: ( FromRow tx
+    :: ( StorableTx c tx
        , Serialise s
        , FromField s
-       , Serialise (Hash c)
        , FromField (Hash c)
-       , ToField (Hash c)
-       , HasHashing c
        )
     => Connection
     -> BlockHash c
@@ -234,10 +211,8 @@ rollbackBlocks Handle{..} (fromIntegral -> depth :: Integer) = do
     BlockCache.invalidate hBlockCache
 
 switchToFork
-    :: ( ToRow tx
+    :: ( StorableTx c tx
        , ToField s
-       , ToField (Hash c)
-       , HasHashing c
        , Eq (Hash c)
        )
     => Handle c tx s
@@ -262,10 +237,8 @@ lookupBlockTimestamp conn hsh =
 --
 -- Must be called from within a transaction. Must include a valid parent reference.
 storeBlock'
-    :: ( ToRow tx
+    :: ( StorableTx c tx
        , ToField (Sealed c s)
-       , ToField (Hash c)
-       , HasHashing c
        , Eq (Hash c)
        )
     => Handle c tx s
@@ -287,9 +260,8 @@ storeBlock' Handle{..} blk = do
     Sql.execute hConn
         [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
               VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
-    Sql.executeMany hConn
-        [sql| INSERT INTO transactions  (hash, message, author, chainid, nonce, context, blockhash)
-              VALUES                    (?, ?, ?, ?, ?, ?, ?) |] txs
+
+    storeTxs hConn (blockHash blk) (toList $ blockData blk)
 
     -- Cache the block
     BlockCache.consBlock hBlockCache blk
@@ -306,21 +278,17 @@ storeBlock' Handle{..} blk = do
 
     bh = blockHeader blk
 
-    txs = [tx :. Only (blockHash blk) | tx <- toList (blockData blk)]
-
     blockParent =
         if isGenesisBlock blk
            then Nothing
            else Just $ blockPrevHash bh
 
+
 getBlocks
     :: ( Serialise s
-       , FromRow tx
-       , Serialise (Hash c)
+       , StorableTx c tx
        , FromField (Hash c)
        , FromField (Sealed c s)
-       , ToField (Hash c)
-       , HasHashing c
        )
     => Handle c tx s
     -> Depth
@@ -339,12 +307,9 @@ getBlocks Handle{..} (fromIntegral -> depth :: Int) =
 
 getTip
     :: ( Serialise s
-       , FromRow tx
-       , ToField (Hash c)
+       , StorableTx c tx
        , FromField (Hash c)
        , FromField (Sealed c s)
-       , Serialise (Hash c)
-       , HasHashing c
        )
     => Handle c tx s
     -> IO (Block c tx (Sealed c s))

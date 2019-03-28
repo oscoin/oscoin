@@ -8,7 +8,6 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.RadicleTx
 
 import qualified Codec.Serialise as CBOR
 import qualified Data.ByteString.Lazy as LBS
@@ -39,18 +38,6 @@ instance ( Crypto.HasHashing c
         <*> field
         <*> field
 
-instance ( CBOR.Serialise (Crypto.PublicKey c)
-         , CBOR.Serialise (Crypto.Signature c)
-         , Typeable c
-         , FromField (BlockHash c)
-         ) => FromRow (RadTx c) where
-    fromRow = Tx
-        <$> field
-        <*> field
-        <*> field
-        <*> field
-        <*> field
-
 -- | Convert a SQL parent hash field to a 'Crypto.Hash'. The SQL value is
 -- 'SQLNull' in the case of the genesis block.
 fromPrevHashField
@@ -63,17 +50,6 @@ fromPrevHashField f =
     case fieldData f of
         SQLNull -> Ok Crypto.zeroHash
         _       -> fromField f
-
-instance ( Crypto.HasHashing c
-         , ToField (Crypto.Hashed c (RadTx c))
-         , ToField (BlockHash c)
-         , CBOR.Serialise (BlockHash c)
-         , CBOR.Serialise (Crypto.PublicKey c)
-         , CBOR.Serialise (Crypto.Signature c)
-         ) => ToRow (RadTx c) where
-    toRow tx@Tx{..} =
-        [ toField (Crypto.hash @c tx), toField txMessage, toField txPubKey
-        , toField txChainId, toField txNonce, toField txContext ]
 
 instance ( CBOR.Serialise (Crypto.Signature c)
          , CBOR.Serialise msg
