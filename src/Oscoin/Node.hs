@@ -16,6 +16,7 @@ module Oscoin.Node
     , getPathLatest
     , getBlocks
     , lookupTx
+    , lookupReceipt
     , lookupBlock
     ) where
 
@@ -34,7 +35,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , StateHash
                  , blockHash
                  )
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
@@ -245,6 +246,9 @@ getBlocks d =
 
 lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
 lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)
+
+lookupReceipt :: (Ord (Hash c), MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
+lookupReceipt txHash = ReceiptStore.lookupReceipt txHash
 
 lookupBlock
     :: (MonadIO m)
