@@ -236,18 +236,19 @@ selectBestChain mgr = do
                                                                       . toNewestFirst $ chainSuffix
                                                          )
 
-            when newChainFound $
-                switchToFork bestFork chainSuffix
-
-            let orphanage' =
-                  -- Prune the chain which won, /as well as/ every dangling orphan
-                  -- originating from the suffix chain which has been replaced.
-                  foldl' (\acc blockInSuffix ->
-                             O.pruneOrphanage (blockHash blockInSuffix)
-                                              (O.fromChainSuffix scoreFn (OldestFirst $ blockInSuffix NonEmpty.:| []))
-                                              $ acc
-                         ) (O.pruneOrphanage parentHash bestFork orphanage) chainSuffix
-            pure $ mgr { protoOrphanage = orphanage' }
+            if newChainFound
+               then do
+                   switchToFork bestFork chainSuffix
+                   -- Prune the chain which won, /as well as/ every dangling orphan
+                   -- originating from the suffix chain which has been replaced.
+                   let orphanage' =
+                         foldl' (\acc blockInSuffix ->
+                                    O.pruneOrphanage (blockHash blockInSuffix)
+                                                     (O.fromChainSuffix scoreFn (OldestFirst $ blockInSuffix NonEmpty.:| []))
+                                                     $ acc
+                                ) (O.pruneOrphanage parentHash bestFork orphanage) chainSuffix
+                   pure $ mgr { protoOrphanage = orphanage' }
+               else pure mgr
         _ -> pure mgr
 
   where
