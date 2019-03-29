@@ -6,16 +6,10 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Consensus.Nakamoto (blockScore)
-import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), genesis, height, unsafeToBlockchain)
-import           Oscoin.Crypto.Blockchain.Block (Block(..), blockHash)
-import           Oscoin.Crypto.Blockchain.Eval (evalBlockchain)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
-import qualified Oscoin.Storage.Block.Pure as BlockStore
 
 import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.API.HTTP as HTTP
@@ -23,7 +17,6 @@ import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary (arbitraryBlockchain)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary
                  (arbitraryKeyPair, arbitrarySigned)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
@@ -49,8 +42,6 @@ import qualified Codec.Serialise as CBOR
 import qualified Data.Aeson as Aeson
 import           Data.ByteArray.Orphans ()
 import qualified Data.ByteString as BS
-import           Data.Default (def)
-import qualified Data.List.NonEmpty as NonEmpty
 
 tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
 tests d@Dict config = testGroup "Oscoin"
@@ -61,8 +52,6 @@ tests d@Dict config = testGroup "Oscoin"
     , testGroup      "CLI"                            CLI.tests
     , testGroup      "Crypto"                         (testOscoinCrypto d)
     , testProperty   "Mempool"                        (testOscoinMempool d)
-    , testProperty   "BlockStore lookup block"        (testBlockStoreLookupBlock d)
-    , testProperty   "BlockStore"                     (propOscoinBlockStore (arbitraryBlockchain @c))
     , testProperty   "JSON instance of Hashed"        (propHashedJSON d)
     , testProperty   "JSON instance of Signed"        (propSignedJSON d)
     , testGroup      "Consensus"                      (Consensus.tests d config)
@@ -153,31 +142,6 @@ testOscoinMempool Dict = monadicIO $ do
     fromEvent :: Mempool.Event tx -> Maybe [tx]
     fromEvent (Mempool.Insert txs) = Just txs
     fromEvent _                    = Nothing
-
-testBlockStoreLookupBlock :: forall c. Dict (IsCrypto c) -> Property
-testBlockStoreLookupBlock Dict = monadicIO $ do
-    blks <- pick (arbitraryBlockchain @c @() @())
-    let g  = genesis blks
-    let bs = BlockStore.initWithChain blks blockScore
-    liftIO $ BlockStore.lookupBlock (blockHash g) bs @?= Just g
-
-propOscoinBlockStore
-    :: forall c. IsCrypto c
-    => Gen (Blockchain c (Seq Word8) (Seq Word8))
-    -> Property
-propOscoinBlockStore chainGen =
-    forAll (resize 10 chainGen) $ \chain -> do
-        let foldEval x xs = Right ((), xs <> x)
-        let blks = NonEmpty.toList $ fromBlockchain chain
-        let bs   = BlockStore.fromOrphans blks (genesis chain) blockScore
-        let best = BlockStore.getBlocks (fromIntegral $ height chain) bs
-        let z    = snd $ evalBlockchain foldEval def (unsafeToBlockchain best)
-        let txs  = concatMap (toList . blockData) $ reverse blks
-        let txs' = mconcat txs
-        counterexample ("From input: " ++ show txs ++ ", Expected: "
-                                       ++ show txs' ++ " but got "
-                                       ++ show z ++ ", " ++ show best)
-                       (txs' == z)
 
 propHashedJSON :: forall c. Dict (IsCrypto c) -> ByteString -> Bool
 propHashedJSON Dict bs =

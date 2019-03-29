@@ -14,20 +14,7 @@ import           Oscoin.Time
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import qualified Oscoin.Consensus.Simple as Simple
-import           Oscoin.Crypto.Blockchain (blockHash, tip, unsafeToBlockchain)
-import           Oscoin.Crypto.Blockchain.Block
-                 ( Block
-                 , BlockHash
-                 , Unsealed
-                 , blockPrevHash
-                 , blockTimestamp
-                 , emptyGenesisBlock
-                 , emptyHeader
-                 , mkBlock
-                 , sealBlock
-                 )
-import           Oscoin.Storage.Block.Pure
-                 (genesisBlockStore, getBlocks, insert, orphans)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 
 import           Codec.Serialise (Serialise)
 import           Data.List (foldr1, sort)
@@ -38,7 +25,6 @@ import qualified Data.Text as T
 import           Oscoin.Test.Crypto
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
-import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> [TestTree]
@@ -66,19 +52,6 @@ tests Dict config =
                                      testableInit
                                      (arbitraryHealthyNetwork Nakamoto.blockTime)
                                      config
-        ]
-    , testGroup "BlockStore"
-        [ testCase "'insert' puts blocks with parents on a chain" $ do
-            let genBlk  = sealBlock () (emptyGenesisBlock epoch :: Block c () Unsealed)
-                nextBlk = sealBlock () $ mkBlock emptyHeader
-                    { blockTimestamp = fromEpoch (1 * seconds)
-                    , blockPrevHash = blockHash genBlk
-                    } []
-                blkStore = insert nextBlk $ genesisBlockStore genBlk Nakamoto.blockScore
-                chain = unsafeToBlockchain $ getBlocks 2 blkStore
-            tip chain @?= nextBlk
-            orphans blkStore @?= mempty
-
         ]
     ]
 
