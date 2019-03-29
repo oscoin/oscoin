@@ -7,13 +7,10 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
-import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Storage.HashStore
+import           Oscoin.Storage.Ledger
 import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt, buildBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
@@ -31,24 +28,20 @@ mineBlock
        , Crypto.Hashable   c (BlockHeader c Unsealed)
        , AuthTree.MerkleHash (Crypto.Hash c)
        )
-    => BlockStoreReader c tx s m
-    -> HashStore c st m
-    -- ^ State store
+    => Ledger c s tx o st m
     -> Consensus c tx s m
-    -> Evaluator st tx o
     -> Timestamp
-    -> m (Maybe (Block c tx (Sealed c s), st, [Receipt c tx o]))
-mineBlock bs stateStore Consensus{cMiner} eval time = do
+    -> m (Maybe (Block c tx (Sealed c s)))
+mineBlock ledger Consensus{cMiner} time = do
     txs <- (map . map) snd Mempool.getTxs
-    parent <- BlockStore.getTip bs
-    runMaybeT $ do
-        let parentStateHash = Crypto.toHashed $ blockStateHash $ blockHeader parent
-        st <- MaybeT $ lookupHashContent stateStore parentStateHash
-        let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
-        sealedBlock <- MaybeT $ cMiner (map toNewestFirst . BlockStore.getBlocksByDepth bs) blockCandidate
-        lift $ do
-            Mempool.delTxs (blockData sealedBlock)
-            pure $ (sealedBlock, st', receipts)
+    unsealedBlock_ <- buildNextBlock ledger time txs
+    case unsealedBlock_ of
+        Left _err -> pure $ Nothing
+        Right unsealedBlock -> runMaybeT $ do
+            sealedBlock <- MaybeT $ cMiner (map toNewestFirst . getBlocksByDepth ledger) unsealedBlock
+            lift $ do
+                Mempool.delTxs (blockData sealedBlock)
+                pure $ sealedBlock
 
 -- | Mine a genesis block with the given 'Miner'.
 mineGenesis

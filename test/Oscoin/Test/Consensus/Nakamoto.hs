@@ -17,6 +17,8 @@ import qualified Oscoin.Protocol as Protocol
 import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.HashStore
+import qualified Oscoin.Storage.Ledger as Ledger
+import           Oscoin.Storage.Receipt
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network
@@ -36,10 +38,11 @@ import           System.Random
 ---------------------------------------------------
 
 data NakamotoNodeState c = NakamotoNodeState
-    { nakStdGen     :: StdGen
-    , nakMempool    :: Mempool.Mempool c DummyTx
-    , nakBlockstore :: BlockStore.Pure.Handle c DummyTx PoW
-    , nakStateStore :: Map (Crypto.Hashed c DummyState) DummyState
+    { nakStdGen       :: StdGen
+    , nakMempool      :: Mempool.Mempool c DummyTx
+    , nakBlockstore   :: BlockStore.Pure.Handle c DummyTx PoW
+    , nakStateStore   :: Map (Crypto.Hashed c DummyState) DummyState
+    , nakReceiptStore :: ReceiptMap c DummyTx DummyOutput
     }
 
 deriving instance Show (Crypto.Hash c) => Show (NakamotoNodeState c)
@@ -55,6 +58,9 @@ nakBlockstoreL = lens nakBlockstore (\s a -> s { nakBlockstore = a })
 
 nakStateStoreL :: Lens' (NakamotoNodeState c) (Map (Crypto.Hashed c DummyState) DummyState)
 nakStateStoreL = lens nakStateStore (\s a -> s { nakStateStore = a })
+
+nakReceiptStoreL :: Lens' (NakamotoNodeState c) (ReceiptMap c DummyTx DummyOutput)
+nakReceiptStoreL = lens nakReceiptStore (\s a -> s { nakReceiptStore = a })
 
 
 ---------------------------------------------------
@@ -73,13 +79,15 @@ instance (IsCrypto c) => MonadMempool c DummyTx (NakamotoNode c) where
 
 instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
     testableTick tn = do
-        let (blockStoreReader, blockStoreWriter) = testableBlockStore
+        let blockStore = testableBlockStore
         let stateStore = mkStateHashStore nakStateStoreL
-        maybeBlock <- mineBlock blockStoreReader stateStore nakConsensus dummyEval tn
+        let receiptStore = mkStateReceiptStore nakReceiptStoreL
+        let ledger = Ledger.mkLedger (fst blockStore) stateStore dummyEval receiptStore
+        maybeBlock <- mineBlock ledger nakConsensus tn
         -- NOTE (adn): We are bypassing the protocol at the moment, but we
         -- probably shouldn't.
-        forM maybeBlock $ \(blk, _, _) -> do
-            insertBlock blockStoreWriter blk
+        forM maybeBlock $ \blk -> do
+            insertBlock (snd blockStore) blk
             pure blk
 
     testableInit = initNakamoto
@@ -109,6 +117,7 @@ initNakamoto nid = NakamotoNodeState
     , nakMempool = mempty
     , nakBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
     , nakStateStore   = Map.singleton (Crypto.hash genesisState) genesisState
+    , nakReceiptStore = Map.empty
     }
   where
     genBlk   = sealBlock emptyPoW $ emptyGenesisFromState epoch genesisState

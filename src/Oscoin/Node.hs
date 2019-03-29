@@ -29,17 +29,8 @@ import           Oscoin.Consensus (Consensus(..), ValidationError)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
-                 , BlockHash
-                 , BlockHeader(..)
-                 , Depth
-                 , Sealed
-                 , StateHash
-                 , blockHash
-                 )
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
-import           Oscoin.Crypto.Hash
-                 (HasHashing, Hash, Hashable, Hashed, formatHash)
+import           Oscoin.Crypto.Blockchain.Eval (Receipt)
+import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
@@ -49,7 +40,7 @@ import           Oscoin.Node.Trans
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
-import           Oscoin.Storage.HashStore
+import qualified Oscoin.Storage.Ledger as Ledger
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
@@ -57,10 +48,7 @@ import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Time.Chrono as Chrono
 
 import qualified Oscoin.Protocol as Protocol
-import           Oscoin.Storage.Block.Abstract
-                 (BlockStoreReader, hoistBlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import qualified Oscoin.Storage.Receipt as ReceiptStore
 
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -70,23 +58,20 @@ import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
 withNode
-    :: (Log.Buildable (Hash c), HasHashing c)
+    :: (Log.Buildable (Hash c))
     => Config
     -> i
     -> Mempool.Handle c tx
-    -> HashStore c st IO
-    -> BlockStoreReader c tx s IO
+    -> Ledger.Ledger c s tx RadicleTx.Message st IO
     -> Protocol.Handle c tx s IO
-    -> Evaluator st tx RadicleTx.Output
     -> Consensus c tx s (NodeT c tx st s i IO)
     -> (Handle c tx st s i -> IO a)
     -> IO a
-withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConsensus =
+withNode hConfig hNodeId hMempool hLedger hProtocol hConsensus =
     bracket open close
   where
     open = do
-        hReceiptStore <- ReceiptStore.newReceiptStoreIO
-        gen <- liftIO (BlockStore.getGenesisBlock hBlockStore)
+        gen <- liftIO (BlockStore.getGenesisBlock $ Ledger.blockStoreReader hLedger)
         let
             GlobalConfig { globalEnv             = env
                          , globalLogicalNetwork  = lnet
@@ -169,26 +154,19 @@ mineBlock
        )
     => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
-    Handle{hEval, hConsensus, hProtocol} <- ask
-    stateStore <- getStateStore
+    Handle{hConsensus, hProtocol} <- ask
     time <- currentTick
-    bs <- getBlockStoreReader
+    ledger <- getLedger
     maybeBlock <- hoist liftIO $ Consensus.mineBlock
-        bs
-        stateStore
+        ledger
         hConsensus
-        hEval
         time
     -- NOTE(adn) Here we should dispatch the block and wait for the
     -- result: if the block hasn't been inserted (for example due to
     -- a validation error) we shouldn't proceed with all these other
     -- side effects. Ideally 'dispatchBlockSync' should return some kind
     -- of 'Either Error ()'.
-    forM maybeBlock $ \(blk, st, receipts) -> do
-        stateStore' <- getStateStore
-        storeHashContent stateStore' st
-        receiptStore <- getReceiptStore
-        for_ receipts $ ReceiptStore.storeReceipt receiptStore
+    forM maybeBlock $ \blk -> do
         liftIO $ Protocol.dispatchBlockSync hProtocol blk
         pure blk
 
@@ -231,23 +209,23 @@ getPath
     -> [Text]
     -> NodeT c tx st s i m (Maybe (QueryVal st))
 getPath stateHash p = do
-    stateStore <- getStateStore
-    result <- lookupHashContent stateStore (Crypto.toHashed stateHash)
+    ledger <- getLedger
+    result <- Ledger.lookupState ledger (Crypto.toHashed stateHash)
     pure $ query p =<< result
 
 -- | Get a value from the latest state.
 getPathLatest
     :: ( MonadIO m
        , Query st
+       , Crypto.Hashable c tx
        )
     => [Text]
-    -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))
+    -> NodeT c tx st s i m (Maybe (QueryVal st))
 getPathLatest path = do
-    bs <- asks hBlockStore
-    stateHash <- blockStateHash . blockHeader <$> BlockStore.getTip (hoistBlockStoreReader liftIO bs)
-    result <- getPath stateHash path
-    for result $ \v ->
-        pure (stateHash, v)
+    ledger <- getLedger
+    Ledger.getTipWithState ledger >>= \case
+        Left _err -> pure Nothing
+        Right (_, st) -> pure $ query path st
 
 getBlocks
     :: MonadIO m
@@ -262,10 +240,10 @@ lookupTx tx = do
     bs <- getBlockStoreReader
     BlockStore.lookupTx bs tx
 
-lookupReceipt :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
+lookupReceipt :: (MonadIO m, Crypto.Hashable c tx) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
 lookupReceipt txHash = do
-    receiptStore <- getReceiptStore
-    ReceiptStore.lookupReceipt receiptStore txHash
+    ledger <- getLedger
+    Ledger.lookupReceipt ledger txHash
 
 lookupBlock
     :: (MonadIO m)

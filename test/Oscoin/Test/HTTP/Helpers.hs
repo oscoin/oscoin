@@ -45,7 +45,7 @@ import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage.Block.Memory
-import           Oscoin.Storage.HashStore
+import qualified Oscoin.Storage.Ledger as Ledger
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Telemetry.Metrics as Metrics
@@ -154,19 +154,15 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    blkStore@(bsh, _privateAPI) <- newBlockStoreIO (blocks' blockstoreState)
-    runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock -> do
-        stateStore <- liftIO $ newHashStoreIO
-        liftIO $ storeHashContent stateStore statestoreState
-
+    blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
+    ledger <- Ledger.newFromBlockStoreIO Rad.txEval blockStoreReader statestoreState
+    runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode
             cfg
             42
             mph
-            stateStore
-            bsh
+            ledger
             dispatchBlock
-            Rad.txEval
             (trivialConsensus "")
             k
 

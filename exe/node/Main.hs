@@ -10,7 +10,6 @@ import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
-import           Oscoin.Crypto.Blockchain.Eval (evalBlock)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Node (runNodeT, withNode)
@@ -26,7 +25,7 @@ import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
-import           Oscoin.Storage.HashStore
+import qualified Oscoin.Storage.Ledger as Ledger
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
 import qualified Oscoin.Telemetry.Logging as Log
@@ -57,9 +56,6 @@ main = do
     nid          <- pure (mkNodeId $ fst keys)
     mem          <- Mempool.newIO
     gen          <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
-    let (genState, _receipts) = evalBlock Rad.txEval Rad.pureEnv gen
-    stStore      <- newHashStoreIO
-    storeHashContent stStore genState
     metricsStore <-
         newMetricsStore $
             labelsFromList [("env", renderEnvironment optEnvironment)]
@@ -76,8 +72,9 @@ main = do
         $ do
             let telemetry = Telemetry.newTelemetryStore lgr metricsStore
 
-            blkStore@(blkStoreReader,_) <- managed $
+            blkStore <- managed $
                 BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen
+            ledger <- liftIO $ Ledger.newFromBlockStoreIO Rad.txEval (fst blkStore) Rad.pureEnv
 
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)
@@ -97,10 +94,8 @@ main = do
                     withNode config
                              nid
                              mem
-                             stStore
-                             blkStoreReader
+                             ledger
                              proto
-                             Rad.txEval
                              consensus
 
             disco <- managed $

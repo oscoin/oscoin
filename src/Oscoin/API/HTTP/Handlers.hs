@@ -120,12 +120,12 @@ getBlock h = do
         Nothing ->
             respond notFound404 $ errBody "Block not found"
 
-getStatePath :: Text -> ApiAction c s i ()
+getStatePath :: (Crypto.HasHashing c, Serialise (BlockHash c), Serialise (Crypto.PublicKey c), Serialise (Crypto.Signature c)) => Text -> ApiAction c s i ()
 getStatePath _chain = do
     path <- listParam "q"
     result' <- node $ Node.getPathLatest path
     case result' of
-        Just (_sh, val) ->
+        Just val ->
             respond ok200 (Ok val)
         Nothing ->
             respond notFound404 $ errBody "Value not found"

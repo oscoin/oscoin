@@ -63,7 +63,7 @@ tests Dict = testGroup "Test.Oscoin.API"
                 response <- Client.run (Client.getTransaction txHash)
                 response @?= API.Err "Transaction not found"
 
-        , testCase "confirmed transaction" $ runEmptySession $ do
+        , testCase "unconfirmed transaction" $ runEmptySession $ do
             (txHash, tx) <- createValidTx @c (Rad.String "jo")
             liftNode $ Mempool.addTxs [tx]
             response <- Client.run (Client.getTransaction txHash)
