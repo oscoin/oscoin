@@ -3,6 +3,7 @@
 module Oscoin.Test.Crypto.PubKey.Arbitrary (
       arbitrarySignedWith
     , arbitraryKeyPair
+    , arbitraryKeyPairs
     , arbitrarySigned
     ) where
 
@@ -55,10 +56,24 @@ arbitrarySignedWith pk = do
     seed <- arbitrary
     withFastRandomBytes (SplitMix.mkSMGen seed) . sign pk <$> arbitrary
 
-arbitraryKeyPair :: (HasHashing c, HasDigitalSignature c) => Gen (PublicKey c, PrivateKey c)
-arbitraryKeyPair = do
-    seed <- arbitrary
-    pure $ withFastRandomBytes (SplitMix.mkSMGen seed) generateKeyPair
+-- | Generate a key pair.
+--
+-- Note that using this more than once in a property will lead to duplicate
+-- keypairs, as the random seed is independent. Use 'arbitraryKeyPairs' if you
+-- need more than one.
+arbitraryKeyPair
+    :: (HasHashing c, HasDigitalSignature c)
+    => Gen (PublicKey c, PrivateKey c)
+arbitraryKeyPair =
+    flip withFastRandomBytes generateKeyPair <$> genSeed
+
+-- | Generate @n@ distinct key pairs.
+arbitraryKeyPairs
+    :: (HasHashing c, HasDigitalSignature c)
+    => Int
+    -> Gen [(PublicKey c, PrivateKey c)]
+arbitraryKeyPairs n =
+    flip withFastRandomBytes (replicateM n generateKeyPair) <$> genSeed
 
 arbitrarySigned
     :: forall a c.
@@ -70,3 +85,8 @@ arbitrarySigned
 arbitrarySigned Proxy = do
     (_, priv :: PrivateKey c) <- arbitraryKeyPair
     arbitrarySignedWith priv
+
+-- Internal --------------------------------------------------------------------
+
+genSeed :: Gen SplitMix.SMGen
+genSeed = SplitMix.mkSMGen <$> arbitrary

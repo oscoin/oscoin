@@ -1,5 +1,7 @@
 module Oscoin.P2P.Handshake
-    ( simpleHandshake
+    ( HandshakeError(..)
+
+    , simpleHandshake
     , secureHandshake
 
     , module Oscoin.P2P.Handshake.Simple
@@ -55,7 +57,12 @@ simpleHandshake
 simpleHandshake keys role peerId = do
     res <- map mkNodeId . signedPayloads (snd keys)
        <$> keyExchange keys role Nothing
-    guardPeerId (Proxy :: Proxy c) peerId res
+    let
+        crypto = Proxy @c
+        self   = let (pk,_) = keys in mkNodeId pk
+        guards = guardPeerIdNot crypto self >=> guardPeerId crypto peerId
+     in
+        guards res
 
 -- | A secure handshake combining 'noiseNNHandshake' and 'keyExchange'.
 --
@@ -63,7 +70,8 @@ simpleHandshake keys role peerId = do
 -- 'NoiseHandshakeHash', which is verified on reception. This is called
 -- \"Channel Binding\" in the Noise spec (Section 11.2).
 secureHandshake
-    :: ( Serialise p
+    :: forall p c.
+       ( Serialise p
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Eq (Crypto.PublicKey c)
@@ -76,7 +84,9 @@ secureHandshake
                  (NoisePayload (Crypto.Signed c NoiseHandshakeHash, p))
 secureHandshake keys role (map fromNodeId -> peer) = do
     noise <- withHandshakeT NoiseHandshakeError  $ noiseNNHandshake role Nothing
-    keyex <- withHandshakeT SimpleHandshakeError $ keyExchange keys role peer
+    keyex <-
+        withHandshakeT SimpleHandshakeError $
+            keyExchange keys role peer >>= guardPeerIdNot (Proxy @c) self
     let
         clear     = signedHandshakeHash (snd keys) $ map (,hrPeerId noise) keyex
         sendClear = hrPreSend clear
@@ -85,6 +95,8 @@ secureHandshake keys role (map fromNodeId -> peer) = do
         pure
             . map (const . mkNodeId $ hrPeerId clear)
             $ mapInput sendClear recvClear noise
+  where
+    self = fst keys
 
 -- Internal --------------------------------------------------------------------
 
