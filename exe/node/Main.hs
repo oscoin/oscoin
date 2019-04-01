@@ -187,7 +187,7 @@ main = do
                                         }
                            (Set.map (Nothing,) seeds)
                            (storage node)
-                           (Handshake.simpleHandshake keys)
+                           (Handshake.secureHandshake keys)
 
             liftIO $ do
                 forkEkgServer metricsStore ekgHost ekgPort
