@@ -84,16 +84,16 @@ instance HasTestNodeState c PoW (NakamotoNodeState c) where
     testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
 
 instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
-    testableTick tn =
-        withTestBlockStore $ \(publicAPI, privateAPI) -> do
-            -- NOTE (adn): We are bypassing the protocol at the moment, but we
-            -- probably shouldn't.
-            res <- mineBlock publicAPI nakConsensus dummyEval tn
-            case res of
-              Nothing -> pure Nothing
-              Just blk -> do
-                  Abstract.insertBlock privateAPI blk
-                  pure (Just blk)
+    testableTick tn = do
+        (blockStoreReader, blockStoreWriter) <- getTestBlockStore
+        -- NOTE (adn): We are bypassing the protocol at the moment, but we
+        -- probably shouldn't.
+        res <- mineBlock blockStoreReader nakConsensus dummyEval tn
+        case res of
+          Nothing -> pure Nothing
+          Just blk -> do
+              Abstract.insertBlock blockStoreWriter blk
+              pure (Just blk)
 
     testableInit    = initNakamotoNodes
     testableRun     = runNakamotoNode

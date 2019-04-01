@@ -9,11 +9,11 @@ module Oscoin.Test.Consensus.Node
     , TestNodeState(..)
     , TestNodeT
     , HasTestNodeState(..)
+    , getTestBlockStore
     , tnsBlockstoreL
     , emptyTestNodeState
     , runTestNodeT
     , LiftTestNodeT(..)
-    , withTestBlockStore
     , stepTestProtocol
     ) where
 
@@ -32,8 +32,7 @@ import           Oscoin.Storage.Block.Abstract
                  ( BlockStore
                  , BlockStoreReader(..)
                  , BlockStoreWriter(..)
-                 , hoistBlockStoreReader
-                 , hoistBlockStoreWriter
+                 , hoistBlockStore
                  )
 import           Oscoin.Storage.Block.Orphanage (Orphanage, emptyOrphanage)
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
@@ -60,38 +59,35 @@ import           Test.QuickCheck
 class Monad m => LiftTestNodeT c s m | m -> s where
     liftTestNodeT :: TestNodeT c s Identity a -> m a
 
--- | Runs the given action against a test 'BlockStore' which is baked by
--- a pure, in-memory 'Handle', kept around as part of the 'NodeTestState'.
-withTestBlockStore
+-- | Get the abstract 'BlockStore' for the pure block store in
+-- 'NodeTestState'
+getTestBlockStore
     :: ( LiftTestNodeT c s n
        , Hashable c Word8
        )
-    => (BlockStore c DummyTx s n -> n b)
-    -> n b
-withTestBlockStore action =
-    let publicAPI = BlockStoreReader
-            { getGenesisBlock =
-                gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
-            , lookupBlock     = \h ->
-                BlockStore.Pure.lookupBlock h <$> gets tnsBlockstore
-            , lookupTx        = \tx ->
-                gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
-            -- The pure store doesn't guarantee block ordering as 'getBlocks'
-            -- sorts using the score function.
-            , getBlocksByDepth = \d ->
-                  Chrono.NewestFirst <$> gets (BlockStore.Pure.getBlocks d . tnsBlockstore)
-            , getBlocksByParentHash = \h ->
-                  Chrono.NewestFirst <$> gets (BlockStore.Pure.getChainSuffix h . tnsBlockstore)
-            , getTip          = gets (BlockStore.Pure.getTip . tnsBlockstore)
-            }
-        privateAPI = BlockStoreWriter
-            { insertBlock     = \b ->
-                modify' (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
-            , switchToFork = \_ _ -> pure ()
-            }
-    in action ( hoistBlockStoreReader liftTestNodeT publicAPI
-              , hoistBlockStoreWriter liftTestNodeT privateAPI
-              )
+    => n (BlockStore c DummyTx s n)
+getTestBlockStore = pure $ hoistBlockStore liftTestNodeT (blockStoreReader, blockStoreWriter)
+  where
+    blockStoreReader = BlockStoreReader
+        { getGenesisBlock =
+            gets (BlockStore.Pure.getGenesisBlock . tnsBlockstore)
+        , lookupBlock     = \h ->
+            BlockStore.Pure.lookupBlock h <$> gets tnsBlockstore
+        , lookupTx        = \tx ->
+            gets (BlockStore.Pure.lookupTx tx . tnsBlockstore)
+        -- The pure store doesn't guarantee block ordering as 'getBlocks'
+        -- sorts using the score function.
+        , getBlocksByDepth = \d ->
+              Chrono.NewestFirst <$> gets (BlockStore.Pure.getBlocks d . tnsBlockstore)
+        , getBlocksByParentHash = \h ->
+              Chrono.NewestFirst <$> gets (BlockStore.Pure.getChainSuffix h . tnsBlockstore)
+        , getTip          = gets (BlockStore.Pure.getTip . tnsBlockstore)
+        }
+    blockStoreWriter = BlockStoreWriter
+        { insertBlock     = \b ->
+            modify' (\old -> old { tnsBlockstore = BlockStore.Pure.insert b (tnsBlockstore old) })
+        , switchToFork = \_ _ -> pure ()
+        }
 
 -- | Internally builds a 'Protocol' and steps it, making sure the state is
 -- persisted in the underlying monad.
