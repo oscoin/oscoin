@@ -31,7 +31,6 @@ import           Oscoin.Telemetry.Logging (withStdLogger)
 import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 
-import qualified Control.Concurrent.Async as Async
 import           Control.Monad.Managed (managed, runManaged)
 import           Data.IP (IP)
 import qualified Data.Set as Set
@@ -189,11 +188,10 @@ main = do
                            (storage node)
                            (Handshake.secureHandshake keys)
 
-            liftIO $ do
-                forkEkgServer metricsStore ekgHost ekgPort
-                Async.runConcurrently $
-                         Async.Concurrently (HTTP.run (fromIntegral apiPort) node)
-                      <> Async.Concurrently (miner node gossip)
+            liftIO . runConcurrently $
+                   Concurrently (HTTP.run (fromIntegral apiPort) node)
+                <> Concurrently (miner node gossip)
+                <> Concurrently (runEkg metricsStore ekgHost ekgPort)
 
     either (const exitFailure) (const exitSuccess) res
   where
@@ -207,3 +205,8 @@ main = do
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
     storage nod =
         hoistStorage (runNodeT nod) (Node.storage Nakamoto.validateBasic)
+
+    runEkg store host port = do
+        tid <- forkEkgServer store host port
+        withException (threadDelay maxBound) $ \(e :: SomeAsyncException) ->
+            throwTo tid e

@@ -79,7 +79,7 @@ There are a bunch of things happening under the hood here:
 As we have seen in the last section, every time you `emit` a new event, the telemetry machinery ensure some interesting metric is distilled out of that event and stored inside the
 `MetricsStore`. Internally, the `MetricsStore` reuses some of
 the [ekg-core](http://hackage.haskell.org/package/ekg-core) metric types but it also exposes new ones
-(like the `Histogram`) which are actively inspired by [Prometheus](https://prometheus.io). The synergy with `Prometheus` is important as 
+(like the `Histogram`) which are actively inspired by [Prometheus](https://prometheus.io). The synergy with `Prometheus` is important as
 it opens to the interesting possibility of exposing an HTTP
 endpoint somewhere that Prometheus can scrape to store the time series, for later aggregation and monitoring with a dashboard like [Grafana](https://grafana.com/). Indeed this is something that the
 `Oscoin.Telemetry.Middleware` already takes care of, and a
@@ -115,7 +115,7 @@ enableEKG = do
     -- reuse this one as these are meant to be \"singleton\"
     -- objects throughout your app. Ditto for the Logger.
     metricsStore <- newMetricsStore noLabels
-    forkEkgServer metricsStore ekgHost ekgPort
+    void $ forkEkgServer metricsStore ekgHost ekgPort
 ```
 
 If you embed `enableEKG` in your `main`, you will now be

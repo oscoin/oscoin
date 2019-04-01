@@ -157,6 +157,7 @@ tests:
       - hedgehog
       - hedgehog-quickcheck
       - http-api-data
+      - http-client
       - http-media
       - http-types
       - iproute

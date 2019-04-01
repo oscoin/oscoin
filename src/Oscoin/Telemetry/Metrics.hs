@@ -290,10 +290,10 @@ newMetricsStore predefinedLabels = do
 forkEkgServer :: MetricsStore  -- ^ A 'MetricsStore'.
               -> HostName      -- ^ The desired host.
               -> PortNumber    -- ^ The desired port.
-              -> IO ()
-forkEkgServer ms host port = do
-    let store = _msEKGStore ms
-    void $ EKG.forkServerWith store (C8.pack host) (fromIntegral port)
+              -> IO ThreadId
+forkEkgServer (_msEKGStore -> store) host port =
+    EKG.serverThreadId <$>
+        EKG.forkServerWith store (C8.pack host) (fromIntegral port)
 
 withMetric :: Metric
            -- ^ The metric to lookup.
