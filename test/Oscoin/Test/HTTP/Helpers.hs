@@ -1,10 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Oscoin.Test.HTTP.Helpers
-    ( Codec
-    , newCodec
-
-    , NodeState(..)
+    ( NodeState(..)
     , nodeState
     , emptyNodeState
 
@@ -32,8 +29,6 @@ module Oscoin.Test.HTTP.Helpers
 import           Oscoin.Prelude hiding (First, get)
 
 import qualified Oscoin.API.HTTP as API
-import           Oscoin.API.HTTP.Internal
-                 (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
 import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
@@ -64,18 +59,13 @@ import           Test.QuickCheck (arbitrary)
 import           Test.QuickCheck.Monadic
 import           Test.Tasty.HUnit.Extended
 
-import           Codec.Serialise (Serialise)
+import           Codec.Serialise
 import           Control.Monad.Fail (MonadFail(..))
 import           Crypto.Random.Types (MonadRandom(..))
-import           Data.Aeson (FromJSON, ToJSON)
-import qualified Data.Aeson as Aeson
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.List (lookup)
 import qualified Data.Text as T
 import           System.Random.SplitMix (newSMGen)
 
-import qualified Network.HTTP.Media as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
 import qualified Network.HTTP.Types.Method as HTTP
@@ -262,7 +252,7 @@ assertStatus want (Wai.simpleStatus -> have) = have @?= want
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
 assertResultOK
-    :: (HasCallStack, FromJSON a, Serialise a, Eq a, Show a)
+    :: (HasCallStack, Serialise a, Eq a, Show a)
     => a -> Wai.SResponse -> Session c ()
 assertResultOK expected response = do
     result <- assertResponseBody response
@@ -282,92 +272,46 @@ assertResultErr expected response = do
         API.Ok _    -> assertFailure $ "Received unexpected API OK result"
 
 assertResponseBody
-    :: (HasCallStack, FromJSON a, Serialise a)
+    :: (HasCallStack, Serialise a)
     => Wai.SResponse -> Session c a
 assertResponseBody response =
     case responseBody response of
         Left err -> assertFailure $ show err
         Right a  -> pure $ a
+  where
+    responseBody :: (Serialise a) => Wai.SResponse -> Either Text a
+    responseBody resp =
+        first (T.pack . show) (deserialiseOrFail $ Wai.simpleBody resp)
 
 
 -- | Low-level HTTP request helper.
 request
-    :: (HasCallStack, ToJSON a, Serialise a)
+    :: (Serialise a)
     => HTTP.StdMethod                    -- ^ Request method
     -> Text                              -- ^ Request path
-    -> HTTP.RequestHeaders               -- ^ Request headers
     -> Maybe a                           -- ^ Request body
     -> Session c Wai.SResponse
-request method (encodeUtf8 -> path) headers mb
-    | Nothing <- mb = liftWaiSession $ req LBS.empty
-    | Just b  <- mb = case supportedContentType headers of
-        Left err -> assertFailure $ show err
-        Right ct -> liftWaiSession $ req $ encode ct b
-    where req = Wai.srequest . Wai.SRequest (mkRequest method path headers)
+request method path maybeBody =
+    liftWaiSession $ Wai.srequest $ Wai.SRequest req bodyData
+  where
+    bodyData = case maybeBody of
+        Just a  -> serialise a
+        Nothing -> LBS.empty
+    headers = case maybeBody of
+        Just _  -> [(HTTP.hContentType, "application/cbor"), acceptHeader]
+        Nothing -> [acceptHeader]
+    acceptHeader = (HTTP.hAccept, "application/cbor")
+    req =
+        Wai.setPath
+            Wai.defaultRequest
+                { Wai.requestMethod = HTTP.renderStdMethod method
+                , Wai.requestHeaders = headers
+                }
+            (encodeUtf8 path)
 
 
-mkRequest :: HTTP.StdMethod -> ByteString -> HTTP.RequestHeaders -> Wai.Request
-mkRequest method path headers = Wai.setPath req path where
-    req = Wai.defaultRequest
-        { Wai.requestMethod = HTTP.renderStdMethod method
-        , Wai.requestHeaders = headers
-        }
+get :: Text -> Session c Wai.SResponse
+get path = request GET path (Nothing @())
 
--- | @Codec@ represents the @ContentType@ of sent HTTP request bodies and
--- the accepted (i.e. desired) @ContentType@ of the correspondent HTTP response
--- bodies.
-data Codec = Codec
-    { codecAccept      :: HTTP.MediaType
-    , codecContentType :: HTTP.MediaType
-    } deriving (Show)
-
-newCodec :: HTTP.MediaType -> HTTP.MediaType -> Codec
-newCodec accept ctype = Codec
-    { codecAccept = accept
-    , codecContentType = ctype
-    }
-
-codecHeaders :: Codec -> [HTTP.Header]
-codecHeaders Codec{..} =
-    [ contentTypeHeader codecContentType
-    , acceptHeader      codecAccept
-    ]
-
-contentTypeHeader, acceptHeader :: HTTP.MediaType -> HTTP.Header
-contentTypeHeader = (HTTP.hContentType, ) . mediaTypeBytes
-acceptHeader      = (HTTP.hAccept, )      . mediaTypeBytes
-
-mediaTypeBytes :: HTTP.MediaType -> BS.ByteString
-mediaTypeBytes = encodeUtf8 . T.pack . show
-
-supportedContentType :: [HTTP.Header] -> Either Text MediaType
-supportedContentType headers = case lookup HTTP.hContentType headers of
-    Nothing -> Left $ "No Content-Type found in headers"
-    Just ct -> parseMediaType ct
-
-responseBody :: (FromJSON a, Serialise a) => Wai.SResponse -> Either Text a
-responseBody resp = case supportedContentType (Wai.simpleHeaders resp) of
-    Left err -> Left err
-    Right ct -> decode ct $ Wai.simpleBody resp
-
-get :: HasCallStack => Codec -> Text -> Session c Wai.SResponse
-get = withoutBody GET
-
-post
-    :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => Codec -> Text -> a -> Session c Wai.SResponse
-post = withBody POST
-
-withoutBody :: HasCallStack => HTTP.StdMethod -> Codec -> Text -> Session c Wai.SResponse
-withoutBody method Codec{..} path =
-    request method path [acceptHeader codecAccept] noBody
-
-withBody
-    :: (HasCallStack, Aeson.ToJSON a, Serialise a)
-    => HTTP.StdMethod -> Codec -> Text -> a -> Session c Wai.SResponse
-withBody method codec path body' =
-    request method path (codecHeaders codec) $ Just body'
-
--- | Represents an empty request body.
-noBody :: Maybe ()
-noBody = Nothing
+post :: (Serialise a) => Text -> a -> Session c Wai.SResponse
+post path body = request POST path (Just body)

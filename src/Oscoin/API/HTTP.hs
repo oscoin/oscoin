@@ -7,7 +7,7 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Blockchain.Block (BlockHash, Sealed)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
@@ -30,7 +30,6 @@ import           Web.HttpApiData (FromHttpApiData(..))
 import           Web.Spock
 
 import           Codec.Serialise (Serialise)
-import           Data.Aeson (FromJSON, ToJSON)
 import           Formatting.Buildable (Buildable)
 
 withTelemetryMiddleware :: Node.Handle c tx e s i
@@ -43,9 +42,7 @@ withTelemetryMiddleware hdl action = do
 -- | Runner specialised over the production 'Crypto', as we use a separate
 -- node handle for tests.
 run
-    :: ( Serialise s
-       , ToJSON s
-       )
+    :: (Serialise s)
     => Int
     -> Node.Handle Crypto (RadTx Crypto) (Rad.Env Crypto) s i
     -> IO ()
@@ -53,9 +50,7 @@ run port hdl =
     withTelemetryMiddleware hdl $ \mdlware -> runApi (api mdlware) port hdl
 
 app
-    :: ( ToJSON (Sealed c s)
-       , ToJSON (Crypto.PublicKey c)
-       , Typeable c
+    :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
@@ -63,12 +58,7 @@ app
        , Serialise (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
-       , FromJSON (BlockHash c)
-       , FromJSON (Crypto.PublicKey c)
-       , FromJSON (Crypto.Signature c)
        , Buildable (Crypto.Hash c)
-       , ToJSON (Crypto.Hash c)
-       , ToJSON (Crypto.Signature c)
        )
     => Node.Handle c (RadTx c) (Rad.Env c) s i
     -> IO Wai.Application
@@ -85,9 +75,7 @@ staticFilePolicy =
 
 -- | Entry point for API.
 api
-    :: ( ToJSON (Sealed c s)
-       , ToJSON (Crypto.PublicKey c)
-       , Typeable c
+    :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
@@ -95,12 +83,7 @@ api
        , Serialise (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
-       , FromJSON (BlockHash c)
-       , FromJSON (Crypto.PublicKey c)
-       , FromJSON (Crypto.Signature c)
        , Buildable (Crypto.Hash c)
-       , ToJSON (Crypto.Hash c)
-       , ToJSON (Crypto.Signature c)
        )
     => Wai.Middleware
     -> Api c s i ()
