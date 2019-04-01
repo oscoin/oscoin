@@ -1,4 +1,4 @@
-module Data.Conduit.Test.Serialise (tests) where
+module Test.Data.Conduit.Serialise (tests) where
 
 import           Prelude
 
@@ -20,7 +20,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
-tests = testGroup "Serialise"
+tests = testGroup "Data.Conduit.Serialise"
     [ testProperty "conduitDecodeCBOR . conduitEncodeCBOR == id" . property $
         propSerdeIdentity =<< forAll nonEmptyWiggles
     ]

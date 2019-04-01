@@ -1,4 +1,4 @@
-module Data.Sequence.Circular.Tests
+module Test.Data.Sequence.Circular
     ( tests
     ) where
 

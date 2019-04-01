@@ -1,4 +1,4 @@
-module Control.Concurrent.Test.RateLimit (tests) where
+module Test.Control.Concurrent.RateLimit (tests) where
 
 import           Prelude
 
@@ -12,7 +12,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (Assertion, testCase, (@?=))
 
 tests :: TestTree
-tests = testGroup "Rate Limit"
+tests = testGroup "Control.Concurrent.RateLimit"
     [ testCase "actions/s" testActionsPerSecond
     , testCase "actions/s concurrent" testActionsPerSecondConcurrent
     ]
