@@ -15,23 +15,19 @@ import           Test.Tasty.QuickCheck hiding ((===))
 
 import qualified Codec.Serialise as CBOR
 import qualified Data.Aeson as Aeson
-import           Data.ByteArray.Orphans ()
-import qualified Data.ByteString as BS
 
 tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Oscoin.Crypto.Hash"
-    [ testProperty "JSON serialization of 'Hashed'" (propJsonHashRoundtrip d)
-    , testProperty "CBOR serialization of 'Hashed'" (propSerialiseHashRoundtrip d)
+    [ testProperty "prop_jsonRoundtripHash" (prop_jsonRoundtripHash d)
+    , testProperty "prop_serialiseRoundtripHash" (prop_serialiseRoundtripHash d)
     ]
 
-propJsonHashRoundtrip :: forall c. Dict (IsCrypto c) -> ByteString -> Bool
-propJsonHashRoundtrip Dict bs =
-    let x = Crypto.hash @c bs
-     in (Aeson.decode . Aeson.encode) x == Just x
+prop_jsonRoundtripHash :: forall c. Dict (IsCrypto c) -> ByteString -> Property
+prop_jsonRoundtripHash Dict bytes =
+    let h = Crypto.hash @c bytes
+    in (Aeson.decode . Aeson.encode) h === Just h
 
-propSerialiseHashRoundtrip :: forall c. Dict (IsCrypto c) -> Property
-propSerialiseHashRoundtrip Dict =
-    forAll (arbitrary @ByteString) $ \bytes ->
-        (BS.length bytes > 0) ==>
-            let h = Crypto.hash @c bytes
-            in (CBOR.deserialise . CBOR.serialise $ h) === h
+prop_serialiseRoundtripHash :: forall c. Dict (IsCrypto c) -> ByteString -> Property
+prop_serialiseRoundtripHash Dict bytes =
+    let h = Crypto.hash @c bytes
+    in (CBOR.deserialise . CBOR.serialise $ h) === h
