@@ -17,12 +17,10 @@ import           Oscoin.Prelude
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader, isNovelBlock)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.State.Class (MonadStateStore)
-import           Oscoin.Storage.State.Class as StateStore
 
 import           Oscoin.Consensus (ValidationError, validateBlockSize)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator, evalBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool)
@@ -31,7 +29,6 @@ import           Oscoin.Telemetry (NotableEvent(..))
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
-import           Data.Foldable (toList)
 import           Formatting.Buildable (Buildable)
 
 -- | Package up the storage operations in a dictionary
@@ -57,7 +54,7 @@ data ApplyResult =
     | Error   [NotableEvent]
 
 applyBlock
-    :: forall c st tx s o m.
+    :: forall c st tx s m.
        ( Serialise tx
        , Serialise s
        , Serialise (Crypto.Hash c)
@@ -69,13 +66,12 @@ applyBlock
        )
     => BlockStoreReader c tx s m
     -> (Block c tx (Sealed c s) -> m ())
-    -- ^ A function to dispatch the block outside.
-    -> Evaluator    st tx o
+    -- ^ Called when block is new and valid
     -> (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Consensus.Config
     -> Block      c tx (Sealed c s)
     -> m ApplyResult
-applyBlock bs dispatchBlock eval validateBasic config blk = do
+applyBlock bs dispatchBlock validateBasic config blk = do
     let blkHash = blockHash blk
     novel <- isNovelBlock bs blkHash
     if | novel ->
@@ -88,31 +84,7 @@ applyBlock bs dispatchBlock eval validateBasic config blk = do
 
                 dispatchBlock blk
                 Mempool.delTxs txs
-
-                -- Try to find the parent state of the block, and if found,
-                -- save a new state in the state store.
-                result <- runMaybeT $ do
-                    prevBlock <- MaybeT $ BlockStore.lookupBlock bs
-                        (blockPrevHash $ blockHeader blk)
-
-                    prevState <- MaybeT $ StateStore.lookupState
-                        (blockStateHash $ blockHeader prevBlock)
-
-                    case evalBlock eval prevState blk of
-                        Left err ->
-                            pure $ Error [BlockEvaluationFailedEvent blkHash err]
-                        Right st' -> do
-                            lift $ StateStore.storeState st'
-                            let hashes = map (Crypto.fromHashed . Crypto.hash @c) $ toList txs
-                            let events = [ BlockAppliedEvent blkHash
-                                         , TxsRemovedFromMempoolEvent hashes
-                                         ]
-                            pure $ Applied events
-
-                -- Nb. If either the parent block wasn't found, or the parent state,
-                -- the block is considered an "orphan", and we consider it
-                -- 'Applied' anyway.
-                pure $ maybe (Applied [BlockOrphanEvent blkHash]) identity result
+                pure $ Applied [BlockAppliedEvent blkHash]
 
        | otherwise -> pure $ Stale [BlockStaleEvent blkHash]
 

@@ -16,6 +16,7 @@ module Oscoin.Node
     , getPathLatest
     , getBlocks
     , lookupTx
+    , lookupReceipt
     , lookupBlock
     ) where
 
@@ -34,7 +35,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , StateHash
                  , blockHash
                  )
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
@@ -59,7 +60,6 @@ import           Oscoin.Storage.Block.Abstract
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
 import qualified Oscoin.Storage.State as StateStore
-import qualified Oscoin.Storage.State.Class as StateStoreClass
 
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -164,23 +164,19 @@ mineBlock
 mineBlock = do
     Handle{hEval, hConsensus, hBlockStore, hProtocol} <- ask
     time <- currentTick
-    res  <- hoist liftIO $ Consensus.mineBlock (hoistBlockStoreReader lift hBlockStore)
-                                               hConsensus
-                                               hEval
-                                               time
-    case res of
-      Nothing -> pure Nothing
-      Just (blk, st', receipts) -> do
-          -- NOTE(adn) Here we should dispatch the block and wait for the
-          -- result: if the block hasn't been inserted (for example due to
-          -- a validation error) we shouldn't proceed with all these other
-          -- side effects. Ideally 'dispatchBlockSync' should return some kind
-          -- of 'Either Error ()'.
-          liftIO $ Protocol.dispatchBlockSync hProtocol blk
-          Mempool.delTxs (blockData blk)
-          StateStoreClass.storeState st'
-          for_ receipts ReceiptStore.addReceipt
-          pure (Just blk)
+    maybeBlock <- hoist liftIO $ Consensus.mineBlock
+        (hoistBlockStoreReader lift hBlockStore)
+        hConsensus
+        hEval
+        time
+    -- NOTE(adn) Here we should dispatch the block and wait for the
+    -- result: if the block hasn't been inserted (for example due to
+    -- a validation error) we shouldn't proceed with all these other
+    -- side effects. Ideally 'dispatchBlockSync' should return some kind
+    -- of 'Either Error ()'.
+    forM maybeBlock $ \blk -> do
+        liftIO $ Protocol.dispatchBlockSync hProtocol blk
+        pure blk
 
 storage
     :: ( MonadIO m
@@ -195,10 +191,10 @@ storage
     -> Storage c tx s (NodeT c tx st s i m)
 storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
-        Handle{hProtocol, hBlockStore, hEval, hConfig} <- ask
+        Handle{hProtocol, hBlockStore, hConfig} <- ask
         let dispatchBlock = liftIO . Protocol.dispatchBlockAsync hProtocol
         let consensusConfig =  cfgConsensusConfig hConfig
-        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock hEval validateBasic consensusConfig blk
+        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock validateBasic consensusConfig blk
     , storageApplyTx     = \tx -> do
         bs <- asks hBlockStore
         Storage.applyTx (hoistBlockStoreReader liftIO bs) tx
@@ -250,6 +246,9 @@ getBlocks d =
 
 lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
 lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)
+
+lookupReceipt :: (Ord (Hash c), MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
+lookupReceipt txHash = ReceiptStore.lookupReceipt txHash
 
 lookupBlock
     :: (MonadIO m)

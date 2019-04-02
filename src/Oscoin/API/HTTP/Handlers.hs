@@ -15,7 +15,6 @@ import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Data.Tx (verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.Storage.Receipt.Class
 import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
 
@@ -53,7 +52,7 @@ getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
         Nothing -> respond notFound404 $ errBody "Transaction not found"
         Just res -> pure $ res
-    txReceipt <- node $ lookupReceipt txId
+    txReceipt <- node $ Node.lookupReceipt txId
     respond ok200 $ body $ Ok TxLookupResponse
         { txHash = hash tx
         , txBlockHash =  bh

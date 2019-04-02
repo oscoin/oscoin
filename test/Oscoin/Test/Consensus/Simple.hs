@@ -79,15 +79,15 @@ instance LiftTestNodeT c PoA (SimpleNode c) where
 instance (IsCrypto c) => TestableNode c PoA (SimpleNode c) (SimpleNodeState c) where
     testableTick tick = do
         position <- ask
-        withTestBlockStore $ \(publicAPI, privateAPI) -> do
-            -- NOTE (adn): We are bypassing the protocol at the moment, but we
-            -- probably shouldn't.
-            res <- mineBlock publicAPI (simpleConsensus position) identityEval tick
-            case res of
-              Nothing -> pure Nothing
-              Just (blk, _,_) -> do
-                  Abstract.insertBlock privateAPI blk
-                  pure (Just blk)
+        (blockStoreReader, blockStoreWriter) <- getTestBlockStore
+        -- NOTE (adn): We are bypassing the protocol at the moment, but we
+        -- probably shouldn't.
+        res <- mineBlock blockStoreReader (simpleConsensus position) identityEval tick
+        case res of
+          Nothing -> pure Nothing
+          Just blk -> do
+              Abstract.insertBlock blockStoreWriter blk
+              pure (Just blk)
 
     testableInit = initSimpleNodes
     testableRun  = runSimpleNode
