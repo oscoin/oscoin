@@ -87,7 +87,6 @@ close Handle{..} = Sql.close hConn
 initialize
     :: ( StorableTx c tx
        , ToField (Sealed c s)
-       , Eq (Hash c)
        )
     => Block c tx (Sealed c s)
     -> Handle c tx s
@@ -132,7 +131,6 @@ storeBlock
         , Serialise s
         , FromField (Sealed c s)
         , FromField (Hash c)
-        , Ord (BlockHash c)
         ) => Handle c tx s
           -> Block c tx (Sealed c s)
           -> IO ()
@@ -213,7 +211,6 @@ rollbackBlocks Handle{..} (fromIntegral -> depth :: Integer) = do
 switchToFork
     :: ( StorableTx c tx
        , ToField s
-       , Eq (Hash c)
        )
     => Handle c tx s
     -> Depth
@@ -239,7 +236,6 @@ lookupBlockTimestamp conn hsh =
 storeBlock'
     :: ( StorableTx c tx
        , ToField (Sealed c s)
-       , Eq (Hash c)
        )
     => Handle c tx s
     -> Block c tx (Sealed c s)

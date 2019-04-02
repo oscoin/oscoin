@@ -49,14 +49,13 @@ newIO = do
     hBroadcast <- STM.newBroadcastTChanIO
     pure Handle{..}
 
-insert :: (Ord (Hash c), Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
+insert :: (Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
 insert Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.insert tx)
     STM.writeTChan hBroadcast (Insert [tx])
 
 insertMany
-    :: ( Ord (Hash c)
-       , Crypto.Hashable c tx
+    :: ( Crypto.Hashable c tx
        , Foldable t
        )
     => Handle c tx
@@ -66,14 +65,13 @@ insertMany Handle{hMempool, hBroadcast} txs = do
     STM.modifyTVar' hMempool (Internal.insertMany txs)
     STM.writeTChan hBroadcast (Insert (Fold.toList txs))
 
-remove :: (Ord (Hash c), Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
+remove :: (Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
 remove Handle{hMempool, hBroadcast} tx = do
     STM.modifyTVar' hMempool (Internal.removeTxs [tx])
     STM.writeTChan hBroadcast (Remove [tx])
 
 removeMany
-    :: ( Ord (Hash c)
-       , Crypto.Hashable c tx
+    :: ( Crypto.Hashable c tx
        , Foldable t
        )
     => Handle c tx

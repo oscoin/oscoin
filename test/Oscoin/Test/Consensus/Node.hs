@@ -22,8 +22,7 @@ import           Oscoin.Prelude hiding (StateT, evalStateT, runStateT, show)
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto (blockScore)
 import           Oscoin.Consensus.Types (Validate)
-import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHash, Score, Sealed, Unsealed)
+import           Oscoin.Crypto.Blockchain.Block (Block, Score, Sealed, Unsealed)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable(..))
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -65,7 +64,6 @@ class Monad m => LiftTestNodeT c s m | m -> s where
 -- a pure, in-memory 'Handle', kept around as part of the 'NodeTestState'.
 withTestBlockStore
     :: ( LiftTestNodeT c s n
-       , Ord (BlockHash c)
        , Hashable c Word8
        )
     => (BlockStore c DummyTx s n -> n b)
@@ -100,7 +98,6 @@ withTestBlockStore action =
 -- a pure, in-memory 'BlockStore', kept around as part of the 'NodeTestState'.
 stepTestProtocol
     :: ( LiftTestNodeT c s n
-       , Ord (BlockHash c)
        , Hashable c Word8
        , Ord s
        , Buildable (Hash c)

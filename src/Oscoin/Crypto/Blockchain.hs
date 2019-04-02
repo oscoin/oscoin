@@ -101,7 +101,7 @@ data TxLookup c tx = TxLookup
     }
 
 lookupTx
-    :: forall c tx s. (Crypto.Hashable c tx, Eq (Crypto.Hash c))
+    :: forall c tx s. (Crypto.Hashable c tx)
     => Crypto.Hashed c tx
     -> Blockchain c tx s
     -> Maybe (TxLookup c tx)

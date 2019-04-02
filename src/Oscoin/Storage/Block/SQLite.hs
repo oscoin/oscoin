@@ -37,7 +37,6 @@ withBlockStore
        , FromField s
        , FromField (Crypto.Hash c)
        , Serialise s
-       , Ord (BlockHash c)
        , StorableTx c tx
        )
     => String

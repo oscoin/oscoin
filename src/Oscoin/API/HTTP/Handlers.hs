@@ -6,7 +6,7 @@ import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
-import           Oscoin.Crypto.Blockchain.Block (BlockHash, Sealed, StateHash)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash, Sealed)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -43,7 +43,6 @@ getTransaction :: ( Serialise (BlockHash c)
                   , Serialise (Crypto.PublicKey c)
                   , Serialise (Crypto.Signature c)
                   , Crypto.HasHashing c
-                  , Ord (Crypto.Hash c)
                   , ToJSON (Crypto.PublicKey c)
                   , ToJSON (Crypto.Signature c)
                   , ToJSON (BlockHash c)
@@ -72,8 +71,7 @@ getTransaction txId = do
 
 submitTransaction
     :: forall c s i a.
-       ( Ord (Crypto.Hash c)
-       , Serialise (BlockHash c)
+       ( Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Crypto.HasHashing c
@@ -113,7 +111,6 @@ getBestChain
        , ToJSON (Sealed c s)
        , ToJSON (Crypto.PublicKey c)
        , ToJSON (Crypto.Signature c)
-       , Eq (Crypto.Hash c)
        )
     => ApiAction c s i a
 getBestChain = do
@@ -131,7 +128,6 @@ getBlock
        , ToJSON (Sealed c s)
        , ToJSON (Crypto.PublicKey c)
        , ToJSON (Crypto.Signature c)
-       , Eq (Crypto.Hash c)
        )
     => BlockHash c -> ApiAction c s i a
 getBlock h = do
@@ -142,12 +138,7 @@ getBlock h = do
         Nothing ->
             respond notFound404 noBody
 
-getStatePath
-    :: ( Ord (StateHash c)
-       , Crypto.HasHashing c
-       )
-    => Text
-    -> ApiAction c s i ()
+getStatePath :: (Crypto.HasHashing c) => Text -> ApiAction c s i ()
 getStatePath _chain = do
     path <- listParam "q"
     result' <- node $ Node.getPathLatest path

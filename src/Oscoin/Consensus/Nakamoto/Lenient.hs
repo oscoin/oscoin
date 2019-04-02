@@ -25,8 +25,7 @@ import           Data.ByteArray (ByteArrayAccess)
 -- | Like 'nakamotoConsensus', but uses a looser validation function, more
 -- suitable for development.
 nakamotoConsensusLenient
-    :: ( Eq (Hash c)
-       , AuthTree.MerkleHash (Hash c)
+    :: ( AuthTree.MerkleHash (Hash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        , ByteArrayAccess (BlockHash c)
@@ -39,8 +38,7 @@ nakamotoConsensusLenient = nakamotoConsensus { cValidate = validateLenient }
 -- | A more lenient validation function, where the \"age\" of block with
 -- respect to the parent is not checked.
 validateLenient
-    :: ( Eq (Hash c)
-       , ByteArrayAccess (BlockHash c)
+    :: ( ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)
        , Serialise tx

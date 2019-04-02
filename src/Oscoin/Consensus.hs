@@ -41,7 +41,6 @@ validateBlockchain validateBlock (Blockchain (blk :| blks)) =
 validateBlockSize
     :: ( Serialise tx
        , Hashable c (BlockHeader c s)
-       , Eq (Hash c)
        , Serialise s
        , Serialise (Hash c)
        )

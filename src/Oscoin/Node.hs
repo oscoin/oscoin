@@ -105,7 +105,6 @@ miner
        , Hashable  c tx
        , Serialise s
        , Hashable  c st
-       , Ord (Hash c)
        , Serialise (Hash c)
        , AuthTree.MerkleHash (Hash c)
        , Log.Buildable (Hash c)
@@ -158,7 +157,6 @@ mineBlock
        , Serialise tx
        , Hashable c tx
        , Hashable c st
-       , Ord (Hash c)
        , Serialise (Hash c)
        , AuthTree.MerkleHash (Hash c)
        )
@@ -192,7 +190,6 @@ storage
        , Serialise s
        , Serialise (Hash c)
        , Log.Buildable (Hash c)
-       , Ord (StateHash c)
        )
     => (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Storage c tx s (NodeT c tx st s i m)
@@ -221,7 +218,6 @@ getPath
     :: ( Query st
        , Hashable c st
        , MonadIO m
-       , Ord (StateHash c)
        )
     => StateHash c
     -> [Text]
@@ -235,7 +231,6 @@ getPathLatest
     :: ( MonadIO m
        , Query st
        , Hashable c st
-       , Ord (StateHash c)
        )
     => [Text]
     -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))

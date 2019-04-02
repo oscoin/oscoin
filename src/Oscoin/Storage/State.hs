@@ -27,12 +27,11 @@ newtype Handle c st = Handle (TVar (StateStore c st))
 new :: (Ord (Hash c), MonadIO m) => m (Handle c st)
 new = Handle <$> liftIO (newTVarIO mempty)
 
-fromState :: (Ord (Hash c), Crypto.Hashable c st) => st -> StateStore c st
+fromState :: (Crypto.Hashable c st) => st -> StateStore c st
 fromState st = storeState st mempty
 
 fromStateM
-    :: ( Ord (Hash c)
-       , Crypto.Hashable c st
+    :: ( Crypto.Hashable c st
        , MonadIO m
        )
     => st
@@ -44,22 +43,18 @@ withHandle :: MonadIO m => Handle c st -> (StateStore c st -> m a) -> m a
 withHandle (Handle tvar) f =
     f =<< liftIO (readTVarIO tvar)
 
-lookupState :: Ord (StateHash c) => StateHash c -> StateStore c st -> Maybe st
-lookupState = Map.lookup
+lookupState :: (Crypto.HasHashing c) => StateHash c -> StateStore c st -> Maybe st
+lookupState s = Map.lookup s
 
 storeState
-    :: ( Ord (Hash c)
-       , Crypto.Hashable c st
-       )
+    :: (Crypto.Hashable c st)
     => st
     -> StateStore c st
     -> StateStore c st
 storeState s = Map.insert (Crypto.fromHashed $ Crypto.hash s) s
 
 storeStateIO
-    :: ( Ord (Hash c)
-       , Crypto.Hashable c st
-       )
+    :: (Crypto.Hashable c st)
     => Handle c st
     -> st
     -> IO ()

@@ -58,8 +58,7 @@ data ApplyResult =
 
 applyBlock
     :: forall c st tx s o m.
-       ( Eq (Crypto.Hash c)
-       , Serialise tx
+       ( Serialise tx
        , Serialise s
        , Serialise (Crypto.Hash c)
        , MonadStateStore c st   m

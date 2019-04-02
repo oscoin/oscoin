@@ -13,7 +13,6 @@ import           Oscoin.Prelude
 import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Crypto.Blockchain.Block (StateHash)
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
@@ -107,7 +106,7 @@ instance (Ord (Hash c), MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (N
     addReceipt = ReceiptStore.addWithHandle
     lookupReceipt = ReceiptStore.lookupWithHandle
 
-instance (Ord (StateHash c), MonadIO m, Hashable c st) => MonadStateStore c st (NodeT c tx st s i m) where
+instance (MonadIO m, Hashable c st) => MonadStateStore c st (NodeT c tx st s i m) where
     lookupState k = do
         h <- asks hStateStore
         lift $ StateStore.withHandle h (pure . StateStore.lookupState k)
