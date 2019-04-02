@@ -162,10 +162,11 @@ mineBlock
        )
     => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
-    Handle{hEval, hConsensus, hBlockStore, hProtocol} <- ask
+    Handle{hEval, hConsensus, hProtocol} <- ask
     time <- currentTick
+    bs <- getBlockStoreReader
     maybeBlock <- hoist liftIO $ Consensus.mineBlock
-        (hoistBlockStoreReader lift hBlockStore)
+        bs
         hConsensus
         hEval
         time
@@ -191,19 +192,20 @@ storage
     -> Storage c tx s (NodeT c tx st s i m)
 storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
-        Handle{hProtocol, hBlockStore, hConfig} <- ask
+        Handle{hProtocol, hConfig} <- ask
         let dispatchBlock = liftIO . Protocol.dispatchBlockAsync hProtocol
         let consensusConfig =  cfgConsensusConfig hConfig
-        Storage.applyBlock (hoistBlockStoreReader liftIO hBlockStore) dispatchBlock validateBasic consensusConfig blk
+        bs <- getBlockStoreReader
+        Storage.applyBlock bs dispatchBlock validateBasic consensusConfig blk
     , storageApplyTx     = \tx -> do
-        bs <- asks hBlockStore
-        Storage.applyTx (hoistBlockStoreReader liftIO bs) tx
+        bs <- getBlockStoreReader
+        Storage.applyTx bs tx
     , storageLookupBlock = \blk -> do
-        bs <- asks hBlockStore
-        BlockStore.lookupBlock (hoistBlockStoreReader liftIO bs) blk
+        bs <- getBlockStoreReader
+        BlockStore.lookupBlock bs blk
     , storageLookupTx    = \tx -> do
-        bs <- asks hBlockStore
-        Storage.lookupTx (hoistBlockStoreReader liftIO bs) tx
+        bs <- getBlockStoreReader
+        Storage.lookupTx bs tx
     }
 
 getMempool :: MonadIO m => NodeT c tx st s i m (Mempool c tx)
@@ -241,11 +243,14 @@ getBlocks
     :: MonadIO m
     => Depth
     -> NodeT c tx st s i m [Block c tx (Sealed c s)]
-getBlocks d =
-  Chrono.toNewestFirst <$> withBlockStore (`BlockStore.getBlocksByDepth` d)
+getBlocks d = do
+    bs <- getBlockStoreReader
+    Chrono.toNewestFirst <$> BlockStore.getBlocksByDepth bs d
 
 lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
-lookupTx tx = withBlockStore (`BlockStore.lookupTx` tx)
+lookupTx tx = do
+    bs <- getBlockStoreReader
+    BlockStore.lookupTx bs tx
 
 lookupReceipt :: (Ord (Hash c), MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
 lookupReceipt txHash = ReceiptStore.lookupReceipt txHash
@@ -254,4 +259,6 @@ lookupBlock
     :: (MonadIO m)
     => BlockHash c
     -> NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
-lookupBlock h = withBlockStore (`BlockStore.lookupBlock` h)
+lookupBlock h = do
+    bs <- getBlockStoreReader
+    BlockStore.lookupBlock bs h
