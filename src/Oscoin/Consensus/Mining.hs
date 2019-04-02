@@ -9,8 +9,7 @@ import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Storage.Receipt (MonadReceiptStore)
-import qualified Oscoin.Storage.Receipt as ReceiptStore
+import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State
 import           Oscoin.Time.Chrono (toNewestFirst)
 
@@ -50,7 +49,7 @@ mineBlock bs Consensus{cMiner} eval time = do
         lift $ do
             Mempool.delTxs (blockData sealedBlock)
             storeState st'
-            for_ receipts ReceiptStore.addReceipt
+            for_ receipts addReceipt
             pure $ sealedBlock
 
 -- | Mine a genesis block with the given 'Miner'.

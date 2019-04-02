@@ -16,7 +16,7 @@ import qualified Oscoin.Node.Mempool.Internal as Mempool
 import           Oscoin.Storage.Block.Abstract
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.HashStore
-import           Oscoin.Storage.Receipt as ReceiptStore
+import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State
 import           Oscoin.Time
 
@@ -39,7 +39,7 @@ import           System.Random
 data NakamotoNodeState c = NakamotoNodeState
     { nakStdGen       :: StdGen
     , nakMempool      :: Mempool.Mempool c DummyTx
-    , nakReceiptStore :: ReceiptStore.Store c DummyTx DummyOutput
+    , nakReceiptStore :: ReceiptMap c DummyTx DummyOutput
     , nakBlockstore   :: BlockStore.Pure.Handle c DummyTx PoW
     , nakStateStore   :: Map (Crypto.Hashed c DummyState) DummyState
     }
@@ -51,6 +51,9 @@ nakStdGenL = lens nakStdGen (\s a -> s { nakStdGen = a })
 
 nakMempoolL :: Lens' (NakamotoNodeState c) (Mempool.Mempool c DummyTx)
 nakMempoolL = lens nakMempool (\s a -> s { nakMempool = a })
+
+nakReceiptStoreL :: Lens' (NakamotoNodeState c) (ReceiptMap c DummyTx DummyOutput)
+nakReceiptStoreL = lens nakReceiptStore (\s a -> s { nakReceiptStore = a })
 
 nakBlockstoreL :: Lens' (NakamotoNodeState c) (BlockStore.Pure.Handle c DummyTx PoW)
 nakBlockstoreL = lens nakBlockstore (\s a -> s { nakBlockstore = a })
@@ -65,12 +68,8 @@ nakStateStoreL = lens nakStateStore (\s a -> s { nakStateStore = a })
 
 type NakamotoNode c = State (NakamotoNodeState c)
 
-instance ReceiptStore.HasStore c DummyTx DummyOutput (NakamotoNodeState c) where
-    storeL = lens nakReceiptStore (\s nakReceiptStore -> s { nakReceiptStore })
-
 instance (IsCrypto c) => MonadReceiptStore c DummyTx DummyOutput (NakamotoNode c) where
-    addReceipt = ReceiptStore.addWithStore
-    lookupReceipt = ReceiptStore.lookupWithStore
+    getReceiptStore = pure $ mkStateReceiptStore nakReceiptStoreL
 
 instance (IsCrypto c) => MonadStateStore c DummyState (NakamotoNode c) where
     getStateStore = pure $ mkStateHashStore nakStateStoreL
@@ -105,7 +104,7 @@ initNakamoto :: (IsCrypto c) => DummyNodeId -> NakamotoNodeState c
 initNakamoto nid = NakamotoNodeState
     { nakStdGen = mkStdGen (Hashable.hash nid)
     , nakMempool = mempty
-    , nakReceiptStore = ReceiptStore.emptyStore
+    , nakReceiptStore = Map.empty
     , nakBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
     , nakStateStore   = Map.singleton (Crypto.hash genesisState) genesisState
     }
