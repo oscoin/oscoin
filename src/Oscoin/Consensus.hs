@@ -1,7 +1,6 @@
 module Oscoin.Consensus
     ( nakamotoConsensus
     , nakamotoConsensusLenient
-    , simpleConsensus
     , validateBlockchain
     , validateBlockSize
     , module Oscoin.Consensus.Mining
@@ -16,7 +15,6 @@ import           Codec.Serialise (Serialise, serialise)
 import           Oscoin.Consensus.Mining
 import           Oscoin.Consensus.Nakamoto (nakamotoConsensus)
 import           Oscoin.Consensus.Nakamoto.Lenient (nakamotoConsensusLenient)
-import           Oscoin.Consensus.Simple (simpleConsensus)
 import           Oscoin.Consensus.Types
 
 import qualified Oscoin.Consensus.Config as Consensus

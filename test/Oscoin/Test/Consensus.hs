@@ -8,12 +8,10 @@ import           Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary
 import           Oscoin.Test.Consensus.Node (DummyTx)
-import           Oscoin.Test.Consensus.Simple
 import           Oscoin.Time
 
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import qualified Oscoin.Consensus.Simple as Simple
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 
 import           Codec.Serialise (Serialise)
@@ -27,32 +25,18 @@ import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> [TestTree]
-tests Dict config =
-    [ testGroup "With Partitions"
-        [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @c @Simple.PoA @(SimpleNodeState c)
-                                     testableInit
-                                     (arbitraryPartitionedNetwork Simple.blockTime)
-                                     config
-        , testProperty "Nodes converge (nakamoto)" $
-            propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
-                                     testableInit
-                                     (arbitraryPartitionedNetwork Nakamoto.blockTime)
-                                     config
-        ]
-    , testGroup "Without Partitions"
-        [ testProperty "Nodes converge (simple)" $
-            propNetworkNodesConverge @c @Simple.PoA @(SimpleNodeState c)
-                                     testableInit
-                                     (arbitraryHealthyNetwork Simple.blockTime)
-                                     config
-        , testProperty "Nodes converge (nakamoto)" $
-            propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
-                                     testableInit
-                                     (arbitraryHealthyNetwork Nakamoto.blockTime)
-                                     config
-        ]
+tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
+tests Dict config = testGroup "Oscoin.Test.Consensus"
+    [ testProperty "Nodes converge with partitions" $
+        propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
+                                 testableInit
+                                 (arbitraryPartitionedNetwork Nakamoto.blockTime)
+                                 config
+    , testProperty "Nodes converge without partitions" $
+        propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
+                                 testableInit
+                                 (arbitraryHealthyNetwork Nakamoto.blockTime)
+                                 config
     ]
 
 -- | Tests whether simulated nodes converge to a single chain.
