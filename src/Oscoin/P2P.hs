@@ -75,7 +75,6 @@ newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeId c)) m a)
 
 instance ( Hashable (Crypto.PublicKey c)
          , Eq (Crypto.PublicKey c)
-         , Eq (Crypto.Hash c)
          , Serialise (Crypto.Hash c)
          , MonadIO m
          ) => MonadBroadcast c (GossipT c m) where
@@ -105,7 +104,6 @@ withGossip
        , Eq (Crypto.PublicKey c)
        , Exception e
        , Buildable (Crypto.Hash c)
-       , Eq (BlockHash c)
        , Serialise s
        , Serialise tx
        , Serialise o
@@ -187,7 +185,6 @@ wrapApply
     :: forall c tx s.
        ( Crypto.Hashable c tx
        , Buildable (Crypto.Hash c)
-       , Eq (BlockHash c)
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
@@ -241,7 +238,6 @@ wrapLookup
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
-       , Eq (BlockHash c)
        )
     => (BlockHash c -> IO (Maybe (Block c tx s)))
     -> (Crypto.Hashed c tx -> IO (Maybe tx))
@@ -256,7 +252,6 @@ wrapLookup lookupBlock lookupTx mid =
 fromGossip
     :: ( Crypto.Hashable c tx
        , Serialise s
-       , Eq (BlockHash c)
        , Serialise tx
        , Serialise (BlockHash c)
        )
@@ -285,7 +280,6 @@ deserialisePayload
        , Serialise tx
        , Serialise s
        , Serialise (BlockHash c)
-       , Eq (BlockHash c)
        )
     => ByteString
     -> Either CBOR.DeserialiseFailure (Msg c tx s)

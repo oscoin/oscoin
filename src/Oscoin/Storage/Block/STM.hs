@@ -7,7 +7,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
 import           Oscoin.Crypto.Blockchain.Block (ScoreFn, Sealed)
-import           Oscoin.Crypto.Hash (Hash, Hashable)
+import           Oscoin.Crypto.Hash (Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
 import           Oscoin.Time.Chrono as Chrono
@@ -16,7 +16,7 @@ import           Control.Concurrent.STM (TVar, modifyTVar', newTVarIO, readTVar)
 
 -- | A bracket-style initialiser for an in-memory block store.
 withBlockStore
-    :: (Ord (Hash c), Hashable c tx)
+    :: (Hashable c tx)
     => Blockchain c tx s
     -- ^ The initial blockchain to initialise this store with
     -> ScoreFn c tx (Sealed c s)

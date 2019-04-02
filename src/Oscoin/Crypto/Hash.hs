@@ -75,7 +75,10 @@ deriving instance FromJSON (Hash crypto) => FromJSON (Hashed crypto a)
 class HasHashing crypto => Hashable crypto a where
     hash :: a -> Hashed crypto a
 
-class HasHashing crypto where
+class
+    ( Ord (Hash crypto)
+    , Eq (Hash crypto)
+    ) => HasHashing crypto where
     type family HashAlgorithm crypto = algo | algo -> crypto
 
     -- | A hash using the default hash algorithm. Used instead of 'Hashed' when

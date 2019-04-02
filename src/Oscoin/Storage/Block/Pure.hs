@@ -143,7 +143,7 @@ lookupBlock h Handle{..} =
 -- | Lookup a transaction in the 'Handle'. Only considers transactions in
 -- the best chain.
 lookupTx
-    :: forall c tx s. (Eq (Hash c), Hashable c tx)
+    :: (Hashable c tx)
     => Hashed c tx
     -> Handle c tx s
     -> Maybe (TxLookup c tx)

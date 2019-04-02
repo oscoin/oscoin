@@ -94,8 +94,7 @@ withProtocol o validateFull scoreBlock bs config action =
 -- and steps the protocol.
 runProtocol
     :: forall c tx s a.
-       ( Ord (Hash c)
-       , Ord s
+       ( Ord s
        , HasHashing c
        , Buildable (Hash c)
        )

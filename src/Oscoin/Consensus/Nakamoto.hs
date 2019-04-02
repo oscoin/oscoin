@@ -58,8 +58,7 @@ emptyPoW = PoW 0
 
 -- | The Nakamoto consensus definition.
 nakamotoConsensus
-    :: ( Eq (Hash c)
-       , AuthTree.MerkleHash (Hash c)
+    :: ( AuthTree.MerkleHash (Hash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        , ByteArrayAccess (BlockHash c)
@@ -75,8 +74,7 @@ nakamotoConsensus = Consensus
 
 -- | Validate a 'Block' in relation with a prefix.
 validateFull
-    :: ( Eq (Hash c)
-       , ByteArrayAccess (BlockHash c)
+    :: ( ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)
        , Serialise tx
@@ -102,8 +100,7 @@ validateFull prefix@(parent:_) blk = runExcept $ do
 
 -- | Validate a 'Block' using only intrinsic block data.
 validateBasic
-    :: ( Eq (Hash c)
-       , Serialise tx
+    :: ( Serialise tx
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)

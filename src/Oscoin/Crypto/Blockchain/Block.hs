@@ -208,7 +208,6 @@ instance ( Serialise tx
          , Serialise s
          , HasBlockHeader c s
          , Serialise (Hash c)
-         , Eq (Hash c)
          ) => Serialise (Block c tx s) where
     encode Block{..} =
            Serialise.encodeListLen 4
@@ -243,7 +242,6 @@ instance ( FromJSON s
          , FromJSON (Hash c)
          , FromJSON tx
          , HasBlockHeader c s
-         , Eq (Hash c)
          ) => FromJSON (Block c tx s) where
   parseJSON = withObject "Block" $ \o -> do
         blockHeader <- o .: "header"
@@ -309,9 +307,7 @@ genesisBlock txs st seal t =
         }
 
 isGenesisBlock
-    :: ( Crypto.HasHashing c
-       , Eq (Hash c)
-       )
+    :: (Crypto.HasHashing c)
     => Block c tx s
     -> Bool
 isGenesisBlock Block{..} =
@@ -350,4 +346,3 @@ hashTxs (toList -> txs)
                 -- Nb. Since our Merkle tree works with key-value pairs, but we're only
                 -- really interested in the keys being present or absent for this use-case,
                 -- we use the empty byte string as the value component.
-

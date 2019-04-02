@@ -51,8 +51,7 @@ member h (Mempool txs) = Map.member h txs
 
 -- | Add a transaction to a mempool.
 insert
-    :: Ord (Hash c)
-    => Crypto.Hashable c tx
+    :: Crypto.Hashable c tx
     => tx
     -> Mempool c tx
     -> Mempool c tx
@@ -61,7 +60,7 @@ insert tx (Mempool txs) =
 
 -- | Add multiple transactions to a mempool.
 insertMany
-    :: (Foldable t, Crypto.Hashable c tx, Ord (Hash c))
+    :: (Foldable t, Crypto.Hashable c tx)
     => t tx
     -> Mempool c tx
     -> Mempool c tx
@@ -69,7 +68,7 @@ insertMany txs mem = foldl' (flip insert) mem txs
 
 -- | Remove multiple transactions from a mempool.
 removeTxs
-    :: (Foldable t, Crypto.Hashable c tx, Ord (Hash c))
+    :: (Foldable t, Crypto.Hashable c tx)
     => t tx -> Mempool c tx -> Mempool c tx
 removeTxs ks (Mempool txs) =
     Mempool $ Map.withoutKeys txs keys
