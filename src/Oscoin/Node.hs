@@ -47,7 +47,8 @@ import           Oscoin.Node.Trans
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
-import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import           Oscoin.Storage.HashStore
+import           Oscoin.Storage.State
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
@@ -59,7 +60,6 @@ import           Oscoin.Storage.Block.Abstract
                  (BlockStoreReader, hoistBlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Receipt as ReceiptStore
-import qualified Oscoin.Storage.State as StateStore
 
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -69,11 +69,11 @@ import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
 withNode
-    :: Log.Buildable (Hash c)
+    :: (Log.Buildable (Hash c))
     => Config
     -> i
     -> Mempool.Handle c tx
-    -> StateStore.Handle c st
+    -> HashStore c st IO
     -> BlockStoreReader c tx s IO
     -> Protocol.Handle c tx s IO
     -> Evaluator st tx RadicleTx.Output
@@ -213,7 +213,6 @@ getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 -- | Get a value from the given state hash.
 getPath
     :: ( Query st
-       , Hashable c st
        , MonadIO m
        )
     => StateHash c
@@ -227,7 +226,6 @@ getPath sh p = do
 getPathLatest
     :: ( MonadIO m
        , Query st
-       , Hashable c st
        )
     => [Text]
     -> NodeT c tx st s i m (Maybe (StateHash c, QueryVal st))

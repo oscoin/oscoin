@@ -21,10 +21,10 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Storage.HashStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
-import qualified Oscoin.Storage.State as StateStore
-import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import           Oscoin.Storage.State (MonadStateStore(..))
 import qualified Oscoin.Telemetry as Telemetry
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -57,7 +57,7 @@ data Config = Config
 data Handle c tx st s i = Handle
     { hConfig       :: Config
     , hNodeId       :: i
-    , hStateStore   :: StateStore.Handle c st
+    , hStateStore   :: HashStore c st IO
     , hBlockStore   :: Abstract.BlockStoreReader c tx s IO
     , hProtocol     :: Protocol.Handle c tx s IO
     , hMempool      :: Mempool.Handle c tx
@@ -105,13 +105,5 @@ instance (Ord (Hash c), MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (N
     addReceipt = ReceiptStore.addWithHandle
     lookupReceipt = ReceiptStore.lookupWithHandle
 
-instance (MonadIO m, Hashable c st) => MonadStateStore c st (NodeT c tx st s i m) where
-    lookupState k = do
-        h <- asks hStateStore
-        lift $ StateStore.withHandle h (pure . StateStore.lookupState k)
-    storeState st = do
-        h <- asks hStateStore
-        liftIO $ StateStore.storeStateIO h st
-
-    {-# INLINE lookupState #-}
-    {-# INLINE storeState #-}
+instance (MonadIO m) => MonadStateStore c st (NodeT c tx st s i m) where
+    getStateStore = hoistHashStore liftIO <$> asks hStateStore

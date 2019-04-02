@@ -51,7 +51,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Protocol (runProtocol)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
-import qualified Oscoin.Storage.State as StateStore
+import           Oscoin.Storage.HashStore
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Telemetry.Metrics as Metrics
@@ -160,13 +160,14 @@ withNode NodeState{..} k = do
 
     BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \blkStore@(bsh, _privateAPI) ->
         runProtocol (\_ _ -> Right ()) blockScore handle blkStore config $ \dispatchBlock -> do
-            sth <- liftIO $ StateStore.fromStateM statestoreState
+            stateStore <- liftIO $ newHashStoreIO
+            liftIO $ storeHashContent stateStore statestoreState
 
             Node.withNode
                 cfg
                 42
                 mph
-                sth
+                stateStore
                 bsh
                 dispatchBlock
                 Rad.txEval

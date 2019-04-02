@@ -26,7 +26,7 @@ import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
-import qualified Oscoin.Storage.State as StateStore
+import           Oscoin.Storage.HashStore
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
 import qualified Oscoin.Telemetry.Logging as Log
@@ -60,7 +60,8 @@ main = do
     gen          <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
     genState     <- either (die . fromEvalError) pure $
                         evalBlock Rad.txEval Rad.pureEnv gen
-    stStore      <- StateStore.fromStateM genState
+    stStore      <- newHashStoreIO
+    storeHashContent stStore genState
     metricsStore <-
         newMetricsStore $
             labelsFromList [("env", renderEnvironment optEnvironment)]

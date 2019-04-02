@@ -137,7 +137,7 @@ getBlock h = do
         Nothing ->
             respond notFound404 noBody
 
-getStatePath :: (Crypto.HasHashing c) => Text -> ApiAction c s i ()
+getStatePath :: Text -> ApiAction c s i ()
 getStatePath _chain = do
     path <- listParam "q"
     result' <- node $ Node.getPathLatest path
