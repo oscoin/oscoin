@@ -45,12 +45,12 @@ testIsStored
     -> Sqlite.Handle c (RadTx c) DummySeal
     -> Assertion
 testIsStored () h = do
-    (gen :: Block c (RadTx c) (Sealed c DummySeal)) <- getGenesisBlock (hConn h)
+    (gen :: Block c (RadTx c) (Sealed c DummySeal)) <- getGenesisBlock h
 
-    result <- isStored (hConn h) (blockHash gen)
+    result <- runTransaction (hConn h) $ isStored (blockHash gen)
     result @?= True
 
-    result' <- isStored (hConn h) (Crypto.zeroHash @c)
+    result' <- runTransaction (hConn h) $ isStored (Crypto.zeroHash @c)
     result' @?= False
 
 testIsConflicting
@@ -63,8 +63,8 @@ testIsConflicting
 testIsConflicting (blk, blk') h@Handle{..} = do
     storeBlock h blk
 
-    result <- isConflicting hConn blk'
+    result <- runTransaction hConn $ isConflicting blk'
     result @?= True
 
-    result' <- isConflicting hConn (linkParent blk blk')
+    result' <- runTransaction hConn $ isConflicting (linkParent blk blk')
     result' @?= False

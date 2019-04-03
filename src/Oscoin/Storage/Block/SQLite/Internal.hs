@@ -9,6 +9,7 @@ module Oscoin.Storage.Block.SQLite.Internal
     , TxRow(..)
     , IsTxRow(..)
     , StorableTx
+    , runTransaction
     , open
     , close
     , initialize
@@ -58,29 +59,54 @@ import           Codec.Serialise
 import           Oscoin.Storage.Block.Cache (BlockCache)
 import qualified Oscoin.Storage.Block.Cache as BlockCache
 
+-- | Simple, composable transaction mechanism to avoid shooting ourselves in the
+-- foot when working with MVars. It ensures that 'withMVar' is called in a
+-- single place ('runTransaction') rather than being scattered in multiple places.
+-- It also allows transactions to be composed together.
+newtype Transaction m a = TransactionT (ReaderT Connection m a)
+    deriving (Functor, Applicative, Monad, MonadReader Connection, MonadIO)
+
 -- | A handle to an on-disk block store.
 data Handle c tx s = Handle
-    { hConn       :: Connection                    -- ^ Connection to on-disk storage for non-orphan blocks.
+    { hConn       :: MVar Connection               -- ^ Connection to on-disk storage for non-orphan blocks.
     , hBlockCache :: BlockCache c tx (Sealed c s)  -- ^ In-memory cache for most recent blocks.
     }
 
+-- | Runs a 'Transaction' by acquiring an exclusive lock on the underlying
+-- 'Connection' and running the whole action in a single SQLite transaction.
+runTransaction :: MVar Connection -> Transaction IO a -> IO a
+runTransaction connVar = runTransactionWith Sql.withTransaction connVar
+
+runTransactionWith
+    :: (Connection -> IO a -> IO a)
+    -> MVar Connection
+    -> Transaction IO a
+    -> IO a
+runTransactionWith finaliser connVar (TransactionT (ReaderT m)) =
+    withMVar connVar $ \conn ->
+        flip runReaderT conn $
+           liftIO (finaliser conn (m conn))
+
 -- | Opens a connection to the SQLite DB.
-open
-    :: String
-    -> IO (Handle c tx s)
+open :: String -> IO (Handle c tx s)
 open path =
-    Handle <$> (Sql.open path >>= setupConnection)
-           <*> BlockCache.newBlockCache 2016 -- TODO(and) pass this parameter externally
+    Handle <$> (Sql.open path >>= newMVar >>= setupConnection)
+           <*> BlockCache.newBlockCache 2016 -- TODO(adn) pass this parameter externally
   where
-    setupConnection conn = do
-        enableForeignKeys conn
-        pure conn
-    enableForeignKeys conn =
-        Sql3.exec (Sql.connectionHandle conn) "PRAGMA foreign_keys = ON;"
+    setupConnection connVar = do
+        runTransaction connVar enableForeignKeys
+        pure connVar
+    enableForeignKeys = do
+        conn <- ask
+        liftIO $ Sql3.exec (Sql.connectionHandle conn) "PRAGMA foreign_keys = ON;"
 
 -- | Close a connection to the block store.
+-- NOTE(adn) You shouldn't call 'runTransaction' here, as that would trigger
+-- a SQLite 'ErrorMisure' error.
 close :: Handle c tx s -> IO ()
-close Handle{..} = Sql.close hConn
+close Handle{..} = runTransactionWith (const identity) hConn $ do
+    conn <- ask
+    liftIO $ Sql.close conn
 
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.
@@ -91,35 +117,35 @@ initialize
     => Block c tx (Sealed c s)
     -> Handle c tx s
     -> IO (Handle c tx s)
-initialize gen h@Handle{hConn} =
-    getDataFileName "data/blockstore.sql" >>=
-        readFile >>= \schema -> do
-          Sql3.exec (Sql.connectionHandle hConn) schema
-          unlessM (isStored hConn (blockHash gen)) $
-              storeBlock' h gen
-          pure h
+initialize gen h@Handle{hConn} = runTransaction hConn $ do
+    conn   <- ask
+    liftIO $
+        getDataFileName "data/blockstore.sql" >>= readFile >>= Sql3.exec (Sql.connectionHandle conn)
+    unlessM (isStored (blockHash gen)) $
+        storeBlock' (hBlockCache h) gen
+    pure h
 
 -- | Check whether a given block hash exists.
 isStored
     :: ToField (Hash c)
-    => Connection
-    -> BlockHash c
-    -> IO Bool
-isStored conn bh =
-    headDef False . map fromOnly <$> Sql.query conn
-        [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE hash = ?) |] (Only bh)
+    => BlockHash c
+    -> Transaction IO Bool
+isStored bh = do
+    conn <- ask
+    headDef False . map fromOnly <$> liftIO (Sql.query conn
+        [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE hash = ?) |] (Only bh))
 
 -- | Check if a given block is conflicting with the main chain. This means a
 -- block already exists with the same parent.
 isConflicting
     :: ToField (Hash c)
-    => Connection
-    -> Block c tx s
-    -> IO Bool
-isConflicting conn block =
-    headDef False . map fromOnly <$> Sql.query conn
+    => Block c tx s
+    -> Transaction IO Bool
+isConflicting block = do
+    conn <- ask
+    headDef False . map fromOnly <$> liftIO (Sql.query conn
         [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE parenthash = ?) |]
-        (Only $ blockPrevHash $ blockHeader block)
+        (Only $ blockPrevHash $ blockHeader block))
 
 -- | Store a block, along with its transactions in the block store.
 -- Invariant: the input block must have passed \"basic\" validation.
@@ -134,15 +160,14 @@ storeBlock
         ) => Handle c tx s
           -> Block c tx (Sealed c s)
           -> IO ()
-storeBlock h@Handle{..} blk =
-    Sql.withTransaction hConn $ do
-        blockExists        <- isStored hConn $ blockHash blk
-        blockConflicts     <- isConflicting hConn blk
-        currentTip         <- getTip h
+storeBlock Handle{..} blk = runTransaction hConn $ do
+    blockExists        <- isStored $ blockHash blk
+    blockConflicts     <- isConflicting blk
+    currentTip         <- getTipInternal hBlockCache
 
-        if not blockExists && extendsTip currentTip && not blockConflicts
-            then storeBlock' h blk
-            else pure ()
+    if not blockExists && extendsTip currentTip && not blockConflicts
+        then storeBlock' hBlockCache blk
+        else pure ()
 
   where
     extendsTip :: Block c tx (Sealed c s) -> Bool
@@ -156,15 +181,26 @@ getGenesisBlock
        , StorableTx c tx
        , FromField (Hash c)
        )
-    => Connection
-    -> IO (Block c tx s)
-getGenesisBlock conn = do
+    => Handle c tx s
+    -> IO (Block c tx (Sealed c s))
+getGenesisBlock Handle{hConn} = runTransaction hConn $ getGenesisBlockInternal
+
+getGenesisBlockInternal
+    :: forall c s tx.
+       ( Serialise s
+       , FromField s
+       , StorableTx c tx
+       , FromField (Hash c)
+       )
+    => Transaction IO (Block c tx s)
+getGenesisBlockInternal = do
+    conn <- ask
     Only bHash :. bHeader <-
-        headDef (panic "No genesis block!") <$> Sql.query_ conn
+        headDef (panic "No genesis block!") <$> liftIO (Sql.query_ conn
             [sql|   SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
                       FROM blocks
-                     WHERE parenthash IS NULL |]
-    bTxs <- getBlockTxs @c conn bHash
+                     WHERE parenthash IS NULL |])
+    bTxs <- liftIO (getBlockTxs @c conn bHash)
     pure $ mkBlock bHeader bTxs
 
 -- | Get the chain starting from a given hash up to the tip
@@ -174,21 +210,34 @@ getChainSuffix
        , FromField s
        , FromField (Hash c)
        )
-    => Connection
+    => Handle c tx s
     -> BlockHash c
-    -> IO (NewestFirst [] (Block c tx s))
-getChainSuffix conn hsh = do
-    result <- lookupBlockTimestamp conn hsh
+    -> IO (NewestFirst [] (Block c tx (Sealed c s)))
+getChainSuffix Handle{hConn} hsh =
+    runTransaction hConn $ getChainSuffixInternal hsh
+
+getChainSuffixInternal
+    :: ( StorableTx c tx
+       , Serialise s
+       , FromField s
+       , FromField (Hash c)
+       )
+    => BlockHash c
+    -> Transaction IO (NewestFirst [] (Block c tx s))
+getChainSuffixInternal hsh = do
+    result <- lookupBlockTimestamp hsh
     case result of
         Nothing -> pure mempty
         Just t -> do
-            rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
-                [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
-                         FROM blocks WHERE timestamp > ?
-                     ORDER BY timestamp DESC
-                        |] (Only t)
-            map NewestFirst <$> for rows $ \(Only h :. bh) ->
-                mkBlock bh <$> getBlockTxs conn h
+            conn <- ask
+            liftIO $ do
+                rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
+                    [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+                             FROM blocks WHERE timestamp > ?
+                         ORDER BY timestamp DESC
+                            |] (Only t)
+                map NewestFirst <$> for rows $ \(Only h :. bh) ->
+                    mkBlock bh <$> getBlockTxs conn h
 
 getChainHashes
     :: FromField (Hash c)
@@ -200,13 +249,18 @@ getChainHashes conn (fromIntegral -> depth :: Integer) =
       Sql.query conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC LIMIT ? |] (Only depth)
 
 -- | Rollback 'n' blocks.
-rollbackBlocks :: Handle c tx s -> Depth -> IO ()
-rollbackBlocks Handle{..} (fromIntegral -> depth :: Integer) = do
-    Sql.execute hConn
-        [sql| DELETE FROM blocks WHERE hash IN
-              (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)
-        |] (Only depth)
-    BlockCache.invalidate hBlockCache
+rollbackBlocks
+    :: BlockCache c tx (Sealed c s)
+    -> Depth
+    -> Transaction IO ()
+rollbackBlocks blockCache (fromIntegral -> depth :: Integer) = do
+    conn <- ask
+    liftIO $ do
+        Sql.execute conn
+            [sql| DELETE FROM blocks WHERE hash IN
+                  (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)
+            |] (Only depth)
+        BlockCache.invalidate blockCache
 
 switchToFork
     :: ( StorableTx c tx
@@ -216,19 +270,19 @@ switchToFork
     -> Depth
     -> OldestFirst NonEmpty (Block c tx (Sealed c s))
     -> IO ()
-switchToFork h@Handle{..} depth newChain =
-    Sql.withTransaction hConn $ do
-        rollbackBlocks h depth
-        traverse_ (storeBlock' h) (toOldestFirst newChain)
+switchToFork Handle{..} depth newChain = runTransaction hConn $ do
+    rollbackBlocks hBlockCache depth
+    traverse_ (storeBlock' hBlockCache) (toOldestFirst newChain)
 
 lookupBlockTimestamp
     :: ToField (Hash c)
-    => Connection
-    -> BlockHash c
-    -> IO (Maybe Timestamp)
-lookupBlockTimestamp conn hsh =
-    map fromOnly . listToMaybe <$>
-        Sql.query conn [sql| SELECT timestamp FROM blocks WHERE hash = ? |] (Only hsh)
+    => BlockHash c
+    -> Transaction IO (Maybe Timestamp)
+lookupBlockTimestamp hsh = do
+    conn <- ask
+    liftIO $
+        map fromOnly . listToMaybe <$>
+            Sql.query conn [sql| SELECT timestamp FROM blocks WHERE hash = ? |] (Only hsh)
 
 -- | Store a block in the block store.
 --
@@ -237,11 +291,12 @@ storeBlock'
     :: ( StorableTx c tx
        , ToField (Sealed c s)
        )
-    => Handle c tx s
+    => BlockCache c tx (Sealed c s)
     -> Block c tx (Sealed c s)
-    -> IO ()
-storeBlock' Handle{..} blk = do
-    parentTimestamp <- lookupBlockTimestamp hConn (blockPrevHash bh)
+    -> Transaction IO ()
+storeBlock' hBlockCache blk = do
+    hConn <- ask
+    parentTimestamp <- lookupBlockTimestamp (blockPrevHash bh)
 
     -- Since we rely on the timestamp for block ordering, make sure this
     -- invariant is checked. Note that parent references are checked by the
@@ -253,14 +308,15 @@ storeBlock' Handle{..} blk = do
 
     -- Nb. To relate transactions with blocks, we store an extra block hash field
     -- for each row in the transactions table.
-    Sql.execute hConn
-        [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
-              VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
+    liftIO $ do
+        Sql.execute hConn
+            [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
+                  VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
 
-    storeTxs hConn (blockHash blk) (toList $ blockData blk)
+        storeTxs hConn (blockHash blk) (toList $ blockData blk)
 
-    -- Cache the block
-    BlockCache.consBlock hBlockCache blk
+        -- Cache the block
+        BlockCache.consBlock hBlockCache blk
 
   where
     row = ( blockHash blk
@@ -289,17 +345,30 @@ getBlocks
     => Handle c tx s
     -> Depth
     -> IO (NewestFirst [] (Block c tx (Sealed c s)))
-getBlocks Handle{..} (fromIntegral -> depth :: Int) =
+getBlocks Handle{..} depth = runTransaction hConn $
+    getBlocksInternal hBlockCache depth
+
+getBlocksInternal
+    :: ( Serialise s
+       , StorableTx c tx
+       , FromField (Hash c)
+       , FromField (Sealed c s)
+       )
+    => BlockCache c tx (Sealed c s)
+    -> Depth
+    -> Transaction IO (NewestFirst [] (Block c tx (Sealed c s)))
+getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
+    conn <- ask
     -- Hit the cache first
-    BlockCache.cached hBlockCache depth (\backFillSize -> do
-        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query hConn
+    liftIO $ BlockCache.cached hBlockCache depth (\backFillSize -> do
+        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query conn
             [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
                      FROM blocks
                  ORDER BY timestamp DESC
                     LIMIT ? |] (Only (fromIntegral backFillSize :: Integer))
 
         Chrono.NewestFirst <$>
-            for rows (\(Only h :. bh) -> mkBlock bh <$> getBlockTxs hConn h))
+            for rows (\(Only h :. bh) -> mkBlock bh <$> getBlockTxs conn h))
 
 getTip
     :: ( Serialise s
@@ -309,5 +378,15 @@ getTip
        )
     => Handle c tx s
     -> IO (Block c tx (Sealed c s))
-getTip h =
-    headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocks h 1
+getTip h = runTransaction (hConn h) $ getTipInternal (hBlockCache h)
+
+getTipInternal
+    :: ( Serialise s
+       , StorableTx c tx
+       , FromField (Hash c)
+       , FromField (Sealed c s)
+       )
+    => BlockCache c tx (Sealed c s)
+    -> Transaction IO (Block c tx (Sealed c s))
+getTipInternal cache =
+    headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocksInternal cache 1

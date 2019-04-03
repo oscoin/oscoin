@@ -49,11 +49,11 @@ withBlockStore
 withBlockStore path genesisBlock action =
     let newBlockStore internalHandle =
             ( (Abstract.BlockStoreReader {
-                  Abstract.getGenesisBlock       = getGenesisBlock (hConn internalHandle)
+                  Abstract.getGenesisBlock       = getGenesisBlock internalHandle
                 , Abstract.lookupBlock           = lookupBlock internalHandle
                 , Abstract.lookupTx              = lookupTx internalHandle
                 , Abstract.getBlocksByDepth      = getBlocks internalHandle
-                , Abstract.getBlocksByParentHash = getChainSuffix (hConn internalHandle)
+                , Abstract.getBlocksByParentHash = getChainSuffix internalHandle
                 , Abstract.getTip                = getTip internalHandle
                 }
             , Abstract.BlockStoreWriter {
@@ -77,13 +77,14 @@ lookupBlock
     => Handle c tx s
     -> BlockHash c
     -> IO (Maybe (Block c tx (Sealed c s)))
-lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
-    result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> Sql.query hConn
+lookupBlock Handle{hConn} h = runTransaction hConn $ do
+    conn <- ask
+    result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> liftIO (Sql.query conn
         [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
                 FROM blocks
-               WHERE hash = ? |] (Only h)
+               WHERE hash = ? |] (Only h))
 
-    txs :: [tx] <- getBlockTxs hConn h
+    txs :: [tx] <- liftIO $ getBlockTxs conn h
 
     for result $ \bh ->
         pure $ mkBlock bh txs
@@ -91,8 +92,9 @@ lookupBlock Handle{hConn} h = Sql.withTransaction hConn $ do
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.
 lookupTx :: (StorableTx c tx) => Handle c tx s -> Crypto.Hashed c tx -> IO (Maybe (TxLookup c tx))
-lookupTx Handle{hConn} hash = do
-    maybeTx <- getTx hConn (Crypto.fromHashed hash)
+lookupTx Handle{hConn} hash = runTransaction hConn $ do
+    conn <- ask
+    maybeTx <- liftIO $ getTx conn (Crypto.fromHashed hash)
     pure $ case maybeTx of
         Nothing -> Nothing
         Just tx -> Just $ TxLookup tx Crypto.zeroHash 0
