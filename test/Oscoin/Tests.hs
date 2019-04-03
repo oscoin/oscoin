@@ -42,7 +42,7 @@ tests d@Dict config = testGroup "Oscoin"
     -- ^ Testing API and Node using a 'MonadClient' instance
     , testGroup      "CLI"                            CLI.tests
     , testProperty   "Mempool"                        (testOscoinMempool d)
-    , testGroup      "Consensus"                      (Consensus.tests d config)
+    , Consensus.tests d config
     , testGroup      "P2P"                            (P2P.tests d)
     , testGroup      "Storage Cache"                  (BlockCache.tests d)
     , testGroup      "Storage Orphanage"              (Orphanage.tests d)

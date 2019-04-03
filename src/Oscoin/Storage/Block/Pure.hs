@@ -6,6 +6,7 @@ module Oscoin.Storage.Block.Pure
     ( Handle
     , genesisBlockStore
     , initWithChain
+    , mkStateBlockStore
 
     , getBlocks
     , getChainSuffix
@@ -23,10 +24,13 @@ import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Block)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed)
-import           Oscoin.Time.Chrono (toNewestFirst)
+import qualified Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Time.Chrono as Chrono
 
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
+import           Lens.Micro
+import           Lens.Micro.Mtl
 import           Text.Show (Show(..))
 
 -- | Store of 'Block's and 'Blockchain's.
@@ -49,6 +53,34 @@ instance (Ord tx, Ord (Hash c), Ord s) => Semigroup (Handle c tx s) where
 instance (Ord tx, Ord (Hash c), Ord s) => Monoid (Handle c tx s) where
     mempty = Handle mempty mempty (comparing height)
 
+
+-- | Create an abstract 'BlockStore' for a state monad that has access
+-- to a pure blockstore 'Handle'.
+mkStateBlockStore
+    :: (MonadState state m, Hashable c tx)
+    => Lens' state (Handle c tx s)
+    -> Abstract.BlockStore c tx s m
+mkStateBlockStore bsHandleL = (blockStoreReader, blockStoreWriter)
+  where
+    blockStoreReader = Abstract.BlockStoreReader
+        { getGenesisBlock =
+            getGenesisBlock <$> use bsHandleL
+        , lookupBlock = \h ->
+            lookupBlock h <$> use bsHandleL
+        , lookupTx = \tx ->
+            lookupTx tx <$> use bsHandleL
+        -- The pure store doesn't guarantee block ordering as 'getBlocks'
+        -- sorts using the score function.
+        , getBlocksByDepth = \d ->
+              Chrono.NewestFirst . getBlocks d <$> use bsHandleL
+        , getBlocksByParentHash = \h ->
+              Chrono.NewestFirst . getChainSuffix h <$> use bsHandleL
+        , getTip =  getTip <$> use bsHandleL
+        }
+    blockStoreWriter = Abstract.BlockStoreWriter
+        { insertBlock = \b -> bsHandleL %= insert b
+        , switchToFork = \_ _ -> pure ()
+        }
 
 genesisBlockStore
     :: Ord (Hash c)

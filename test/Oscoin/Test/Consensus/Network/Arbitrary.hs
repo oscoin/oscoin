@@ -11,7 +11,6 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain.Eval (identityEval)
 
 import           Oscoin.Test.Consensus.Network
-import           Oscoin.Test.Consensus.Node (DummyNodeId)
 import           Oscoin.Test.Crypto
 import           Oscoin.Time
 

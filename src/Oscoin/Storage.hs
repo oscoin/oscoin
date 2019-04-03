@@ -16,7 +16,6 @@ import           Oscoin.Prelude
 
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader, isNovelBlock)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Storage.State.Class (MonadStateStore)
 
 import           Oscoin.Consensus (ValidationError, validateBlockSize)
 import qualified Oscoin.Consensus.Config as Consensus
@@ -54,11 +53,9 @@ data ApplyResult =
     | Error   [NotableEvent]
 
 applyBlock
-    :: forall c st tx s m.
-       ( Serialise tx
+    :: ( Serialise tx
        , Serialise s
        , Serialise (Crypto.Hash c)
-       , MonadStateStore c st   m
        , MonadMempool    c tx   m
        , Crypto.Hashable c tx
        , Crypto.Hashable c (BlockHeader c (Sealed c s))

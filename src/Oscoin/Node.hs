@@ -182,7 +182,6 @@ mineBlock = do
 storage
     :: ( MonadIO m
        , Hashable  c tx
-       , Hashable  c st
        , Serialise tx
        , Serialise s
        , Serialise (Hash c)

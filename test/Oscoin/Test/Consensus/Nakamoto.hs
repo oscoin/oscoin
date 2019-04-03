@@ -5,7 +5,6 @@ module Oscoin.Test.Consensus.Nakamoto
 
 import           Oscoin.Prelude
 
-import           Oscoin.Clock
 import           Oscoin.Consensus.Mining (mineBlock)
 import           Oscoin.Consensus.Nakamoto (PoW(..), emptyPoW)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
@@ -13,49 +12,120 @@ import           Oscoin.Consensus.Types
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
-import qualified Oscoin.Storage.Block.Abstract as Abstract
-import           Oscoin.Storage.Receipt
-import           Oscoin.Storage.State.Class (MonadStateStore)
+import qualified Oscoin.Node.Mempool.Internal as Mempool
+import           Oscoin.Storage.Block.Abstract
+import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
+import           Oscoin.Storage.Receipt as ReceiptStore
+import qualified Oscoin.Storage.State as StateStore
+import           Oscoin.Storage.State.Class (MonadStateStore(..))
+import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network
-import           Oscoin.Test.Consensus.Node
 import           Oscoin.Test.Crypto
+import           Test.Oscoin.DummyLedger
 
 import           Codec.Serialise (Serialise)
 import qualified Data.Hashable as Hashable
-import qualified Data.Map.Strict as Map
 import           Lens.Micro
+import           Lens.Micro.Mtl
 import           System.Random
 
-type NakamotoConsensus c tx m = Consensus c tx PoW (NakamotoT tx m)
 
-nakConsensus :: (IsCrypto c, Serialise tx, Monad m) => NakamotoConsensus c tx m
-nakConsensus = Consensus
-    { cScore = comparing Nakamoto.chainScore
-    , cMiner = \_chain blk -> do gen <- state split
-                                 pure $ mineBlockRandom gen blk
-    , cValidate = Nakamoto.validateFull
+---------------------------------------------------
+-- * NakamotoNodeState
+---------------------------------------------------
+
+data NakamotoNodeState c = NakamotoNodeState
+    { nakStdGen       :: StdGen
+    , nakMempool      :: Mempool.Mempool c DummyTx
+    , nakReceiptStore :: ReceiptStore.Store c DummyTx DummyOutput
+    , nakBlockstore   :: BlockStore.Pure.Handle c DummyTx PoW
+    , nakStateStore   :: StateStore.StateStore c DummyState
     }
 
-newtype NakamotoT tx m a =
-    NakamotoT (StateT StdGen m a)
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadIO
-             , MonadState StdGen
-             , MonadTrans
-             )
+deriving instance Show (Crypto.Hash c) => Show (NakamotoNodeState c)
 
-instance (Monad m, MonadClock m) => MonadClock (NakamotoT tx m)
+nakStdGenL :: Lens' (NakamotoNodeState c) StdGen
+nakStdGenL = lens nakStdGen (\s a -> s { nakStdGen = a })
 
-instance MonadMempool    c   tx     m => MonadMempool   c    tx      (NakamotoT tx m)
-instance MonadReceiptStore c tx ()  m => MonadReceiptStore c tx ()   (NakamotoT tx m)
+nakMempoolL :: Lens' (NakamotoNodeState c) (Mempool.Mempool c DummyTx)
+nakMempoolL = lens nakMempool (\s a -> s { nakMempool = a })
 
-instance MonadStateStore c st m => MonadStateStore c st (NakamotoT tx m)
+nakBlockstoreL :: Lens' (NakamotoNodeState c) (BlockStore.Pure.Handle c DummyTx PoW)
+nakBlockstoreL = lens nakBlockstore (\s a -> s { nakBlockstore = a })
 
-runNakamotoT :: StdGen -> NakamotoT tx m a -> m (a, StdGen)
-runNakamotoT rng (NakamotoT ma) = runStateT ma rng
+nakStateStoreL :: Lens' (NakamotoNodeState c) (StateStore.StateStore c DummyState)
+nakStateStoreL = lens nakStateStore (\s a -> s { nakStateStore = a })
+
+
+---------------------------------------------------
+-- * NakamotoNode
+---------------------------------------------------
+
+type NakamotoNode c = State (NakamotoNodeState c)
+
+instance ReceiptStore.HasStore c DummyTx DummyOutput (NakamotoNodeState c) where
+    storeL = lens nakReceiptStore (\s nakReceiptStore -> s { nakReceiptStore })
+
+instance (IsCrypto c) => MonadReceiptStore c DummyTx DummyOutput (NakamotoNode c) where
+    addReceipt = ReceiptStore.addWithStore
+    lookupReceipt = ReceiptStore.lookupWithStore
+
+instance (IsCrypto c) => MonadStateStore c DummyState (NakamotoNode c) where
+    lookupState k = StateStore.lookupState k <$> use nakStateStoreL
+    storeState s = nakStateStoreL %= StateStore.storeState s
+
+instance (IsCrypto c) => MonadMempool c DummyTx (NakamotoNode c) where
+    addTxs txs = nakMempoolL %= Mempool.insertMany txs
+    getTxs     = Mempool.toList <$> use nakMempoolL
+    delTxs txs = nakMempoolL %= Mempool.removeTxs txs
+    numTxs     = Mempool.size <$> use nakMempoolL
+    lookupTx h = Mempool.lookup h <$> use nakMempoolL
+    subscribe  = panic "Oscoin.Consensus.Test.Node: `subscribe` not available for pure mempool"
+
+instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
+    testableTick tn = do
+        let (blockStoreReader, blockStoreWriter) = testableBlockStore
+        maybeBlock <- mineBlock blockStoreReader nakConsensus dummyEval tn
+        -- NOTE (adn): We are bypassing the protocol at the moment, but we
+        -- probably shouldn't.
+        forM_ maybeBlock $ \blk -> insertBlock blockStoreWriter blk
+        pure maybeBlock
+
+    testableInit = initNakamoto
+    testableRun = flip runState
+    testableBlockStore = BlockStore.Pure.mkStateBlockStore nakBlockstoreL
+    testableBestChain nodeState =
+        let blockStore = nodeState ^. nakBlockstoreL
+         in unsafeToBlockchain $ BlockStore.Pure.getBlocks 10000 blockStore
+         -- XXX(alexis): Don't use a magic number.
+
+
+initNakamoto :: (IsCrypto c) => DummyNodeId -> NakamotoNodeState c
+initNakamoto nid = NakamotoNodeState
+    { nakStdGen = mkStdGen (Hashable.hash nid)
+    , nakMempool = mempty
+    , nakReceiptStore = ReceiptStore.emptyStore
+    , nakBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
+    , nakStateStore   = StateStore.fromState genesisState
+    }
+  where
+    genBlk   = sealBlock emptyPoW $ emptyGenesisFromState epoch genesisState
+    genesisState = mempty :: DummyState
+
+
+---------------------------------------------------
+-- * Consensus
+---------------------------------------------------
+
+nakConsensus :: (IsCrypto c, Serialise tx) => Consensus c tx PoW (NakamotoNode c)
+nakConsensus = Consensus
+    { cScore = comparing Nakamoto.chainScore
+    , cMiner = \_chain blk -> zoom nakStdGenL $ do
+        gen <- state split
+        pure $ mineBlockRandom gen blk
+    , cValidate = Nakamoto.validateFull
+    }
 
 -- | Mine a block header in 10% of the cases. The forged header does
 -- not have a valid proof of work.
@@ -70,63 +140,3 @@ mineBlockRandom stdGen blk =
      in if r < p
            then Just $ sealBlock emptyPoW blk
            else Nothing
-
-type NakamotoNode c = NakamotoT DummyTx (TestNodeT c PoW Identity)
-
-data NakamotoNodeState c = NakamotoNodeState
-    { nakStdGen :: StdGen
-    , nakNode   :: TestNodeState c PoW
-    }
-
-deriving instance Show (Crypto.Hash c) => Show (NakamotoNodeState c)
-
-instance HasTestNodeState c PoW (NakamotoNodeState c) where
-    testNodeStateL = lens nakNode (\s nakNode -> s { nakNode })
-
-instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
-    testableTick tn = do
-        (blockStoreReader, blockStoreWriter) <- getTestBlockStore
-        -- NOTE (adn): We are bypassing the protocol at the moment, but we
-        -- probably shouldn't.
-        res <- mineBlock blockStoreReader nakConsensus dummyEval tn
-        case res of
-          Nothing -> pure Nothing
-          Just blk -> do
-              Abstract.insertBlock blockStoreWriter blk
-              pure (Just blk)
-
-    testableInit    = initNakamotoNodes
-    testableRun     = runNakamotoNode
-    testableScore   = const Nakamoto.chainScore
-
-instance LiftTestNodeT c PoW (NakamotoNode c) where
-    liftTestNodeT = lift
-
-nakamotoNode
-    :: ( IsCrypto c
-       )
-    => DummyNodeId
-    -> NakamotoNodeState c
-nakamotoNode nid = NakamotoNodeState
-    { nakStdGen = mkStdGen (Hashable.hash nid)
-    , nakNode   = emptyTestNodeState dummyPoW nid
-    }
-  where
-    dummyPoW = sealBlock emptyPoW
-
-initNakamotoNodes
-    :: ( IsCrypto c
-       )
-    => TestNetwork c PoW a
-    -> TestNetwork c PoW (NakamotoNodeState c)
-initNakamotoNodes tn@TestNetwork{tnNodes} =
-    tn { tnNodes = Map.mapWithKey (const . nakamotoNode) tnNodes }
-
-runNakamotoNode :: NakamotoNodeState c -> NakamotoNode c a -> (a, NakamotoNodeState c)
-runNakamotoNode s@NakamotoNodeState{..} ma =
-    (a, s { nakStdGen = g, nakNode = tns })
-  where
-    ((a, g), tns) =
-        runIdentity
-            . runTestNodeT nakNode
-            $ runNakamotoT nakStdGen ma

@@ -163,6 +163,7 @@ tests:
       - iproute
       - memory
       - microlens
+      - microlens-mtl
       - mtl
       - multihash-cryptonite
       - network
