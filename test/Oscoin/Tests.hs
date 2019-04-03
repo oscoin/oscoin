@@ -18,7 +18,6 @@ import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Storage.Block.Cache as BlockCache
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
-import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
 import qualified Oscoin.Test.Storage.Block.SQLite.Whitebox as SQLite.Whitebox
 import qualified Oscoin.Test.Telemetry as Telemetry
@@ -43,7 +42,6 @@ tests d@Dict config = testGroup "Oscoin"
     , testGroup      "Address"                        (Address.tests d)
     , testGroup      "P2P"                            (P2P.tests d)
     , testGroup      "Storage Cache"                  (BlockCache.tests d)
-    , testGroup      "Storage Orphanage"              (Orphanage.tests d)
     , testGroup      "Storage equivalence checking"   (StorageEquivalence.tests d)
     , testGroup      "SQLite Storage blackbox"        (SQLite.Blackbox.tests d)
     , testGroup      "SQLite Storage whitebox"        (SQLite.Whitebox.tests d)

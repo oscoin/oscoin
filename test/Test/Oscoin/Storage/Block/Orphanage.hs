@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Oscoin.Test.Storage.Block.Orphanage
+module Test.Oscoin.Storage.Block.Orphanage
     ( tests
     ) where
 
@@ -32,12 +32,12 @@ import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.QuickCheck hiding ((===))
 
-tests :: Dict (IsCrypto c) -> [TestTree]
-tests d =
-    [ testProperty "insert orphans"                                     (propInsertOrphans d)
-    , testProperty "selectBestCandidate (single choice)"                (propSelectBestCandidateSingleChoice d)
-    , testProperty "selectBestCandidate (multiple choices)"             (propSelectBestCandidateMultipleChoice d)
-    , testProperty "selectBestCandidate (long chain, multiple choices)" (propSelectBestCandidateComplex d)
+tests :: Dict (IsCrypto c) -> TestTree
+tests d = testGroup "Test.Oscoin.Storage.Block.Orphanage"
+    [ testProperty "propInsertOrphans" (propInsertOrphans d)
+    , testProperty "propSelectBestCandidateSingleChoice" (propSelectBestCandidateSingleChoice d)
+    , testProperty "propSelectBestCandidateMultipleChoice" (propSelectBestCandidateMultipleChoice d)
+    , testProperty "propSelectBestCandidateComplex" (propSelectBestCandidateComplex d)
     ]
 
 {------------------------------------------------------------------------------
