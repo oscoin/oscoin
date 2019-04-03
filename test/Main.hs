@@ -15,6 +15,7 @@ import qualified Oscoin.Tests as Oscoin
 import qualified Test.Control.Concurrent.RateLimit
 import qualified Test.Data.Conduit.Serialise
 import qualified Test.Data.Sequence.Circular
+import qualified Test.Oscoin.API
 import qualified Test.Oscoin.Configuration
 import qualified Test.Oscoin.Crypto.Hash
 import qualified Test.Oscoin.Crypto.PubKey
@@ -32,9 +33,10 @@ main = do
         , Multihash.tests
         , Integration.tests
         , Test.Control.Concurrent.RateLimit.tests
-        , Test.Data.Sequence.Circular.tests
         , Test.Data.Conduit.Serialise.tests
         , Test.Oscoin.Configuration.tests
+        , Test.Data.Sequence.Circular.tests
+        , Test.Oscoin.API.tests crypto
         , Test.Oscoin.Crypto.Hash.tests crypto
         , Test.Oscoin.Crypto.PubKey.tests crypto
         ]

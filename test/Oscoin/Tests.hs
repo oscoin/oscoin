@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
-import qualified Oscoin.Test.API as API
 import qualified Oscoin.Test.API.HTTP as HTTP
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
@@ -38,8 +37,6 @@ tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
 tests d@Dict config = testGroup "Oscoin"
     [ testGroup      "API.HTTP"                       (HTTP.tests d)
     -- ^ Testing HTTP API constructing HTTP requests manually
-    , testGroup      "API"                            (API.tests d)
-    -- ^ Testing API and Node using a 'MonadClient' instance
     , testGroup      "CLI"                            CLI.tests
     , testProperty   "Mempool"                        (testOscoinMempool d)
     , Consensus.tests d config
