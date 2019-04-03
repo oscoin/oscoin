@@ -16,8 +16,6 @@ import qualified Oscoin.Node.Mempool.Internal as Mempool
 import           Oscoin.Storage.Block.Abstract
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.HashStore
-import           Oscoin.Storage.Receipt
-import           Oscoin.Storage.State
 import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network
@@ -37,11 +35,10 @@ import           System.Random
 ---------------------------------------------------
 
 data NakamotoNodeState c = NakamotoNodeState
-    { nakStdGen       :: StdGen
-    , nakMempool      :: Mempool.Mempool c DummyTx
-    , nakReceiptStore :: ReceiptMap c DummyTx DummyOutput
-    , nakBlockstore   :: BlockStore.Pure.Handle c DummyTx PoW
-    , nakStateStore   :: Map (Crypto.Hashed c DummyState) DummyState
+    { nakStdGen     :: StdGen
+    , nakMempool    :: Mempool.Mempool c DummyTx
+    , nakBlockstore :: BlockStore.Pure.Handle c DummyTx PoW
+    , nakStateStore :: Map (Crypto.Hashed c DummyState) DummyState
     }
 
 deriving instance Show (Crypto.Hash c) => Show (NakamotoNodeState c)
@@ -51,9 +48,6 @@ nakStdGenL = lens nakStdGen (\s a -> s { nakStdGen = a })
 
 nakMempoolL :: Lens' (NakamotoNodeState c) (Mempool.Mempool c DummyTx)
 nakMempoolL = lens nakMempool (\s a -> s { nakMempool = a })
-
-nakReceiptStoreL :: Lens' (NakamotoNodeState c) (ReceiptMap c DummyTx DummyOutput)
-nakReceiptStoreL = lens nakReceiptStore (\s a -> s { nakReceiptStore = a })
 
 nakBlockstoreL :: Lens' (NakamotoNodeState c) (BlockStore.Pure.Handle c DummyTx PoW)
 nakBlockstoreL = lens nakBlockstore (\s a -> s { nakBlockstore = a })
@@ -68,12 +62,6 @@ nakStateStoreL = lens nakStateStore (\s a -> s { nakStateStore = a })
 
 type NakamotoNode c = State (NakamotoNodeState c)
 
-instance (IsCrypto c) => MonadReceiptStore c DummyTx DummyOutput (NakamotoNode c) where
-    getReceiptStore = pure $ mkStateReceiptStore nakReceiptStoreL
-
-instance (IsCrypto c) => MonadStateStore c DummyState (NakamotoNode c) where
-    getStateStore = pure $ mkStateHashStore nakStateStoreL
-
 instance (IsCrypto c) => MonadMempool c DummyTx (NakamotoNode c) where
     addTxs txs = nakMempoolL %= Mempool.insertMany txs
     getTxs     = Mempool.toList <$> use nakMempoolL
@@ -85,11 +73,13 @@ instance (IsCrypto c) => MonadMempool c DummyTx (NakamotoNode c) where
 instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState c) where
     testableTick tn = do
         let (blockStoreReader, blockStoreWriter) = testableBlockStore
-        maybeBlock <- mineBlock blockStoreReader nakConsensus dummyEval tn
+        let stateStore = mkStateHashStore nakStateStoreL
+        maybeBlock <- mineBlock blockStoreReader stateStore nakConsensus dummyEval tn
         -- NOTE (adn): We are bypassing the protocol at the moment, but we
         -- probably shouldn't.
-        forM_ maybeBlock $ \blk -> insertBlock blockStoreWriter blk
-        pure maybeBlock
+        forM maybeBlock $ \(blk, _, _) -> do
+            insertBlock blockStoreWriter blk
+            pure blk
 
     testableInit = initNakamoto
     testableRun = flip runState
@@ -104,7 +94,6 @@ initNakamoto :: (IsCrypto c) => DummyNodeId -> NakamotoNodeState c
 initNakamoto nid = NakamotoNodeState
     { nakStdGen = mkStdGen (Hashable.hash nid)
     , nakMempool = mempty
-    , nakReceiptStore = Map.empty
     , nakBlockstore   = BlockStore.Pure.genesisBlockStore genBlk Nakamoto.blockScore
     , nakStateStore   = Map.singleton (Crypto.hash genesisState) genesisState
     }

@@ -39,6 +39,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
 import           Oscoin.Crypto.Hash
                  (HasHashing, Hash, Hashable, Hashed, formatHash)
+import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Node.Mempool (Mempool)
@@ -49,7 +50,6 @@ import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
 import qualified Oscoin.Storage as Storage
 import           Oscoin.Storage.HashStore
-import           Oscoin.Storage.State
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (ftag, stext, (%))
@@ -164,10 +164,12 @@ mineBlock
     => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
     Handle{hEval, hConsensus, hProtocol} <- ask
+    stateStore <- getStateStore
     time <- currentTick
     bs <- getBlockStoreReader
     maybeBlock <- hoist liftIO $ Consensus.mineBlock
         bs
+        stateStore
         hConsensus
         hEval
         time
@@ -176,7 +178,11 @@ mineBlock = do
     -- a validation error) we shouldn't proceed with all these other
     -- side effects. Ideally 'dispatchBlockSync' should return some kind
     -- of 'Either Error ()'.
-    forM maybeBlock $ \blk -> do
+    forM maybeBlock $ \(blk, st, receipts) -> do
+        stateStore' <- getStateStore
+        storeHashContent stateStore' st
+        receiptStore <- getReceiptStore
+        for_ receipts $ ReceiptStore.storeReceipt receiptStore
         liftIO $ Protocol.dispatchBlockSync hProtocol blk
         pure blk
 
@@ -219,8 +225,9 @@ getPath
     => StateHash c
     -> [Text]
     -> NodeT c tx st s i m (Maybe (QueryVal st))
-getPath sh p = do
-    result <- lookupState sh
+getPath stateHash p = do
+    stateStore <- getStateStore
+    result <- lookupHashContent stateStore (Crypto.toHashed stateHash)
     pure $ query p =<< result
 
 -- | Get a value from the latest state.
@@ -251,7 +258,9 @@ lookupTx tx = do
     BlockStore.lookupTx bs tx
 
 lookupReceipt :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
-lookupReceipt txHash = ReceiptStore.lookupReceipt txHash
+lookupReceipt txHash = do
+    receiptStore <- getReceiptStore
+    ReceiptStore.lookupReceipt receiptStore txHash
 
 lookupBlock
     :: (MonadIO m)

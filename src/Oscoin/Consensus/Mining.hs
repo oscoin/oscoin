@@ -9,12 +9,11 @@ import           Oscoin.Consensus.Types
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Storage.Receipt
-import           Oscoin.Storage.State
+import           Oscoin.Storage.HashStore
 import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator, buildBlock)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt, buildBlock)
 import           Oscoin.Node.Mempool.Class (MonadMempool)
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
@@ -26,8 +25,6 @@ import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 -- from 'MonadBlockStore' using all transactions from 'MonadMempool'.
 mineBlock
     :: ( MonadMempool      c tx   m
-       , MonadStateStore   c st   m
-       , MonadReceiptStore c tx o m
        , Serialise         tx
        , Crypto.Hashable   c tx
        , Crypto.Hashable   c st
@@ -35,22 +32,23 @@ mineBlock
        , AuthTree.MerkleHash (Crypto.Hash c)
        )
     => BlockStoreReader c tx s m
+    -> HashStore c st m
+    -- ^ State store
     -> Consensus c tx s m
     -> Evaluator st tx o
     -> Timestamp
-    -> m (Maybe (Block c tx (Sealed c s)))
-mineBlock bs Consensus{cMiner} eval time = do
+    -> m (Maybe (Block c tx (Sealed c s), st, [Receipt c tx o]))
+mineBlock bs stateStore Consensus{cMiner} eval time = do
     txs <- (map . map) snd Mempool.getTxs
     parent <- BlockStore.getTip bs
     runMaybeT $ do
-        st <- MaybeT $ lookupState $ blockStateHash $ blockHeader parent
+        let parentStateHash = Crypto.toHashed $ blockStateHash $ blockHeader parent
+        st <- MaybeT $ lookupHashContent stateStore parentStateHash
         let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
         sealedBlock <- MaybeT $ cMiner (map toNewestFirst . BlockStore.getBlocksByDepth bs) blockCandidate
         lift $ do
             Mempool.delTxs (blockData sealedBlock)
-            storeState st'
-            for_ receipts addReceipt
-            pure $ sealedBlock
+            pure $ (sealedBlock, st', receipts)
 
 -- | Mine a genesis block with the given 'Miner'.
 mineGenesis
