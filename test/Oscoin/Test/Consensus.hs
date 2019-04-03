@@ -7,7 +7,6 @@ import           Oscoin.Prelude
 import           Oscoin.Test.Consensus.Nakamoto
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Consensus.Network.Arbitrary
-import           Oscoin.Test.Consensus.Node (DummyTx)
 import           Oscoin.Time
 
 import qualified Oscoin.Consensus.Config as Consensus
@@ -21,6 +20,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import           Oscoin.Test.Crypto
+import           Test.Oscoin.DummyLedger
 import           Test.QuickCheck.Instances ()
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -29,12 +29,12 @@ tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
 tests Dict config = testGroup "Oscoin.Test.Consensus"
     [ testProperty "Nodes converge with partitions" $
         propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
-                                 testableInit
+                                 initNetwork
                                  (arbitraryPartitionedNetwork Nakamoto.blockTime)
                                  config
     , testProperty "Nodes converge without partitions" $
         propNetworkNodesConverge @c @Nakamoto.PoW @(NakamotoNodeState c)
-                                 testableInit
+                                 initNetwork
                                  (arbitraryHealthyNetwork Nakamoto.blockTime)
                                  config
     ]
@@ -155,7 +155,7 @@ prettyCounterexample tn@TestNetwork{..} txsReplicated score =
   where
     prettyLog    = T.unlines $  " log:" : prettyMsgs tnLog
     prettyNodes  = T.unlines $ [" nodes:", "  " <> show (length tnNodes)]
-    prettyInfo   = T.unlines $ [" info:", T.unlines ["  " <> show (testableNodeAddr n) <> ": " <> testableShow n | n <- toList tnNodes]]
+    prettyInfo   = T.unlines $ [" info:", T.unlines ["  " <> show id <> ": " <> testableShow n | (id, n) <- Map.toList tnNodes]]
     prettyStats  = T.unlines $ [" msgs sent: "      <> show tnMsgCount,
                                 " txs replicated: " <> show (length txsReplicated),
                                 " common prefix: "  <> show (length $ longestCommonPrefix $ nodePrefixes tn),

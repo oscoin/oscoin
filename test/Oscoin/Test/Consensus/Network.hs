@@ -4,10 +4,12 @@ module Oscoin.Test.Consensus.Network
     , TestNetwork(..)
     , runNetwork
     , networkNonTrivial
+    , initNetwork
     , testableLongestChain
-    , testableNodeAddr
     , testableIncludedTxs
     , testableShow
+
+    , DummyNodeId(..)
 
     , Msg(TxMsg)
 
@@ -22,23 +24,16 @@ module Oscoin.Test.Consensus.Network
 
 import           Oscoin.Prelude hiding (log, show)
 
-import           Oscoin.Test.Consensus.Node
 import           Oscoin.Test.Crypto
 import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Oscoin.Consensus (ValidationError)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
-                 ( Blockchain
-                 , blocks
-                 , showBlockDigest
-                 , showChainDigest
-                 , unsafeToBlockchain
-                 )
+                 (Blockchain, blocks, showBlockDigest, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block
                  , BlockHash
-                 , Score
                  , Sealed
                  , blockData
                  , blockHash
@@ -51,36 +46,45 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block.Abstract as Abstract
-import qualified Oscoin.Storage.Block.Pure as Pure
-import           Oscoin.Storage.State.Class (MonadStateStore)
 import           Oscoin.Time
 
+import           Test.Oscoin.DummyLedger
+import           Test.QuickCheck hiding (sample)
+
 import           Codec.Serialise (Serialise)
+import qualified Data.Hashable as Hashable
 import           Data.List (unlines)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import           Formatting (left, right, sformat, shown, stext, (%), (%.))
 import qualified Formatting as F
-import           Lens.Micro ((^.))
 import           System.Random
 import           System.Random.Shuffle (shuffle')
 import           Text.Show (Show(..))
 
+
+-- DummyNodeId  ---------------------------------------------------------------
+
+newtype DummyNodeId = DummyNodeId Word8
+    deriving (Eq, Ord, Num, Hashable.Hashable)
+
+deriving instance (HasHashing c, Hashable c Word8) => Hashable c DummyNodeId
+
+instance Show DummyNodeId where
+    show (DummyNodeId x) = show x
+
+instance Arbitrary DummyNodeId where
+    arbitrary = DummyNodeId <$> arbitrary
+
 -- TestableNode ----------------------------------------------------------------
 
-class
-    ( MonadMempool c DummyTx m
-    , MonadStateStore c DummyState m
-    , HasTestNodeState c s a
-    , LiftTestNodeT c s m
-    ) => TestableNode c s m a | a -> m, m -> a
-  where
-    testableInit         :: TestNetwork c s b -> TestNetwork c s a
-
-    testableTick         :: Timestamp -> m (Maybe (Block c DummyTx (Sealed c s)))
-    testableRun          :: a -> m b -> (b, a)
-    testableScore        :: a -> Blockchain c DummyTx s -> Score
+class (MonadMempool c DummyTx m) => TestableNode c s m a | a -> m, m -> a, a -> s where
+    testableInit :: DummyNodeId -> a
+    testableTick :: Timestamp -> m (Maybe (Block c DummyTx (Sealed c s)))
+    testableRun :: a -> m b -> (b, a)
+    testableBlockStore :: Abstract.BlockStore c DummyTx s m
+    testableBestChain :: a -> Blockchain c DummyTx s
 
 testableLongestChain :: TestableNode c s m a => a -> [BlockHash c]
 testableLongestChain =
@@ -88,9 +92,6 @@ testableLongestChain =
     . toNewestFirst
     . blocks
     . testableBestChain
-
-testableNodeAddr :: forall c s m a. TestableNode c s m a => a -> DummyNodeId
-testableNodeAddr nodeState = tnsNodeId $ nodeState ^. testNodeStateL @c
 
 testableIncludedTxs :: TestableNode c s m a => a -> [DummyTx]
 testableIncludedTxs =
@@ -100,12 +101,6 @@ testableIncludedTxs =
 
 testableShow :: (HasHashing c, TestableNode c s m a) => a -> Text
 testableShow = showChainDigest . testableBestChain
-
-testableBestChain :: TestableNode c s m a => a -> Blockchain c DummyTx s
-testableBestChain nodeState =
-    let blockStore = nodeState ^. testNodeStateL . tnsBlockstoreL
-     in unsafeToBlockchain $ Pure.getBlocks 10000 blockStore
-     -- XXX(alexis): Don't use a magic number.
 
 -- Msg ------------------------------------------------------------------------
 
@@ -178,6 +173,12 @@ instance (IsCrypto c, Serialise s) => Show (TestNetwork c s a) where
 prettyPartitions :: Partitions -> Text
 prettyPartitions parts =
     T.pack $ show $ Map.toList parts
+
+
+initNetwork :: TestableNode c s m a => TestNetwork c s b -> TestNetwork c s a
+initNetwork tn =
+    tn { tnNodes = Map.mapWithKey (\nodeId _ -> testableInit nodeId) (tnNodes tn) }
+
 
 -- | Run the network simulation.
 runNetwork
@@ -259,13 +260,13 @@ applyMessage
     -> Msg c s
     -> m [Msg c s]
 applyMessage _ _ _ msg@(TxMsg tx) = do
-    (blockStoreReader, _) <- getTestBlockStore
+    let (blockStoreReader, _) = testableBlockStore
     result <- Storage.applyTx blockStoreReader tx
     pure $ case result of
         Storage.Applied _ -> [msg]
         _                 -> []
 applyMessage config to validateBasic msg@(BlockMsg blk) = do
-    (blockStoreReader, blockStoreWriter) <- getTestBlockStore
+    let (blockStoreReader, blockStoreWriter) = testableBlockStore
     -- NOTE (adn): We are bypassing the protocol at the moment, but we
     -- probably shouldn't.
     let insertBlock = Abstract.insertBlock blockStoreWriter
@@ -281,7 +282,7 @@ applyMessage config to validateBasic msg@(BlockMsg blk) = do
   where
     parentHash = blockPrevHash $ blockHeader blk
 applyMessage _ _ _ (ReqBlockMsg from bh) = do
-    (blockStoreReader, _) <- getTestBlockStore
+    let (blockStoreReader, _) = testableBlockStore
     mblk <- Abstract.lookupBlock blockStoreReader bh
     pure . maybeToList . map (ResBlockMsg from) $ mblk
 applyMessage config to validate (ResBlockMsg _ blk) =

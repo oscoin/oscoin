@@ -57,7 +57,7 @@ import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Telemetry.Metrics as Metrics
 import           Oscoin.Time
 
-import           Oscoin.Test.Consensus.Node (DummyNodeId, DummySeal)
+import           Oscoin.Test.Consensus.Network (DummyNodeId)
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 
@@ -97,6 +97,8 @@ newtype Session c a = Session (ReaderT (NodeHandle c) Wai.Session a)
 
 instance MonadFail (Session c) where
     fail = assertFailure
+
+type DummySeal = Text
 
 -- | Node handle for API tests.
 type Node c = Node.NodeT c (API.RadTx c) (Rad.Env c) DummySeal DummyNodeId IO
