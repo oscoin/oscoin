@@ -5,7 +5,7 @@ module Oscoin.Node.Trans
     , runNodeT
     , Config(..)
     , Handle(..)
-    , withBlockStore
+    , getBlockStoreReader
     ) where
 
 import           Oscoin.Prelude
@@ -92,13 +92,12 @@ instance ( Ord (Hash c)
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-withBlockStore
-    :: MonadIO m
-    => (Abstract.BlockStoreReader c tx s IO -> IO b)
-    -> NodeT c tx st s i m b
-withBlockStore f = do
+getBlockStoreReader
+    :: (MonadIO m, MonadIO n)
+    => NodeT c tx st s i n (Abstract.BlockStoreReader c tx s m)
+getBlockStoreReader = do
     bs <- asks hBlockStore
-    liftIO $ f bs
+    pure $ Abstract.hoistBlockStoreReader liftIO bs
 
 instance MonadClock m => MonadClock (NodeT c tx st s i m)
 
