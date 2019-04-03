@@ -1,10 +1,10 @@
-module Oscoin.Test.P2P.Transport (tests, props) where
+module Test.Oscoin.P2P.Transport (tests, props) where
 
 import           Oscoin.Prelude
 
 import qualified Oscoin.P2P.Transport as Transport
 
-import           Oscoin.Test.P2P.Helpers
+import           Test.Oscoin.P2P.Helpers
 
 import           Codec.Serialise (Serialise)
 import qualified Data.ByteString.Lazy as LBS
@@ -18,14 +18,14 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
-tests = testGroup "Oscoin.Test.P2P.Transport"
+tests = testGroup "Test.Oscoin.P2P.Transport"
     [ testProperty "prop_framed"    prop_framed
     , testProperty "prop_streaming" prop_streaming
     ]
 
 -- | For GHCi use.
 props :: IO Bool
-props = checkParallel $ Group "Oscoin.Test.P2P.Transport"
+props = checkParallel $ Group "Test.Oscoin.P2P.Transport"
     [ ("prop_framed",    prop_framed)
     , ("prop_streaming", prop_streaming)
     ]

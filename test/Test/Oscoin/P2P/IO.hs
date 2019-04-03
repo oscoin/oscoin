@@ -1,10 +1,10 @@
-module Oscoin.Test.P2P.IO (tests, props) where
+module Test.Oscoin.P2P.IO (tests, props) where
 
 import           Oscoin.Prelude
 
 import qualified Oscoin.P2P.Transport as Transport
 
-import           Oscoin.Test.P2P.Helpers
+import           Test.Oscoin.P2P.Helpers
 
 import           Codec.Serialise (Serialise)
 import           Control.Applicative (liftA3)
@@ -19,7 +19,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog
 
 tests :: TestTree
-tests = testGroup "Oscoin.Test.P2P.IO"
+tests = testGroup "Test.Oscoin.P2P.IO"
     [ testProperty "prop_streamingHappy" prop_streamingHappy
     , testProperty "prop_framedHappy"    prop_framedHappy
     , testProperty "prop_hybridHappy"    prop_hybridHappy

@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Handshake  where
+module Test.Oscoin.P2P.Handshake (tests, props) where
 
 import           Oscoin.Prelude
 
@@ -9,8 +9,8 @@ import           Oscoin.P2P.Types (NodeId, fromNodeId, mkNodeId)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
-import           Oscoin.Test.P2P.Helpers (framedPair)
 import           Oscoin.Test.Util (Condensed, condensed)
+import           Test.Oscoin.P2P.Helpers (framedPair)
 
 import qualified Crypto.Noise.Exception as Noise
 
@@ -20,7 +20,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: Dict (IsCrypto c) -> TestTree
-tests d = testGroup "Oscoin.Test.P2P.Handshake"
+tests d = testGroup "Test.Oscoin.P2P.Handshake"
     [ testProperty "prop_simple"            (prop_simple d)
     , testProperty "prop_simpleRejectsSelf" (prop_simpleRejectsSelf d)
     , testProperty "prop_secure"            (prop_secure d)
@@ -29,7 +29,7 @@ tests d = testGroup "Oscoin.Test.P2P.Handshake"
 
 -- | For GHCi use.
 props :: Dict (IsCrypto c) -> IO Bool
-props d = checkParallel $ Group "Oscoin.Test.P2P.Handshake"
+props d = checkParallel $ Group "Test.Oscoin.P2P.Handshake"
     [ ("prop_simple",            prop_simple d)
     , ("prop_simpleRejectsSelf", prop_simpleRejectsSelf d)
     , ("prop_secure",            prop_secure d)

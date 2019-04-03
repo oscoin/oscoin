@@ -1,8 +1,4 @@
-module Oscoin.Test.P2P.Types
-    ( tests
-    , props
-    )
-where
+module Test.Oscoin.P2P.Types (tests , props) where
 
 import           Oscoin.Prelude
 
@@ -25,7 +21,7 @@ import           Codec.Serialise (deserialiseOrFail, serialise)
 import           Data.IP (IP(IPv6))
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.P2P.Gen
+import           Test.Oscoin.P2P.Gen
                  (genHost, genHostname, genMsg, genMsgId, genNetwork)
 
 import           Hedgehog
@@ -35,7 +31,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: Dict (IsCrypto c) -> TestTree
-tests d = testGroup "Oscoin.Test.P2P.Types"
+tests d = testGroup "Test.Oscoin.P2P.Types"
     [ testProperty "prop_roundtripNetworkStringly"  prop_roundtripNetworkStringly
     , testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
     , testProperty "prop_roundtripHostnameStringly" prop_roundtripHostnameStringly
@@ -46,7 +42,7 @@ tests d = testGroup "Oscoin.Test.P2P.Types"
     ]
 
 props :: Dict (IsCrypto c) -> IO Bool
-props d = checkParallel $ Group "Oscoin.Test.P2P.Types"
+props d = checkParallel $ Group "Test.Oscoin.P2P.Types"
     [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly )
     , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
     , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly)

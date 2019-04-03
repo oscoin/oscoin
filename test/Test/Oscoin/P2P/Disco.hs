@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Disco
+module Test.Oscoin.P2P.Disco
     ( tests
     , props
     )
@@ -33,7 +33,7 @@ import           Network.Socket
                  )
 import           Network.Socket.ByteString (recvFrom, sendAllTo)
 
-import           Oscoin.Test.P2P.Gen (genSomeNetwork)
+import           Test.Oscoin.P2P.Gen (genSomeNetwork)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -41,14 +41,14 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
-tests = testGroup "Oscoin.Test.P2P.Disco"
+tests = testGroup "Test.Oscoin.P2P.Disco"
     [ testProperty "prop_multicast"   prop_multicast
     , testProperty "prop_staticPeers" prop_staticPeers
     , testProperty "prop_dnsSD"       prop_dnsSD
     ]
 
 props :: IO Bool
-props = checkParallel $ Group "Oscoin.Test.P2P.Disco"
+props = checkParallel $ Group "Test.Oscoin.P2P.Disco"
     [ ("prop_multicast"  , prop_multicast  )
     , ("prop_staticPeers", prop_staticPeers)
     , ("prop_dnsSD"      , prop_dnsSD      )

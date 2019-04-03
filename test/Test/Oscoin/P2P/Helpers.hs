@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Helpers
+module Test.Oscoin.P2P.Helpers
     ( framedPair
     , streamingPair
 

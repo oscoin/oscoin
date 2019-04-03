@@ -1,4 +1,4 @@
-module Oscoin.Test.P2P.Gen
+module Test.Oscoin.P2P.Gen
     ( genNetwork
     , genSomeNetwork
     , genHost
@@ -54,7 +54,7 @@ genSomeNetwork = do
             readNetwork <$> Gen.string (Range.constant 1 63) Gen.alphaNum
     case net of
         Right x -> pure x
-        Left  _ -> panic "Oscoin.Test.P2P.Disco: unexpected Left"
+        Left  _ -> panic "Test.Oscoin.P2P.Disco: unexpected Left"
 
 genHost :: Gen Host
 genHost = Gen.choice
@@ -76,7 +76,7 @@ genHostname = do
                        (toList labels)
     case hostname of
         Right x -> pure x
-        Left  _ -> panic "Oscoin.Test.P2P.Disco: unexpected Left"
+        Left  _ -> panic "Test.Oscoin.P2P.Disco: unexpected Left"
 
 genIP :: Gen IP
 genIP = Gen.choice [ ipv4, ipv6 ]

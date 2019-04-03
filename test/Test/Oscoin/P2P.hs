@@ -1,13 +1,14 @@
-module Oscoin.Test.P2P (tests, props) where
+module Test.Oscoin.P2P (tests, props) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Test.Crypto
-import qualified Oscoin.Test.P2P.Disco as Disco
-import qualified Oscoin.Test.P2P.Handshake as Handshake
-import qualified Oscoin.Test.P2P.IO as IO
-import qualified Oscoin.Test.P2P.Transport as Transport
-import qualified Oscoin.Test.P2P.Types as Types
+
+import qualified Test.Oscoin.P2P.Disco as Disco
+import qualified Test.Oscoin.P2P.Handshake as Handshake
+import qualified Test.Oscoin.P2P.IO as IO
+import qualified Test.Oscoin.P2P.Transport as Transport
+import qualified Test.Oscoin.P2P.Types as Types
 
 import           Test.Tasty
 

@@ -18,13 +18,13 @@ import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Environment as Environment
-import qualified Oscoin.Test.P2P as P2P
 import qualified Oscoin.Test.Storage.Block.Cache as BlockCache
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
 import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
 import qualified Oscoin.Test.Storage.Block.SQLite.Whitebox as SQLite.Whitebox
 import qualified Oscoin.Test.Telemetry as Telemetry
+import qualified Test.Oscoin.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
 import           Test.QuickCheck.Monadic
