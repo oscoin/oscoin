@@ -11,8 +11,7 @@ import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.Receipt (MonadReceiptStore)
 import qualified Oscoin.Storage.Receipt as ReceiptStore
-import           Oscoin.Storage.State.Class (MonadStateStore)
-import qualified Oscoin.Storage.State.Class as StateStore
+import           Oscoin.Storage.State
 import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Oscoin.Crypto.Blockchain
@@ -45,12 +44,12 @@ mineBlock bs Consensus{cMiner} eval time = do
     txs <- (map . map) snd Mempool.getTxs
     parent <- BlockStore.getTip bs
     runMaybeT $ do
-        st <- MaybeT $ StateStore.lookupState $ blockStateHash $ blockHeader parent
+        st <- MaybeT $ lookupState $ blockStateHash $ blockHeader parent
         let (blockCandidate, st', receipts) = buildBlock eval time st txs (blockHash parent)
         sealedBlock <- MaybeT $ cMiner (map toNewestFirst . BlockStore.getBlocksByDepth bs) blockCandidate
         lift $ do
             Mempool.delTxs (blockData sealedBlock)
-            StateStore.storeState st'
+            storeState st'
             for_ receipts ReceiptStore.addReceipt
             pure $ sealedBlock
 
