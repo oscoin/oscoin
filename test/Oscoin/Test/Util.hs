@@ -3,7 +3,6 @@ module Oscoin.Test.Util where
 
 import           Oscoin.Prelude
 
-import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -24,6 +23,9 @@ class Condensed a where
 
 instance Condensed () where
     condensed () = "()"
+
+instance Condensed Bool where
+    condensed = show
 
 instance Condensed Integer where
     condensed = show
@@ -86,20 +88,6 @@ instance Condensed (PrivateKey MockCrypto) where
 
 instance Show (Signature c) => Condensed (Signed c Text) where
     condensed = show
-
-showOrphans
-    :: Crypto.HasHashing c
-    => ( Blockchain c (RadTx c) s
-       , [(Blockchain c (RadTx c) s, Block c (RadTx c) (Sealed c s))]
-       )
-    -> String
-showOrphans (initialChain, orphansWithLinks) =
-    "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
-    "orphans:\n- " <> T.unpack showOrphanAndLinks
-  where
-      showOrphanAndLinks =
-          T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")
-                             $ orphansWithLinks
 
 -- The Ed's Kmett one weird trick.
 
