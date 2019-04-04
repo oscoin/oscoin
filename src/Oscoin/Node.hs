@@ -37,7 +37,8 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHash
                  )
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
-import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
+import           Oscoin.Crypto.Hash
+                 (HasHashing, Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Node.Mempool (Mempool)
@@ -69,7 +70,7 @@ import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
 withNode
-    :: (Log.Buildable (Hash c))
+    :: (Log.Buildable (Hash c), HasHashing c)
     => Config
     -> i
     -> Mempool.Handle c tx
@@ -84,7 +85,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConse
     bracket open close
   where
     open = do
-        hReceiptStore <- ReceiptStore.newHandle
+        hReceiptStore <- ReceiptStore.newReceiptStoreIO
         gen <- liftIO (BlockStore.getGenesisBlock hBlockStore)
         Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "running in"
@@ -249,7 +250,7 @@ lookupTx tx = do
     bs <- getBlockStoreReader
     BlockStore.lookupTx bs tx
 
-lookupReceipt :: (Ord (Hash c), MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
+lookupReceipt :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
 lookupReceipt txHash = ReceiptStore.lookupReceipt txHash
 
 lookupBlock

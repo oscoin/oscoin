@@ -21,9 +21,9 @@ import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Storage.ContentStore
 import           Oscoin.Storage.HashStore
-import           Oscoin.Storage.Receipt (MonadReceiptStore)
-import qualified Oscoin.Storage.Receipt as ReceiptStore
+import           Oscoin.Storage.Receipt
 import           Oscoin.Storage.State (MonadStateStore(..))
 import qualified Oscoin.Telemetry as Telemetry
 
@@ -63,16 +63,13 @@ data Handle c tx st s i = Handle
     , hMempool      :: Mempool.Handle c tx
     , hEval         :: Evaluator st tx RadicleTx.Message
     , hConsensus    :: Consensus c tx s (NodeT c tx st s i IO)
-    , hReceiptStore :: ReceiptStore.Handle c tx RadicleTx.Output
+    , hReceiptStore :: ReceiptStore c tx RadicleTx.Output IO
     }
 
 -------------------------------------------------------------------------------
 
 instance Telemetry.HasTelemetry (Handle c tx st s i) where
     telemetryStoreL = to (cfgTelemetry . hConfig)
-
-instance ReceiptStore.HasHandle c tx RadicleTx.Output (Handle c tx st s i) where
-    handleL = lens hReceiptStore (\s hReceiptStore -> s { hReceiptStore })
 
 instance ( Ord (Hash c)
          , Hashable c tx
@@ -101,9 +98,8 @@ getBlockStoreReader = do
 
 instance MonadClock m => MonadClock (NodeT c tx st s i m)
 
-instance (Ord (Hash c), MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (NodeT c tx st s i m) where
-    addReceipt = ReceiptStore.addWithHandle
-    lookupReceipt = ReceiptStore.lookupWithHandle
+instance (MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (NodeT c tx st s i m) where
+    getReceiptStore = hoistContentStore liftIO <$> asks hReceiptStore
 
 instance (MonadIO m) => MonadStateStore c st (NodeT c tx st s i m) where
     getStateStore = hoistHashStore liftIO <$> asks hStateStore

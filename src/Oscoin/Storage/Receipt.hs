@@ -1,80 +1,67 @@
--- | Provides helper functions to easily implement 'MonadReceiptStore'
--- instances for State monads and IO Reader monads with handles.
+-- | This module provides the 'ReceiptStore' interface which is a
+-- 'ContentStore' that uses the transaction hashes to identify
+-- transaction receipts.
+--
+-- For legacy reasons we also provide the 'MonadReceiptStore' type
+-- class to obtain a receipt store.
 module Oscoin.Storage.Receipt
     ( MonadReceiptStore(..)
-    , Receipt(..)
+    , addReceipt
+    , lookupReceipt
 
-    -- * State based receipt store
-    , Store
-    , HasStore(..)
-    , emptyStore
-    , addWithStore
-    , lookupWithStore
+    , ReceiptStore
+    , ReceiptMap
+    , newReceiptStoreIO
+    , mkStateReceiptStore
 
-    -- * TVar handle based receipt store
-    , Handle
-    , HasHandle(..)
-    , newHandle
-    , addWithHandle
-    , lookupWithHandle
+    -- * Re-exports from "Oscoin.Storage.ContentStore"
+    , storeContent
+    , lookupContent
+    , hoistContentStore
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
-import           Oscoin.Crypto.Hash (Hash)
-import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Storage.Receipt.Class
-
-import           Control.Concurrent.STM
-import qualified Data.Map as Map
 import           Lens.Micro
-import           Lens.Micro.Mtl
+import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Storage.ContentStore
 
--- State based MonadReceiptStore --------------------------------------
+-- | 'ContentStore' for 'Receipt's where a receipt is adressed by the
+-- hash of the transaction the receipt is for.
+type ReceiptStore c tx o m = ContentStore (Crypto.Hashed c tx) (Receipt c tx o) m
 
-type Store c tx o = Map.Map (Crypto.Hashed c tx) (Receipt c tx o)
+-- | Underlying data structure for pure versions of 'ReceiptStore'
+-- created with 'mkStateReceiptStore'.
+type ReceiptMap c tx o = Map (Crypto.Hashed c tx) (Receipt c tx o)
 
-class HasStore c tx o r where
-    storeL :: Lens' r (Store c tx o)
+newReceiptStoreIO
+    :: (MonadIO m, Crypto.HasHashing c)
+    => IO (ReceiptStore c tx o m)
+newReceiptStoreIO = newContentStoreIO receiptTx
 
-emptyStore :: Store c tx o
-emptyStore = Map.empty
+mkStateReceiptStore
+    :: (MonadState state m, Crypto.HasHashing c)
+    => Lens' state (ReceiptMap c tx o)
+    -> ReceiptStore c tx o m
+mkStateReceiptStore l = mkStateContentStore l receiptTx
 
-addWithStore
-    :: (Ord (Hash c), HasStore c tx o st, MonadState st m)
-    => Receipt c tx o -> m ()
-addWithStore receipt = do
-    store <- use storeL
-    let store' = Map.insert (receiptTx receipt) receipt store
-    storeL .= store'
 
-lookupWithStore
-    :: (Ord (Hash c), HasStore c tx o st, MonadState st m)
-    => Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
-lookupWithStore txHash =
-    Map.lookup txHash <$> use storeL
+class (Monad m) => MonadReceiptStore c tx o m | m -> tx o where
+    getReceiptStore :: m (ReceiptStore c tx o m)
 
--- TVar handle based MonadReceiptStore --------------------------------------
+    default getReceiptStore
+        :: (MonadReceiptStore c tx o m', MonadTrans t, m ~ t m')
+        => m (ReceiptStore c tx o m)
+    getReceiptStore = hoistContentStore lift <$> lift getReceiptStore
 
-type Handle c tx o = TVar (Store c tx o)
 
-class HasHandle c tx o r where
-    handleL :: Lens' r (Handle c tx o)
+addReceipt :: (MonadReceiptStore c tx o m) => Receipt c tx o -> m ()
+addReceipt receipt = do
+    cs <- getReceiptStore
+    storeContent cs receipt
 
-newHandle :: MonadIO m => m (Handle c o tx)
-newHandle = liftIO $ newTVarIO emptyStore
-
-addWithHandle
-    :: (Ord (Hash c), HasHandle c tx o r, MonadReader r m, MonadIO m)
-    => Receipt c tx o -> m ()
-addWithHandle receipt = do
-    store <- view handleL
-    liftIO $ atomically $ modifyTVar' store $ Map.insert (receiptTx receipt) receipt
-
-lookupWithHandle
-    :: (Ord (Hash c), HasHandle c tx o r, MonadReader r m, MonadIO m)
-    => Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
-lookupWithHandle txHash = do
-    store <- view handleL
-    Map.lookup txHash <$> liftIO (readTVarIO store)
+lookupReceipt :: (MonadReceiptStore c tx o m) => Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
+lookupReceipt hash = do
+    cs <- getReceiptStore
+    lookupContent cs hash
