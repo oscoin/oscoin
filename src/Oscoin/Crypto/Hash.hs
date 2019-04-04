@@ -3,6 +3,7 @@
 {-# LANGUAGE UndecidableInstances   #-}
 module Oscoin.Crypto.Hash
     ( Hashed
+    , ShortHashed
     , Hashable(..)
     , HasHashing(..)
     , toHashed
@@ -60,7 +61,8 @@ encodeAtBase :: BaseN.Base b -> Multihash -> BaseN.AtBase b
 encodeAtBase base mhash = BaseN.encodeAtBase base (Multihash.encodedBytes mhash)
 
 -- | A 'Hash'' tagged by its pre-image
-newtype Hashed crypto a = Hashed (Hash crypto)
+newtype Hashed      crypto a = Hashed      (Hash crypto)
+newtype ShortHashed crypto a = ShortHashed (ShortHash crypto)
 
 deriving instance Eq (Hash crypto) => Eq (Hashed crypto a)
 deriving instance Ord (Hash crypto) => Ord (Hashed crypto a)
@@ -72,8 +74,21 @@ deriving instance Serialise (Hash crypto) => Serialise (Hashed crypto a)
 deriving instance ToJSON (Hash crypto) => ToJSON (Hashed crypto a)
 deriving instance FromJSON (Hash crypto) => FromJSON (Hashed crypto a)
 
+deriving instance Eq (ShortHash crypto) => Eq (ShortHashed crypto a)
+deriving instance Ord (ShortHash crypto) => Ord (ShortHashed crypto a)
+deriving instance Show (ShortHash crypto) => Show (ShortHashed crypto a)
+deriving instance Semigroup (ShortHash crypto) => Semigroup (ShortHashed crypto a)
+deriving instance Monoid (ShortHash crypto) => Monoid (ShortHashed crypto a)
+deriving instance ByteArrayAccess (ShortHash crypto) => ByteArrayAccess (ShortHashed crypto a)
+deriving instance Serialise (ShortHash crypto) => Serialise (ShortHashed crypto a)
+deriving instance ToJSON (ShortHash crypto) => ToJSON (ShortHashed crypto a)
+deriving instance FromJSON (ShortHash crypto) => FromJSON (ShortHashed crypto a)
+
 class HasHashing crypto => Hashable crypto a where
-    hash :: a -> Hashed crypto a
+    hash      :: a -> Hashed crypto a
+
+    shortHash :: a -> ShortHashed crypto a
+    shortHash = ShortHashed . toShortHash . fromHashed . hash
 
 class
     ( Ord (Hash crypto)
@@ -83,7 +98,8 @@ class
 
     -- | A hash using the default hash algorithm. Used instead of 'Hashed' when
     -- the hash pre-image is not known or cannot be typed.
-    data family Hash crypto :: *
+    data family Hash      crypto :: *
+    data family ShortHash crypto :: *
 
     hashByteArray :: forall ba. ByteArray.ByteArrayAccess ba => ba -> Hash crypto
 
@@ -92,7 +108,12 @@ class
     -- | The zero hash. Also the minimum hash value.
     zeroHash  :: Hash crypto
 
-    shortHash :: Hash crypto -> ByteString
+    -- | A short hash, in the similar spirit of the BTC one.
+    -- eg. ripemd160(blake2b(x))
+    toShortHash :: Hash crypto -> ShortHash crypto
+
+    -- | A compact representation of the hash.
+    compactHash :: Hash crypto -> ByteString
 
 
 instance Sql.ToField (Hash crypto) => Sql.ToField (Hashed crypto a) where

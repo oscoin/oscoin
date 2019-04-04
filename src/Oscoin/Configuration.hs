@@ -1,3 +1,6 @@
+-- | Umbrella module which gathers all the types which, when combined,
+-- determines the particular configuration an Oscoin node is running with.
+--
 module Oscoin.Configuration
     ( ConfigPaths
     , getConfigPaths

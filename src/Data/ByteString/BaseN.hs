@@ -12,6 +12,7 @@ module Data.ByteString.BaseN
     , Base16
     , Base58
     , Base64
+    , Base32z
 
     -- * Compact Representation
     , AtBaseCompact
@@ -38,6 +39,7 @@ module Data.ByteString.BaseN
     , encodeBase16
     , encodeBase58
     , encodeBase64
+    , encodeBase32z
     , encodeAtBase
 
     -- * Decoding Bytes
@@ -50,6 +52,7 @@ module Data.ByteString.BaseN
     , decodeBase64
     , decodeBase64Either
     , decodeBase64Lenient
+    , decodeBase32z
     , decodeAtBase
     , decodeAtBaseEither
 
@@ -92,6 +95,7 @@ import qualified Data.Aeson.Encoding as JSON
 import           Data.Bifunctor (bimap, first, second)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Base32.Z as Base32z
 import qualified Data.ByteString.Base58 as Base58
 import qualified Data.ByteString.Base64 as Base64
 import           Data.ByteString.Builder (Builder)
@@ -118,6 +122,7 @@ data Base (a :: Nat) where
     Base16 :: Base 16
     Base58 :: Base 58
     Base64 :: Base 64
+    Base32 :: Base 32
 
 -- | A 'ByteString' encoded at a specific base.
 newtype AtBase (b :: Nat) = BaseN { fromAtBase :: ByteString }
@@ -154,10 +159,11 @@ instance (ValidBase b, KnownNat b) => FromJSON (AtBase b) where
 instance ToJSONKey (AtBase b)
 instance (ValidBase b, KnownNat b) => FromJSONKey (AtBase b)
 
-type Base2  = AtBase  2
-type Base16 = AtBase 16
-type Base58 = AtBase 58
-type Base64 = AtBase 64
+type Base2   = AtBase  2
+type Base16  = AtBase 16
+type Base58  = AtBase 58
+type Base64  = AtBase 64
+type Base32z = AtBase 32
 
 -- Compact ---------------------------------------------------------------------
 
@@ -221,12 +227,17 @@ encodeBase64 :: ByteString -> AtBase 64
 encodeBase64 = BaseN . Base64.encode
 {-# INLINE encodeBase64 #-}
 
+encodeBase32z :: ByteString -> AtBase 32
+encodeBase32z = BaseN . Base32z.encode
+{-# INLINE encodeBase32z #-}
+
 -- | Encode at a base supplied at runtime.
 encodeAtBase :: Base b -> ByteString -> AtBase b
 encodeAtBase Base2  = BaseN
 encodeAtBase Base16 = encodeBase16
 encodeAtBase Base58 = encodeBase58
 encodeAtBase Base64 = encodeBase64
+encodeAtBase Base32 = encodeBase32z
 
 -- $decodingbytes
 -- Decode (presumed to be) base-n encoded 'ByteString's to their original
@@ -266,6 +277,13 @@ decodeBase64Lenient :: ByteString -> ByteString
 decodeBase64Lenient = Base64.decodeLenient
 {-# INLINE decodeBase64Lenient #-}
 
+decodeBase32z :: ByteString -> Maybe ByteString
+decodeBase32z = either (const Nothing) pure . decodeBase32zEither
+
+decodeBase32zEither :: ByteString -> Either String ByteString
+decodeBase32zEither = Base32z.decode
+{-# INLINE decodeBase32zEither #-}
+
 class DecodeBase (b :: Nat) where
     decodeAtBase       :: proxy b -> ByteString -> Maybe ByteString
     decodeAtBaseEither :: proxy b -> ByteString -> Either String ByteString
@@ -291,6 +309,14 @@ instance DecodeBase 58 where
 instance DecodeBase 64 where
     decodeAtBase       = const decodeBase64
     decodeAtBaseEither = const decodeBase64Either
+    {-# INLINE decodeAtBase       #-}
+    {-# INLINE decodeAtBaseEither #-}
+
+-- | NOTE(adn) this is slightly problematic as Base32 and Base32z would
+-- clash here.
+instance DecodeBase 32 where
+    decodeAtBase       = const decodeBase32z
+    decodeAtBaseEither = const decodeBase32zEither
     {-# INLINE decodeAtBase       #-}
     {-# INLINE decodeAtBaseEither #-}
 
@@ -322,6 +348,12 @@ validBase64 bs = BaseN bs <$ decodeBase64 bs
 validBase64Either :: ByteString -> Either String (AtBase 64)
 validBase64Either bs = second (const $ BaseN bs) $ decodeBase64Either bs
 
+validBase32z :: ByteString -> Maybe (AtBase 32)
+validBase32z bs = BaseN bs <$ decodeBase32z bs
+
+validBase32zEither :: ByteString -> Either String (AtBase 32)
+validBase32zEither bs = second (const $ BaseN bs) $ decodeBase32zEither bs
+
 class ValidBase (b :: Nat) where
     validAtBase       :: proxy b -> ByteString -> Maybe (AtBase b)
     validAtBaseEither :: proxy b -> ByteString -> Either String (AtBase b)
@@ -347,6 +379,13 @@ instance ValidBase 58 where
 instance ValidBase 64 where
     validAtBase       = const validBase64
     validAtBaseEither = const validBase64Either
+    {-# INLINE validAtBase       #-}
+    {-# INLINE validAtBaseEither #-}
+
+-- | NOTE(adn) Same problem as 'DecodeBase'
+instance ValidBase 32 where
+    validAtBase       = const validBase32z
+    validAtBaseEither = const validBase32zEither
     {-# INLINE validAtBase       #-}
     {-# INLINE validAtBaseEither #-}
 

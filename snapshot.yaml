@@ -21,6 +21,9 @@ packages:
 - git: https://github.com/oscoin/qc-instances
   commit: e659eb65a421a91603de4d7645d370abf19aeeef
 
+- git: https://github.com/oscoin/z-base32-bytestring
+  commit: 03f644fd2b88596a08a39c0a539cf22f856a3033
+
   # 0.13.0.1
   # https://github.com/agrafix/Spock/pull/152 (Bump to stm-containers >= 1)
 - git: https://github.com/agrafix/Spock

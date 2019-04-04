@@ -119,7 +119,7 @@ deriving instance (Eq s, Eq (Hash c)) => Eq (Msg c s)
 instance HasHashing c => Show (Msg c s) where
     show (BlockMsg  blk)   = F.formatToString (F.stext % " " % F.stext) "BlockMsg" (showBlockDigest blk)
     show (TxMsg     txs)   = "TxMsg " ++ show txs
-    show (ReqBlockMsg n h) = "ReqBlockMsg " ++ "(" ++ show n ++ ") " ++ show (Crypto.shortHash h)
+    show (ReqBlockMsg n h) = "ReqBlockMsg " ++ "(" ++ show n ++ ") " ++ show (Crypto.compactHash h)
     show (ResBlockMsg n b) = "ResBlockMsg " ++ "(" ++ show n ++ ") " ++ T.unpack (showBlockDigest b)
 
 -- TestNetwork -----------------------------------------------------------------

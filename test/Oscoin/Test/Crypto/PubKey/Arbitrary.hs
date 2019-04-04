@@ -3,8 +3,10 @@
 module Oscoin.Test.Crypto.PubKey.Arbitrary (
       arbitrarySignedWith
     , arbitraryKeyPair
+    , arbitraryKeyPairFrom
     , arbitraryKeyPairs
     , arbitrarySigned
+    , withFastRandomBytes
     ) where
 
 import           Oscoin.Test.Crypto
@@ -66,6 +68,14 @@ arbitraryKeyPair
     => Gen (PublicKey c, PrivateKey c)
 arbitraryKeyPair =
     flip withFastRandomBytes generateKeyPair <$> genSeed
+
+-- | Generates a new key pair from a given 'Word64` seed.
+arbitraryKeyPairFrom
+    :: (HasHashing c, HasDigitalSignature c)
+    => Word64
+    -> Gen (PublicKey c, PrivateKey c)
+arbitraryKeyPairFrom seed =
+    pure $ withFastRandomBytes (SplitMix.mkSMGen seed) generateKeyPair
 
 -- | Generate @n@ distinct key pairs.
 arbitraryKeyPairs

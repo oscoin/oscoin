@@ -48,14 +48,20 @@ instance HasHashing MockCrypto where
     -- Nb.: `NoStrictData` due to https://ghc.haskell.org/trac/ghc/ticket/16141
     newtype Hash MockCrypto = FnvHash { fromMockHash :: FnvHash64 }
         deriving (Eq, Ord)
+    newtype ShortHash MockCrypto = ShortHash { fromShortHash :: Hash MockCrypto }
+        deriving (Eq, Ord)
 
     -- | Hash anything which is an instance of 'ByteArray' into a 'Word64' using
     -- FNV-1.
     hashByteArray = FnvHash . fnv1a_64Hash
 
     hashAlgorithm = MockHash
+
     zeroHash = FnvHash (FnvHash64 minBound)
-    shortHash (FnvHash (FnvHash64 w64)) = BS.take 7
+
+    toShortHash = ShortHash
+
+    compactHash (FnvHash (FnvHash64 w64)) = BS.take 7
                                         . BaseN.encodedBytes
                                         . BaseN.encodeBase58
                                         . toS
@@ -68,11 +74,19 @@ instance HasHashing MockCrypto where
 ------------------------------------------------------------------------------}
 
 instance Show.Show (Hash MockCrypto) where
-    show = show . shortHash
+    show = show . compactHash
 
 instance Serialise (Hash MockCrypto) where
     encode (FnvHash (FnvHash64 w64)) = encode w64
     decode = FnvHash . FnvHash64 <$> decode
+
+instance Serialise (ShortHash MockCrypto) where
+    encode = encode . fromShortHash
+    decode = ShortHash <$> decode
+
+instance ByteArrayAccess (ShortHash MockCrypto) where
+    length (ShortHash h)          = length h
+    withByteArray (ShortHash h) f = withByteArray h f
 
 instance ByteArrayAccess (Hash MockCrypto) where
     length (FnvHash (FnvHash64 w64)) = length
@@ -96,7 +110,7 @@ instance Hashable MockCrypto Text where
     hash = toHashed . hashByteArray . encodeUtf8
 
 instance H.Hashable (Hash MockCrypto) where
-    hashWithSalt salt = H.hashWithSalt salt . shortHash
+    hashWithSalt salt = H.hashWithSalt salt . compactHash
 
 instance ToJSON (Hash MockCrypto) where
     toJSON (FnvHash (FnvHash64 w64)) = toJSON . T.pack . show $ w64

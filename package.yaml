@@ -30,6 +30,7 @@ library:
     - base16-bytestring
     - base58-bytestring
     - base64-bytestring
+    - z-base32-bytestring
     - binary
     - bytestring
     - cacophony >= 0.10.1

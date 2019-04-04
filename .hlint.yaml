@@ -43,3 +43,4 @@
 - ignore: {name: Redundant $}
 - ignore: {name: Avoid reverse}
 - ignore: {name: Use print}
+- ignore: {name: Use camelCase}

@@ -58,7 +58,7 @@ instance Condensed a => Condensed [a] where
     condensed xs = "[" <> T.intercalate "," (map condensed xs) <> "]"
 
 instance Crypto.HasHashing c => Condensed (BlockHash c) where
-    condensed h = F.sformat F.string (C8.unpack . Crypto.shortHash $ h)
+    condensed h = F.sformat F.string (C8.unpack . Crypto.compactHash $ h)
 
 instance Crypto.HasHashing c => Condensed (Block c tx s) where
     condensed = showBlockDigest
@@ -67,7 +67,7 @@ instance Crypto.HasHashing c => Condensed (Blockchain c tx s) where
     condensed = showChainDigest
 
 instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
-    condensed = decodeUtf8 . Crypto.shortHash . Crypto.fromHashed
+    condensed = decodeUtf8 . Crypto.compactHash . Crypto.fromHashed
 
 instance Condensed (PublicKey Crypto) where
     condensed = show

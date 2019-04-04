@@ -9,11 +9,13 @@ import           Oscoin.Prelude
 import qualified Prelude
 
 import           Codec.Serialise
+import qualified Codec.Serialise as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
 import qualified Codec.Serialise.Multihash as Multihash.CBOR
 import           Control.Monad.Fail (fail)
 import           Crypto.Data.Auth.Tree.Class (MerkleHash(..))
 import qualified Crypto.Data.Auth.Tree.Cryptonite as Cryptonite
-import           Crypto.Hash (Blake2b_256(..), Digest)
+import           Crypto.Hash (Blake2b_256(..), Digest, RIPEMD160(..))
 import qualified Crypto.Hash as Crypto
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import           Data.ByteArray (ByteArrayAccess, convert)
@@ -56,15 +58,25 @@ instance HasHashing Crypto where
         Hash { fromHash :: Digest (HashAlgorithm Crypto) }
         deriving (Eq, Ord, ByteArrayAccess)
 
+    newtype ShortHash Crypto =
+        ShortHash { fromShortHash :: Digest RIPEMD160 }
+        deriving (Eq, Ord, ByteArrayAccess)
+
     hashByteArray = Hash . Crypto.hash
 
     hashAlgorithm = Blake2b_256
+
+    toShortHash h = ShortHash
+                  . Crypto.hash @ByteString @RIPEMD160
+                  . ByteArray.convert @(Crypto.Digest (HashAlgorithm Crypto)) @ByteString
+                  . fromHash
+                  $ h
 
     zeroHash = Hash . fromJust $
         Crypto.digestFromByteString @(HashAlgorithm Crypto) @ByteString
             (ByteArray.zero (hashDigestSize_ (Proxy @(HashAlgorithm Crypto))))
 
-    shortHash = shortHashRealWorld
+    compactHash = compactHashRealWorld
 
 {------------------------------------------------------------------------------
   Instances galore
@@ -118,6 +130,14 @@ instance Multihashable (HashAlgorithm Crypto) => Serialise (Hash Crypto) where
     encode = Multihash.CBOR.encode . fromHash
     decode = Hash <$> Multihash.CBOR.decode
 
+instance Serialise (ShortHash Crypto) where
+    encode = CBOR.encodeBytes . convert . fromShortHash
+    decode = do
+        mbDigest <- Crypto.digestFromByteString @RIPEMD160 @ByteString <$> CBOR.decode
+        case mbDigest of
+          Nothing  -> fail "error decoding ShortHash Crypto: not a valid digest."
+          Just dig -> pure (ShortHash dig)
+
 instance Multihashable (HashAlgorithm Crypto) => FromHttpApiData (Hash Crypto) where
     parseQueryParam =
         bimap T.pack Hash . decodeAtBase BaseN.Base58 . encodeUtf8
@@ -160,8 +180,8 @@ hashBlockSize_ :: forall proxy a. Crypto.HashAlgorithm a => proxy a -> Int
 hashBlockSize_ _ = Crypto.hashBlockSize (Prelude.undefined :: a)
 
 -- | The first 7 bytes of the base-58 encoded hash.
-shortHashRealWorld :: Hash Crypto -> ByteString
-shortHashRealWorld (Hash d) =
+compactHashRealWorld :: Hash Crypto -> ByteString
+compactHashRealWorld (Hash d) =
       BS.take 7
     . BaseN.encodedBytes
     . BaseN.encodeBase58

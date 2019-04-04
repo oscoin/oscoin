@@ -23,6 +23,7 @@ import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
 import qualified Oscoin.Test.Storage.Block.SQLite.Blackbox as SQLite.Blackbox
 import qualified Oscoin.Test.Storage.Block.SQLite.Whitebox as SQLite.Whitebox
 import qualified Oscoin.Test.Telemetry as Telemetry
+import qualified Test.Oscoin.Crypto.Address as Address
 import qualified Test.Oscoin.P2P as P2P
 
 import           Test.QuickCheck.Instances ()
@@ -42,6 +43,7 @@ tests d@Dict config = testGroup "Oscoin"
     , testGroup      "CLI"                            CLI.tests
     , testProperty   "Mempool"                        (testOscoinMempool d)
     , Consensus.tests d config
+    , testGroup      "Address"                        (Address.tests d)
     , testGroup      "P2P"                            (P2P.tests d)
     , testGroup      "Storage Cache"                  (BlockCache.tests d)
     , testGroup      "Storage Orphanage"              (Orphanage.tests d)
