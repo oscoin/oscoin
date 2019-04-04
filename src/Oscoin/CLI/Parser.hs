@@ -2,10 +2,6 @@ module Oscoin.CLI.Parser
     ( CLI(..)
     , execParser
     , execParserPure
-
-    -- * Exposed parsers
-    , keyPathParser
-    , environmentParser
     ) where
 
 import           Oscoin.Prelude hiding (option)
@@ -13,60 +9,44 @@ import           Oscoin.Prelude hiding (option)
 import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
 
 import           Oscoin.CLI.Command
-import           Oscoin.Environment (Environment)
-import qualified Oscoin.Environment as Env
+import           Oscoin.Configuration
+                 ( ConfigPaths
+                 , Environment
+                 , Paths
+                 , environmentParser
+                 , pathsParser
+                 )
 
 import qualified Data.Text as T
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
 data CLI = CLI
-    { cliKeyPath     :: Maybe FilePath
+    { cliPaths       :: Paths
     , cliEnvironment :: Environment
     , cliCommand     :: Command
     }
 
-execParser :: IO CLI
-execParser = Options.execParser mainParserInfo
+execParser :: ConfigPaths -> IO CLI
+execParser cps = Options.execParser (mainParserInfo cps)
 
-execParserPure :: [String] -> ParserResult CLI
-execParserPure = Options.execParserPure defaultPrefs mainParserInfo
+execParserPure :: ConfigPaths -> [String] -> ParserResult CLI
+execParserPure cps = Options.execParserPure defaultPrefs (mainParserInfo cps)
 
-mainParserInfo :: ParserInfo CLI
-mainParserInfo =
-    info (helper <*> mainParser)
+mainParserInfo :: ConfigPaths -> ParserInfo CLI
+mainParserInfo cps =
+    info (helper <*> mainParser cps)
     $ progDesc "Oscoin CLI"
 
 
-mainParser :: Parser CLI
-mainParser =
-    CLI <$> keyPathParser
-        <*> environmentParser
-        <*> subparser
-            ( command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
-           <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
-            )
-
-keyPathParser :: Parser (Maybe FilePath)
-keyPathParser = optional (option str (
-                             long "keys"
-                          <> help ("The optional path to the folder containing the oscoin keys. " <>
-                                   "If not specified, defaults to a path inside the Xdg directory.")
-                          <> metavar "KEY-PATH (e.g. ~/.config/oscoin)"
-                          ))
-
-environmentParser :: Parser Environment
-environmentParser = option (maybeReader (Env.fromText . toS)) (
-                             long "environment"
-                          <> short 'e'
-                          <> help ("The environment this node is running in." <>
-                                   " One between " <>
-                                       intercalate "," (map (toS . Env.toText) Env.allEnvironments) <>
-                                   ".")
-                          <> metavar "ENV"
-                          <> value Env.Development
-                          <> showDefaultWith (toS . Env.toText)
-                    )
+mainParser :: ConfigPaths -> Parser CLI
+mainParser cps = CLI
+    <$> pathsParser cps
+    <*> environmentParser
+    <*> subparser
+        ( command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
+       <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
+        )
 
 keyPairParser :: Parser Command
 keyPairParser = subparser

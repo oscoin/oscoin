@@ -10,19 +10,16 @@ import           Oscoin.P2P.Types
                  , hostnameToDomain
                  , readHost
                  , readHostnameText
-                 , readNetwork
                  , readNodeAddr
                  , renderHost
                  , renderHostname
-                 , renderNetwork
                  )
 
 import           Codec.Serialise (deserialiseOrFail, serialise)
 import           Data.IP (IP(IPv6))
 
 import           Oscoin.Test.Crypto
-import           Test.Oscoin.P2P.Gen
-                 (genHost, genHostname, genMsg, genMsgId, genNetwork)
+import           Test.Oscoin.P2P.Gen (genHost, genHostname, genMsg, genMsgId)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -32,8 +29,7 @@ import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.P2P.Types"
-    [ testProperty "prop_roundtripNetworkStringly"  prop_roundtripNetworkStringly
-    , testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
+    [ testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
     , testProperty "prop_roundtripHostnameStringly" prop_roundtripHostnameStringly
     , testProperty "prop_roundtripHostnameDomain"   prop_roundtripHostnameDomain
     , testProperty "prop_readNodeAddr"              (prop_readNodeAddr d)
@@ -43,19 +39,13 @@ tests d = testGroup "Test.Oscoin.P2P.Types"
 
 props :: Dict (IsCrypto c) -> IO Bool
 props d = checkParallel $ Group "Test.Oscoin.P2P.Types"
-    [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly )
-    , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
+    [ ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
     , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly)
     , ("prop_roundtripHostnameDomain"  , prop_roundtripHostnameDomain  )
     , ("prop_readNodeAddr"             , prop_readNodeAddr d           )
     , ("prop_roundtripMsgSerialise"    , prop_roundtripMsgSerialise d  )
     , ("prop_roundtripMsgIdSerialise"  , prop_roundtripMsgIdSerialise d)
     ]
-
-prop_roundtripNetworkStringly :: Property
-prop_roundtripNetworkStringly = property $ do
-    net <- forAll genNetwork
-    tripping net renderNetwork (readNetwork . toS)
 
 prop_roundtripHostStringly :: Property
 prop_roundtripHostStringly = property $ do

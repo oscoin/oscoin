@@ -1,7 +1,5 @@
 module Test.Oscoin.P2P.Gen
-    ( genNetwork
-    , genSomeNetwork
-    , genHost
+    ( genHost
     , genHostname
     , genIP
     , genMsg
@@ -18,11 +16,9 @@ import           Oscoin.P2P.Types
                  , Hostname
                  , Msg(..)
                  , MsgId(..)
-                 , Network(..)
                  , namedHost
                  , numericHost
                  , readHostnameText
-                 , readNetwork
                  )
 
 import           Data.IP (IP(..), toIPv4, toIPv6)
@@ -37,24 +33,6 @@ import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
-
-genNetwork :: Gen Network
-genNetwork = Gen.choice
-    [ pure Mainnet
-    , pure Testnet
-    , pure Devnet
-    , genSomeNetwork
-    ]
-
--- | Generate a random 'SomeNetwork'
-genSomeNetwork :: Gen Network
-genSomeNetwork = do
-    net <-
-        Gen.filter isRight $
-            readNetwork <$> Gen.string (Range.constant 1 63) Gen.alphaNum
-    case net of
-        Right x -> pure x
-        Left  _ -> panic "Test.Oscoin.P2P.Disco: unexpected Left"
 
 genHost :: Gen Host
 genHost = Gen.choice

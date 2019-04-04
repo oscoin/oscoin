@@ -1,11 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.P2P.Types
-    ( Network(Mainnet, Testnet, Devnet)
-    , renderNetwork
-    , readNetwork
-
-    , NodeId
+    ( NodeId
     , mkNodeId
     , fromNodeId
 
@@ -59,7 +55,6 @@ import           Data.Char (isAlphaNum)
 import           Data.Hashable (Hashable(..))
 import           Data.IP (IP(..))
 import           Data.Profunctor (Profunctor(dimap))
-import           Data.String (IsString(..))
 import qualified Data.Text as T
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -68,35 +63,6 @@ import qualified Generics.SOP as SOP
 import qualified Network.DNS as DNS
 import           Network.Socket (PortNumber, SockAddr)
 import qualified Network.Socket as Network
-
--- | A logical oscoin network.
-data Network =
-      Mainnet
-    | Testnet
-    | Devnet
-    | Somenet Text
-    deriving (Eq, Show)
-
-instance IsString Network where
-    fromString = either (panic . toS) identity . readNetwork
-
-renderNetwork :: Network -> Text
-renderNetwork Mainnet     = "mainnet"
-renderNetwork Testnet     = "testnet"
-renderNetwork Devnet      = "devnet"
-renderNetwork (Somenet x) = x
-
-readNetwork :: String -> Either String Network
-readNetwork "mainnet" = pure Mainnet
-readNetwork "testnet" = pure Testnet
-readNetwork "devnet"  = pure Devnet
-readNetwork xs
-  | length xs > 63           = Left "Network name longer than 63 characters"
-  | Just c <- invalidChar xs = Left $ "Invalid character in network name: " <> [c]
-  | otherwise                = Right $ Somenet (T.pack xs)
-  where
-    invalidChar = find (`elem` ("./:" :: String))
-
 
 -- | A cryptographically secure identifier for a logical peer.
 newtype NodeId c = NodeId { fromNodeId :: PublicKey c }

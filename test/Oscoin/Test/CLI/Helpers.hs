@@ -24,6 +24,7 @@ import           Oscoin.API.Client
 import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
+import qualified Oscoin.Configuration as Config
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Time as Time
@@ -53,10 +54,11 @@ runCLI
     -> IO (TestCommandState c)
 runCLI args setupState = do
     storedKeyPair <- Crypto.generateKeyPair
+    cfgPaths      <- Config.getConfigPaths
     -- We don't seem to care about overriding the location of the keys for
     -- the 'TestCommandState', as the 'HOME' env var is overwritten with a
     -- throwaway temporary directory.
-    cli <- case execParserPure args of
+    cli <- case execParserPure cfgPaths args of
         Options.Success cli -> pure cli
         Options.CompletionInvoked _ -> assertFailure "Unexpected CLI completion invoked"
         Options.Failure failure ->

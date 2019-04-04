@@ -11,12 +11,12 @@ module Oscoin.Node.Trans
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
+import           Oscoin.Configuration (Environment)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
-import           Oscoin.Environment
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Protocol as Protocol

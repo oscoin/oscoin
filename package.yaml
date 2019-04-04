@@ -99,9 +99,7 @@ executables:
     dependencies:
       - async
       - containers
-      - iproute
       - managed
-      - network
       - optparse-applicative
       - oscoin
       - semigroups

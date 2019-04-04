@@ -91,7 +91,7 @@ module Oscoin.Telemetry.Logging
 
 import           Oscoin.Prelude hiding (SrcLoc)
 
-import           Oscoin.Environment (Environment(..))
+import           Oscoin.Configuration (Environment(..))
 
 import           Control.Concurrent (ThreadId)
 import           Control.Exception.Safe (Exception, MonadMask, SomeException)

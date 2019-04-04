@@ -6,9 +6,10 @@ where
 
 import           Oscoin.Prelude hiding (retry)
 
+import           Oscoin.Configuration (Network)
 import           Oscoin.P2P.Disco (Options(..), withDisco)
 import qualified Oscoin.P2P.Disco.MDns as MDns
-import           Oscoin.P2P.Types (Network, readNodeAddr)
+import           Oscoin.P2P.Types (readNodeAddr)
 
 import           Control.Retry
 import qualified Data.Set as Set
@@ -33,7 +34,7 @@ import           Network.Socket
                  )
 import           Network.Socket.ByteString (recvFrom, sendAllTo)
 
-import           Test.Oscoin.P2P.Gen (genSomeNetwork)
+import           Test.Oscoin.Configuration.Gen (genSomeNetwork)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen

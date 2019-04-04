@@ -23,6 +23,7 @@ module Oscoin.Node
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
+import           Oscoin.Configuration (renderEnvironment)
 import           Oscoin.Consensus (Consensus(..), ValidationError)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
@@ -39,7 +40,6 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator, Receipt)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
-import qualified Oscoin.Environment as Env
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -88,7 +88,7 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConse
         gen <- liftIO (BlockStore.getGenesisBlock hBlockStore)
         Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "running in"
-                 (ftag "env" % stext) (Env.toText $ cfgEnv hConfig)
+                 (ftag "env" % stext) (renderEnvironment $ cfgEnv hConfig)
         Log.info (cfgTelemetry hConfig ^. Log.loggerL)
                  "genesis is"
                  (ftag "block_hash" % formatHash) (blockHash gen)

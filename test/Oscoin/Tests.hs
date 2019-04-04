@@ -17,7 +17,6 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
-import qualified Oscoin.Test.Environment as Environment
 import qualified Oscoin.Test.Storage.Block.Cache as BlockCache
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence
 import qualified Oscoin.Test.Storage.Block.Orphanage as Orphanage
@@ -51,7 +50,6 @@ tests d@Dict config = testGroup "Oscoin"
     , testGroup      "SQLite Storage whitebox"        (SQLite.Whitebox.tests d)
     , testBlockchain d config
     , testGroup      "Telemetry"                      (Telemetry.tests d)
-    , testGroup      "Environment"                    Environment.tests
     ]
 
 testOscoinMempool :: forall c. Dict (IsCrypto c) -> Property

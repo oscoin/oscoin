@@ -36,6 +36,7 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
+import           Oscoin.Configuration (Environment(Testing))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
@@ -46,7 +47,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
-import           Oscoin.Environment
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Protocol (runProtocol)
@@ -144,7 +144,7 @@ withNode :: IsCrypto c => NodeState c -> (NodeHandle c -> IO a) -> IO a
 withNode NodeState{..} k = do
     let env    = Testing
         logger = Log.noLogger
-    let config = Consensus.getConfig env
+    let config = Consensus.configForEnvironment env
     metricsStore <- Metrics.newMetricsStore Metrics.noLabels
     let handle = Telemetry.newTelemetryStore logger metricsStore
     let cfg = Node.Config { Node.cfgEnv = env

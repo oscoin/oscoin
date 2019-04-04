@@ -36,20 +36,18 @@ module Oscoin.P2P.Disco
 
 import           Oscoin.Prelude hiding (option)
 
+import           Oscoin.Configuration (Network, readNetwork, renderNetwork)
 import           Oscoin.Crypto (Crypto)
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import           Oscoin.P2P.Types
                  ( Host
-                 , Network
                  , NodeAddr(..)
                  , SeedAddr
                  , hostEither
                  , hostnameToDomain
                  , namedHost
                  , readHostnameText
-                 , readNetwork
                  , readNodeAddr
-                 , renderNetwork
                  )
 
 import           Data.IP

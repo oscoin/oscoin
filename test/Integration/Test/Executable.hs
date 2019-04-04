@@ -16,7 +16,7 @@ import           Network.HTTP.Client
 import           Network.HTTP.Types (statusCode)
 import           System.IO (Handle)
 import           System.IO.Temp
-import           System.Random (getStdGen, randomRIO, randoms)
+import           System.Random (getStdGen, randomRIO, randomRs)
 
 import           Test.Sandbox
 import           Test.Tasty
@@ -43,7 +43,7 @@ randomPorts = Ports
 
 withOscoinExe :: Ports -> (Handle -> Handle -> Assertion) -> Assertion
 withOscoinExe Ports{..} f = do
-    randomNetwork <- take 63 . randoms <$> getStdGen
+    randomNetwork <- take 63 . randomRs ('a', 'z') <$> getStdGen
 
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
@@ -67,6 +67,8 @@ withOscoinExe Ports{..} f = do
                                  , show ekgPort
                                  , "--blockstore"
                                  , dbPath
+                                 , "--genesis"
+                                 , "data/genesis.yaml"
                                  ] defaultSandboxOptions $
                 \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
 
