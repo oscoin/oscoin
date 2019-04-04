@@ -39,7 +39,7 @@ import qualified Oscoin.API.Types as API
 import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
+import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
                  (emptyGenesisBlock, genesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
@@ -51,7 +51,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)
 import           Oscoin.Protocol (runProtocol)
-import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
+import           Oscoin.Storage.Block.Memory
 import           Oscoin.Storage.HashStore
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
@@ -167,21 +167,21 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \blkStore@(bsh, _privateAPI) ->
-        runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock -> do
-            stateStore <- liftIO $ newHashStoreIO
-            liftIO $ storeHashContent stateStore statestoreState
+    blkStore@(bsh, _privateAPI) <- newBlockStoreIO (blocks' blockstoreState)
+    runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock -> do
+        stateStore <- liftIO $ newHashStoreIO
+        liftIO $ storeHashContent stateStore statestoreState
 
-            Node.withNode
-                cfg
-                42
-                mph
-                stateStore
-                bsh
-                dispatchBlock
-                Rad.txEval
-                (trivialConsensus "")
-                k
+        Node.withNode
+            cfg
+            42
+            mph
+            stateStore
+            bsh
+            dispatchBlock
+            Rad.txEval
+            (trivialConsensus "")
+            k
 
 liftNode :: Node c a -> Session c a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
