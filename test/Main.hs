@@ -17,6 +17,7 @@ import qualified Test.Data.Conduit.Serialise
 import qualified Test.Data.Sequence.Circular
 import qualified Test.Oscoin.API
 import qualified Test.Oscoin.Configuration
+import qualified Test.Oscoin.Crypto.Blockchain.GeneratorsTest
 import qualified Test.Oscoin.Crypto.Hash
 import qualified Test.Oscoin.Crypto.PubKey
 import qualified Test.Oscoin.Node.Mempool
@@ -36,9 +37,10 @@ main = do
         , Integration.tests
         , Test.Control.Concurrent.RateLimit.tests
         , Test.Data.Conduit.Serialise.tests
-        , Test.Oscoin.Configuration.tests
         , Test.Data.Sequence.Circular.tests
         , Test.Oscoin.API.tests crypto
+        , Test.Oscoin.Configuration.tests
+        , Test.Oscoin.Crypto.Blockchain.GeneratorsTest.tests crypto
         , Test.Oscoin.Crypto.Hash.tests crypto
         , Test.Oscoin.Crypto.PubKey.tests crypto
         , Test.Oscoin.Node.Mempool.tests crypto

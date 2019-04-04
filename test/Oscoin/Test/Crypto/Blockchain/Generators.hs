@@ -2,11 +2,12 @@ module Oscoin.Test.Crypto.Blockchain.Generators
     ( ForkParams(..)
 
       -- * Generating generic chains
+    , genBlockchain
     , genBlockchainFrom
     , genOrphanChainsFrom
 
       -- * Generating Nakamoto chains
-    , genNakamotoBlockchainFrom
+    , genNakamotoBlockchain
     ) where
 
 import           Oscoin.Prelude
@@ -20,10 +21,39 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
-                 (genBlockFrom, genNakamotoBlockFrom)
 import           Test.QuickCheck
+
+-- | Generates a 'Blockchain' starting with the provided genesis block.
+genBlockchainFrom
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       )
+    => Block c tx (Sealed c s)
+    -> Gen (Blockchain c tx s)
+genBlockchainFrom genBlock = sized $ \n ->
+    foldM (\chain _ -> do
+               newTip <- genBlockFrom (tip chain)
+               pure (newTip |> chain)
+          ) (fromGenesis genBlock) [1 .. n - 1]
+
+
+-- | 'genBlockchainFrom' with an arbitrary empty genesis block
+genBlockchain
+    :: ( IsCrypto c
+       , Serialise tx
+       , Serialise s
+       , Arbitrary tx
+       , Arbitrary s
+       )
+    => Gen (Blockchain c tx s)
+genBlockchain = do
+    ts <- arbitrary
+    seal <- arbitrary
+    genBlockchainFrom (sealBlock seal (emptyGenesisBlock ts))
 
 
 data ForkParams = ForkParams
@@ -55,23 +85,6 @@ genChainEvents inputChainSize ForkParams{..} = do
     dontFork <- vectorOf (inputChainSize - fromIntegral forkNumber) (pure DoNotFork)
     shuffle (doFork ++ dontFork)
 
-
--- | Generates a 'Blockchain' from the input 'Block' (included in the resulting
--- chain).
-genBlockchainFrom
-    :: ( IsCrypto c
-       , Arbitrary tx
-       , Arbitrary s
-       , Serialise s
-       , Serialise tx
-       )
-    => Block c tx (Sealed c s)
-    -> Gen (Blockchain c tx s)
-genBlockchainFrom parentBlock = sized $ \n ->
-    foldM (\chain _ -> do
-               newTip <- genBlockFrom (tip chain)
-               pure (newTip |> chain)
-          ) (unsafeToBlockchain [parentBlock]) [1 .. n - 1]
 
 -- | Generates a bunch of chain \"candidates\" to be used in more articulated
 -- tests wanting to assess the resilience of fork selection. Here is the
@@ -161,22 +174,27 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
                     [missingBlock] -> go xs ((orphanChain, missingBlock) : acc)
                     _ -> go xs acc
 
-{------------------------------------------------------------------------------
-  Generating Nakamoto's chains
-------------------------------------------------------------------------------}
 
-genNakamotoBlockchainFrom
-    :: forall c tx.
-       ( Arbitrary tx
-       , Serialise tx
-       , IsCrypto c
-       )
-    => Block c tx (Sealed c Nakamoto.PoW)
-    -> Gen (Blockchain c tx Nakamoto.PoW)
-genNakamotoBlockchainFrom parentBlock = sized $ \n ->
-    go (parentBlock :| []) n
+-- | Generate a 'Blockchain' that is valid under
+-- 'Nakamoto.validateFull'.
+--
+-- In particular this means that the difficulty is correctly computed
+-- for the blockchain. However, the proof-of-work (i.e. the right
+-- nonce) is not computed.
+genNakamotoBlockchain
+    :: forall c tx. (IsCrypto c, Serialise tx, Arbitrary tx)
+    => Gen (Blockchain c tx Nakamoto.PoW)
+genNakamotoBlockchain = do
+    blockTimestamp <- arbitrary
+    genesisSeal <- arbitrary
+    let genHeader = emptyHeader
+            { blockSeal = genesisSeal
+            , blockTimestamp
+            , blockTargetDifficulty = Nakamoto.minDifficulty
+            }
+    let genBlock = mkBlock genHeader []
+    sized $ \n -> go (genBlock :| []) n
   where
-
     go :: NonEmpty (Block c tx (Sealed c Nakamoto.PoW))
        -> Int
        -> Gen (Blockchain c tx Nakamoto.PoW)
@@ -185,4 +203,3 @@ genNakamotoBlockchainFrom parentBlock = sized $ \n ->
     go blks n = do
         blk <- genNakamotoBlockFrom blks
         go (blk <| blks) (n - 1)
-

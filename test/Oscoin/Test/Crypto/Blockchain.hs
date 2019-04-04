@@ -15,7 +15,7 @@ import           Oscoin.Crypto.Hash
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+import           Oscoin.Test.Crypto.Blockchain.Generators
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
@@ -77,7 +77,7 @@ testValidateBlock
     -> TestTree
 testValidateBlock Dict config = testGroup "Nakamoto: validateBlockchain"
     [ testProperty "Valid blockchains validate" $
-        forAllShow (arbitraryNakamotoBlockchain @c @Text) (toS . showChainDigest) $
+        forAllShow (genNakamotoBlockchain @c @Text) (toS . showChainDigest) $
             \blks -> let result = validateBlockchain Nakamoto.validateFull blks
                      in counterexample (show result) (result == Right ())
     , testProperty "Blocks bigger than the maximum size won't validate" $
