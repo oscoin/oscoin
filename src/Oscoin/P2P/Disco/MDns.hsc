@@ -36,12 +36,13 @@ module Oscoin.P2P.Disco.MDns
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Network, renderNetwork)
 import           Oscoin.P2P.Types
                  ( Host
+                 , Network
                  , domainToHostname
                  , eitherToHost
                  , numericHost
+                 , renderNetwork
                  )
 import           Oscoin.Time (Duration, seconds)
 

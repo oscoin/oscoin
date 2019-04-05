@@ -23,7 +23,7 @@ data Options = Options
     { optHost          :: IP
     , optGossipPort    :: PortNumber
     , optApiPort       :: PortNumber
-    , optDiscovery     :: P2P.Disco.Options
+    , optDiscovery     :: P2P.Disco.Options P2P.Disco.OptNetwork
     , optNoEmptyBlocks :: Bool
     , optPaths         :: Paths
     , optEnvironment   :: Environment

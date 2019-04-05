@@ -1,5 +1,7 @@
 module Test.Oscoin.P2P.Gen
-    ( genHost
+    ( genNetwork
+    , genSomeNetwork
+    , genHost
     , genHostname
     , genIP
     , genMsg
@@ -16,13 +18,16 @@ import           Oscoin.P2P.Types
                  , Hostname
                  , Msg(..)
                  , MsgId(..)
+                 , Network(Devnet, Mainnet, Testnet)
                  , namedHost
                  , numericHost
+                 , randomNetwork
                  , readHostnameText
                  )
 
 import           Data.IP (IP(..), toIPv4, toIPv6)
 import qualified Data.Text as T
+import           System.Random.SplitMix (mkSMGen)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary (arbitraryBlock)
@@ -33,6 +38,20 @@ import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
+
+genNetwork :: Gen Network
+genNetwork = Gen.choice
+    [ pure Mainnet
+    , pure Testnet
+    , pure Devnet
+    , genSomeNetwork
+    ]
+
+-- | Generate a random 'Somenet'
+genSomeNetwork :: Gen Network
+genSomeNetwork = do
+    rng <- mkSMGen <$> Gen.word64 Range.linearBounded
+    pure $ randomNetwork rng
 
 genHost :: Gen Host
 genHost = Gen.choice
@@ -54,7 +73,7 @@ genHostname = do
                        (toList labels)
     case hostname of
         Right x -> pure x
-        Left  _ -> panic "Test.Oscoin.P2P.Disco: unexpected Left"
+        Left  _ -> panic "Test.Oscoin.P2P.Gen: unexpected Left"
 
 genIP :: Gen IP
 genIP = Gen.choice [ ipv4, ipv6 ]

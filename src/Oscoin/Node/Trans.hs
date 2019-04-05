@@ -4,6 +4,7 @@ module Oscoin.Node.Trans
     ( NodeT
     , runNodeT
     , Config(..)
+    , GlobalConfig(..)
     , Handle(..)
     , getBlockStoreReader
     , getStateStore
@@ -13,7 +14,7 @@ module Oscoin.Node.Trans
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Configuration (Environment)
+import           Oscoin.Configuration (Environment, Network)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
@@ -21,6 +22,7 @@ import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.P2P.Types as P2P (Network)
 import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.ContentStore
@@ -48,10 +50,16 @@ runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
 data Config = Config
-    { cfgEnv             :: Environment
+    { cfgGlobalConfig    :: GlobalConfig
     , cfgTelemetry       :: Telemetry.Handle
     , cfgNoEmptyBlocks   :: Bool
     , cfgConsensusConfig :: Consensus.Config
+    }
+
+data GlobalConfig = GlobalConfig
+    { globalEnv             :: Environment
+    , globalLogicalNetwork  :: Network
+    , globalPhysicalNetwork :: P2P.Network
     }
 
 -- | Node handle.

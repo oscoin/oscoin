@@ -62,13 +62,7 @@ data ProtocolVersionTag =
 -- 0x03 Devnet
 -- ..
 newtype AddressType =
-    AddressType AddressTypeTag
-    deriving (Eq, Show)
-
-data AddressTypeTag =
-      AddressType_Mainnet
-    | AddressType_Testnet
-    | AddressType_Devnet
+    AddressType Network
     deriving (Eq, Show)
 
 -- | The 'AddressFormat' allows for flexibility in the 'Address' payload, i.e.
@@ -99,17 +93,3 @@ newtype AddressPayload c =
 
 newtype Checksum = Checksum { fromChecksum :: ByteString }
     deriving (Show, Eq)
-
-{------------------------------------------------------------------------------
-  Miscellanea functions
-------------------------------------------------------------------------------}
-
-configToAddressTypeTag :: Network -> Maybe AddressTypeTag
-configToAddressTypeTag = \case
-  Mainnet -> Just AddressType_Mainnet
-  Testnet -> Just AddressType_Testnet
-  Devnet  -> Just AddressType_Devnet
-  -- NOTE(adn) The 'Somenet' constructor is not exported, which makes this
-  -- pattern-match non-exhaustive.
-  _       -> Nothing
-

@@ -52,7 +52,6 @@ main = do
             case optEnvironment of
                 Production  -> Consensus.nakamotoConsensus
                 Development -> Consensus.nakamotoConsensusLenient
-                Testing     -> Consensus.nakamotoConsensusLenient
 
     keys         <- runReaderT readKeyPair (Just $ keysDir optPaths)
     nid          <- pure (mkNodeId $ fst keys)
@@ -66,6 +65,9 @@ main = do
         newMetricsStore $
             labelsFromList [("env", renderEnvironment optEnvironment)]
     let consensusConfig = Consensus.configForEnvironment optEnvironment
+
+    optDiscovery' <-
+        either (die . toS) pure =<< P2P.Disco.evalOptions optDiscovery
 
     res :: Either SomeException () <-
           try
@@ -86,11 +88,15 @@ main = do
                             consensusConfig
 
             node <- managed $
-                let config = mkNodeConfig optEnvironment
-                                          telemetry
-                                          optNoEmptyBlocks
-                                          consensusConfig
-                 in withNode config
+                let
+                    config =
+                        mkNodeConfig optEnvironment
+                                     (P2P.Disco.optNetwork optDiscovery')
+                                     telemetry
+                                     optNoEmptyBlocks
+                                     consensusConfig
+                 in
+                    withNode config
                              nid
                              mem
                              stStore
@@ -104,7 +110,7 @@ main = do
                     instr :: HasCallStack => P2P.Disco.DiscoEvent -> IO ()
                     instr = Telemetry.emit telemetry . Telemetry.DiscoEvent
                  in
-                    P2P.Disco.withDisco instr optDiscovery $ Set.fromList
+                    P2P.Disco.withDisco instr optDiscovery' $ Set.fromList
                         [ MDns.Service "gossip" MDns.TCP optHost optGossipPort
                         , MDns.Service "http"   MDns.TCP optHost optApiPort
                         ]
@@ -127,10 +133,14 @@ main = do
 
     either (const exitFailure) (const exitSuccess) res
   where
-    mkNodeConfig env telemetryHandle neb config = Node.Config
-        { Node.cfgEnv = env
-        , Node.cfgTelemetry = telemetryHandle
-        , Node.cfgNoEmptyBlocks = neb
+    mkNodeConfig env net telemetryHandle neb config = Node.Config
+        { Node.cfgGlobalConfig    = Node.GlobalConfig
+            { Node.globalEnv             = env
+            , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
+            , Node.globalPhysicalNetwork = net
+            }
+        , Node.cfgTelemetry       = telemetryHandle
+        , Node.cfgNoEmptyBlocks   = neb
         , Node.cfgConsensusConfig = config
         }
 

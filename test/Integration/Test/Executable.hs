@@ -79,7 +79,7 @@ testStartsOK = do
         -- TODO(adn) In the future we want a better handshake string here.
         actual <- C8.hGet stdoutHandle 100
         assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
-                   ("running in" `C8.isInfixOf` actual)
+                   ("node starting" `C8.isInfixOf` actual)
 
 testMinerOK :: Assertion
 testMinerOK = do

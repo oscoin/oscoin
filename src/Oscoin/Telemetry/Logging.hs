@@ -207,14 +207,12 @@ styleForEnvironment :: Environment -> StyleFormatter
 styleForEnvironment = \case
     Production  -> StyleFormatter False NoLayout
     Development -> StyleFormatter True HumanReadable
-    Testing     -> defaultStyle
 
 -- | The conventional 'Severity' for an 'Environment'.
 severityForEnvironment :: Environment -> Severity
 severityForEnvironment = \case
     Production  -> Info
     Development -> Debug
-    Testing     -> Err
 
 -- | The conventional 'Config' for an 'Environment'.
 configForEnvironment :: Environment -> Config

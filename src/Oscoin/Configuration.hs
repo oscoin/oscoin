@@ -15,14 +15,14 @@ module Oscoin.Configuration
     , readEnvironmentText
     , environmentParser
 
-    , Network (Mainnet, Testnet, Devnet)
+    , Network(..)
+    , allNetworks
     , renderNetwork
-    , readNetwork
+    , readNetworkText
     ) where
 
 import           Oscoin.Prelude hiding (option, (<.>))
 
-import           Data.String (IsString(..))
 import           Options.Applicative
 import           Paths_oscoin (getDataDir)
 import           System.Directory (XdgDirectory(..), getXdgDirectory)
@@ -83,7 +83,7 @@ pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
         )
 
 -- | Deployment environment
-data Environment = Production | Development | Testing
+data Environment = Production | Development
     deriving (Show, Eq, Enum, Bounded)
 
 -- | A list of all the possible environments.
@@ -91,17 +91,15 @@ allEnvironments :: [Environment]
 allEnvironments = [minBound .. maxBound]
 
 renderEnvironment :: Environment -> Text
-renderEnvironment Development = "development"
 renderEnvironment Production  = "production"
-renderEnvironment Testing     = "testing"
+renderEnvironment Development = "development"
 
 readEnvironment :: String -> Either String Environment
 readEnvironment = readEnvironmentText . toS
 
 readEnvironmentText :: Text -> Either String Environment
-readEnvironmentText "development" = pure Development
 readEnvironmentText "production"  = pure Production
-readEnvironmentText "testing"     = pure Testing
+readEnvironmentText "development" = pure Development
 readEnvironmentText x             = Left . toS $ "Unknown environment: " <> x
 
 environmentParser :: Parser Environment
@@ -118,25 +116,18 @@ data Network =
       Mainnet
     | Testnet
     | Devnet
-    | Somenet Text
-    deriving (Eq, Show)
+    deriving (Eq, Enum, Bounded, Show, Read)
 
-instance IsString Network where
-    fromString = either (panic . toS) identity . readNetwork
+allNetworks :: [Network]
+allNetworks = [minBound .. maxBound]
 
 renderNetwork :: Network -> Text
-renderNetwork Mainnet     = "mainnet"
-renderNetwork Testnet     = "testnet"
-renderNetwork Devnet      = "devnet"
-renderNetwork (Somenet x) = x
+renderNetwork Mainnet = "mainnet"
+renderNetwork Testnet = "testnet"
+renderNetwork Devnet  = "devnet"
 
-readNetwork :: String -> Either String Network
-readNetwork "mainnet" = pure Mainnet
-readNetwork "testnet" = pure Testnet
-readNetwork "devnet"  = pure Devnet
-readNetwork xs
-  | length xs > 63           = Left "Network name longer than 63 characters"
-  | Just c <- invalidChar xs = Left $ "Invalid character in network name: " <> [c]
-  | otherwise                = Right $ Somenet (toS xs)
-  where
-    invalidChar = find (`elem` ("./:" :: String))
+readNetworkText :: Text -> Either String Network
+readNetworkText "mainnet" = pure Mainnet
+readNetworkText "testnet" = pure Testnet
+readNetworkText "devnet"  = pure Devnet
+readNetworkText x         = Left . toS $ "Unkown network: " <> x

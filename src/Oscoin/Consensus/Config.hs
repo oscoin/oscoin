@@ -28,10 +28,7 @@ defaultConfig = Config
 configForEnvironment :: Environment -> Config
 configForEnvironment = \case
     Production  -> defaultConfig
-    Testing     -> defaultConfig
+    Development -> defaultConfig
         { maxBlockSize      = 128000  -- 128kb
         , mutableChainDepth = 20      -- blocks
-        }
-    Development -> defaultConfig
-        { maxBlockSize      = 512000  -- 512kb
         }

@@ -43,10 +43,6 @@ import qualified Formatting as F
     Creating an Address
 ------------------------------------------------------------------------------}
 
-data AddressCreationError =
-    UnsupportedConfiguration Config.Network
-    deriving Show
-
 -- | Creates an 'Address' given a 'Network' configuration and a 'PublicKey'.
 fromPublicKey
     :: forall c.
@@ -57,18 +53,17 @@ fromPublicKey
     -- ^ The 'Network' the node is running on.
     -> PublicKey c
     -- ^ A 'PublicKey'.
-    -> Either AddressCreationError (Address c)
-fromPublicKey network pk = runExcept $
-    case configToAddressTypeTag network of
-      Nothing -> throwError $ UnsupportedConfiguration network
-      Just at -> do
-          let prefix = AddressPrefix
-                { addressFormat   = AddressFormat AddressFormatTag_CBOR
-                , addressType     = AddressType at
-                , protocolVersion = ProtocolVersion ProtocolVersion_V1
-                }
-              payload = Tagged . CBOR.fromByteString . convert . shortHash @c $ pk
-          pure $ Address prefix (AddressPayload payload)
+    -> Address c
+fromPublicKey network pk =
+    let
+        prefix = AddressPrefix
+            { addressFormat   = AddressFormat AddressFormatTag_CBOR
+            , addressType     = AddressType network
+            , protocolVersion = ProtocolVersion ProtocolVersion_V1
+            }
+        payload = Tagged . CBOR.fromByteString . convert . shortHash @c $ pk
+     in
+        Address prefix (AddressPayload payload)
 
 -- | Parses a base32z-encoded binary block back into an 'Address'.
 decodeAddress

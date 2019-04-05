@@ -8,6 +8,7 @@ module Oscoin.Crypto.Address.Serialisation
 
 import           Oscoin.Prelude
 
+import           Oscoin.Configuration (Network(..))
 import qualified Oscoin.Crypto.Address.Bech32 as Bech32
 import           Oscoin.Crypto.Address.Internal
 import           Oscoin.Crypto.Hash
@@ -145,9 +146,9 @@ deserializeAddressType :: Decoder AddressType
 deserializeAddressType = do
     tag <- decodeWord8
     case tag of
-      0x01 -> pure $ AddressType AddressType_Mainnet
-      0x02 -> pure $ AddressType AddressType_Testnet
-      0x03 -> pure $ AddressType AddressType_Devnet
+      0x01 -> pure $ AddressType Mainnet
+      0x02 -> pure $ AddressType Testnet
+      0x03 -> pure $ AddressType Devnet
       _    -> throwError $ UnknownAddressType tag
 
 -- | Deserializes the 'AddressFormat'.
@@ -227,9 +228,9 @@ serializeProtocolVersion = \case
 -- | Serializes the 'AddressType'.
 serializeAddressType :: AddressType -> BL.Builder
 serializeAddressType = \case
-  AddressType AddressType_Mainnet -> BL.word8 0x01
-  AddressType AddressType_Testnet -> BL.word8 0x02
-  AddressType AddressType_Devnet  -> BL.word8 0x03
+  AddressType Mainnet -> BL.word8 0x01
+  AddressType Testnet -> BL.word8 0x02
+  AddressType Devnet  -> BL.word8 0x03
 
 -- | Serializes the 'AddressFormat'.
 serializeAddressFormat :: AddressFormat -> BL.Builder

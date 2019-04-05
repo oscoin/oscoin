@@ -36,7 +36,7 @@ import qualified Oscoin.API.HTTP as API
 import           Oscoin.API.HTTP.Internal
                  (MediaType(..), decode, encode, parseMediaType)
 import qualified Oscoin.API.Types as API
-import           Oscoin.Configuration (Environment(Testing))
+import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain (Blockchain(..), fromGenesis)
@@ -49,6 +49,7 @@ import qualified Oscoin.Data.RadicleTx as Rad
 import           Oscoin.Data.Tx (mkTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
+import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)
 import           Oscoin.Protocol (runProtocol)
 import qualified Oscoin.Storage.Block.STM as BlockStore.Concrete.STM
 import           Oscoin.Storage.HashStore
@@ -74,6 +75,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           Data.List (lookup)
 import qualified Data.Text as T
+import           System.Random.SplitMix (newSMGen)
 
 import qualified Network.HTTP.Media as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
@@ -142,16 +144,23 @@ nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, states
 
 withNode :: IsCrypto c => NodeState c -> (NodeHandle c -> IO a) -> IO a
 withNode NodeState{..} k = do
-    let env    = Testing
-        logger = Log.noLogger
+    let env    = Development
+    let logger = Log.noLogger
+    metrics   <-
+        Telemetry.newTelemetryStore logger <$>
+            Metrics.newMetricsStore Metrics.noLabels
+    net       <- P2P.randomNetwork <$> newSMGen
     let config = Consensus.configForEnvironment env
-    metricsStore <- Metrics.newMetricsStore Metrics.noLabels
-    let handle = Telemetry.newTelemetryStore logger metricsStore
-    let cfg = Node.Config { Node.cfgEnv = env
-                          , Node.cfgTelemetry = handle
-                          , Node.cfgNoEmptyBlocks = False
-                          , Node.cfgConsensusConfig = config
-                          }
+    let cfg    = Node.Config
+            { Node.cfgGlobalConfig    = Node.GlobalConfig
+                { Node.globalEnv             = env
+                , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
+                , Node.globalPhysicalNetwork = net
+                }
+            , Node.cfgTelemetry       = metrics
+            , Node.cfgNoEmptyBlocks   = False
+            , Node.cfgConsensusConfig = config
+            }
 
     mph <- atomically $ do
         mp <- Mempool.new
@@ -159,7 +168,7 @@ withNode NodeState{..} k = do
         pure mp
 
     BlockStore.Concrete.STM.withBlockStore blockstoreState blockScore $ \blkStore@(bsh, _privateAPI) ->
-        runProtocol (\_ _ -> Right ()) blockScore handle blkStore config $ \dispatchBlock -> do
+        runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock -> do
             stateStore <- liftIO $ newHashStoreIO
             liftIO $ storeHashContent stateStore statestoreState
 

@@ -2,7 +2,7 @@ module Main (main) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Environment(Testing))
+import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto
 import           Oscoin.Crypto.Hash.Mock ()
@@ -25,7 +25,7 @@ type CryptoUnderTest = IsCrypto MockCrypto
 
 main :: IO ()
 main = do
-    let config = Consensus.configForEnvironment Testing
+    let config = Consensus.configForEnvironment Development
     let crypto = Dict @CryptoUnderTest
     defaultMainWithIngredients (map failFast defaultIngredients) $ testGroup "All"
         [ Oscoin.tests crypto config

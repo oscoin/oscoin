@@ -19,7 +19,6 @@ import qualified Data.ByteString as BS
 import           Data.ByteString.BaseN (decodeBase32z)
 import           Data.IORef
 import qualified Data.Set as Set
-import           Data.String (fromString)
 import           Formatting
 import           System.IO.Unsafe (unsafePerformIO)
 
@@ -58,13 +57,13 @@ props d = checkParallel $ Group "Address.Serialisation"
 propAddressSerdeRoundtrip :: forall c. Dict (IsCrypto c) -> Property
 propAddressSerdeRoundtrip Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- genAddress pk
+    address <- forAll $ genAddress pk
     (deserializeAddress . serializeAddress $ address) === Right address
 
 propRenderDecodeRoundtrip :: forall c. Dict (IsCrypto c) -> Property
 propRenderDecodeRoundtrip Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- genAddress pk
+    address <- forAll $ genAddress pk
     let (b32 :: ByteString) = toS $ sformat fmtAddress address
     decodeBase32z b32 === Just (serializeAddress address)
     (decodeAddress . toS . sformat fmtAddress $ address) === Right address
@@ -72,7 +71,7 @@ propRenderDecodeRoundtrip Dict = property $ do
 propInvalidChecksum :: forall c. Dict (IsCrypto c) -> Property
 propInvalidChecksum Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- genAddress pk
+    address <- forAll $ genAddress pk
     let serialized = serializeAddress address
     idx <- forAll (Gen.int (Range.linear 0 (BS.length serialized - 1)))
     w8  <- forAll (Gen.word8 Range.linearBounded)
@@ -108,7 +107,7 @@ propInjectivity :: forall c. Dict (IsCrypto c) -> Property
 propInjectivity Dict = property $ do
     (seed, addresses) <- evalIO (readIORef addressesRef)
     (pk :: PublicKey Crypto, _) <- forAllWith (toS . condensed) (quickcheck (arbitraryKeyPairFrom seed))
-    address <- renderAddress <$> genAddress pk
+    address <- renderAddress <$> forAll (genAddress pk)
     if Set.member address addresses
        then annotate ("Generated address not unique: " <> toS address) *> failure
        else do
@@ -124,9 +123,5 @@ addressesRef = unsafePerformIO $ newIORef (0, mempty)
   Generators and other mythological creatures
 ------------------------------------------------------------------------------}
 
-genAddress :: IsCrypto c => PublicKey c -> PropertyT IO (Address c)
-genAddress pk = do
-    net <- forAll (Gen.element ["mainnet", "testnet", "devnet"])
-    case fromPublicKey (fromString net) pk of
-      Left err -> annotate (show err) *> failure
-      Right a  -> pure a
+genAddress :: IsCrypto c => PublicKey c -> Gen (Address c)
+genAddress pk = (`fromPublicKey` pk) <$> Gen.enumBounded

@@ -1,5 +1,6 @@
 module Oscoin.Node
     ( Config (..)
+    , GlobalConfig (..)
     , Handle
     , NodeT
 
@@ -23,7 +24,7 @@ module Oscoin.Node
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Configuration (renderEnvironment)
+import           Oscoin.Configuration (renderEnvironment, renderNetwork)
 import           Oscoin.Consensus (Consensus(..), ValidationError)
 import qualified Oscoin.Consensus as Consensus
 import           Oscoin.Crypto.Blockchain (TxLookup)
@@ -87,12 +88,26 @@ withNode hConfig hNodeId hMempool hStateStore hBlockStore hProtocol hEval hConse
     open = do
         hReceiptStore <- ReceiptStore.newReceiptStoreIO
         gen <- liftIO (BlockStore.getGenesisBlock hBlockStore)
-        Log.info (cfgTelemetry hConfig ^. Log.loggerL)
-                 "running in"
-                 (ftag "env" % stext) (renderEnvironment $ cfgEnv hConfig)
-        Log.info (cfgTelemetry hConfig ^. Log.loggerL)
-                 "genesis is"
-                 (ftag "block_hash" % formatHash) (blockHash gen)
+        let
+            GlobalConfig { globalEnv             = env
+                         , globalLogicalNetwork  = lnet
+                         , globalPhysicalNetwork = pnet
+                         } = cfgGlobalConfig hConfig
+         in
+            Log.info (cfgTelemetry hConfig ^. Log.loggerL)
+                     "node starting"
+                     ( ftag "env" % stext
+                     % " "
+                     % ftag "logical_network" % stext
+                     % " "
+                     % ftag "physical_network" % stext
+                     % " "
+                     % ftag "genesis" % formatHash
+                     )
+                     (renderEnvironment env)
+                     (renderNetwork     lnet)
+                     (P2P.renderNetwork pnet)
+                     (blockHash gen)
         pure Handle{..}
 
     close = const $ pure ()

@@ -26,28 +26,27 @@
 -- DNSSEC is not currently supported.
 --
 module Oscoin.P2P.Disco
-    ( Options(..)
-    , discoParser
-
-    , DiscoEvent(..)
+    ( DiscoEvent(..)
 
     , withDisco
+
+    -- * Re-exports
+    , module Oscoin.P2P.Disco.Options
     ) where
 
 import           Oscoin.Prelude hiding (option)
 
-import           Oscoin.Configuration (Network, readNetwork, renderNetwork)
-import           Oscoin.Crypto (Crypto)
 import qualified Oscoin.P2P.Disco.MDns as MDns
+import           Oscoin.P2P.Disco.Options
 import           Oscoin.P2P.Types
                  ( Host
+                 , Network
                  , NodeAddr(..)
-                 , SeedAddr
                  , hostEither
                  , hostnameToDomain
                  , namedHost
                  , readHostnameText
-                 , readNodeAddr
+                 , renderNetwork
                  )
 
 import           Data.IP
@@ -65,70 +64,8 @@ import           Network.Socket
                  , defaultHints
                  , getAddrInfo
                  )
-import           Options.Applicative
-import           Options.Applicative.Help
-                 (paragraph, stringChunk, unChunk, vcatChunks, vsepChunks)
 
 {-# ANN module ("HLint: ignore Use >=>" :: String) #-}
-
-data Options = Options
-    { optNetwork    :: Network
-    , optSeeds      :: [SeedAddr Crypto]
-    , optSDDomains  :: [HostName]
-    , optEnableMDns :: Bool
-    , optNameserver :: Maybe (HostName, PortNumber) -- only for testing currently
-    }
-
-discoParser :: Parser Options
-discoParser = Options
-    <$> option (eitherReader readNetwork)
-        ( long "network"
-       <> help "The name of the oscoin network to participate in"
-        )
-    <*> many
-        ( option (eitherReader readNodeAddr)
-            ( long "seed"
-           <> helpDoc
-               ( unChunk $ vsepChunks
-               [ paragraph "Zero or more gossip seed nodes to connect to"
-               , paragraph "If HOST is an IPv6 address, it must be enclosed in \
-                           \square brackets to delimit it from the portnumber."
-               , paragraph "If HOST is a domain name, all IPv4 and IPv6 \
-                           \addresses bound to it will be considered as \
-                           \distinct peer addresses."
-               , paragraph "Examples:"
-               , vcatChunks $ map stringChunk
-                    [ "--seed=\"[2001:db8::01]:6942\""
-                    , "--seed=\"127.0.0.1:6942\""
-                    , "--seed=testnet.oscoin.io:6942\""
-                    ]
-               ]
-               )
-           <> metavar "HOST:PORT"
-            )
-        )
-    <*> many
-        ( option str
-            ( long "sd-domain"
-           <> helpDoc
-                ( unChunk $ vsepChunks
-                [ paragraph "Zero or more search domains to query for SRV records"
-                , paragraph "Examples:"
-                , vcatChunks $ map stringChunk
-                    [ "--sd-domain=svc.cluster.local"
-                    , "--sd-domain=oscoin.io"
-                    , "--sd-domain=monadic.xyz"
-                    ]
-                ]
-                )
-           <> metavar "DOMAIN NAME"
-            )
-        )
-    <*> switch
-        ( long "enable-mdns"
-       <> help "Enable mDNS discovery"
-        )
-    <*> pure Nothing
 
 data DiscoEvent =
       MDnsResponderEvent MDns.ResponderTrace
@@ -145,7 +82,7 @@ data DiscoEvent =
 --
 withDisco
     :: (HasCallStack => DiscoEvent -> IO ())
-    -> Options
+    -> Options Network
     -> Set MDns.Service
     -> (IO (Set SockAddr) -> IO a)
     -> IO a

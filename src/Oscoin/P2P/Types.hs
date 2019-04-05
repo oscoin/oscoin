@@ -1,7 +1,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Oscoin.P2P.Types
-    ( NodeId
+    ( Network(Mainnet, Testnet, Devnet)
+    , pattern Somenet
+    , readNetwork
+    , readNetworkText
+    , renderNetwork
+    , randomNetwork
+    , fromPhysicalNetwork
+
+    , NodeId
     , mkNodeId
     , fromNodeId
 
@@ -38,6 +46,7 @@ module Oscoin.P2P.Types
 
 import           Oscoin.Prelude
 
+import qualified Oscoin.Configuration as Logical (Network(..))
 import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hash, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
@@ -50,19 +59,92 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
+import           Control.Monad.Trans.Writer (execWriterT, tell)
 import           Data.Aeson (FromJSON, ToJSON)
 import           Data.Char (isAlphaNum)
 import           Data.Hashable (Hashable(..))
 import           Data.IP (IP(..))
 import           Data.Profunctor (Profunctor(dimap))
+import           Data.String (IsString(..))
 import qualified Data.Text as T
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as V.Unboxed
 import           Formatting as F
 import qualified Generics.SOP as SOP
 import qualified Network.DNS as DNS
 import           Network.Socket (PortNumber, SockAddr)
 import qualified Network.Socket as Network
+import           System.Random (RandomGen, randomR)
+
+-- | The name of the overlay network.
+--
+-- This is, in a way, the \"physical\" network a node joins, although physical
+-- isolation is not implied. The overlay network typically matches the
+-- \"logical\" oscoin network as defined by "Oscoin.Configuration.Network".
+-- Additionally, ad-hoc networks ('Somenet'') can be created, which map to the
+-- logical "Oscoin.Configuration.Devnet".
+--
+-- Ad-hoc networks must be valid domain name labels (RFC 1035, RFC 1123, RFC
+-- 2181), and can only be created using 'readNetwork', 'readNetworkText', or
+-- 'randomNetwork'. To allow exhaustive pattern matching, the view pattern
+-- 'Somenet' is exported.
+--
+data Network =
+      Mainnet
+    | Testnet
+    | Devnet
+    | Somenet' Text
+    deriving (Eq, Show)
+
+pattern Somenet :: Text -> Network
+pattern Somenet x <- Somenet' x
+
+{-# COMPLETE Mainnet, Testnet, Devnet, Somenet #-}
+
+instance IsString Network where
+    fromString = either (panic . toS) identity . readNetwork
+
+renderNetwork :: Network -> Text
+renderNetwork Mainnet      = "mainnet"
+renderNetwork Testnet      = "testnet"
+renderNetwork Devnet       = "devnet"
+renderNetwork (Somenet' x) = x
+
+readNetwork :: String -> Either String Network
+readNetwork = readNetworkText . toS
+
+readNetworkText :: Text -> Either String Network
+readNetworkText "mainnet" = pure Mainnet
+readNetworkText "testnet" = pure Testnet
+readNetworkText "devnet"  = pure Devnet
+readNetworkText t
+  | T.length t > 63            = Left "Network name longer than 63 characters"
+  | Just ('-',_) <- T.uncons t = Left "Network name cannot start with hyphen"
+  | Just c <- invalidChar t    = Left $ "Invalid character in network name: " <> [c]
+  | otherwise                  = pure $ Somenet' (T.toLower t)
+  where
+    invalidChar = T.find $ \c -> c /= '-' && not (isAlphaNum c)
+
+randomNetwork :: RandomGen g => g -> Network
+randomNetwork g = Somenet' . flip evalState g . execWriterT $ do
+    lift (randC firstChar) >>= tell . T.singleton
+    num <- lift . state $ randomR (0, 62)
+    replicateM num $
+        lift (randC labelChars) >>= tell . T.singleton
+  where
+    randC cs = state $
+        first (cs V.Unboxed.!) . randomR (0, V.Unboxed.length cs - 1)
+
+    labelChars = V.Unboxed.fromList "abcdefghiklmnopqrstuvwxyz0123456789-"
+    firstChar  = V.Unboxed.init labelChars
+
+fromPhysicalNetwork :: Network -> Logical.Network
+fromPhysicalNetwork = \case
+    Mainnet    -> Logical.Mainnet
+    Testnet    -> Logical.Testnet
+    Devnet     -> Logical.Devnet
+    Somenet'{} -> Logical.Devnet
 
 -- | A cryptographically secure identifier for a logical peer.
 newtype NodeId c = NodeId { fromNodeId :: PublicKey c }
