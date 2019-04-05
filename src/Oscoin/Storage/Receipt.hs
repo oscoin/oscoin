@@ -5,19 +5,14 @@
 -- For legacy reasons we also provide the 'MonadReceiptStore' type
 -- class to obtain a receipt store.
 module Oscoin.Storage.Receipt
-    ( MonadReceiptStore(..)
-    , addReceipt
+    ( ReceiptStore
+    , storeReceipt
     , lookupReceipt
+    , hoistReceiptStore
 
-    , ReceiptStore
     , ReceiptMap
     , newReceiptStoreIO
     , mkStateReceiptStore
-
-    -- * Re-exports from "Oscoin.Storage.ContentStore"
-    , storeContent
-    , lookupContent
-    , hoistContentStore
     ) where
 
 import           Oscoin.Prelude
@@ -35,6 +30,15 @@ type ReceiptStore c tx o m = ContentStore (Crypto.Hashed c tx) (Receipt c tx o) 
 -- created with 'mkStateReceiptStore'.
 type ReceiptMap c tx o = Map (Crypto.Hashed c tx) (Receipt c tx o)
 
+storeReceipt :: ReceiptStore c tx o m -> Receipt c tx o -> m ()
+storeReceipt = storeContent
+
+lookupReceipt :: ReceiptStore c tx o m -> Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
+lookupReceipt = lookupContent
+
+hoistReceiptStore :: (forall x. m x -> n x) -> ReceiptStore c tx o m -> ReceiptStore c tx o n
+hoistReceiptStore = hoistContentStore
+
 newReceiptStoreIO
     :: (MonadIO m, Crypto.HasHashing c)
     => IO (ReceiptStore c tx o m)
@@ -45,23 +49,3 @@ mkStateReceiptStore
     => Lens' state (ReceiptMap c tx o)
     -> ReceiptStore c tx o m
 mkStateReceiptStore l = mkStateContentStore l receiptTx
-
-
-class (Monad m) => MonadReceiptStore c tx o m | m -> tx o where
-    getReceiptStore :: m (ReceiptStore c tx o m)
-
-    default getReceiptStore
-        :: (MonadReceiptStore c tx o m', MonadTrans t, m ~ t m')
-        => m (ReceiptStore c tx o m)
-    getReceiptStore = hoistContentStore lift <$> lift getReceiptStore
-
-
-addReceipt :: (MonadReceiptStore c tx o m) => Receipt c tx o -> m ()
-addReceipt receipt = do
-    cs <- getReceiptStore
-    storeContent cs receipt
-
-lookupReceipt :: (MonadReceiptStore c tx o m) => Crypto.Hashed c tx -> m (Maybe (Receipt c tx o))
-lookupReceipt hash = do
-    cs <- getReceiptStore
-    lookupContent cs hash

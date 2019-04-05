@@ -6,6 +6,8 @@ module Oscoin.Node.Trans
     , Config(..)
     , Handle(..)
     , getBlockStoreReader
+    , getStateStore
+    , getReceiptStore
     ) where
 
 import           Oscoin.Prelude
@@ -24,7 +26,6 @@ import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.ContentStore
 import           Oscoin.Storage.HashStore
 import           Oscoin.Storage.Receipt
-import           Oscoin.Storage.State (MonadStateStore(..))
 import qualified Oscoin.Telemetry as Telemetry
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -98,8 +99,8 @@ getBlockStoreReader = do
 
 instance MonadClock m => MonadClock (NodeT c tx st s i m)
 
-instance (MonadIO m) => MonadReceiptStore c tx RadicleTx.Output (NodeT c tx st s i m) where
-    getReceiptStore = hoistContentStore liftIO <$> asks hReceiptStore
+getReceiptStore :: (Monad m, MonadIO n) => NodeT c tx st s i m (ReceiptStore c tx RadicleTx.Output n)
+getReceiptStore = hoistContentStore liftIO <$> asks hReceiptStore
 
-instance (MonadIO m) => MonadStateStore c st (NodeT c tx st s i m) where
-    getStateStore = hoistHashStore liftIO <$> asks hStateStore
+getStateStore :: (Monad m, MonadIO n) => NodeT c tx st s i m (HashStore c st n)
+getStateStore = hoistHashStore liftIO <$> asks hStateStore
