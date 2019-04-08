@@ -102,6 +102,22 @@ pattern Somenet x <- Somenet' x
 
 {-# COMPLETE Mainnet, Testnet, Devnet, Somenet #-}
 
+instance Serialise Network where
+    encode Mainnet      = CBOR.encodeListLen 1 <> CBOR.encodeWord 0
+    encode Testnet      = CBOR.encodeListLen 1 <> CBOR.encodeWord 1
+    encode Devnet       = CBOR.encodeListLen 1 <> CBOR.encodeWord 2
+    encode (Somenet' x) = CBOR.encodeListLen 2 <> CBOR.encodeWord 3 <> CBOR.encode x
+
+    decode = do
+        len <- CBOR.decodeListLen
+        tag <- CBOR.decodeWord
+        case (len, tag) of
+            (1, 0) -> pure Mainnet
+            (1, 1) -> pure Testnet
+            (1, 2) -> pure Devnet
+            (2, 3) -> CBOR.decode >>= either fail pure . readNetworkText
+            _      -> fail "Oscoin.P2P.Types.Network: Unknown length/tag"
+
 instance IsString Network where
     fromString = either (panic . toS) identity . readNetwork
 

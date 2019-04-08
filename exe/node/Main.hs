@@ -124,7 +124,8 @@ main = do
                                         }
                            (Set.map (Nothing,) seeds)
                            (storage node)
-                           (Handshake.secureHandshake keys)
+                           (Handshake.secureHandshake
+                               keys (P2P.Disco.optNetwork optDiscovery'))
 
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)

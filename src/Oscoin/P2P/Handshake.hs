@@ -26,7 +26,7 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P.Handshake.Noise
 import           Oscoin.P2P.Handshake.Simple
 import           Oscoin.P2P.Handshake.Types as Types
-import           Oscoin.P2P.Types (NodeId, fromNodeId, mkNodeId)
+import           Oscoin.P2P.Types (Network, NodeId, fromNodeId, mkNodeId)
 
 import           Codec.Serialise (Serialise)
 import           Data.ByteArray (ByteArrayAccess)
@@ -53,10 +53,11 @@ simpleHandshake
        , Eq (Crypto.PublicKey c)
        )
     => Crypto.KeyPair c
+    -> Network
     -> Handshake SimpleError (NodeId c) p (Crypto.Signed c p)
-simpleHandshake keys role peerId = do
+simpleHandshake keys net role peerId = do
     res <- map mkNodeId . signedPayloads (snd keys)
-       <$> keyExchange keys role Nothing
+       <$> keyExchange keys net role Nothing
     let
         crypto = Proxy @c
         self   = let (pk,_) = keys in mkNodeId pk
@@ -78,15 +79,16 @@ secureHandshake
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c
+    -> Network
     -> Handshake HandshakeError
                  (NodeId c)
                  p
                  (NoisePayload (Crypto.Signed c NoiseHandshakeHash, p))
-secureHandshake keys role (map fromNodeId -> peer) = do
-    noise <- withHandshakeT NoiseHandshakeError  $ noiseNNHandshake role Nothing
+secureHandshake keys net role (map fromNodeId -> peer) = do
+    noise <- withHandshakeT NoiseHandshakeError $ noiseNNHandshake role Nothing
     keyex <-
         withHandshakeT SimpleHandshakeError $
-            keyExchange keys role peer >>= guardPeerIdNot (Proxy @c) self
+            keyExchange keys net role peer >>= guardPeerIdNot (Proxy @c) self
     let
         clear     = signedHandshakeHash (snd keys) $ map (,hrPeerId noise) keyex
         sendClear = hrPreSend clear

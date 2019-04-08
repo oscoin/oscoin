@@ -36,6 +36,7 @@ tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.P2P.Types"
     [ testProperty "prop_roundtripNetworkStringly"  prop_roundtripNetworkStringly
     , testProperty "prop_randomNetworkValid"        prop_randomNetworkValid
+    , testProperty "prop_roundtripNetworkSerialise" prop_roundtripNetworkSerialise
     , testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
     , testProperty "prop_roundtripHostnameStringly" prop_roundtripHostnameStringly
     , testProperty "prop_roundtripHostnameDomain"   prop_roundtripHostnameDomain
@@ -48,6 +49,7 @@ props :: Dict (IsCrypto c) -> IO Bool
 props d = checkParallel $ Group "Test.Oscoin.P2P.Types"
     [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly )
     , ("prop_randomNetworkValid"       , prop_randomNetworkValid       )
+    , ("prop_roundtripNetworkSerialise", prop_roundtripNetworkSerialise)
     , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
     , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly)
     , ("prop_roundtripHostnameDomain"  , prop_roundtripHostnameDomain  )
@@ -65,6 +67,11 @@ prop_randomNetworkValid :: Property
 prop_randomNetworkValid = property $ do
     rng <- mkSMGen <$> forAll (Gen.word64 Range.linearBounded)
     tripping (randomNetwork rng) renderNetwork readNetworkText
+
+prop_roundtripNetworkSerialise :: Property
+prop_roundtripNetworkSerialise = property $ do
+    net <- forAll genNetwork
+    tripping net serialise deserialiseOrFail
 
 prop_roundtripHostStringly :: Property
 prop_roundtripHostStringly = property $ do

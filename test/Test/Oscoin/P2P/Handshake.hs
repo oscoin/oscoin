@@ -10,49 +10,49 @@ import           Oscoin.P2P.Types (NodeId, fromNodeId, mkNodeId)
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
 import           Oscoin.Test.Util (Condensed, condensed)
+import           Test.Oscoin.P2P.Gen (genNetwork)
 import           Test.Oscoin.P2P.Helpers (framedPair)
 
 import qualified Crypto.Noise.Exception as Noise
 
 import           Hedgehog
+import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.P2P.Handshake"
-    [ testProperty "prop_simple"            (prop_simple d)
-    , testProperty "prop_simpleRejectsSelf" (prop_simpleRejectsSelf d)
-    , testProperty "prop_secure"            (prop_secure d)
-    , testProperty "prop_secureRejectsSelf" (prop_secureRejectsSelf d)
+    [ testProperty "prop_simple"                (prop_simple d)
+    , testProperty "prop_simpleRejectsSelf"     (prop_simpleRejectsSelf d)
+    , testProperty "prop_simpleNetworkMismatch" (prop_simpleNetworkMismatch d)
+    , testProperty "prop_secure"                (prop_secure d)
+    , testProperty "prop_secureRejectsSelf"     (prop_secureRejectsSelf d)
+    , testProperty "prop_secureNetworkMismatch" (prop_secureNetworkMismatch d)
     ]
 
 -- | For GHCi use.
 props :: Dict (IsCrypto c) -> IO Bool
 props d = checkParallel $ Group "Test.Oscoin.P2P.Handshake"
-    [ ("prop_simple",            prop_simple d)
-    , ("prop_simpleRejectsSelf", prop_simpleRejectsSelf d)
-    , ("prop_secure",            prop_secure d)
-    , ("prop_secureRejectsSelf", prop_secureRejectsSelf d)
+    [ ("prop_simple"               , prop_simple                d)
+    , ("prop_simpleRejectsSelf"    , prop_simpleRejectsSelf     d)
+    , ("prop_simpleNetworkMismatch", prop_simpleNetworkMismatch d)
+    , ("prop_secure"               , prop_secure                d)
+    , ("prop_secureRejectsSelf"    , prop_secureRejectsSelf     d)
+    , ("prop_secureNetworkMismatch", prop_secureNetworkMismatch d)
     ]
 
 prop_simple :: forall c. Dict (IsCrypto c) -> Property
 prop_simple Dict = withTests 1 . property $ do
-    ((pkAlice, skAlice), (pkBob, skBob)) <- genKeyPairPair @c
-    ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
+    network                                    <- forAll genNetwork
+    (keysAlice@(pkAlice,_), keysBob@(pkBob,_)) <- genKeyPairPair @c
 
     let nidAlice = mkNodeId pkAlice
     let nidBob   = mkNodeId pkBob
-    let hsAlice = Handshake.simpleHandshake @ByteString (pkAlice, skAlice)
-    let hBob    = Handshake.simpleHandshake @ByteString (pkBob,   skBob  )
+    let hsAlice  = Handshake.simpleHandshake @ByteString keysAlice network
+    let hsBob    = Handshake.simpleHandshake @ByteString keysBob   network
 
-    hrs <-
-        liftIO $ concurrently
-            (Handshake.runHandshakeT ttAlice
-                (hsAlice Handshake.Acceptor Nothing) `finally` close1)
-            (Handshake.runHandshakeT ttBob
-                (hBob Handshake.Connector (Just nidAlice)) `finally` close2)
-
+    hrs <- runHandshake nidAlice hsAlice hsBob
     case hrs of
         (Left e, _) -> annotateShow e *> failure
         (_, Left e) -> annotateShow e *> failure
@@ -84,41 +84,47 @@ prop_simple Dict = withTests 1 . property $ do
 
 prop_simpleRejectsSelf :: forall c. Dict (IsCrypto c) -> Property
 prop_simpleRejectsSelf Dict = withTests 1 . property $ do
-    (pk, sk)                             <- genKeyPair @c
-    ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
+    network  <- forAll genNetwork
+    (pk, sk) <- genKeyPair @c
 
-    let hsAlice = Handshake.simpleHandshake @ByteString (pk, sk)
-    let hBob    = Handshake.simpleHandshake @ByteString (pk, sk)
+    let hsAlice = Handshake.simpleHandshake @ByteString (pk, sk) network
+    let hsBob   = Handshake.simpleHandshake @ByteString (pk, sk) network
 
-    hrs <-
-        evalIO $ concurrently
-            (Handshake.runHandshakeT ttAlice
-                (hsAlice Handshake.Acceptor Nothing) `finally` close1)
-            (Handshake.runHandshakeT ttBob
-                (hBob Handshake.Connector (Just (mkNodeId pk))) `finally` close2)
-
+    hrs <- runHandshake (mkNodeId pk) hsAlice hsBob
     case hrs of
         (Left Handshake.DuplicateId, _) -> success
         (_, Left Handshake.DuplicateId) -> success
         _                               -> failure
 
+prop_simpleNetworkMismatch :: forall c. Dict (IsCrypto c) -> Property
+prop_simpleNetworkMismatch Dict = withTests 1 . property $ do
+    (netAlice, netBob) <- forAll $ do
+        a <- genNetwork
+        b <- Gen.filter (/= a) genNetwork
+        pure (a, b)
+
+    (keysAlice@(pkAlice,_), keysBob) <- genKeyPairPair @c
+
+    let hsAlice = Handshake.simpleHandshake @ByteString keysAlice netAlice
+    let hsBob   = Handshake.simpleHandshake @ByteString keysBob   netBob
+
+    hrs <- runHandshake (mkNodeId pkAlice) hsAlice hsBob
+    case hrs of
+        ( Left Handshake.NetworkMismatch,
+          Left Handshake.NetworkMismatch ) -> success
+        _                                  -> failure
+
 prop_secure :: forall c. Dict (IsCrypto c) -> Property
 prop_secure Dict = withTests 1 . property $ do
-    ((pkAlice, skAlice), (pkBob, skBob)) <- genKeyPairPair @c
-    ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
+    network                                    <- forAll genNetwork
+    (keysAlice@(pkAlice,_), keysBob@(pkBob,_)) <- genKeyPairPair @c
 
     let nidAlice = mkNodeId pkAlice
     let nidBob   = mkNodeId pkBob
-    let hsAlice  = Handshake.secureHandshake @LByteString (pkAlice, skAlice)
-    let hBob     = Handshake.secureHandshake @LByteString (pkBob,   skBob  )
+    let hsAlice  = Handshake.secureHandshake @LByteString keysAlice network
+    let hsBob    = Handshake.secureHandshake @LByteString keysBob   network
 
-    hrs <-
-        liftIO $ concurrently
-            (Handshake.runHandshakeT ttAlice
-                (hsAlice Handshake.Acceptor Nothing) `finally` close1)
-            (Handshake.runHandshakeT ttBob
-                (hBob Handshake.Connector (Just nidAlice)) `finally` close2)
-
+    hrs <- runHandshake nidAlice hsAlice hsBob
     case hrs of
         (Left e, _) -> annotateShow e *> failure
         (_, Left e) -> annotateShow e *> failure
@@ -152,26 +158,52 @@ prop_secure Dict = withTests 1 . property $ do
 
 prop_secureRejectsSelf :: forall c. Dict (IsCrypto c) -> Property
 prop_secureRejectsSelf Dict = withTests 1 . property $ do
+    network  <- forAll genNetwork
     (pk, sk) <- genKeyPair @c
 
-    ((ttAlice, close1), (ttBob, close2)) <- liftIO framedPair
+    let hsAlice = Handshake.secureHandshake @ByteString (pk, sk) network
+    let hsBob   = Handshake.secureHandshake @ByteString (pk, sk) network
 
-    let hsAlice = Handshake.secureHandshake @ByteString (pk, sk)
-    let hBob    = Handshake.secureHandshake @ByteString (pk, sk)
-
-    hrs <-
-        evalIO $ concurrently
-            (Handshake.runHandshakeT ttAlice
-                (hsAlice Handshake.Acceptor Nothing) `finally` close1)
-            (Handshake.runHandshakeT ttBob
-                (hBob Handshake.Connector (Just (mkNodeId pk))) `finally` close2)
-
+    hrs <- runHandshake (mkNodeId pk) hsAlice hsBob
     case hrs of
         (Left (Handshake.SimpleHandshakeError Handshake.DuplicateId), _) -> success
         (_, Left (Handshake.SimpleHandshakeError Handshake.DuplicateId)) -> success
         _                                                                -> failure
 
+prop_secureNetworkMismatch :: forall c. Dict (IsCrypto c) -> Property
+prop_secureNetworkMismatch Dict = withTests 1 . property $ do
+    (netAlice, netBob) <- forAll $ do
+        a <- genNetwork
+        b <- Gen.filter (/= a) genNetwork
+        pure (a, b)
+
+    (keysAlice@(pkAlice,_), keysBob) <- genKeyPairPair @c
+
+    let hsAlice = Handshake.secureHandshake @ByteString keysAlice netAlice
+    let hsBob   = Handshake.secureHandshake @ByteString keysBob   netBob
+
+    hrs <- runHandshake (mkNodeId pkAlice) hsAlice hsBob
+    case hrs of
+        ( Left (Handshake.SimpleHandshakeError Handshake.NetworkMismatch),
+          Left (Handshake.SimpleHandshakeError Handshake.NetworkMismatch))
+           -> success
+        _  -> failure
+
 --------------------------------------------------------------------------------
+
+runHandshake
+    :: (MonadTest m, MonadIO m)
+    => nid
+    -> (HandshakeRole -> Maybe nid -> HandshakeT e IO a)
+    -> (HandshakeRole -> Maybe nid -> HandshakeT e IO a)
+    -> m (Either e a, Either e a)
+runHandshake nidA hsA hsB = do
+    ((ttA, closeA), (ttB, closeB)) <- liftIO framedPair
+    evalIO $ concurrently
+        (Handshake.runHandshakeT ttA (hsA Handshake.Acceptor Nothing)
+            `finally` closeA)
+        (Handshake.runHandshakeT ttB (hsB Handshake.Connector (Just nidA))
+            `finally` closeB)
 
 tripping' :: (MonadTest m, Eq a, Show a) => a -> (a -> m b) -> (b -> m a) -> m ()
 tripping' x f g = do

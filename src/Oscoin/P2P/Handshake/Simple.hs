@@ -15,9 +15,9 @@ module Oscoin.P2P.Handshake.Simple
 import           Oscoin.Prelude hiding (length, pi)
 
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.P2P.Transport as Transport
-
 import           Oscoin.P2P.Handshake.Types
+import qualified Oscoin.P2P.Transport as Transport
+import           Oscoin.P2P.Types (Network)
 
 import           Codec.Serialise (Serialise)
 import           Control.Exception.Safe (Exception, throwM)
@@ -26,10 +26,10 @@ import           Data.ByteArray.Orphans ()
 
 
 data HandshakeMessage c =
-      Hai (Crypto.PublicKey c)
-    -- ^ Present a pubkey and random value.
+      Hai (Crypto.PublicKey c) Network
+    -- ^ Present a pubkey and network name.
     | Bai SimpleError
-    -- ^ At any point, either side may bail oout.
+    -- ^ At any point, either side may bail out.
     deriving (Generic)
 
 instance Serialise (Crypto.PublicKey c) => Serialise (HandshakeMessage c)
@@ -39,6 +39,7 @@ data SimpleError =
     | InvalidPayload
     | Unauthorized
     | IdMismatch
+    | NetworkMismatch
     | DuplicateId
     | Timeout
     | Gone
@@ -63,13 +64,15 @@ keyExchange
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c
+    -> Network
     -> Handshake SimpleError (Crypto.PublicKey c) p p
-keyExchange (myPK, mySK) _role peerId = do
-    handshakeSend $ Hai myPK
+keyExchange (myPK, mySK) net _role peerId = do
+    handshakeSend $ Hai myPK net
     hai <- handshakeRecv mapRecvError
     case hai of
-        Bai err     -> throwError err
-        Hai theirPK -> do
+        Bai err              -> throwError err
+        Hai theirPK theirNet | net /= theirNet -> throwError NetworkMismatch
+                             | otherwise       -> do
             modifyTransport $
                 Transport.framedEnvelope (sign mySK) (verify theirPK)
             guardPeerId (Proxy @c) peerId  HandshakeResult
