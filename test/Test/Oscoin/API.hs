@@ -1,6 +1,6 @@
 -- | Tests behavior of the Node through its API using a test
 -- implementation of 'MonadClient'.
-module Oscoin.Test.API
+module Test.Oscoin.API
     ( tests
     ) where
 
@@ -24,8 +24,8 @@ import           Test.Tasty.HUnit.Extended
 import           Test.Tasty.QuickCheck
 
 
-tests :: forall c. Dict (IsCrypto c) -> [TestTree]
-tests Dict =
+tests :: forall c. Dict (IsCrypto c) -> TestTree
+tests Dict = testGroup "Test.Oscoin.API"
     [ testGroup "getState"
         [ testProperty "existing value" $ monadicIO $ do
             -- #341: We need 'listOf1' here as generating an
