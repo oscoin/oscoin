@@ -7,7 +7,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blocks, chainLength, txPayload)
-import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
+import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract

@@ -9,7 +9,7 @@ import           Oscoin.Prelude
 
 import           Data.ByteArray.Orphans ()
 
-import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
+import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.RadicleTx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite

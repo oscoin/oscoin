@@ -8,7 +8,7 @@ module Oscoin.Test.Storage.Block.SQLite
 import           Oscoin.Prelude
 
 
-import           Oscoin.Crypto.Blockchain hiding (genesisBlock)
+import           Oscoin.Crypto.Blockchain
 import           Oscoin.Data.RadicleTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite as Sqlite
