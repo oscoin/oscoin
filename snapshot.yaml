@@ -1,21 +1,20 @@
-name: oscoin-deps-13.10
-resolver: lts-13.10
+name: oscoin-deps-13.16
+resolver: lts-13.16
 
 packages:
-- base58-bytestring-0.1.0
-- ekg-0.4.0.15@sha256:f52d7c00654d72d2ab988255f30adba95a52484ac310bab9c136c64732e69f4b
-- ekg-json-0.1.0.6@sha256:4ff2e9cac213a5868ae8b4a7c72a16a9a76fac14d944ae819b3d838a9725569b
-- focus-1.0.1.2@sha256:5399f2957b2a4ad2f15fb21f3da4ff5ed6c4394f9d4a32504c19ca48ac61109f
 - github-0.20
 - hedgehog-quickcheck-0.1@sha256:03bb3c3cb1301d6ad0a6dae13b7bac3d547e82c555bb43b11bf83098d4a4ef22
-- pretty-terminal-0.1.0.0
-- primitive-extras-0.7.1@sha256:23905c57089418b1a2d324cfee3e81bbd5a344a0fa56a827867b2dce275fdb5e
-- reroute-0.5.0.0
-- sandi-0.5@sha256:b278d072ca717706ea38f9bd646e023f7f2576a778fb43565b434f93638849aa
-- stm-containers-1.1.0.2@sha256:8976df591e61f378ef29dc0443dbe2d5d34818c898093af3ca138ea1d013b5eb
-- stm-hamt-1.2.0.2@sha256:18126db7bf2d9c967a6020c677b3005dd957a4c39d69aeaea3c29c90de8f6124
-- tasty-fail-fast-0.0.3
+- tasty-fail-fast-0.0.3@sha256:0a5a850d7fb5aecb9058d847fa1e634357c2b83bad4b31e41ed1ba6c2d2f1828
 - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
+- writer-cps-mtl-0.1.1.6@sha256:ec9c2dff8f201600f1f49d89085a4b5cbd2330e1c3d90f31a5bd133f017a3a90
+- writer-cps-transformers-0.5.6.0@sha256:4613679aaaf24d82da9a14ac06679190799b04e11b1a6c3a22badc01e77222f0
+- base58-bytestring-0.1.0@sha256:a1da72ee89d5450bac1c792d9fcbe95ed7154ab7246f2172b57bd4fd9b5eab79
+- pretty-terminal-0.1.0.0@sha256:e9135d86ebb2a8e3aaf5a79088de4628dbd49988388e0fbfc26c5ecb3c399ad9
+- reroute-0.5.0.0@sha256:c115f8d011016986ba905a75562479bf22117e123ed4fc59066773d6633a6f62
+- sandi-0.5@sha256:b278d072ca717706ea38f9bd646e023f7f2576a778fb43565b434f93638849aa
+- stm-containers-1.1.0.2@sha256:68f11870da794c570245f03fff98bc06251443780315324a7f2b01a07a1ebe91
+- stm-hamt-1.2.0.2@sha256:18126db7bf2d9c967a6020c677b3005dd957a4c39d69aeaea3c29c90de8f6124
+- primitive-extras-0.7.1@sha256:23905c57089418b1a2d324cfee3e81bbd5a344a0fa56a827867b2dce275fdb5e
 
   # https://github.com/nick8325/quickcheck/issues/234
 - git: https://github.com/oscoin/qc-instances

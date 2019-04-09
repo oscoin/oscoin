@@ -3,7 +3,7 @@
 set -euxo pipefail
 
 deps_hash=$(cat package.yaml snapshot.yaml | sha256sum | cut -d' ' -f1)
-bucket="gs://oscoin-build-cache/v4"
+bucket="gs://oscoin-build-cache/v5"
 local_cache_archive="stack-root.tar.gz"
 remote_cache_master="${bucket}/stack-root-master.tar.gz"
 remote_cache_hashed="${bucket}/stack-root-${deps_hash}.tar.gz"
