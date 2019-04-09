@@ -8,6 +8,7 @@ module Oscoin.Crypto.Blockchain
     , genesis
     , fromGenesis
     , blocks
+    , blocks'
     , takeBlocks
     , takeWhileBlocks
     , height
@@ -66,6 +67,9 @@ unsafeToBlockchain blks =
 
 blocks :: Blockchain c tx s -> NewestFirst [] (Block c tx (Sealed c s))
 blocks = NewestFirst . NonEmpty.toList . fromBlockchain
+
+blocks' :: Blockchain c tx s -> NewestFirst NonEmpty (Block c tx (Sealed c s))
+blocks' = NewestFirst . fromBlockchain
 
 takeBlocks :: Int -> Blockchain c tx s -> [Block c tx (Sealed c s)]
 takeBlocks n = NonEmpty.take n . fromBlockchain

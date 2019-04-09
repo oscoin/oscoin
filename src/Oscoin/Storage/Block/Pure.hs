@@ -44,15 +44,6 @@ instance Show (Handle c tx s) where
     -- We can't derive Show because 'hScoreFn' is a function.
     show = const "Handle{}"
 
-instance (Ord tx, Ord (Hash c), Ord s) => Semigroup (Handle c tx s) where
-    (<>) a b = Handle
-        { hOrphans = hOrphans a <> hOrphans b
-        , hChains  = hChains  a <> hChains  b
-        , hScoreFn = hScoreFn a }
-
-instance (Ord tx, Ord (Hash c), Ord s) => Monoid (Handle c tx s) where
-    mempty = Handle mempty mempty (comparing height)
-
 
 -- | Create an abstract 'BlockStore' for a state monad that has access
 -- to a pure blockstore 'Handle'.
