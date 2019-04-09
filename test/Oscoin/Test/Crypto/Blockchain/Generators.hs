@@ -21,6 +21,7 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Test.QuickCheck
 
@@ -186,7 +187,7 @@ genNakamotoBlockchain
     => Gen (Blockchain c tx Nakamoto.PoW)
 genNakamotoBlockchain = do
     blockTimestamp <- arbitrary
-    genesisSeal <- arbitrary
+    genesisSeal <- genPoWSeal
     let genHeader = emptyHeader
             { blockSeal = genesisSeal
             , blockTimestamp
