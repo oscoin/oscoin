@@ -13,7 +13,8 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.Node.Mempool.Internal as Mempool
-import           Oscoin.Storage.Block.Abstract
+import qualified Oscoin.Protocol as Protocol
+import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.HashStore
 import           Oscoin.Time
@@ -84,6 +85,18 @@ instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState 
     testableInit = initNakamoto
     testableRun = flip runState
     testableBlockStore = BlockStore.Pure.mkStateBlockStore nakBlockstoreL
+    testableProtocol =
+        -- NOTE (adn): We are bypassing the protocol at the moment, but we
+        -- shouldn't. We ought to fix that in the future.
+        let dispatchSync blk = do
+              let (_,bs) = testableBlockStore
+              Abstract.insertBlock bs blk
+        in Protocol.Handle { dispatchBlockSync = dispatchSync
+                           , dispatchBlockAsync = dispatchSync
+                           , isNovelBlock = \h -> do
+                               let (bs,_) = testableBlockStore
+                               Abstract.isNovelBlock bs h
+                           }
     testableBestChain nodeState =
         let blockStore = nodeState ^. nakBlockstoreL
          in unsafeToBlockchain $ BlockStore.Pure.getBlocks 10000 blockStore

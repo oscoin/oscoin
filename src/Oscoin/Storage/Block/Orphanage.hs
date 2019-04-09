@@ -3,6 +3,7 @@ module Oscoin.Storage.Block.Orphanage
     ( Orphanage -- opaque
     , emptyOrphanage
     , getOrphans
+    , member
     , insertOrphan
     , toBlocksOldestFirst
     , selectBestChain
@@ -20,6 +21,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import           Data.Sequence (Seq, ViewL(..), ViewR(..), (<|), (><), (|>))
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 
 import           Oscoin.Crypto.Blockchain hiding (parentHash, (|>))
 import qualified Oscoin.Crypto.Blockchain as Block
@@ -177,6 +179,9 @@ emptyOrphanage = Orphanage mempty mempty mempty
 
 getOrphans :: Orphanage c tx s -> Set (BlockHash c)
 getOrphans = Map.keysSet . orphans
+
+member :: Ord (BlockHash c) => Orphanage c tx s -> BlockHash c -> Bool
+member o h = Set.member h . Map.keysSet . orphans $ o
 
 -- | /O(log(n))/ Picks the best candidate out of the candidate set at the given 'BlockHash'.
 selectBestCandidate

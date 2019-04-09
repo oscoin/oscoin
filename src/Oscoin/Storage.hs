@@ -9,12 +9,12 @@ module Oscoin.Storage
     , lookupTx
 
     , isNovelTx
-    , isNovelBlock
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Storage.Block.Abstract (BlockStoreReader, isNovelBlock)
+import qualified Oscoin.Protocol as Protocol
+import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 
 import           Oscoin.Consensus (ValidationError, validateBlockSize)
@@ -61,16 +61,14 @@ applyBlock
        , Crypto.Hashable c (BlockHeader c (Sealed c s))
        , Buildable (Crypto.Hash c)
        )
-    => BlockStoreReader c tx s m
-    -> (Block c tx (Sealed c s) -> m ())
-    -- ^ Called when block is new and valid
+    => Protocol.Handle c tx s m
     -> (Block c tx (Sealed c s) -> Either (ValidationError c) ())
     -> Consensus.Config
     -> Block      c tx (Sealed c s)
     -> m ApplyResult
-applyBlock bs dispatchBlock validateBasic config blk = do
+applyBlock proto validateBasic config blk = do
     let blkHash = blockHash blk
-    novel <- isNovelBlock bs blkHash
+    novel <- Protocol.isNovelBlock proto blkHash
     if | novel ->
         -- Performs a basic validation on the incoming block, and push it
         -- into the queue for the 'StorageManager' to process it.
@@ -79,7 +77,7 @@ applyBlock bs dispatchBlock validateBasic config blk = do
             Right () -> do
                 let txs = blockData blk
 
-                dispatchBlock blk
+                Protocol.dispatchBlockAsync proto blk
                 Mempool.delTxs txs
                 pure $ Applied [BlockAppliedEvent blkHash]
 

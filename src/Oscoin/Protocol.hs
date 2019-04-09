@@ -1,6 +1,7 @@
 module Oscoin.Protocol
     ( Protocol -- opaque
     , Handle(..)
+    , hoistHandle
 
     -- * Getters
     , protoOrphanage
@@ -68,6 +69,17 @@ data Handle c tx s m = Handle
     { dispatchBlockSync  :: Block c tx (Sealed c s) -> m ()
     -- ^ TODO(adn): Return an error?
     , dispatchBlockAsync :: Block c tx (Sealed c s) -> m ()
+    , isNovelBlock       :: BlockHash c -> m Bool
+    }
+
+hoistHandle
+    :: forall c tx s n m. (forall a. n a -> m a)
+    -> Handle c tx s n
+    -> Handle c tx s m
+hoistHandle natTrans hdl = Handle
+    { dispatchBlockSync  = natTrans . dispatchBlockSync hdl
+    , dispatchBlockAsync = natTrans . dispatchBlockAsync hdl
+    , isNovelBlock       = natTrans . isNovelBlock hdl
     }
 
 {------------------------------------------------------------------------------
@@ -119,6 +131,7 @@ runProtocol validateFull scoreBlock telemetry bs config use =
                   events <- modifyMVar proto $ \p -> stepProtocol p blk
                   forM_ events (Telemetry.emit telemetry)
               , dispatchBlockAsync = atomically . writeTBQueue incomingBlocksQueue
+              , isNovelBlock = \h -> withMVar proto $ \p -> isNovelBlockInternal p h
               }
 
         worker <- Async.async $ do
@@ -276,3 +289,17 @@ selectBestChain mgr = do
     switchToFork fork chainSuffix = do
         let newChain = O.toBlocksOldestFirst orphanage fork
         BlockStore.switchToFork bsPrivateAPI (fromIntegral $ length chainSuffix) newChain
+
+-- | Returns 'True' if the input block is novel to the 'Protocol', i.e it's
+-- neither in the block store nor in the orphanage.
+isNovelBlockInternal
+    :: (Ord (BlockHash c), Monad m)
+    => Protocol c tx s m
+    -> BlockHash c
+    -> m Bool
+isNovelBlockInternal proto h = do
+    insideBlockStore <- not <$> BlockStore.isNovelBlock bsPublicAPI h
+    pure (not insideBlockStore && not (O.member orphanage h))
+  where
+    orphanage   = protoOrphanage proto
+    bsPublicAPI = fst . protoFullBlockStore $ proto

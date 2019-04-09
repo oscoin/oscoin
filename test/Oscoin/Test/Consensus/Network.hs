@@ -44,6 +44,7 @@ import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
+import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage as Storage
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Time
@@ -80,11 +81,12 @@ instance Arbitrary DummyNodeId where
 -- TestableNode ----------------------------------------------------------------
 
 class (MonadMempool c DummyTx m) => TestableNode c s m a | a -> m, m -> a, a -> s where
-    testableInit :: DummyNodeId -> a
-    testableTick :: Timestamp -> m (Maybe (Block c DummyTx (Sealed c s)))
-    testableRun :: a -> m b -> (b, a)
+    testableInit       :: DummyNodeId -> a
+    testableTick       :: Timestamp -> m (Maybe (Block c DummyTx (Sealed c s)))
+    testableRun        :: a -> m b -> (b, a)
     testableBlockStore :: Abstract.BlockStore c DummyTx s m
-    testableBestChain :: a -> Blockchain c DummyTx s
+    testableProtocol   :: Protocol.Handle c DummyTx s m
+    testableBestChain  :: a -> Blockchain c DummyTx s
 
 testableLongestChain :: TestableNode c s m a => a -> [BlockHash c]
 testableLongestChain =
@@ -266,11 +268,9 @@ applyMessage _ _ _ msg@(TxMsg tx) = do
         Storage.Applied _ -> [msg]
         _                 -> []
 applyMessage config to validateBasic msg@(BlockMsg blk) = do
-    let (blockStoreReader, blockStoreWriter) = testableBlockStore
-    -- NOTE (adn): We are bypassing the protocol at the moment, but we
-    -- probably shouldn't.
-    let insertBlock = Abstract.insertBlock blockStoreWriter
-    result <- Storage.applyBlock blockStoreReader insertBlock validateBasic config blk
+    let (blockStoreReader, _) = testableBlockStore
+    let proto = testableProtocol
+    result <- Storage.applyBlock proto validateBasic config blk
     parentMissing <- map isNothing (Abstract.lookupBlock blockStoreReader parentHash)
 
     -- If the parent block is missing, request it from the network.

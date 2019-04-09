@@ -214,10 +214,9 @@ storage
 storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
         Handle{hProtocol, hConfig} <- ask
-        let dispatchBlock = liftIO . Protocol.dispatchBlockAsync hProtocol
         let consensusConfig =  cfgConsensusConfig hConfig
-        bs <- getBlockStoreReader
-        Storage.applyBlock bs dispatchBlock validateBasic consensusConfig blk
+        let protoHandle = Protocol.hoistHandle liftIO hProtocol
+        Storage.applyBlock protoHandle validateBasic consensusConfig blk
     , storageApplyTx     = \tx -> do
         bs <- getBlockStoreReader
         Storage.applyTx bs tx
