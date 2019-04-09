@@ -5,36 +5,34 @@ module Test.Oscoin.Storage.Block.Orphanage
     ) where
 
 import           Oscoin.Prelude hiding (reverse)
+import qualified Prelude (last, reverse)
 
 
 import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
+import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Storage.Block.Orphanage
+import qualified Oscoin.Time as Time
 import           Oscoin.Time.Chrono (reverse, toNewestFirst)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
-import           Oscoin.Test.Storage.Block.SQLite
-                 ( bestChainOracle
-                 , defaultGenesis
-                 , fromShuffled
-                 , insertOrphans
-                 , shuffledOrphanChains
-                 )
-import           Oscoin.Test.Util (Condensed(..), showOrphans)
+import           Oscoin.Test.Util (Condensed(..))
 
 import           Data.ByteArray.Orphans ()
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
+import qualified Data.Text as T
 
 import           Test.QuickCheck (property)
 import           Test.QuickCheck.Extended ((===))
-import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.QuickCheck hiding ((===))
 
 tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.Storage.Block.Orphanage"
-    [ testProperty "propInsertOrphans" (propInsertOrphans d)
+    [ testProperty "propInsertOrphansGetOrphans" (propInsertOrphansGetOrphans d)
     , testProperty "propSelectBestCandidateSingleChoice" (propSelectBestCandidateSingleChoice d)
     , testProperty "propSelectBestCandidateMultipleChoice" (propSelectBestCandidateMultipleChoice d)
     , testProperty "propSelectBestCandidateComplex" (propSelectBestCandidateComplex d)
@@ -44,18 +42,17 @@ tests d = testGroup "Test.Oscoin.Storage.Block.Orphanage"
   Properties
 ------------------------------------------------------------------------------}
 
-propInsertOrphans :: forall c. Dict (IsCrypto c) -> Property
-propInsertOrphans Dict = do
-    let orphanage    = emptyOrphanage @c blockScore
-        initialChain = unsafeToBlockchain [defaultGenesis]
-        showIt       = showOrphans . (initialChain,)
-        forkParams   = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
+propInsertOrphansGetOrphans :: forall c. Dict (IsCrypto c) -> Property
+propInsertOrphansGetOrphans Dict =
     forAllShow (genOrphanChainsFrom forkParams initialChain) showIt $ \chains ->
-        monadic runIdentity $ do
-            ps <- forM chains $ \(orphanChain, _missingLink) -> do
-                     let actual = toList $ getOrphans (insertOrphans (toNewestFirst $ blocks orphanChain) orphanage)
-                     pure (sort actual === sort (map blockHash (toNewestFirst $ blocks orphanChain)))
-            pure $ foldl' (.&&.) (property True) ps
+        conjoin $ flip map chains $ \(orphanChain, _missingLink) ->
+            let blks = toNewestFirst $ blocks orphanChain
+                orphanage = insertOrphans blks (emptyOrphanage @c blockScore)
+            in Set.fromList (map blockHash blks) === getOrphans orphanage
+  where
+    initialChain = Blockchain.fromGenesis defaultGenesis
+    showIt       = showOrphans . (initialChain,)
+    forkParams   = ForkParams 0 3 1  -- 1 fork of max 3 blocks.
 
 -- Generates a bunch of candidates and check the best one is selected.
 -- In this test, we limit the selection to only one choice, i.e. at any given
@@ -63,76 +60,92 @@ propInsertOrphans Dict = do
 propSelectBestCandidateSingleChoice :: forall c. Dict (IsCrypto c) -> Property
 propSelectBestCandidateSingleChoice Dict = do
     let orphanage    = emptyOrphanage @c blockScore
-        initialChain = unsafeToBlockchain [defaultGenesis]
+        initialChain = Blockchain.fromGenesis defaultGenesis
         showIt       = showOrphans . (initialChain,)
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
     forAllShow (genOrphanChainsFrom forkParams initialChain) showIt $ \chains ->
-        monadic runIdentity $ do
-            ps <- forM chains $ \(orphanChain, missingLink) -> do
-                -- First of all, we insert all the orphans up to the missing
-                -- link, and we assess that the best chain must be 'Nothing',
-                -- as we don't have any candidate linking to the main chain.00
-                let orphanage' = insertOrphans (toNewestFirst $ blocks orphanChain) orphanage
-                let p1 = selectBestChain [blockHash defaultGenesis] orphanage' === Nothing
-                -- Now we insert the missing link and we check the chain is
-                -- what we expect.
-                let orphanage'' = insertOrphans [missingLink] orphanage'
-                let bestChain = toList
-                              . toNewestFirst
-                              . reverse
-                              . toBlocksOldestFirst orphanage''
-                              . snd <$> selectBestChain [blockHash defaultGenesis] orphanage''
-                let p2 = bestChain === Just ((toNewestFirst . blocks) orphanChain <> [missingLink])
-                pure [p1, p2]
-            pure $ classifyChainsByScore chains $
-                       foldl' (.&&.) (property True) (mconcat ps)
+            classifyChainsByScore chains
+                $ conjoin
+                $ flip map chains $ \(orphanChain, missingLink) ->
+                    -- First of all, we insert all the orphans up to the missing
+                    -- link, and we assess that the best chain must be 'Nothing',
+                    -- as we don't have any candidate linking to the main chain.00
+                    let orphanage' = insertOrphans (toNewestFirst $ blocks orphanChain) orphanage
+                        p1 = selectBestChain [blockHash defaultGenesis] orphanage' === Nothing
+                        -- Now we insert the missing link and we check the chain is
+                        -- what we expect.
+                        orphanage'' = insertOrphans [missingLink] orphanage'
+                        bestChain = toList
+                                  . toNewestFirst
+                                  . reverse
+                                  . toBlocksOldestFirst orphanage''
+                                  . snd <$> selectBestChain [blockHash defaultGenesis] orphanage''
+                        p2 = bestChain === Just ((toNewestFirst . blocks) orphanChain <> [missingLink])
+                    in p1 .&&. p2
 
 -- Generates a bunch of candidates and check the best one is selected. The
 -- orphans blocks are fed shuffled to the 'Orphanage', to test its ability to
 -- recognise and fuse chain fragments.
 propSelectBestCandidateMultipleChoice :: forall c. Dict (IsCrypto c) -> Property
-propSelectBestCandidateMultipleChoice Dict = do
-    let orphanage    = emptyOrphanage @c blockScore
-        initialChain = unsafeToBlockchain [defaultGenesis]
-        showIt       = showOrphans . (initialChain,) . map (\(_,b,c) -> (b,c))
+propSelectBestCandidateMultipleChoice Dict = property $ do
+    let initialChain = Blockchain.fromGenesis (defaultGenesis @c)
+        baseBlockHash = blockHash defaultGenesis
         forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
-    forAllShow (resize 3 $ shuffledOrphanChains forkParams initialChain) showIt $ \chains ->
-            let finalOrphanage =
-                  foldl' (\o (shuffledChain, _, missingLink) ->
-                            insertOrphans (toNewestFirst . blocks $ fromShuffled shuffledChain)
-                          . insertOrphans [missingLink]
-                          $ o -- Order of insertion shouldn't matter!
-                        ) orphanage chains
-                bestChain = snd <$>
-                  selectBestChain [blockHash defaultGenesis] finalOrphanage
-            in classifyChainsByScore (map (\(_,b,c) -> (b,c)) chains) $
-                 bestChain === bestChainOracle (blockHash defaultGenesis) chains
+    chains <- resize 3 $ genOrphanChainsFrom forkParams initialChain
+    orphanage <-
+        foldM (\o (chain, missingLink) ->
+            insertOrphansShuffled (missingLink : toNewestFirst (blocks chain)) o
+            ) (emptyOrphanage blockScore) chains
+
+    let bestChainOrphanage = snd <$>
+          selectBestChain [baseBlockHash] orphanage
+    pure
+        $ counterexample (showOrphans (initialChain, chains))
+        $ classifyChainsByScore chains
+        $ bestChainOrphanage === bestChainOracle baseBlockHash chains
+
 
 propSelectBestCandidateComplex :: forall c. Dict (IsCrypto c) -> Property
-propSelectBestCandidateComplex Dict = do
-    let orphanage = emptyOrphanage @c blockScore
-        generator = do
-            chain <- resize 15 $ genBlockchainFrom defaultGenesis
-            orph  <- shuffledOrphanChains forkParams chain
-            pure (chain, orph)
-        showIt (chns, orph) = showOrphans . (chns,) . map (\(_,b,c) -> (b,c)) $ orph
-        forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
-    forAllShow generator showIt $ \(_initialChain, chains) ->
-            let (finalOrphanage, allLinks) =
-                  foldl' (\(o,ls) (shuffledChain, _, missingLink) -> (
-                            insertOrphans (toNewestFirst . blocks $ fromShuffled shuffledChain)
-                          . insertOrphans [missingLink]
-                          $ o, missingLink : ls)
-                        ) (orphanage, mempty) chains
-                bestChain lnk = snd <$> selectBestChain [parentHash lnk] finalOrphanage
-                props = map (\lnk -> bestChain lnk == bestChainOracle (parentHash lnk) chains) allLinks
-            in classifyChainsByScore (map (\(_,b,c) -> (b,c)) chains) $
-                foldl' (.&&.) (property True) props
-
+propSelectBestCandidateComplex Dict = property $ do
+    initialChain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
+    let forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
+    chains <- genOrphanChainsFrom forkParams initialChain
+    orphanage <-
+        foldM (\o (chain, missingLink) ->
+            insertOrphansShuffled (missingLink : toNewestFirst (blocks chain)) o
+            ) (emptyOrphanage blockScore) chains
+    let bestChainOrphanage lnk = snd <$> selectBestChain [parentHash lnk] orphanage
+    pure
+        $ counterexample (showOrphans (initialChain, chains))
+        $ classifyChainsByScore chains
+        $ conjoin
+        $ map (\(_, lnk) -> bestChainOrphanage lnk === bestChainOracle (parentHash lnk) chains) chains
 
 {------------------------------------------------------------------------------
   Utility functions
 ------------------------------------------------------------------------------}
+
+insertOrphansShuffled
+    :: IsCrypto c
+    => [Block c tx (Sealed c s)]
+    -> Orphanage c tx s
+    -> Gen (Orphanage c tx s)
+insertOrphansShuffled blks o = do
+    shuffledBlocks <- shuffle blks
+    pure $ insertOrphans shuffledBlocks o
+
+-- | Inserts all the given blocks in the 'Orphanage'.
+insertOrphans
+    :: IsCrypto c
+    => [Block c tx (Sealed c s)]
+    -> Orphanage c tx s
+    -> Orphanage c tx s
+insertOrphans xs o =
+    foldl' (flip insertOrphan) o xs
+
+
+defaultGenesis :: IsCrypto c => Block c () (Sealed c ())
+defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
 
 classifyChainsByScore
     :: forall c tx s. [(Blockchain c tx s, Block c tx (Sealed c s))]
@@ -156,6 +169,27 @@ classifyChainsByScore chains = tabulate "Chain Score" scores
       totalScore :: [Block c tx (Sealed c s)] -> Score
       totalScore = sum . map blockScore
 
+bestChainOracle
+    :: IsCrypto c
+    => BlockHash c
+    -- ^ The hash of the adopted block this chain originates from.
+    -> [(Blockchain c tx s, Block c tx (Sealed c s))]
+    -> Maybe (ChainCandidate c s)
+bestChainOracle _ [] = Nothing
+bestChainOracle root xs =
+    let (chain, lnk) =
+            maximumBy (\(chain1,lnk1) (chain2, lnk2) ->
+                sum (map blockScore (lnk1 : (toNewestFirst . blocks) chain1)) `compare`
+                sum (map blockScore (lnk2 : (toNewestFirst . blocks) chain2))
+            ) (filter (\(_,ls) -> parentHash ls == root) xs)
+        winningChain = Prelude.reverse ((toNewestFirst . blocks) chain <> [lnk])
+    in Just $ ChainCandidate
+        { candidateChain     = Seq.fromList (map blockHash winningChain)
+        , candidateTipHeader = blockHeader (Prelude.last winningChain)
+        , candidateScore     = sum (map blockScore winningChain)
+        }
+
+
 {------------------------------------------------------------------------------
   (Temporary) Orphans
 ------------------------------------------------------------------------------}
@@ -167,3 +201,17 @@ instance (IsCrypto c, Show s) => Condensed (ChainCandidate c s) where
         <> ", tip  = "   <> show candidateTipHeader
         <> ", score  = " <> condensed candidateScore
         <> " }"
+
+showOrphans
+    :: HasHashing c
+    => ( Blockchain c tx s
+       , [(Blockchain c tx s, Block c tx (Sealed c s))]
+       )
+    -> String
+showOrphans (initialChain, orphansWithLinks) =
+    "chain: "      <> T.unpack (showChainDigest initialChain) <> "\n" <>
+    "orphans:\n- " <> T.unpack showOrphanAndLinks
+  where
+      showOrphanAndLinks =
+          T.intercalate "- " . map (\(c,l) -> showChainDigest c <> " link: " <> showBlockDigest l <> "\n")
+                             $ orphansWithLinks
