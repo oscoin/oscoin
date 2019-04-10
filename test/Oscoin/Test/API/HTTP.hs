@@ -12,7 +12,7 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx (txPubKey, verifyTx)
-import           Oscoin.Test.Crypto.Blockchain.Arbitrary
+import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
@@ -136,7 +136,7 @@ getMissingBlock codec = liftIO $ httpTest emptyNodeState $ do
 
 getExistingBlock :: IsCrypto c => Codec -> PropertyM IO (HTTPTest c)
 getExistingBlock codec = do
-    chain <- pick arbitraryBlockchain
+    chain <- pick genBlockchain
     let g = genesis chain
     let blockId = toUrlPiece $ blockHash g
 
@@ -147,7 +147,7 @@ getExistingBlock codec = do
 
 getBestChain :: IsCrypto c => Codec -> PropertyM IO (HTTPTest c)
 getBestChain codec = do
-    chain <- pick arbitraryBlockchain
+    chain <- pick genBlockchain
 
     liftIO $ httpTest (nodeState mempty chain def) $ do
         get codec "/blockchain/best?depth=1" >>=
