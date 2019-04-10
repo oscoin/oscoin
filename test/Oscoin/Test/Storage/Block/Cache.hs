@@ -4,7 +4,7 @@ module Oscoin.Test.Storage.Block.Cache
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain.Block hiding (genesisBlock)
+import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Time.Chrono (NewestFirst(..))
 
 import           Oscoin.Storage.Block.Cache

@@ -23,11 +23,9 @@ module Oscoin.Crypto.Blockchain.Block
     , blockData
     , emptyGenesisBlock
     , emptyGenesisFromState
-    , genesisBlock
     , isGenesisBlock
     , headerHash
     , parentHash
-    , withHeader
     , sealBlock
     , linkParent
     , emptyHeader
@@ -56,6 +54,7 @@ import           Data.Aeson
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
+import           Lens.Micro
 import           Numeric.Natural
 import           Text.Show (Show(..))
 
@@ -136,6 +135,12 @@ instance (FromJSON (Hash c), FromJSON s) => FromJSON (BlockHeader c s) where
 
         pure BlockHeader{..}
 
+blockHeaderSealL :: Lens (BlockHeader c s) (BlockHeader c s') s s'
+blockHeaderSealL = lens blockSeal (\h x -> h { blockSeal = x })
+
+blockHeaderPrevHashL :: Lens' (BlockHeader c s) (BlockHash c)
+blockHeaderPrevHashL = lens blockPrevHash (\h x -> h { blockPrevHash = x })
+
 -- | Create an empty block header.
 emptyHeader :: Crypto.HasHashing c => BlockHeader c Unsealed
 emptyHeader = BlockHeader
@@ -164,23 +169,14 @@ headerHash =
 parentHash :: Block c tx s -> BlockHash c
 parentHash = blockPrevHash . blockHeader
 
-withHeader
-    :: (HasBlockHeader c s)
-    => Block c tx a
-    -> BlockHeader c s
-    -> Block c tx s
-withHeader blk h = blk { blockHeader = h, blockHash = headerHash h }
-
 -- | Set the block parent hash of a block to the supplied parent.
 linkParent
     :: (HasBlockHeader c s)
     => Block c tx s -- ^ The parent block
     -> Block c tx s -- ^ The unlinked child block
     -> Block c tx s -- ^ The newly-linked child
-linkParent p blk =
-    blk { blockHeader = header, blockHash = headerHash header }
-  where
-    header = (blockHeader blk) { blockPrevHash = blockHash p }
+linkParent parent blk =
+    blk & blockHeaderL . blockHeaderPrevHashL .~ blockHash parent
 
 
 -- | The hash of a block.
@@ -252,6 +248,11 @@ instance ( FromJSON s
            then fail "Error decoding block: hash does not match data"
            else pure Block{..}
 
+blockHeaderL
+    :: (HasBlockHeader c s')
+    => Lens (Block c tx s) (Block c tx s') (BlockHeader c s) (BlockHeader c s')
+blockHeaderL = lens blockHeader (\b h -> mkBlock h (blockData b))
+
 mkBlock
     :: ( Foldable t
        , HasBlockHeader c s
@@ -284,28 +285,6 @@ emptyGenesisFromState blockTimestamp st =
     header = emptyHeader { blockTimestamp, blockStateHash = stHash }
     stHash = Crypto.fromHashed . Crypto.hash $ st
 
--- | Construct a sealed genesis block.
-genesisBlock
-    :: (Serialise tx
-      , HasBlockHeader c s
-      , AuthTree.MerkleHash (Hash c)
-      , Crypto.Hashable c (BlockHeader c Unsealed)
-      , Crypto.Hashable c (BlockHeader c (Sealed c s))
-      , Crypto.Hashable c st)
-    => [tx]
-    -> st
-    -> s
-    -> Timestamp
-    -> Block c tx (Sealed c s)
-genesisBlock txs st seal t =
-    sealBlock seal $ mkBlock header txs
-  where
-    header = emptyHeader
-        { blockTimestamp = t
-        , blockStateHash = hashState st
-        , blockDataHash = hashTxs txs
-        }
-
 isGenesisBlock
     :: (Crypto.HasHashing c)
     => Block c tx s
@@ -320,10 +299,7 @@ sealBlock
     -> Block c tx Unsealed
     -> Block c tx (Sealed c s)
 sealBlock seal blk =
-    blk' { blockHash = headerHash (blockHeader blk') }
-  where
-    blk' = blk { blockHeader =
-        (blockHeader blk) { blockSeal = SealedWith seal } }
+    blk & (blockHeaderL . blockHeaderSealL) .~ SealedWith seal
 
 
 hashState :: Crypto.Hashable c st => st -> StateHash c

@@ -40,8 +40,7 @@ import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block
-                 (emptyGenesisBlock, genesisBlock, sealBlock)
+import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -240,7 +239,7 @@ runSession nst (Session sess) =
 -- Radicle environment
 runSessionEnv :: IsCrypto c => Rad.Env c -> Session c () -> Assertion
 runSessionEnv env (Session sess) = do
-    let nst = nodeState [] (fromGenesis $ genesisBlock [] env "" epoch) env
+    let nst = nodeState [] (fromGenesis $ sealBlock "" $ emptyGenesisFromState epoch env) env
     withNode nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
