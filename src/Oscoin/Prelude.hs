@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 
 -- | Custom Prelude based on <https://hackage.haskell.org/package/protolude Protolude>.
 --
@@ -24,6 +25,13 @@
 --     * "Data.Type.Equality"
 --     * "Data.Complex"
 --
+-- * Export 'Prelude.error' instead of 'Protolude.Error.error'. The
+--   latter has a bug that swallows stack traces. See
+--   https://github.com/sdiehl/protolude/pull/102.
+--
+-- * 'undefined' and 'notImplemented' have 'HasCallStack' constraint
+--   and use 'Prelude.error'.
+--
 -- To see the full list of exported symbols, run
 --
 -- @
@@ -42,25 +50,34 @@ module Oscoin.Prelude
 
     , applyN
     , die
+    , error
     , guarded
     , guardedA
     , identity
     , liftIO1
     , liftIO2
     , map
+    , notImplemented
     , pass
     , print
     , show
     , uncons
+    , undefined
     , unsnoc
     ) where
 
 import           Control.Exception.Safe hiding (assert, handle)
-import           Prelude (String)
+
+-- 'Protolude.Error.error' does not add stack traces to the error.
+-- Switch to 'Protolude.Error.error' again when
+-- https://github.com/sdiehl/protolude/pull/102 is released.
+import           Prelude (String, error)
 
 import           Data.String as X (IsString)
 
-import           Debug as X
+-- We define alternative versions of 'notImplemented' and 'undefined'
+-- that have the 'HasCallStack' constraint.
+import           Debug as X hiding (notImplemented, undefined)
 
 import           Protolude.Base as Base hiding
                  ( print
@@ -435,3 +452,12 @@ show x = toS (PBase.show x)
 
 die :: Text -> IO a
 die err = System.Exit.die (toS err)
+
+
+{-# WARNING notImplemented "'notImplemented' remains in code" #-}
+notImplemented :: (HasCallStack) => a
+notImplemented = error "Not implemented"
+
+{-# WARNING undefined "'undefined' remains in code" #-}
+undefined :: (HasCallStack) => a
+undefined = error "Prelude.undefined"
