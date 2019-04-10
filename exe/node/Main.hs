@@ -10,7 +10,7 @@ import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
-import           Oscoin.Crypto.Blockchain.Eval (evalBlock, fromEvalError)
+import           Oscoin.Crypto.Blockchain.Eval (evalBlock)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
 import           Oscoin.Node (runNodeT, withNode)
@@ -57,8 +57,7 @@ main = do
     nid          <- pure (mkNodeId $ fst keys)
     mem          <- Mempool.newIO
     gen          <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
-    genState     <- either (die . fromEvalError) pure $
-                        evalBlock Rad.txEval Rad.pureEnv gen
+    let (genState, _receipts) = evalBlock Rad.txEval Rad.pureEnv gen
     stStore      <- newHashStoreIO
     storeHashContent stStore genState
     metricsStore <-

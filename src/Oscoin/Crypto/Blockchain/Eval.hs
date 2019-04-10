@@ -9,17 +9,14 @@ module Oscoin.Crypto.Blockchain.Eval
     , buildBlockStrict
     , buildGenesis
     , evalBlock
-    , evalBlockchain
     ) where
 
 import           Oscoin.Prelude
 
 
-import           Oscoin.Crypto.Blockchain (Blockchain(..), blocks)
 import           Oscoin.Crypto.Blockchain.Block hiding (parentHash)
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
@@ -136,32 +133,27 @@ buildGenesis eval tick txs s =
         Crypto.zeroHash
         s
 
--- | Try to evaluate a block, given an initial state and evaluator.
+-- | Evaluate the transactions contained in the block against the given
+-- state and return the new state and all the produced Receipts.
 evalBlock
-    :: Evaluator st tx o
+    :: forall c st tx o s.
+       (Crypto.Hashable c tx)
+    => Evaluator st tx o
     -> st
     -> Block c tx s
-    -> Either EvalError st
-evalBlock eval st b =
-    foldlM step st (blockData b)
-  where
-    step s tx = map snd (eval tx s)
-
--- | Evaluate all transactions of a 'Blockchain' and return the result.
-evalBlockchain
-    :: Evaluator st tx o
-    -> st
-    -> Blockchain c tx s
-    -> ([(tx, Either EvalError o)], st)
-evalBlockchain eval st (toNewestFirst . blocks -> blks) =
-    evalTraverse eval (concatMap (toList . blockData) (reverse blks)) st
+    -> (st, [Receipt c tx o])
+evalBlock eval initialState blk =
+    let (txOutputs, newState) = evalTraverse eval (blockData blk) initialState
+        receipts = map (uncurry $ mkReceipt blk) txOutputs
+     in (newState, toList receipts)
 
 -- Internal ------------------------------------------------------
 
 -- | Traverses transactions, evalutes them against the
 -- given state and provides the output of the transaction.
 --
--- If evaluation of a transaction fails the state remains untouched.
+-- If the evaluation of a transaction fails the state remains untouched
+-- and we proceed evaluating the next transaction.
 evalTraverse
     :: (Traversable t)
     => Evaluator state tx output
