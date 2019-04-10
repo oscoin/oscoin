@@ -14,21 +14,22 @@ import           Oscoin.Configuration
                  , pathsParser
                  )
 import qualified Oscoin.P2P.Disco as P2P.Disco
+import           Oscoin.Time (Duration, seconds)
 
 import           Data.IP (IP)
 import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Options = Options
-    { optHost          :: IP
-    , optGossipPort    :: PortNumber
-    , optApiPort       :: PortNumber
-    , optDiscovery     :: P2P.Disco.Options P2P.Disco.OptNetwork
-    , optNoEmptyBlocks :: Bool
-    , optPaths         :: Paths
-    , optEnvironment   :: Environment
-    , optEkgHost       :: HostName
-    , optEkgPort       :: PortNumber
+    { optHost           :: IP
+    , optGossipPort     :: PortNumber
+    , optApiPort        :: PortNumber
+    , optDiscovery      :: P2P.Disco.Options P2P.Disco.OptNetwork
+    , optBlockTimeLower :: Duration
+    , optPaths          :: Paths
+    , optEnvironment    :: Environment
+    , optEkgHost        :: HostName
+    , optEkgPort        :: PortNumber
     }
 
 nodeOptionsParser :: ConfigPaths -> Parser Options
@@ -53,9 +54,13 @@ nodeOptionsParser cps = Options
        <> showDefault
         )
     <*> P2P.Disco.discoParser
-    <*> switch
-        ( long "no-empty-blocks"
-       <> help "Do not generate empty blocks"
+    <*> option (map (* seconds) auto)
+        ( long "block-time-lower"
+       <> help "Lower bound on the block time. Applies only to empty blocks in \
+               \the development environment, and is useful to avoid busy looping \
+               \in an idle network."
+       <> metavar "SECONDS"
+       <> value 1
        <> showDefault
         )
     <*> pathsParser cps

@@ -52,7 +52,6 @@ runNodeT env (NodeT ma) = runReaderT ma env
 data Config = Config
     { cfgGlobalConfig    :: GlobalConfig
     , cfgTelemetry       :: Telemetry.Handle
-    , cfgNoEmptyBlocks   :: Bool
     , cfgConsensusConfig :: Consensus.Config
     }
 

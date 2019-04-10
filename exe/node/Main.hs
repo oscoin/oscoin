@@ -51,7 +51,7 @@ main = do
     let consensus =
             case optEnvironment of
                 Production  -> Consensus.nakamotoConsensus
-                Development -> Consensus.nakamotoConsensusLenient
+                Development -> Consensus.nakamotoConsensusLenient optBlockTimeLower
 
     keys         <- runReaderT readKeyPair (Just $ keysDir optPaths)
     nid          <- pure (mkNodeId $ fst keys)
@@ -92,7 +92,6 @@ main = do
                         mkNodeConfig optEnvironment
                                      (P2P.Disco.optNetwork optDiscovery')
                                      telemetry
-                                     optNoEmptyBlocks
                                      consensusConfig
                  in
                     withNode config
@@ -133,16 +132,16 @@ main = do
 
     either (const exitFailure) (const exitSuccess) res
   where
-    mkNodeConfig env net telemetryHandle neb config = Node.Config
-        { Node.cfgGlobalConfig    = Node.GlobalConfig
-            { Node.globalEnv             = env
-            , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
-            , Node.globalPhysicalNetwork = net
+    mkNodeConfig env net metrics consensusConfig
+        = Node.Config
+            { Node.cfgGlobalConfig    = Node.GlobalConfig
+                { Node.globalEnv             = env
+                , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
+                , Node.globalPhysicalNetwork = net
+                }
+            , Node.cfgTelemetry       = metrics
+            , Node.cfgConsensusConfig = consensusConfig
             }
-        , Node.cfgTelemetry       = telemetryHandle
-        , Node.cfgNoEmptyBlocks   = neb
-        , Node.cfgConsensusConfig = config
-        }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner
     storage nod =

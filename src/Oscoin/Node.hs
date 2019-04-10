@@ -45,7 +45,6 @@ import           Oscoin.Data.Query
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
-import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Node.Trans
 import qualified Oscoin.P2P as P2P
 import           Oscoin.Storage (Storage(..))
@@ -127,23 +126,15 @@ miner
        )
     => NodeT c tx st s i m a
 miner = do
-    Handle{hConfig} <- ask
-    let
-        tele :: HasCallStack => NotableEvent -> IO ()
-        tele = Telemetry.emit (cfgTelemetry hConfig)
+    metrics <- asks (cfgTelemetry . hConfig)
     forever $ do
-        nTxs <- Mempool.numTxs
-        if nTxs == 0 && cfgNoEmptyBlocks hConfig
-        then
-            liftIO $ threadDelay $ 1000 * 1000
-        else do
-            blk <- mineBlock
-            for_ blk $ \b -> do
-                let bhash = blockHash b
-                liftIO $ tele (BlockMinedEvent bhash)
-                lift (tryBroadcast b) >>= liftIO . tele . \case
-                    Left  e  -> BlockBroadcastFailedEvent bhash (toException e)
-                    Right () -> BlockBroadcastEvent bhash
+        blk <- mineBlock
+        for_ blk $ \b -> do
+            let bhash = blockHash b
+            liftIO $ Telemetry.emit metrics (BlockMinedEvent bhash)
+            lift (tryBroadcast b) >>= liftIO . Telemetry.emit metrics . \case
+                Left  e  -> BlockBroadcastFailedEvent bhash (toException e)
+                Right () -> BlockBroadcastEvent bhash
   where
     tryBroadcast
         :: ( MonadIO              m

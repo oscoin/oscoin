@@ -37,7 +37,7 @@ import           Database.SQLite.Simple.ToField (ToField)
 
 -- | Target block time.
 blockTime :: Duration
-blockTime = 1 * seconds
+blockTime = 1 * minutes
 
 -- | The default target difficulty at genesis.
 defaultGenesisDifficulty :: Difficulty

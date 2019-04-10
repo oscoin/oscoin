@@ -146,7 +146,6 @@ withNode NodeState{..} k = do
                 , Node.globalPhysicalNetwork = net
                 }
             , Node.cfgTelemetry       = metrics
-            , Node.cfgNoEmptyBlocks   = False
             , Node.cfgConsensusConfig = config
             }
 
