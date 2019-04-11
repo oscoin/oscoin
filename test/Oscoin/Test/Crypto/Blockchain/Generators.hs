@@ -4,6 +4,7 @@ module Oscoin.Test.Crypto.Blockchain.Generators
       -- * Generating generic chains
     , genBlockchain
     , genBlockchainFrom
+    , genBlockchainFrom'
     , genOrphanChainsFrom
 
       -- * Generating Nakamoto chains
@@ -26,6 +27,9 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Test.QuickCheck
 
 -- | Generates a 'Blockchain' starting with the provided genesis block.
+--
+-- The generated blockchain has length between 2 and 15 depending on
+-- the size.
 genBlockchainFrom
     :: ( IsCrypto c
        , Arbitrary tx
@@ -35,11 +39,31 @@ genBlockchainFrom
        )
     => Block c tx (Sealed c s)
     -> Gen (Blockchain c tx s)
-genBlockchainFrom genBlock = sized $ \n ->
+genBlockchainFrom genBlock = genBlockchainFrom' 15 genBlock
+
+
+-- | Generates a 'Blockchain' starting with the provided genesis block.
+--
+-- Uses the provided maximum length to determine the number of blocks.
+-- We ensure that there are at least two blocks in the blockchain.
+genBlockchainFrom'
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       )
+    => Int
+    -> Block c tx (Sealed c s)
+    -> Gen (Blockchain c tx s)
+genBlockchainFrom' maxLength genBlock = sized $ \size -> do
+    -- Some tests will fail if a blockchain of length 1 is generated.
+    let maxLengthSized = 2 `max` ((maxLength * size) `div` 100)
+    len <- choose (2, maxLengthSized)
     foldM (\chain _ -> do
                newTip <- genBlockFrom (tip chain)
                pure (newTip |> chain)
-          ) (fromGenesis genBlock) [1 .. n - 1]
+          ) (fromGenesis genBlock) [1 :: Int .. len]
 
 
 -- | 'genBlockchainFrom' with an arbitrary empty genesis block
