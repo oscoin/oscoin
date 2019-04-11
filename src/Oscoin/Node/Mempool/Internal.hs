@@ -19,7 +19,6 @@ import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise(..))
-import qualified Data.Aeson as Aeson
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
@@ -37,9 +36,6 @@ deriving instance Ord (Hash c) => Monoid (Mempool c tx)
 instance (Ord (Hash c), Serialise tx, Serialise (Hash c)) => Serialise (Mempool c tx) where
     encode (Mempool txs) = encode (Map.elems txs)
     decode               = Mempool <$> decode
-
-instance Aeson.ToJSON tx => Aeson.ToJSON (Mempool c tx) where
-    toJSON (Mempool txs) = Aeson.toJSON $ Map.elems txs
 
 -- | Lookup a transaction in a mempool.
 lookup :: Ord (Hash c) => Crypto.Hashed c tx -> Mempool c tx -> Maybe tx

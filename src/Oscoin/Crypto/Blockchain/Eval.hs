@@ -23,8 +23,6 @@ import           Oscoin.Time.Chrono (toNewestFirst)
 
 import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
-import           Data.Aeson
-                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Generics.SOP as SOP
 
 
@@ -42,13 +40,6 @@ instance SOP.Generic EvalError
 instance SOP.HasDatatypeInfo EvalError
 
 instance Serialise EvalError
-
-instance ToJSON EvalError where
-    toJSON (EvalError e) = toJSON e
-
-instance FromJSON EvalError where
-    parseJSON v = EvalError <$> parseJSON v
-
 
 -- | A 'Receipt' is generated whenever a transaction is evaluated as
 -- part of a block.
@@ -71,20 +62,6 @@ mkReceipt
 mkReceipt block tx result = Receipt (Crypto.hash tx) result (blockHash block)
 
 instance (Serialise tx, Serialise (Hash c), Serialise o) => Serialise (Receipt c tx o)
-
-instance (ToJSON (Hash c), ToJSON tx, ToJSON o) => ToJSON (Receipt c tx o) where
-    toJSON Receipt{..} = object
-        [ "txHash"      .= receiptTx
-        , "txOutput"    .= receiptTxOutput
-        , "txBlockHash" .= receiptTxBlock
-        ]
-
-instance (FromJSON tx, FromJSON (Hash c), FromJSON o) => FromJSON (Receipt c tx o) where
-    parseJSON = withObject "Receipt" $ \o -> do
-        receiptTx        <- o .: "txHash"
-        receiptTxOutput  <- o .: "txOutput"
-        receiptTxBlock   <- o .: "txBlockHash"
-        pure Receipt{..}
 
 
 -- | Build a block by evaluating all the transactions and generating

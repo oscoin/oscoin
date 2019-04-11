@@ -10,14 +10,13 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (txPubKey, verifyTx)
+import           Oscoin.Data.Tx (txPubKey)
 import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
 import           Oscoin.Time.Chrono (toNewestFirst)
 
-import qualified Data.Aeson as Aeson
 import           Data.Default (def)
 
 import           Network.HTTP.Types.Status
@@ -31,7 +30,6 @@ import           Test.Tasty.QuickCheck
 tests :: forall c. Dict (IsCrypto c) -> [TestTree]
 tests Dict =
     [ test "Smoke test" (smokeTestOscoinAPI @c)
-    , testProperty "JSON encoding of Tx" (encodeDecodeTx @c)
     , testGroup "POST /transactions"
         [ testGroup "400 Bad Request"
             [ test "Invalid signature" (postTransactionWithInvalidSignature @c)]
@@ -147,7 +145,3 @@ getBestChain = do
         get "/blockchain/best" >>=
             assertStatus ok200 <>
             assertResultOK (take 3 . toNewestFirst $ blocks chain)
-
-encodeDecodeTx :: IsCrypto c => API.RadTx c -> Property
-encodeDecodeTx tx =
-    (Aeson.eitherDecode . Aeson.encode) tx === Right tx .&&. verifyTx tx

@@ -60,7 +60,6 @@ import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
 import           Control.Monad.Trans.Writer (execWriterT, tell)
-import           Data.Aeson (FromJSON, ToJSON)
 import           Data.Char (isAlphaNum)
 import           Data.Hashable (Hashable(..))
 import           Data.IP (IP(..))
@@ -166,10 +165,7 @@ fromPhysicalNetwork = \case
 newtype NodeId c = NodeId { fromNodeId :: PublicKey c }
     deriving (Generic)
 
-deriving instance Show (PublicKey c)     => Show (NodeId c)
-deriving instance FromJSON (PublicKey c) => FromJSON (NodeId c)
-deriving instance ToJSON (PublicKey c)   => ToJSON (NodeId c)
-
+deriving instance Show (PublicKey c) => Show (NodeId c)
 deriving instance Eq (PublicKey c)  => Eq (NodeId c)
 deriving instance Ord (PublicKey c) => Ord (NodeId c)
 
