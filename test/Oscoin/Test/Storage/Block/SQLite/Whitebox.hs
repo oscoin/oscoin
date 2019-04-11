@@ -15,6 +15,7 @@ import           Oscoin.Data.RadicleTx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()

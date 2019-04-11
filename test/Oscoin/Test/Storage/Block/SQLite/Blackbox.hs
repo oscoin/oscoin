@@ -14,7 +14,7 @@ import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary (arbitraryBlock)
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Data.Rad.Arbitrary ()
@@ -55,7 +55,7 @@ genGetBlocks
     => Block c (RadTx c) (Sealed c DummySeal)
     -> Gen (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
 genGetBlocks genesisBlock =
-    (,) <$> arbitraryBlock
+    (,) <$> genStandaloneBlock
         <*> resize 1 (genBlockchainFrom genesisBlock)
 
 

@@ -15,6 +15,7 @@ import           Oscoin.Crypto.Hash
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators
 
 import           Codec.Serialise (Serialise)
@@ -47,10 +48,10 @@ testBlockchain d@Dict config = testGroup "Blockchain"
         \(blk :: Block c String String) ->
             (Aeson.decode . Aeson.encode) blk == Just blk
     , testProperty "Difficulty: decode . encode == id (JSON)" $
-        \(diffi :: Difficulty) ->
+        forAll genDifficulty $ \(diffi :: Difficulty) ->
             (Aeson.decode . Aeson.encode) diffi == Just diffi
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
-        \(diffi :: Difficulty) ->
+        forAll genDifficulty $ \(diffi :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) diffi == Just diffi
     , testProperty "Difficulty (compact): decode . encode == id" $
         \(diffi :: Integer) -> -- TODO(alexis): Should only create 256-bit integers.
@@ -81,7 +82,7 @@ testValidateBlock Dict config = testGroup "Nakamoto: validateBlockchain"
             \blks -> let result = validateBlockchain Nakamoto.validateFull blks
                      in counterexample (show result) (result == Right ())
     , testProperty "Blocks bigger than the maximum size won't validate" $
-        forAll (arbitrary @(Block c Text Nakamoto.PoW)) $
+        forAll (arbitrary @(Block c Text ())) $
           \block -> let result = validateBlockSize config { Consensus.maxBlockSize = 1 } block
                     in counterexample (show result) (hasExceededMaxSize result)
     ]

@@ -30,7 +30,8 @@ import qualified Data.Text as T
 import           System.Random.SplitMix (mkSMGen)
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary (arbitraryBlock)
+import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
@@ -84,11 +85,11 @@ genIP = Gen.choice [ ipv4, ipv6 ]
 genMsg :: IsCrypto c => Gen (Msg c Text (Sealed c Text))
 genMsg = Gen.choice [ blkMsg, txMsg ]
   where
-    blkMsg = BlockMsg <$> quickcheck arbitraryBlock
+    blkMsg = BlockMsg <$> quickcheck genStandaloneBlock
     txMsg  = TxMsg    <$> Gen.text (Range.constant 0 512) Gen.unicodeAll
 
 genMsgId :: forall c. IsCrypto c => Gen (MsgId c Text)
 genMsgId = Gen.choice [ blkMsgId, txMsgId ]
   where
-    blkMsgId = BlockId . blockHash <$> quickcheck (arbitraryBlock @c @Text @(Sealed c Text))
+    blkMsgId = BlockId . blockHash <$> quickcheck (genStandaloneBlock @c @Text @(Sealed c Text))
     txMsgId  = TxId    . hash      <$> Gen.text (Range.constant 0 512) Gen.unicodeAll
