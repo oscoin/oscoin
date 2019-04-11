@@ -10,8 +10,7 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain (showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Eval
-import           Oscoin.Crypto.Hash
-                 (Hashable(..), Hashed, fromHashed, hashSerial, toHashed)
+import           Oscoin.Crypto.Hash (Hashable(..), hashSerial)
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto
@@ -20,7 +19,6 @@ import           Oscoin.Test.Crypto.Blockchain.Generators
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
-import qualified Data.Aeson as Aeson
 import           Data.Binary.Put (putWord32le, runPut)
 import qualified Data.ByteString.Lazy as LBS
 
@@ -38,18 +36,9 @@ testBlockchain
 testBlockchain d@Dict config = testGroup "Blockchain"
     [ testBuildBlock d
     , testValidateBlock d config
-    , testProperty "JSON Receipt" $ do
-        receipt <- arbitraryReceipt d
-        pure $ (Aeson.decode . Aeson.encode) receipt == Just receipt
     , testProperty "Block: deserialise . serialise == id" $
         \(blk :: Block c ByteString ByteString) ->
             (Serialise.deserialise . Serialise.serialise) blk == blk
-    , testProperty "Block: decode . encode == id (JSON)" $
-        \(blk :: Block c String String) ->
-            (Aeson.decode . Aeson.encode) blk == Just blk
-    , testProperty "Difficulty: decode . encode == id (JSON)" $
-        forAll genDifficulty $ \(diffi :: Difficulty) ->
-            (Aeson.decode . Aeson.encode) diffi == Just diffi
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
         forAll genDifficulty $ \(diffi :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) diffi == Just diffi
@@ -121,19 +110,6 @@ testBuildBlock d@Dict = testGroup "buildBlock"
     ]
 
 
-arbitraryReceipt
-    :: forall c. Dict (IsCrypto c)
-    -> Gen (Receipt c Tx Output)
-arbitraryReceipt Dict = do
-    receiptTxBlock <- fromHashed <$> arbitraryHashed
-    receiptTx <- arbitraryHashed
-    receiptTxOutput <- liftArbitrary2 (EvalError <$> arbitrary) arbitrary
-    pure Receipt{..}
-  where
-    arbitraryHashed :: Gen (Hashed c a)
-    arbitraryHashed = toHashed . fromHashed . hash <$> (arbitrary :: Gen ByteString)
-
-
 --
 -- * Test evaluator
 --
@@ -149,9 +125,6 @@ data Tx
     = TxOk Output
     | TxErr Int
     deriving (Eq, Show, Generic)
-
-instance Aeson.ToJSON Tx
-instance Aeson.FromJSON Tx
 
 txIsOk :: Tx -> Bool
 txIsOk (TxOk _)  = True

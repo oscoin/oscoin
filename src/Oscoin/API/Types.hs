@@ -11,25 +11,13 @@ module Oscoin.API.Types
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
-import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
+import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey, Signature)
 import           Oscoin.Data.RadicleTx (RadTx)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import           Oscoin.Prelude
-import qualified Radicle.Extended as Rad
 
 import qualified Codec.Serialise as Serial
-import           Data.Aeson
-                 ( FromJSON
-                 , ToJSON
-                 , object
-                 , parseJSON
-                 , toJSON
-                 , withObject
-                 , (.:)
-                 , (.=)
-                 )
-import           Lens.Micro
 import           Numeric.Natural
 
 data Result a =
@@ -37,8 +25,6 @@ data Result a =
     | Err Text
     deriving (Show, Eq, Functor, Generic)
 
-instance ToJSON a => ToJSON (Result a)
-instance FromJSON a => FromJSON (Result a)
 instance Serial.Serialise a => Serial.Serialise (Result a)
 
 isOk :: Result a -> Bool
@@ -73,25 +59,6 @@ data TxLookupResponse c = TxLookupResponse
 deriving instance (HasHashing c, Show (Hash c), Show (RadTx c)) => Show (TxLookupResponse c)
 deriving instance (Eq (Hash c), Eq (RadTx c))                   => Eq (TxLookupResponse c)
 
-instance (ToJSON (RadTx c), ToJSON (Hash c)) => ToJSON (TxLookupResponse c) where
-    toJSON TxLookupResponse{..} = object
-        [ "txHash" .= toJSON txHash
-        , "txBlockHash" .= toJSON txBlockHash
-        , "txOutput" .= toJSON (map (second Rad.prettyValue) $ txOutput)
-        , "txConfirmations" .= toJSON txConfirmations
-        , "txPayload" .= toJSON txPayload
-        ]
-
-instance (FromJSON (RadTx c), FromJSON (Hash c)) => FromJSON (TxLookupResponse c) where
-    parseJSON = withObject "TxLookupResponse" $ \o -> do
-        txHash <- o .: "txHash"
-        txBlockHash <- o .: "txBlockHash"
-        txOutput <- o .: "txOutput" >>= traverseOf (_Just . _Right) Rad.parseFromJson
-        txConfirmations <- o .: "txConfirmations"
-        txPayload <- o .: "txPayload"
-        pure $ TxLookupResponse {..}
-
-
 instance ( Serial.Serialise (Hash c)
          , Serial.Serialise (PublicKey c)
          , Serial.Serialise (Signature c)
@@ -105,11 +72,3 @@ deriving instance Show (Hash c) => Show (TxSubmitResponse c tx)
 deriving instance Eq (Hash c)   => Eq (TxSubmitResponse c tx)
 
 deriving instance Serial.Serialise (Hash c) => Serial.Serialise (TxSubmitResponse c tx)
-
-instance (ToJSON (Hash c), Hashable c tx) => ToJSON (TxSubmitResponse c tx) where
-    toJSON (TxSubmitResponse tx) =
-        object [ "tx" .= tx ]
-
-instance (FromJSON (Hash c), Hashable c tx) => FromJSON (TxSubmitResponse c tx) where
-    parseJSON = withObject "TxSubmitResponse" $ \o ->
-        TxSubmitResponse <$> o .: "tx"
