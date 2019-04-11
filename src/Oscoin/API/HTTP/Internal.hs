@@ -5,21 +5,13 @@ module Oscoin.API.HTTP.Internal
     , runApi
     , withHandle
 
-    , MediaType(..)
-    , decode
-    , encode
-    , parseMediaType
-    , fromMediaType
-
     , trailingSlashPolicy
     , indexPolicy
     , mkMiddleware
 
     , errBody
     , respond
-    , respondCbor
     , noBody
-    , body
 
     , param
     , param'
@@ -35,17 +27,10 @@ import qualified Oscoin.Node as Node
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
-import           Data.Aeson (FromJSON, ToJSON)
-import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import           Data.List (init, isSuffixOf, lookup)
-import           Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NonEmpty
+import           Data.List (init, isSuffixOf)
 import qualified Data.Text as T
-import           Network.HTTP.Media
-                 (Quality, mapQuality, parseAccept, parseQuality, (//))
-import qualified Network.HTTP.Media as HTTP
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
@@ -81,52 +66,15 @@ type MonadApi c s i m =
 mkState :: State
 mkState = State ()
 
-getHeader :: HeaderName -> ApiAction c s i (Maybe BS.ByteString)
-getHeader = Spock.rawHeader
-
-getHeader' :: HeaderName -> ApiAction c s i BS.ByteString
-getHeader' name = do
-    header <- getHeader name
+getHeader :: HeaderName -> ApiAction c s i BS.ByteString
+getHeader name = do
+    header <- Spock.rawHeader name
     case header of
         Just v  -> pure v
-        Nothing -> respond HTTP.badRequest400 noBody
+        Nothing -> respondText HTTP.badRequest400 $ "Header " <> show name <> " is missing"
 
 getRawBody :: ApiAction c s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
-
--- | A sum type of supported media types.
-data MediaType = JSON | CBOR deriving (Ord, Eq, Show)
-
-fromMediaType :: MediaType -> HTTP.MediaType
-fromMediaType JSON = "application" // "json"
-fromMediaType CBOR = "application" // "cbor"
-
-parseMediaType :: BS.ByteString -> Either Text MediaType
-parseMediaType t = toEither $ do
-    accepted <- parseAccept t
-    lookup accepted $ NonEmpty.toList supportedMediaTypes
-    where toEither = maybe (Left err) Right
-          err = "Content-Type '" <> show t <> "' not supported."
-
-supportedMediaTypes :: NonEmpty (HTTP.MediaType, MediaType)
-supportedMediaTypes = NonEmpty.fromList $ [(fromMediaType ct, ct) | ct <- [JSON, CBOR]]
-
--- | Gets the parsed content types out of the Accept header, ordered by priority.
-getAccepted :: ApiAction c s i [Quality HTTP.MediaType]
-getAccepted = do
-    accept <- maybe "*/*" identity <$> getHeader "Accept"
-    case parseQuality accept of
-       Nothing -> respond HTTP.badRequest400 $ Just ("Accept header malformed" :: Text)
-       Just accepted -> pure accepted
-
--- | Negotiates the best response content type from the request's accept header.
-negotiateContentType :: ApiAction c s i MediaType
-negotiateContentType = do
-    accepted <- getAccepted
-    let supported = NonEmpty.toList supportedMediaTypes
-    case mapQuality supported accepted of
-        Nothing -> respond HTTP.notAcceptable406 noBody
-        Just ct -> pure ct
 
 param' :: (FromHttpApiData p) => Text -> ApiAction c s i p
 param' = Spock.param'
@@ -149,60 +97,35 @@ listParam key = do
 withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
 withHandle = Spock.runQuery
 
-body :: a -> Maybe a
-body = Just
-
 noBody :: Maybe ()
 noBody = Nothing
 
-errBody :: Text -> Maybe (Result ())
-errBody = Just . Err
+errBody :: Text -> Result ()
+errBody = Err
 
-encode :: (Serialise a, ToJSON a) => MediaType -> a -> LBS.ByteString
-encode JSON = Aeson.encode
-encode CBOR = Serialise.serialise
-
-decode :: (Serialise a, FromJSON a) => MediaType -> LBS.ByteString -> Either Text a
-decode JSON bs = first T.pack          (Aeson.eitherDecode' bs)
-decode CBOR bs = first (T.pack . show) (Serialise.deserialiseOrFail bs)
-
-respond :: (ToJSON a, Serialise a) => HTTP.Status -> Maybe a -> ApiAction c s i b
-respond status (Just bdy) = do
-    ct <- negotiateContentType
-    respondBytes status ct (encode ct bdy)
-respond status Nothing = do
+respond :: (Serialise a) => HTTP.Status -> a -> ApiAction c s i b
+respond status value = do
     Spock.setStatus status
-    Spock.lazyBytes ""
+    Spock.setHeader "Content-Type" $ "application/cbor"
+    Spock.lazyBytes $ Serialise.serialise value
 
--- | Respond with a CBOR encoded payload.
---
--- Responds with a 406 status code if the @Accept@ header is not
--- @appliaction/cbor@.
-respondCbor :: (Serialise a) => HTTP.Status -> a -> ApiAction c s i b
-respondCbor status value = do
-    ct <- negotiateContentType
-    case ct of
-        CBOR -> respondBytes status ct $ Serialise.serialise value
-        _    -> respond HTTP.notAcceptable406 noBody
-
-respondBytes :: HTTP.Status -> MediaType -> LBS.ByteString -> ApiAction c s i b
-respondBytes status ct bdy = do
+respondText :: HTTP.Status -> Text -> ApiAction c s i b
+respondText status bdy = do
     Spock.setStatus status
-    Spock.setHeader "Content-Type" $ T.pack $ show $ fromMediaType ct
-    Spock.lazyBytes bdy
+    Spock.setHeader "Content-Type" $ "text/plain"
+    Spock.bytes $ encodeUtf8 bdy
 
-getSupportedContentType :: ApiAction c s i MediaType
-getSupportedContentType = (parseMediaType <$> getHeader' "Content-Type") >>= \case
-    Left _   -> respond HTTP.unsupportedMediaType415 noBody
-    Right mt -> pure mt
 
-getBody :: (Serialise a, FromJSON a) => ApiAction c s i a
+getBody :: (Serialise a) => ApiAction c s i a
 getBody = do
-    ct <- getSupportedContentType
-    !body' <- getRawBody
-    case decode ct body' of
-        Left  _ -> respond HTTP.badRequest400 $ body $ Err @() "Failed to decode body"
+    rawCtHeader <- getHeader "Content-Type"
+    when (rawCtHeader /= "application/cbor") $
+        respondText HTTP.unsupportedMediaType415 "Unknown content type"
+    body' <- getRawBody
+    case Serialise.deserialiseOrFail body' of
+        Left  _ -> respondText HTTP.badRequest400 "Failed to decode body"
         Right a -> pure a
+
 
 runApi :: Api c s i ()
     -> Int

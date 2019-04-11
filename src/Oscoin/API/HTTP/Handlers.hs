@@ -6,7 +6,7 @@ import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
-import           Oscoin.Crypto.Blockchain.Block (BlockHash, Sealed)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -19,7 +19,6 @@ import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
 
 import           Codec.Serialise (Serialise)
-import           Data.Aeson (FromJSON, ToJSON)
 import           Formatting.Buildable (Buildable)
 import           Network.HTTP.Types.Status
 
@@ -27,8 +26,7 @@ root :: ApiAction c s i ()
 root = respond ok200 noBody
 
 getAllTransactions
-    :: ( ToJSON (RadTx c)
-       , Ord (Crypto.Hash c)
+    :: ( Ord (Crypto.Hash c)
        , Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
@@ -36,15 +34,12 @@ getAllTransactions
      => ApiAction c s i ()
 getAllTransactions = do
     mp <- node Node.getMempool
-    respond ok200 $ body (Ok mp)
+    respond ok200 $ Ok mp
 
 getTransaction :: ( Serialise (BlockHash c)
                   , Serialise (Crypto.PublicKey c)
                   , Serialise (Crypto.Signature c)
                   , Crypto.HasHashing c
-                  , ToJSON (Crypto.PublicKey c)
-                  , ToJSON (Crypto.Signature c)
-                  , ToJSON (BlockHash c)
                   )
                => Hashed c (RadTx c)
                -> ApiAction c s i ()
@@ -53,7 +48,7 @@ getTransaction txId = do
         Nothing -> respond notFound404 $ errBody "Transaction not found"
         Just res -> pure $ res
     txReceipt <- node $ Node.lookupReceipt txId
-    respond ok200 $ body $ Ok TxLookupResponse
+    respond ok200 $ Ok TxLookupResponse
         { txHash = hash tx
         , txBlockHash =  bh
         , txOutput = receiptTxOutput <$> txReceipt
@@ -75,10 +70,6 @@ submitTransaction
        , Serialise (Crypto.Signature c)
        , Crypto.HasHashing c
        , Buildable (Crypto.Hash c)
-       , ToJSON (Crypto.Hash c)
-       , FromJSON (BlockHash c)
-       , FromJSON (Crypto.PublicKey c)
-       , FromJSON (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        )
     => ApiAction c s i a
@@ -92,7 +83,7 @@ submitTransaction = do
             liftIO . Telemetry.emit store
         pure $ TxSubmitResponse (hash @c tx)
 
-    respond accepted202 $ body (Ok receipt)
+    respond accepted202 $ Ok receipt
   where
     getVerifiedTxBody = do
         tx <- getBody
@@ -102,40 +93,32 @@ submitTransaction = do
 
 getBestChain
     :: ( Serialise s
-       , ToJSON (Crypto.Hash c)
        , Crypto.HasHashing c
        , Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , ToJSON (Sealed c s)
-       , ToJSON (Crypto.PublicKey c)
-       , ToJSON (Crypto.Signature c)
        )
     => ApiAction c s i a
 getBestChain = do
     n    <- fromMaybe 3 <$> param "depth"
     blks <- node $ Node.getBlocks n
-    respond ok200 $ body (Ok blks)
+    respond ok200 $ Ok blks
 
 getBlock
     :: ( Serialise s
-       , ToJSON (Crypto.Hash c)
        , Crypto.HasHashing c
        , Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , ToJSON (Sealed c s)
-       , ToJSON (Crypto.PublicKey c)
-       , ToJSON (Crypto.Signature c)
        )
     => BlockHash c -> ApiAction c s i a
 getBlock h = do
     result <- node $ Node.lookupBlock h
     case result of
         Just blk ->
-            respond ok200 $ body (Ok blk)
+            respond ok200 $ Ok blk
         Nothing ->
-            respond notFound404 noBody
+            respond notFound404 $ errBody "Block not found"
 
 getStatePath :: Text -> ApiAction c s i ()
 getStatePath _chain = do
@@ -143,7 +126,7 @@ getStatePath _chain = do
     result' <- node $ Node.getPathLatest path
     case result' of
         Just (_sh, val) ->
-            respondCbor ok200 (Ok val)
+            respond ok200 (Ok val)
         Nothing ->
             respond notFound404 $ errBody "Value not found"
 

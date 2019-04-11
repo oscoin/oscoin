@@ -61,7 +61,7 @@ newExampleHistogram = do
 
 smokeTestMiddleware :: forall c. Dict (IsCrypto c) -> Assertion
 smokeTestMiddleware Dict = HTTP.runSession @c HTTP.emptyNodeState $
-    HTTP.get (HTTP.newCodec "text/plain" "text/plain") "/metrics"
+    HTTP.get "/metrics"
         >>= HTTP.assertStatus ok200
 
 testRenderCounter :: Assertion
