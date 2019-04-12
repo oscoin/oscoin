@@ -52,7 +52,7 @@ data Paths = Paths
     , genesisPath    :: FilePath
     -- ^ Path to the genesis YAML file.
     --
-    -- Default: $oscoin_datadir/genesis.yaml
+    -- Default: $oscoin_datadir/data/genesis.yaml
     }
 
 pathsParser :: ConfigPaths -> Parser Paths
@@ -76,9 +76,9 @@ pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
     <*> option str
         ( long "genesis"
        <> help "Path to the genesis.yaml file. \
-               \Default: $oscoin_datadir/genesis.yaml"
+               \Default: $oscoin_datadir/data/genesis.yaml"
        <> metavar "FILEPATH"
-       <> value (dataDir </> "genesis" <.> "yaml")
+       <> value (dataDir </> "data" </> "genesis" <.> "yaml")
        <> showDefault
         )
 
