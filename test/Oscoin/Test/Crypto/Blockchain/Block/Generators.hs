@@ -2,7 +2,9 @@ module Oscoin.Test.Crypto.Blockchain.Block.Generators
     ( -- * Generating genereric blocks
       genBlockFrom
     , genBlockWith
+    , genEvaledBlock
     , genStandaloneBlock
+    , genEmptyGenesisBlock
 
     , genSeal
     , genPoWSeal
@@ -18,6 +20,7 @@ import           Codec.Serialise (Serialise)
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain.Eval
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
@@ -57,6 +60,22 @@ genStandaloneBlock = do
                , blockTargetDifficulty = diffi
                }
     pure $ mkBlock header txs
+
+
+-- | Generate an empty genesis block with an arbitrary timestamp and a
+-- state hash computed from the given state.
+genEmptyGenesisBlock
+    :: ( IsCrypto c
+       , Serialise s
+       , Arbitrary s
+       , Crypto.Hashable c state
+       )
+    => state
+    -> Gen (Block c tx (Sealed c s))
+genEmptyGenesisBlock genesisState = do
+    timestamp <- arbitrary
+    seal <- arbitrary
+    pure $ sealBlock seal $ emptyGenesisFromState timestamp genesisState
 
 
 -- | The difficulty is calculated with random swings with a factor of 4(**).
@@ -124,6 +143,29 @@ genBlockWith parentBlock txs st = do
                , blockTargetDifficulty = blockDiffi
                }
     pure $ mkBlock header txs
+
+
+-- | Generate an arbitrary child block with arbitrary transactions and
+-- with a correct state hash.
+--
+-- Failing transactions are included in the block.
+genEvaledBlock
+    :: ( IsCrypto c
+       , Crypto.Hashable c state
+       , Serialise s
+       , Serialise tx
+       , Arbitrary s
+       )
+    => Block c tx s
+    -> state
+    -> [tx]
+    -> Evaluator state tx output
+    -> Gen (Block c tx s, state)
+genEvaledBlock parentBlock parentState txs evl = do
+    let (_, newState) = evalTraverse evl txs parentState
+    newBlock <- genBlockWith parentBlock txs newState
+    pure (newBlock, newState)
+
 
 -- | Generates an arbitrary but valid block, linked against the input
 -- one. Uses 'genBlockWith' with an arbitrary set of transactions and

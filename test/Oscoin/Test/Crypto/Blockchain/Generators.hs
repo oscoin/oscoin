@@ -2,9 +2,10 @@ module Oscoin.Test.Crypto.Blockchain.Generators
     ( ForkParams(..)
 
       -- * Generating generic chains
+    , genEvaledBlockchainFrom
+    , genEvaledBlockchain
     , genBlockchain
     , genBlockchainFrom
-    , genBlockchainFrom'
     , genOrphanChainsFrom
 
       -- * Generating Nakamoto chains
@@ -19,6 +20,8 @@ import           GHC.Natural
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain.Eval
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Oscoin.Test.Crypto
@@ -26,10 +29,85 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Test.QuickCheck
 
--- | Generates a 'Blockchain' starting with the provided genesis block.
+-- | Generates a 'Blockchain' starting with the provided genesis block,
+-- the state associated with the genesis block, and the transaction
+-- evaluator.
+--
+-- The state hashes of the blocks are correctly computed by applying
+-- the evaluator to the block’s transactions.
+--
+-- Blocks are generated using 'genBlockWith' and include an arbitrary
+-- list of transactions. If failing transactions are generated they are
+-- included in the block.
 --
 -- The generated blockchain has length between 2 and 15 depending on
 -- the size.
+genEvaledBlockchainFrom
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       , Crypto.Hashable c st
+       )
+    => Block c tx (Sealed c s)
+    -> Evaluator st tx o
+    -> st
+    -> Gen (Blockchain c tx s)
+genEvaledBlockchainFrom genBlock = genEvaledBlockchainSizedFrom 15 genBlock
+
+
+-- | Same as 'genEvaledBlockchainFrom' but allows you to specify the
+-- maximum length of the blockchain.
+--
+-- We ensure that there are at least two blocks in the blockchain.
+genEvaledBlockchainSizedFrom
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       , Crypto.Hashable c st
+       )
+    => Int
+    -> Block c tx (Sealed c s)
+    -> Evaluator st tx o
+    -> st
+    -> Gen (Blockchain c tx s)
+genEvaledBlockchainSizedFrom maxLength genBlock eval genState = sized $ \size -> do
+    -- Some tests will fail if a blockchain of length 1 is generated.
+    let maxLengthSized = 2 `max` ((maxLength * size) `div` 100)
+    len <- choose (2, maxLengthSized)
+    fst <$> foldM mkNextBlock (fromGenesis genBlock, genState) [1 .. len]
+  where
+    mkNextBlock (chain, prevSt) _ = do
+        txs <- arbitrary
+        let (_, st) = evalTraverse eval txs prevSt
+        newTip <- genBlockWith (tip chain) txs st
+        pure (newTip |> chain, st)
+
+
+-- | Same as 'genEvaledBlockchainFrom' with an empty genesis block.
+genEvaledBlockchain
+    :: ( IsCrypto c
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       , Crypto.Hashable c st
+       )
+    => Evaluator st tx o
+    -> st
+    -> Gen (Blockchain c tx s)
+genEvaledBlockchain eval initialState = do
+    genesisBlock <- genEmptyGenesisBlock initialState
+    genEvaledBlockchainFrom genesisBlock eval initialState
+
+
+-- | Similar to 'genEvaledBlockchainFrom' with a trivial evaluator and
+-- state.
+--
+-- This means that the state hash for will be the same for every block.
 genBlockchainFrom
     :: ( IsCrypto c
        , Arbitrary tx
@@ -39,34 +117,11 @@ genBlockchainFrom
        )
     => Block c tx (Sealed c s)
     -> Gen (Blockchain c tx s)
-genBlockchainFrom genBlock = genBlockchainFrom' 15 genBlock
+genBlockchainFrom genBlock =
+    genEvaledBlockchainFrom genBlock identityEval ()
 
 
--- | Generates a 'Blockchain' starting with the provided genesis block.
---
--- Uses the provided maximum length to determine the number of blocks.
--- We ensure that there are at least two blocks in the blockchain.
-genBlockchainFrom'
-    :: ( IsCrypto c
-       , Arbitrary tx
-       , Arbitrary s
-       , Serialise tx
-       , Serialise s
-       )
-    => Int
-    -> Block c tx (Sealed c s)
-    -> Gen (Blockchain c tx s)
-genBlockchainFrom' maxLength genBlock = sized $ \size -> do
-    -- Some tests will fail if a blockchain of length 1 is generated.
-    let maxLengthSized = 2 `max` ((maxLength * size) `div` 100)
-    len <- choose (2, maxLengthSized)
-    foldM (\chain _ -> do
-               newTip <- genBlockFrom (tip chain)
-               pure (newTip |> chain)
-          ) (fromGenesis genBlock) [1 :: Int .. len]
-
-
--- | 'genBlockchainFrom' with an arbitrary empty genesis block
+-- | 'genBlockchainFrom' with an arbitrary empty genesis block.
 genBlockchain
     :: ( IsCrypto c
        , Serialise tx
@@ -75,10 +130,7 @@ genBlockchain
        , Arbitrary s
        )
     => Gen (Blockchain c tx s)
-genBlockchain = do
-    ts <- arbitrary
-    seal <- arbitrary
-    genBlockchainFrom (sealBlock seal (emptyGenesisBlock ts))
+genBlockchain = genEvaledBlockchain identityEval ()
 
 
 data ForkParams = ForkParams
