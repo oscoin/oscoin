@@ -56,7 +56,7 @@ classifyChain chain =
 -- and get the tip, and that both stores agree on the result.
 propInsertGetTipEquivalence :: forall c.  Dict (IsCrypto c) -> Property
 propInsertGetTipEquivalence Dict =
-    forAllShrink (resize 25 $ genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
+    forAllShrink (genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
                 p1 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
@@ -74,7 +74,7 @@ propForksInsertGetTipEquivalence Dict = do
     let forkParams = ForkParams 0 10 3  -- 3 forks of max 10 blocks.
         orphanage  = emptyOrphanage blockScore
         generator = do
-            chain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
+            chain <- genBlockchainFrom (defaultGenesis @c)
             orph  <- genOrphanChainsFrom forkParams chain
             pure (chain, orph)
     forAll generator $ \(chain, orphansWithLink) ->

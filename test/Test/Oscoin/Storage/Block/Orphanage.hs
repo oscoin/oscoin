@@ -17,7 +17,6 @@ import           Oscoin.Time.Chrono (reverse, toNewestFirst)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
-                 (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Util (Condensed(..))
 
 import           Data.ByteArray.Orphans ()
@@ -107,7 +106,7 @@ propSelectBestCandidateMultipleChoice Dict = property $ do
 
 propSelectBestCandidateComplex :: forall c. Dict (IsCrypto c) -> Property
 propSelectBestCandidateComplex Dict = property $ do
-    initialChain <- resize 15 $ genBlockchainFrom (defaultGenesis @c)
+    initialChain <- genBlockchainFrom (defaultGenesis @c)
     let forkParams = ForkParams 0 10 10  -- 10 fork of max 10 blocks.
     chains <- genOrphanChainsFrom forkParams initialChain
     orphanage <-
