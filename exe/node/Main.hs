@@ -25,6 +25,7 @@ import qualified Oscoin.P2P.Disco.MDns as MDns
 import qualified Oscoin.P2P.Handshake as Handshake
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
+import qualified Oscoin.Storage.Block.BlockTree.RealWorld as RealWorld
 import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
 import           Oscoin.Storage.HashStore
 import qualified Oscoin.Telemetry as Telemetry
@@ -79,11 +80,16 @@ main = do
             blkStore@(blkStoreReader,_) <- managed $
                 BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen
 
+            let blockTree = RealWorld.newBlockTree consensusConfig
+                                                  (Consensus.cValidate consensus)
+                                                  Nakamoto.blockScore
+                                                  blkStore
+
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)
                             Nakamoto.blockScore
                             telemetry
-                            blkStore
+                            blockTree
                             consensusConfig
 
             node <- managed $

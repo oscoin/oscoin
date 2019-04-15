@@ -9,18 +9,19 @@ import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Protocol
 import           Oscoin.Storage.Block.Abstract as Abstract
-import qualified Oscoin.Storage.Block.Memory as Memory
-import           Oscoin.Storage.Block.Orphanage
+import qualified Oscoin.Storage.Block.BlockTree.RealWorld as RealWorld
+import qualified Oscoin.Storage.Block.BlockTree.Reference as Reference
 import qualified Oscoin.Storage.Block.STM as STM
 import qualified Oscoin.Time.Chrono as Chrono
 
+import qualified Oscoin.Storage.Block.SQLite as SQLite
+import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Generators
                  (ForkParams(..), genBlockchainFrom, genOrphanChainsFrom)
 import           Oscoin.Test.Storage.Block.SQLite (DummySeal, defaultGenesis)
 import           Oscoin.Test.Util (Condensed(..))
 
-import           Control.Monad.State (modify')
 import           Data.ByteArray.Orphans ()
 
 import           Test.Oscoin.DummyLedger
@@ -76,27 +77,29 @@ testEquivalence
     => EquivalenceTestRunner c a
     -> Property
 testEquivalence runScript = monadicIO $ do
-    stmValue <- liftIO runWithStm
-    protValue <- liftIO runWithProtocolAndSqlite
-    pure $ protValue === stmValue
+    metricsStore <- liftIO $ Telemetry.newMetricsStore Telemetry.noLabels
+    let telemetry = Telemetry.newTelemetryStore Telemetry.noLogger metricsStore
+
+    stmValue <- liftIO (runWithStm telemetry)
+    sqlValue <- liftIO (runWithSqlite telemetry)
+    pure $ sqlValue === stmValue
   where
 
     initialBlockchain = fromGenesis defaultGenesis
+    cfg = Consensus.Config 1024 2016
+    noValidation _ _ = Right ()
 
-    runWithStm :: IO a
-    runWithStm =
-        STM.withBlockStore initialBlockchain blockScore $ \stmStore -> do
-            let dispatch blk = Abstract.insertBlock (snd stmStore) blk
-            runScript (fst stmStore) dispatch
+    runWithStm :: Telemetry.Handle -> IO a
+    runWithStm telemetry =
+        STM.withBlockStore initialBlockchain blockScore $ \blkStore -> do
+            let btree = RealWorld.newBlockTree cfg noValidation blockScore blkStore
+            runProtocol noValidation blockScore telemetry btree cfg $ \Handle{dispatchBlockSync} ->
+                runScript (fst blkStore) dispatchBlockSync
 
-    runWithProtocolAndSqlite :: IO a
-    runWithProtocolAndSqlite = do
-        blockStore <- Memory.newBlockStoreIO (blocks' initialBlockchain)
-        let cfg = Consensus.Config 1024 2016
-        let noValidation _ _ = Right ()
-        let dispatch blk = do
-                orphanage  <- get
-                (p', _) <- withProtocol orphanage noValidation blockScore blockStore cfg $ \p ->
-                               stepProtocol p blk
-                modify' (const (protoOrphanage p'))
-        evalStateT (runScript (fst blockStore) dispatch) (emptyOrphanage blockScore)
+    runWithSqlite :: Telemetry.Handle -> IO a
+    runWithSqlite telemetry = do
+        SQLite.withBlockStore ":memory:" defaultGenesis $ \blkStore -> do
+            let btree = Reference.newBlockTree blkStore
+            runProtocol noValidation blockScore telemetry btree cfg $ \Handle{dispatchBlockSync} ->
+                runScript (fst blkStore) dispatchBlockSync
+

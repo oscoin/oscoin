@@ -13,6 +13,8 @@ module Oscoin.Telemetry
 
     -- * Handy re-exports
     , module Oscoin.Telemetry.Events
+    , module Oscoin.Telemetry.Metrics
+    , module Oscoin.Telemetry.Logging
 
     ) where
 
@@ -49,6 +51,7 @@ import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
+import           Oscoin.Telemetry.Logging
 import           Oscoin.Telemetry.Metrics
 import           Oscoin.Time as Time
 

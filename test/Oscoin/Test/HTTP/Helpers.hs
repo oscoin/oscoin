@@ -44,7 +44,8 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)
 import           Oscoin.Protocol (runProtocol)
-import           Oscoin.Storage.Block.Memory
+import qualified Oscoin.Storage.Block.BlockTree.Reference as BlockTree.Reference
+import qualified Oscoin.Storage.Block.STM as BlockStore.STM
 import           Oscoin.Storage.HashStore
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
@@ -154,21 +155,22 @@ withNode NodeState{..} k = do
         Mempool.insertMany mp mempoolState
         pure mp
 
-    blkStore@(bsh, _privateAPI) <- newBlockStoreIO (blocks' blockstoreState)
-    runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock -> do
-        stateStore <- liftIO $ newHashStoreIO
-        liftIO $ storeHashContent stateStore statestoreState
+    BlockStore.STM.withBlockStore blockstoreState blockScore $ \blkStore@(bsh,_) -> do
+        let blockTree = BlockTree.Reference.newBlockTree blkStore
+        runProtocol (\_ _ -> Right ()) blockScore metrics blockTree config $ \dispatchBlock -> do
+            stateStore <- liftIO $ newHashStoreIO
+            liftIO $ storeHashContent stateStore statestoreState
 
-        Node.withNode
-            cfg
-            42
-            mph
-            stateStore
-            bsh
-            dispatchBlock
-            Rad.txEval
-            (trivialConsensus "")
-            k
+            Node.withNode
+                cfg
+                42
+                mph
+                stateStore
+                bsh
+                dispatchBlock
+                Rad.txEval
+                (trivialConsensus "")
+                k
 
 liftNode :: Node c a -> Session c a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)

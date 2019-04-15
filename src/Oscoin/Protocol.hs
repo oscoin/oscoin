@@ -3,9 +3,6 @@ module Oscoin.Protocol
     , Handle(..)
     , hoistHandle
 
-    -- * Getters
-    , protoOrphanage
-
     -- * Running and using the Protocol
     , withProtocol
     , runProtocol
@@ -17,18 +14,17 @@ module Oscoin.Protocol
 import           Oscoin.Prelude
 
 import           Formatting (Buildable)
-import           Oscoin.Consensus (validateBlockchain)
 import           Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Types (Validate)
-import           Oscoin.Crypto.Blockchain (Blockchain(..))
 import           Oscoin.Crypto.Blockchain.Block hiding (parentHash)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
+import           Oscoin.Protocol.Internal (Protocol(..))
 import           Oscoin.Storage.Block.Abstract
-                 (BlockStore, BlockStoreReader, BlockStoreWriter)
+                 (BlockStoreReader, BlockStoreWriter)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Storage.Block.Orphanage (Orphanage)
-import qualified Oscoin.Storage.Block.Orphanage as O
+import           Oscoin.Storage.Block.BlockTree (BlockTree(btFullBlockStore))
+import qualified Oscoin.Storage.Block.BlockTree as BlockTree
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time.Chrono as Chrono
@@ -36,28 +32,6 @@ import           Oscoin.Time.Chrono as Chrono
 import           Control.Concurrent.Async (Async)
 import qualified Control.Concurrent.Async as Async
 import           Control.Concurrent.STM
-import qualified Data.List.NonEmpty as NonEmpty
-
--- | This data structure incorporates all the different components and
--- data structures in the system devoted to store \"things\" and enforce
--- the Oscoin protocol, which entails also chain selection and blocks
--- validation. Certain components (like the block cache, for example) are not
--- managed by the 'Protocol' directly but they are rather an implementation
--- detail of whichever 'BlockStore' this structure encapsulates.
-data Protocol c tx s m = Protocol
-    { protoFullBlockStore :: BlockStore c tx s m
-    -- ^ The 'BlockStore', an opaque interface to a component which only
-    -- responsibility is to store and retrieve blocks.
-    , protoOrphanage      :: Orphanage c tx s
-    -- ^ The in-memory data structure which keeps orphans blocks and constructs
-    -- sub-chains suitable for fork selection.
-    , protoValidateFull   :: Validate c tx s
-    -- ^ A validation function to (fully) validate a block.
-    , protoScoreBlock     :: Block c tx (Sealed c s) -> Score
-    -- ^ A function to score blocks.
-    , protoConfig         :: Consensus.Config
-    }
-
 
 -- | A 'Handle' is a record of functions containing two possible
 -- \"strategies\" to dispatch block; calling `dispatchBlockSync` ensures the
@@ -90,15 +64,14 @@ hoistHandle natTrans hdl = Handle
 -- the input action and returns the final result.
 withProtocol
     :: forall c tx s a m.
-       Orphanage c tx s
-    -> Validate c tx s
+       Validate c tx s
     -> (Block c tx (Sealed c s) -> Score)
-    -> BlockStore c tx s m
+    -> BlockTree c tx s m
     -> Consensus.Config
     -> (Protocol c tx s m -> m a)
     -> m a
-withProtocol o validateFull scoreBlock bs config action =
-    let protocol = Protocol bs o validateFull scoreBlock config
+withProtocol validateFull scoreBlock btree config action =
+    let protocol = Protocol btree validateFull scoreBlock config
     in action protocol
 
 -- | Initialises and runs the 'Protocol', by spinning an asynchronous worker
@@ -106,32 +79,30 @@ withProtocol o validateFull scoreBlock bs config action =
 -- and steps the protocol.
 runProtocol
     :: forall c tx s a.
-       ( Ord s
-       , HasHashing c
+       ( HasHashing c
        , Buildable (Hash c)
        )
     => Validate c tx s
     -> (Block c tx (Sealed c s) -> Score)
     -- ^ A function to score a block.
     -> Telemetry.Handle
-    -> BlockStore c tx s IO
+    -> BlockTree c tx s IO
     -> Consensus.Config
     -> (Handle c tx s IO -> IO a)
     -> IO a
-runProtocol validateFull scoreBlock telemetry bs config use =
+runProtocol validateFull scoreBlock telemetry btree config use =
   bracket acquire dispose (\(hdl, _worker) -> use hdl)
   where
     acquire :: IO (Handle c tx s IO, Async ())
     acquire = do
-        let o = O.emptyOrphanage scoreBlock
-        proto               <- newMVar (Protocol bs o validateFull scoreBlock config)
+        proto               <- newMVar (Protocol btree validateFull scoreBlock config)
         incomingBlocksQueue <- atomically $ newTBQueue 64
         let hdl = Handle
               { dispatchBlockSync = \blk -> do
                   events <- modifyMVar proto $ \p -> stepProtocol p blk
                   forM_ events (Telemetry.emit telemetry)
               , dispatchBlockAsync = atomically . writeTBQueue incomingBlocksQueue
-              , isNovelBlock = \h -> withMVar proto $ \p -> isNovelBlockInternal p h
+              , isNovelBlock = \h -> withMVar proto $ \p -> BlockTree.isNovelBlock (protoBlockTree p) h
               }
 
         worker <- Async.async $ do
@@ -157,7 +128,6 @@ runProtocol validateFull scoreBlock telemetry bs config use =
 stepProtocol
     :: forall c tx s m.
        ( Ord (BlockHash c)
-       , Ord s
        , HasHashing c
        , Buildable (Hash c)
        , Monad m
@@ -165,7 +135,7 @@ stepProtocol
     => Protocol c tx s m
     -> Block c tx (Sealed c s)
     -> m (Protocol c tx s m, [NotableEvent])
-stepProtocol mgr incomingBlock = do
+stepProtocol proto incomingBlock = do
     -- Step 2. Try to store the block; if this is recognised as to be an
     -- orphan, we store it immediately. If this block is scheduled for
     -- inclusion to extend the tip of the chain, then its full validity is
@@ -174,21 +144,21 @@ stepProtocol mgr incomingBlock = do
         currentTip <- BlockStore.getTip bsPublicAPI
         pure $ blockHash currentTip == Block.parentHash incomingBlock
 
-    (mgr', evts) <-
+    (proto', evts) <-
        if extendsTip
           then do
               -- Get the last (cached) 'mutableChainDepth' blocks and performs
               -- full block validation.
-              let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
+              let depth = fromIntegral $ mutableChainDepth (protoConfig proto)
               ancestors <- BlockStore.getBlocksByDepth bsPublicAPI depth
-              case protoValidateFull mgr (toNewestFirst ancestors) incomingBlock of
+              case protoValidateFull proto (toNewestFirst ancestors) incomingBlock of
                   Left validationError ->
                       let evt = BlockValidationFailedEvent (blockHash incomingBlock) validationError
-                      in pure (mgr, [evt])
+                      in pure (proto, [evt])
                   Right () -> do
                       -- Step 3: store the fully-validated block.
                       BlockStore.insertBlock bsPrivateAPI incomingBlock
-                      pure (mgr, mempty)
+                      pure (proto, mempty)
 
           -- NOTE(adn) This is a side effect of the fact that storing
           -- the genesis as an orphan would insert it into the orphanage with
@@ -197,109 +167,20 @@ stepProtocol mgr incomingBlock = do
           -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
           -- inserting the genesis block into the orphanage in the first place;
           -- After all, the genesis block should never be considered an orphan.
-          else map (,mempty) . pure $
+          else map (,mempty) $
               if not (isGenesisBlock incomingBlock)
-                  then mgr { protoOrphanage = O.insertOrphan incomingBlock (protoOrphanage mgr) }
-                  else mgr
+                  then do
+                      -- Step 4: insert the orphan and perform chain selection.
+                      bt' <- BlockTree.insertOrphan (protoBlockTree proto) incomingBlock
+                      pure $ proto { protoBlockTree = bt' }
+                  else pure proto
 
     -- Step 4: Chain selection.
-    (,evts) <$> selectBestChain mgr'
+    pure (proto', evts)
   where
       bsPublicAPI :: BlockStoreReader c tx s m
-      bsPublicAPI = fst . protoFullBlockStore $ mgr
+      bsPublicAPI = fst . btFullBlockStore . protoBlockTree $ proto
 
       bsPrivateAPI :: BlockStoreWriter c tx s m
-      bsPrivateAPI = snd . protoFullBlockStore $ mgr
+      bsPrivateAPI = snd . btFullBlockStore . protoBlockTree $ proto
 
-{------------------------------------------------------------------------------
-  (Best) Chain selection
-------------------------------------------------------------------------------}
-
--- | Performs best chain selection and returns the new 'Protocol' data
--- structure.
-selectBestChain
-    :: forall m s c tx.
-       ( Monad m
-       , Ord s
-       , Ord (BlockHash c)
-       )
-    => Protocol c tx s m
-    -> m (Protocol c tx s m)
-selectBestChain mgr = do
-    -- NOTE(adn) Grab the \"mutable\" part of the chain and
-    -- compare each root hash to see if there is any fork originating from that.
-    let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
-    mutableBlockHashes <-
-        map blockHash . Chrono.reverse <$> BlockStore.getBlocksByDepth bsPublicAPI depth
-
-    case O.selectBestChain (toOldestFirst mutableBlockHashes) orphanage of
-        Just (parentHash, bestFork) | isValid bestFork -> do
-            -- Compare the orphan best chain with the chain suffix currently adopted
-            chainSuffix <- BlockStore.getBlocksByParentHash bsPublicAPI parentHash
-
-            -- Switch-to-better-chain condition: either the chain suffix is
-            -- empty, which means we are extending directly the tip, or if we
-            -- found a better candidate.
-            let scoreFn       = protoScoreBlock mgr
-                newChainFound =
-                    null chainSuffix
-                 || bestFork > O.fromChainSuffix scoreFn (OldestFirst . NonEmpty.reverse
-                                                                      . NonEmpty.fromList
-                                                                      . toNewestFirst $ chainSuffix
-                                                         )
-
-            if newChainFound
-               then do
-                   switchToFork bestFork chainSuffix
-                   -- Prune the chain which won, /as well as/ every dangling orphan
-                   -- originating from the suffix chain which has been replaced.
-                   let orphanage' =
-                         foldl' (\acc blockInSuffix ->
-                                    O.pruneOrphanage (blockHash blockInSuffix)
-                                                     (O.fromChainSuffix scoreFn (OldestFirst $ blockInSuffix NonEmpty.:| []))
-                                                     $ acc
-                                ) (O.pruneOrphanage parentHash bestFork orphanage) chainSuffix
-                   pure $ mgr { protoOrphanage = orphanage' }
-               else pure mgr
-        _ -> pure mgr
-
-  where
-
-    isValid :: O.ChainCandidate c s -> Bool
-    isValid candidate =
-        let chain = Blockchain
-                  . toNewestFirst
-                  . Chrono.reverse
-                  . O.toBlocksOldestFirst orphanage
-                  $ candidate
-        in case validateBlockchain validateFull chain of
-             Left _   -> False
-             Right () -> True
-
-    bsPublicAPI :: BlockStoreReader c tx s m
-    bsPublicAPI = fst . protoFullBlockStore $ mgr
-
-    bsPrivateAPI :: BlockStoreWriter c tx s m
-    bsPrivateAPI = snd . protoFullBlockStore $ mgr
-
-    validateFull = protoValidateFull mgr
-
-    orphanage  = protoOrphanage mgr
-
-    switchToFork fork chainSuffix = do
-        let newChain = O.toBlocksOldestFirst orphanage fork
-        BlockStore.switchToFork bsPrivateAPI (fromIntegral $ length chainSuffix) newChain
-
--- | Returns 'True' if the input block is novel to the 'Protocol', i.e it's
--- neither in the block store nor in the orphanage.
-isNovelBlockInternal
-    :: (Ord (BlockHash c), Monad m)
-    => Protocol c tx s m
-    -> BlockHash c
-    -> m Bool
-isNovelBlockInternal proto h = do
-    insideBlockStore <- not <$> BlockStore.isNovelBlock bsPublicAPI h
-    pure (not insideBlockStore && not (O.member orphanage h))
-  where
-    orphanage   = protoOrphanage proto
-    bsPublicAPI = fst . protoFullBlockStore $ proto
