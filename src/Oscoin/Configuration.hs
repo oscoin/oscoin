@@ -116,7 +116,7 @@ data Network =
       Mainnet
     | Testnet
     | Devnet
-    deriving (Eq, Enum, Bounded, Show, Read)
+    deriving (Eq, Ord, Enum, Bounded, Show, Read)
 
 allNetworks :: [Network]
 allNetworks = [minBound .. maxBound]

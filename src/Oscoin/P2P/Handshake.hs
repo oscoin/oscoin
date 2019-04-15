@@ -50,7 +50,6 @@ simpleHandshake
        , Serialise (Crypto.Signature c)
        , ByteArrayAccess p
        , Crypto.HasDigitalSignature c
-       , Eq (Crypto.PublicKey c)
        )
     => Crypto.KeyPair c
     -> Network
@@ -75,7 +74,6 @@ secureHandshake
        ( Serialise p
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Eq (Crypto.PublicKey c)
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c

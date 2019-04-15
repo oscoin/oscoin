@@ -33,13 +33,13 @@ import           Data.Tagged
 data Address c = Address
     { addressPrefix  :: AddressPrefix
     , addressPayload :: AddressPayload c
-    } deriving (Eq, Show)
+    } deriving (Eq, Ord, Show)
 
 data AddressPrefix = AddressPrefix
     { protocolVersion :: ProtocolVersion
     , addressType     :: AddressType
     , addressFormat   :: AddressFormat
-    } deriving (Eq, Show)
+    } deriving (Eq, Ord, Show)
 
 -- | A 'ProtocolVersion' is a byte representing the current version of the
 -- Oscoin protocol running. This makes it possible to issue forks of the system
@@ -48,11 +48,11 @@ data AddressPrefix = AddressPrefix
 -- running the fork can be programmed to support both formats.
 newtype ProtocolVersion =
     ProtocolVersion ProtocolVersionTag
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 data ProtocolVersionTag =
       ProtocolVersion_V1
-      deriving (Eq, Show)
+      deriving (Eq, Ord, Show)
 
 -- | The 'AddressType', i.e. the qualifying type of this 'Address'.
 -- Example:
@@ -63,7 +63,7 @@ data ProtocolVersionTag =
 -- ..
 newtype AddressType =
     AddressType Network
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 -- | The 'AddressFormat' allows for flexibility in the 'Address' payload, i.e.
 -- it specifies the serialisation format used to encode the 'AddressPayload'.
@@ -73,11 +73,11 @@ newtype AddressType =
 --
 newtype AddressFormat =
     AddressFormat AddressFormatTag
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 data AddressFormatTag =
     AddressFormatTag_CBOR
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 -- | The 'AddressPayload' is simply the hash of a 'PublicKey'.
 --
@@ -89,7 +89,7 @@ newtype AddressPayload c =
        -- be able to go from a 'ByteString' to a 'ShortHashed' in a meaningful way.
         getAddressPayload :: Tagged (ShortHashed c (PublicKey c)) ByteArray
     }
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 newtype Checksum = Checksum { fromChecksum :: ByteString }
     deriving (Show, Eq)

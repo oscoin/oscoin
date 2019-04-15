@@ -43,7 +43,7 @@ deriving instance (Ord (Signature c), Ord msg) => Ord (Signed c msg)
  Digital signatures - signing and verifying things
 ------------------------------------------------------------------------------}
 
-class HasDigitalSignature c where
+class (Eq (Signature c), Eq (PublicKey c)) => HasDigitalSignature c where
     data family PublicKey c :: *
     data family PrivateKey c :: *
     data family Signature c :: *

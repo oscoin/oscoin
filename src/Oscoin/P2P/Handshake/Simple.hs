@@ -60,7 +60,6 @@ keyExchange
     :: forall c p.
        ( Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Eq (Crypto.PublicKey c)
        , Crypto.HasDigitalSignature c
        )
     => Crypto.KeyPair c
