@@ -456,8 +456,8 @@ die err = System.Exit.die (toS err)
 
 {-# WARNING notImplemented "'notImplemented' remains in code" #-}
 notImplemented :: (HasCallStack) => a
-notImplemented = error "Not implemented"
+notImplemented = withFrozenCallStack (error "Not implemented")
 
 {-# WARNING undefined "'undefined' remains in code" #-}
 undefined :: (HasCallStack) => a
-undefined = error "Prelude.undefined"
+undefined = withFrozenCallStack (error "Prelude.undefined")
