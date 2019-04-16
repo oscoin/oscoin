@@ -97,7 +97,7 @@ testEquivalence runScript = monadicIO $ do
                 runScript (fst blkStore) dispatchBlockSync
 
     runWithSqlite :: Telemetry.Handle -> IO a
-    runWithSqlite telemetry = do
+    runWithSqlite telemetry =
         SQLite.withBlockStore ":memory:" defaultGenesis $ \blkStore -> do
             let btree = Reference.newBlockTree blkStore
             runProtocol noValidation blockScore telemetry btree cfg $ \Handle{dispatchBlockSync} ->
