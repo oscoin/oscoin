@@ -9,6 +9,7 @@ module Oscoin.Crypto.Blockchain.Eval
     , buildBlockStrict
     , buildGenesis
     , evalBlock
+    , evalTraverse
     ) where
 
 import           Oscoin.Prelude

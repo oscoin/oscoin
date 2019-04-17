@@ -24,6 +24,7 @@ import qualified Test.Oscoin.Crypto.PubKey
 import qualified Test.Oscoin.Node.Mempool
 import qualified Test.Oscoin.Protocol
 import qualified Test.Oscoin.Storage.Block.Orphanage
+import qualified Test.Oscoin.Storage.Ledger
 import           Test.Tasty
 import           Test.Tasty.Ingredients.FailFast
 
@@ -49,4 +50,5 @@ main = do
         , Test.Oscoin.Node.Mempool.tests crypto
         , Test.Oscoin.Protocol.tests crypto
         , Test.Oscoin.Storage.Block.Orphanage.tests crypto
+        , Test.Oscoin.Storage.Ledger.tests crypto
         ]

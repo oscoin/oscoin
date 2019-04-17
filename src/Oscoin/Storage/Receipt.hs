@@ -6,6 +6,7 @@
 -- class to obtain a receipt store.
 module Oscoin.Storage.Receipt
     ( ReceiptStore
+    , Receipt
     , storeReceipt
     , lookupReceipt
     , hoistReceiptStore

@@ -7,8 +7,7 @@ module Oscoin.Node.Trans
     , GlobalConfig(..)
     , Handle(..)
     , getBlockStoreReader
-    , getStateStore
-    , getReceiptStore
+    , getLedger
     ) where
 
 import           Oscoin.Prelude
@@ -17,7 +16,6 @@ import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Configuration (Environment, Network)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Data.RadicleTx as RadicleTx
 import qualified Oscoin.Node.Mempool as Mempool
@@ -25,9 +23,7 @@ import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P.Types as P2P (Network)
 import qualified Oscoin.Protocol as Protocol
 import qualified Oscoin.Storage.Block.Abstract as Abstract
-import           Oscoin.Storage.ContentStore
-import           Oscoin.Storage.HashStore
-import           Oscoin.Storage.Receipt
+import qualified Oscoin.Storage.Ledger as Ledger
 import qualified Oscoin.Telemetry as Telemetry
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -63,15 +59,12 @@ data GlobalConfig = GlobalConfig
 
 -- | Node handle.
 data Handle c tx st s i = Handle
-    { hConfig       :: Config
-    , hNodeId       :: i
-    , hStateStore   :: HashStore c st IO
-    , hBlockStore   :: Abstract.BlockStoreReader c tx s IO
-    , hProtocol     :: Protocol.Handle c tx s IO
-    , hMempool      :: Mempool.Handle c tx
-    , hEval         :: Evaluator st tx RadicleTx.Message
-    , hConsensus    :: Consensus c tx s (NodeT c tx st s i IO)
-    , hReceiptStore :: ReceiptStore c tx RadicleTx.Output IO
+    { hConfig    :: Config
+    , hNodeId    :: i
+    , hProtocol  :: Protocol.Handle c tx s IO
+    , hMempool   :: Mempool.Handle c tx
+    , hConsensus :: Consensus c tx s (NodeT c tx st s i IO)
+    , hLedger    :: Ledger.Ledger c s tx RadicleTx.Message st IO
     }
 
 -------------------------------------------------------------------------------
@@ -97,17 +90,14 @@ instance ( Ord (Hash c)
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
+instance MonadClock m => MonadClock (NodeT c tx st s i m)
+
 getBlockStoreReader
     :: (MonadIO m, MonadIO n)
     => NodeT c tx st s i n (Abstract.BlockStoreReader c tx s m)
-getBlockStoreReader = do
-    bs <- asks hBlockStore
-    pure $ Abstract.hoistBlockStoreReader liftIO bs
+getBlockStoreReader = Ledger.blockStoreReader <$> getLedger
 
-instance MonadClock m => MonadClock (NodeT c tx st s i m)
-
-getReceiptStore :: (Monad m, MonadIO n) => NodeT c tx st s i m (ReceiptStore c tx RadicleTx.Output n)
-getReceiptStore = hoistContentStore liftIO <$> asks hReceiptStore
-
-getStateStore :: (Monad m, MonadIO n) => NodeT c tx st s i m (HashStore c st n)
-getStateStore = hoistHashStore liftIO <$> asks hStateStore
+getLedger
+    :: (MonadIO m, MonadIO n)
+    => NodeT c tx st s i m (Ledger.Ledger c s tx RadicleTx.Output st n)
+getLedger = Ledger.hoist liftIO <$> asks hLedger

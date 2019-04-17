@@ -5,6 +5,7 @@
 -- The implementation is inefficient and only intended for testing.
 module Oscoin.Storage.Block.Memory
     ( newBlockStoreIO
+    , newBlockStoreFromGenesisIO
     ) where
 
 import           Oscoin.Prelude
@@ -16,6 +17,7 @@ import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Data.IORef
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 
 -- | Create an abstract blockstore backed by @'IORef' 'Seq'@.
@@ -28,6 +30,13 @@ newBlockStoreIO blks = do
     let getBlocks = liftIO $ readIORef blocksRef
     let modifyBlocks f = liftIO $ atomicModifyIORef' blocksRef $ \x -> (f x, ())
     pure $ mkBlockStore getBlocks modifyBlocks
+
+newBlockStoreFromGenesisIO
+    :: (MonadIO m, Crypto.Hashable c tx)
+    => Block c tx (Sealed c s)
+    -> IO (Abstract.BlockStore c tx s m)
+newBlockStoreFromGenesisIO genesisBlk =
+    newBlockStoreIO $ Chrono.NewestFirst (genesisBlk NonEmpty.:| [])
 
 -- | Given two functions that are able to get and modify the state of
 -- the underlying sequence of blocks we return a block store.
