@@ -8,7 +8,6 @@ module Oscoin.CLI.Command
 import           Oscoin.Prelude
 
 import qualified Oscoin.API.Client as API
-import qualified Oscoin.API.Types as API
 import           Oscoin.CLI.KeyStore
 import           Oscoin.Consensus.Mining (mineGenesis)
 import           Oscoin.Consensus.Nakamoto (mineNakamoto)
@@ -16,10 +15,9 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash, Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.RadicleTx as Rad
-import           Oscoin.Data.Tx (mkTx)
+import qualified Oscoin.Data.OscoinTx as OscoinTx
+import           Oscoin.Data.Tx
 import           Oscoin.Time (Timestamp)
-
 
 import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
@@ -36,8 +34,8 @@ class (MonadRandom m, API.MonadClient c m, MonadKeyStore c m) => MonadCLI c m wh
     putString :: Text -> m ()
     -- | Print text to stdout and add a newline
     putLine :: Text -> m ()
-    -- | Read and parse a .rad file
-    readRadFile :: FilePath -> m (Either Text Rad.Value)
+    -- | Read and parse a tx file.
+    readTxFile :: FilePath -> m (Either Text (TxPayload c (Tx c)))
     -- | Get the current time
     getTime :: m Timestamp
 
@@ -58,7 +56,6 @@ dispatchCommand
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Crypto.HasDigitalSignature c
-       , Crypto.Hashable c (Crypto.PublicKey c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.Signature c)
@@ -75,7 +72,7 @@ dispatchCommand (GenesisCreate [] d) =
 dispatchCommand (GenesisCreate files d) = do
     results <-
         for files $
-            readRadFile >=> traverse signTransaction
+            readTxFile >=> traverse signTransaction
 
     case partitionEithers results of
         (errs, signed)
@@ -93,19 +90,20 @@ printGenesisYaml
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
-       , Crypto.Hashable c (Crypto.PublicKey c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.PublicKey c)
        , Yaml.ToJSON (Crypto.Signature c)
        )
-    => [API.RadTx c]
+    => [Tx c]
     -> Difficulty
     -> m Result
 printGenesisYaml txs diffi = do
     time <- getTime
 
-    case buildGenesis @c Rad.txEval time txs Rad.pureEnv of
+    -- FIXME(adn) Pass a real evaluator and a real state.
+    let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+    case buildGenesis @c dummyEval time txs (mempty :: DummyEnv) of
         Left (_, err) ->
             pure $ ResultError (fromEvalError err)
         Right blk -> do
@@ -123,9 +121,9 @@ signTransaction
     :: ( Crypto.HasDigitalSignature c
        , MonadCLI c m
        )
-    => Rad.Value
-    -> m (API.RadTx c)
-signTransaction v = do
+    => TxPayload c (Tx c)
+    -> m (Tx c)
+signTransaction payload = do
     (pk, sk) <- readKeyPair
-    msg      <- Crypto.sign sk v
+    msg      <- Crypto.sign sk payload
     pure $ mkTx msg pk

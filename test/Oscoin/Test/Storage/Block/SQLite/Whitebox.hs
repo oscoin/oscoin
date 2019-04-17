@@ -11,13 +11,12 @@ import           Data.ByteArray.Orphans ()
 
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.RadicleTx
+import           Oscoin.Data.Tx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
 
@@ -43,10 +42,10 @@ testIsStored
     :: forall c.
        IsCrypto c
     => ()
-    -> Sqlite.Handle c (RadTx c) DummySeal
+    -> Sqlite.Handle c (Tx c) DummySeal
     -> Assertion
 testIsStored () h = do
-    (gen :: Block c (RadTx c) (Sealed c DummySeal)) <- getGenesisBlock h
+    (gen :: Block c (Tx c) (Sealed c DummySeal)) <- getGenesisBlock h
 
     result <- runTransaction (hConn h) $ isStored (blockHash gen)
     result @?= True
@@ -56,10 +55,10 @@ testIsStored () h = do
 
 testIsConflicting
     :: IsCrypto c
-    => ( Block c (RadTx c) (Sealed c DummySeal)
-       , Block c (RadTx c) (Sealed c DummySeal)
+    => ( Block c (Tx c) (Sealed c DummySeal)
+       , Block c (Tx c) (Sealed c DummySeal)
        )
-    -> Sqlite.Handle c (RadTx c) DummySeal
+    -> Sqlite.Handle c (Tx c) DummySeal
     -> Assertion
 testIsConflicting (blk, blk') h@Handle{..} = do
     storeBlock h blk

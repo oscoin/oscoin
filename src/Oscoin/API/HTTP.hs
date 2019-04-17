@@ -5,7 +5,6 @@ module Oscoin.API.HTTP
 
 import           Oscoin.Prelude hiding (get)
 
-import           Oscoin.API.Types (RadTx)
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (toHashed)
@@ -13,7 +12,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.RealWorld ()
-import qualified Oscoin.Data.RadicleTx as Rad
+import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Trans as Node.Trans
 import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
@@ -32,7 +31,7 @@ import           Web.Spock
 import           Codec.Serialise (Serialise)
 import           Formatting.Buildable (Buildable)
 
-withTelemetryMiddleware :: Node.Handle c tx e s i
+withTelemetryMiddleware :: Node.Handle c tx s i
                         -> (Wai.Middleware -> IO a)
                         -> IO a
 withTelemetryMiddleware hdl action = do
@@ -44,7 +43,7 @@ withTelemetryMiddleware hdl action = do
 run
     :: (Serialise s)
     => Int
-    -> Node.Handle Crypto (RadTx Crypto) (Rad.Env Crypto) s i
+    -> Node.Handle Crypto (Tx Crypto) s i
     -> IO ()
 run port hdl =
     withTelemetryMiddleware hdl $ \mdlware -> runApi (api mdlware) port hdl
@@ -60,7 +59,7 @@ app
        , Crypto.HasHashing c
        , Buildable (Crypto.Hash c)
        )
-    => Node.Handle c (RadTx c) (Rad.Env c) s i
+    => Node.Handle c (Tx c) s i
     -> IO Wai.Application
 app hdl =
     withTelemetryMiddleware hdl $ \mdlware ->

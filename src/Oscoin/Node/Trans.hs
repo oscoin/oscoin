@@ -17,7 +17,7 @@ import           Oscoin.Configuration (Environment, Network)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Hash (Hash, Hashable)
-import qualified Oscoin.Data.RadicleTx as RadicleTx
+import qualified Oscoin.Data.Tx as Tx
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P.Types as P2P (Network)
@@ -31,17 +31,17 @@ import           Control.Monad.Morph (MFunctor(..))
 import           Lens.Micro
 
 
-newtype NodeT c tx st s i m a = NodeT (ReaderT (Handle c tx st s i) m a)
+newtype NodeT c tx s i m a = NodeT (ReaderT (Handle c tx s i) m a)
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadReader (Handle c tx st s i)
+             , MonadReader (Handle c tx s i)
              , MonadIO
              , MonadTrans
              , MFunctor
              )
 
-runNodeT :: Handle c tx st s i -> NodeT c tx st s i m a -> m a
+runNodeT :: Handle c tx s i -> NodeT c tx s i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
@@ -58,25 +58,25 @@ data GlobalConfig = GlobalConfig
     }
 
 -- | Node handle.
-data Handle c tx st s i = Handle
+data Handle c tx s i = Handle
     { hConfig    :: Config
     , hNodeId    :: i
     , hProtocol  :: Protocol.Handle c tx s IO
     , hMempool   :: Mempool.Handle c tx
-    , hConsensus :: Consensus c tx s (NodeT c tx st s i IO)
-    , hLedger    :: Ledger.Ledger c s tx RadicleTx.Message st IO
+    , hConsensus :: Consensus c tx s (NodeT c tx s i IO)
+    , hLedger    :: Ledger.Ledger c s tx (Tx.TxOutput c tx) (Tx.TxState c tx) IO
     }
 
 -------------------------------------------------------------------------------
 
-instance Telemetry.HasTelemetry (Handle c tx st s i) where
+instance Telemetry.HasTelemetry (Handle c tx s i) where
     telemetryStoreL = to (cfgTelemetry . hConfig)
 
 instance ( Ord (Hash c)
          , Hashable c tx
          , Monad m
          , MonadIO m
-         ) => MonadMempool c tx (NodeT c tx st s i m) where
+         ) => MonadMempool c tx (NodeT c tx s i m) where
     addTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.insertMany` txs)
     getTxs     = asks hMempool >>= liftIO . atomically . Mempool.toList
     delTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.removeMany` txs)
@@ -90,14 +90,14 @@ instance ( Ord (Hash c)
     {-# INLINE numTxs    #-}
     {-# INLINE subscribe #-}
 
-instance MonadClock m => MonadClock (NodeT c tx st s i m)
+instance MonadClock m => MonadClock (NodeT c tx s i m)
 
 getBlockStoreReader
     :: (MonadIO m, MonadIO n)
-    => NodeT c tx st s i n (Abstract.BlockStoreReader c tx s m)
+    => NodeT c tx s i n (Abstract.BlockStoreReader c tx s m)
 getBlockStoreReader = Ledger.blockStoreReader <$> getLedger
 
 getLedger
     :: (MonadIO m, MonadIO n)
-    => NodeT c tx st s i m (Ledger.Ledger c s tx RadicleTx.Output st n)
+    => NodeT c tx s i m (Ledger.Ledger c s tx (Tx.TxOutput c tx) (Tx.TxState c tx) n)
 getLedger = Ledger.hoist liftIO <$> asks hLedger

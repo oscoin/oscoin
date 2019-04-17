@@ -20,8 +20,8 @@ module Oscoin.Test.HTTP.Helpers
     , get
     , post
 
-    , addRadicleRef
-    , initRadicleEnv
+    , addRef
+    , initEnv
     , genDummyTx
     , createValidTx
     ) where
@@ -38,8 +38,8 @@ import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.RadicleTx as Rad
-import           Oscoin.Data.Tx (mkTx)
+import qualified Oscoin.Data.OscoinTx as OscoinTx
+import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)
@@ -53,7 +53,7 @@ import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network (DummyNodeId)
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Data.Rad.Arbitrary ()
+import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary)
 import           Test.QuickCheck.Monadic
@@ -63,6 +63,7 @@ import           Codec.Serialise
 import           Control.Monad.Fail (MonadFail(..))
 import           Crypto.Random.Types (MonadRandom(..))
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import           System.Random.SplitMix (newSMGen)
 
@@ -72,10 +73,6 @@ import qualified Network.HTTP.Types.Method as HTTP
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
-
-import qualified Radicle
--- FIXME(kim): should use unsafeToIdent, cf. radicle#105
-import qualified Radicle.Internal.Core as Radicle
 
 -- | The 'Session' monad allows for arbitrary IO, communication with
 -- the Node HTTP API (via 'Wai.Session') and access to the underlying
@@ -91,16 +88,16 @@ instance MonadFail (Session c) where
 type DummySeal = Text
 
 -- | Node handle for API tests.
-type Node c = Node.NodeT c (API.RadTx c) (Rad.Env c) DummySeal DummyNodeId IO
+type Node c = Node.NodeT c (Tx c) DummySeal DummyNodeId IO
 
 -- | Node handle for API tests.
-type NodeHandle c = Node.Handle c (API.RadTx c) (Rad.Env c) DummySeal DummyNodeId
+type NodeHandle c = Node.Handle c (Tx c) DummySeal DummyNodeId
 
 -- | Node state to instantiate a NodeHandle with.
 data NodeState c = NodeState
-    { mempoolState    :: [API.RadTx c]
-    , blockstoreState :: Blockchain c (API.RadTx c) DummySeal
-    , statestoreState :: Rad.Env c
+    { mempoolState    :: [Tx c]
+    , blockstoreState :: Blockchain c (Tx c) DummySeal
+    , statestoreState :: TxState c (Tx c)
     }
 
 instance Semigroup a => Semigroup (Session c a) where
@@ -120,13 +117,13 @@ emptyNodeState :: IsCrypto c => NodeState c
 emptyNodeState = NodeState
     { mempoolState = mempty
     , blockstoreState = emptyBlockchain
-    , statestoreState = Rad.pureEnv
+    , statestoreState = mempty
     }
 
 nodeState
-    :: [API.RadTx c]
-    -> Blockchain c (API.RadTx c) DummySeal
-    -> Rad.Env c
+    :: [Tx c]
+    -> Blockchain c (Tx c) DummySeal
+    -> TxState c (Tx c)
     -> NodeState c
 nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, statestoreState = st }
 
@@ -155,7 +152,8 @@ withNode NodeState{..} k = do
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
-    ledger <- Ledger.newFromBlockStoreIO Rad.txEval blockStoreReader statestoreState
+    let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+    ledger <- Ledger.newFromBlockStoreIO dummyEval blockStoreReader statestoreState
     runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode
             cfg
@@ -171,46 +169,36 @@ liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
 
 genDummyTx
     :: (IsCrypto c, MonadIO m)
-    => PropertyM m (Hashed c (API.RadTx c), API.RadTx c)
+    => PropertyM m (Hashed c (Tx c), Tx c)
 genDummyTx = do
-    radValue <- pick arbitrary
-    createValidTx radValue
+    txVal <- pick arbitrary
+    createValidTx txVal
 
 createValidTx
     :: forall c m.
        (IsCrypto c, MonadIO m)
-    => Rad.Value
-    -> m (Hashed c (API.RadTx c), API.RadTx c)
-createValidTx radValue = liftIO $ do
+    => TxPayload c (Tx c)
+    -> m (Hashed c (Tx c), Tx c)
+createValidTx payload = liftIO $ do
     (pubKey, priKey) <- Crypto.generateKeyPair
-    signed           <- Crypto.sign priKey radValue
+    signed           <- Crypto.sign priKey payload
 
-    let tx :: (API.RadTx c) = mkTx signed pubKey
-    let txHash              = Crypto.hash tx
+    let tx :: (Tx c) = mkTx signed pubKey
+    let txHash       = Crypto.hash tx
 
     pure (txHash, tx)
 
 -- | Creates a new empty blockchain with a dummy seal.
-emptyBlockchain :: IsCrypto c => Blockchain c (API.RadTx c) DummySeal
+emptyBlockchain :: IsCrypto c => Blockchain c (Tx c) DummySeal
 emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch)
 
--- | Create a Radicle environment with the given bindings
-initRadicleEnv :: [(Text, Radicle.Value)] -> Rad.Env c
-initRadicleEnv bindings =
-    Rad.Env $ foldl' addBinding Radicle.pureEnv bindings
-  where
-    addBinding env (id, value) =
-        Radicle.addBinding (Radicle.unsafeToIdent id) Nothing value env
+initEnv :: [(Text, DummyPayload)] -> TxState c (Tx c)
+initEnv bindings =
+    DummyEnv $ foldl' (\acc (k,v) -> Map.insert k v acc) mempty bindings
 
 -- | Adds a reference holding @value@ and binds @name@ to the reference
-addRadicleRef :: Text -> Radicle.Value -> Rad.Env c -> Rad.Env c
-addRadicleRef name value (Rad.Env env) =
-    Rad.Env env'
-  where
-    env' = snd $ runIdentity $ Radicle.runLang env $ do
-        ref <- Radicle.newRef value
-        Radicle.defineAtom (Radicle.unsafeToIdent name) Nothing ref
-
+addRef :: Text -> DummyPayload -> DummyEnv -> DummyEnv
+addRef name value (DummyEnv env) = DummyEnv $ Map.insert name value env
 
 -- | Run a 'Session' with the given initial node state
 runSession :: IsCrypto c => NodeState c -> Session c () -> Assertion
@@ -219,9 +207,8 @@ runSession nst (Session sess) =
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
--- | Run a 'Session' so that the blockchain state is the given
--- Radicle environment
-runSessionEnv :: IsCrypto c => Rad.Env c -> Session c () -> Assertion
+-- | Run a 'Session' so that the blockchain state is the given environment.
+runSessionEnv :: IsCrypto c => DummyEnv -> Session c () -> Assertion
 runSessionEnv env (Session sess) = do
     let nst = nodeState [] (fromGenesis $ sealBlock "" $ emptyGenesisFromState epoch env) env
     withNode nst $ \nh -> do
@@ -231,14 +218,14 @@ runSessionEnv env (Session sess) = do
 
 -- | Run a 'Session' so that the blockchain state has the given
 -- Radicle bindings.
-runSessionBindings :: IsCrypto c => [(Text, Rad.Value)] -> Session c () -> Assertion
-runSessionBindings bindings = runSessionEnv (initRadicleEnv bindings)
+runSessionBindings :: IsCrypto c => [(Text, DummyPayload)] -> Session c () -> Assertion
+runSessionBindings bindings = runSessionEnv (initEnv bindings)
 
 -- | Run a 'Session' with an empty node state. That is the node mempool
 -- is empty and the blockchain has only the genesis block with a pure
 -- Radicle environment.
 runEmptySession :: IsCrypto c => Session c () -> Assertion
-runEmptySession = runSessionEnv Rad.pureEnv
+runEmptySession = runSessionEnv mempty
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session c ()

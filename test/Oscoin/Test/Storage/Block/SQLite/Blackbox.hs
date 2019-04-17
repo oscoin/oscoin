@@ -9,7 +9,7 @@ import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blocks, chainLength, txPayload)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.RadicleTx
+import           Oscoin.Data.Tx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Time.Chrono as Chrono
 
@@ -17,7 +17,6 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
 
@@ -44,16 +43,16 @@ tests Dict =
 -- | Generates a non-empty 'Block'.
 genNonEmptyBlock
     :: IsCrypto c
-    => Block c (RadTx c) (Sealed c DummySeal)
-    -> Gen (Block c (RadTx c) (Sealed c DummySeal))
+    => Block c (Tx c) (Sealed c DummySeal)
+    -> Gen (Block c (Tx c) (Sealed c DummySeal))
 genNonEmptyBlock genesisBlock =
     genBlockFrom genesisBlock `suchThat` (not . null . blockData)
 
 
 genGetBlocks
     :: IsCrypto c
-    => Block c (RadTx c) (Sealed c DummySeal)
-    -> Gen (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
+    => Block c (Tx c) (Sealed c DummySeal)
+    -> Gen (Block c (Tx c) (Sealed c DummySeal), Blockchain c (Tx c) DummySeal)
 genGetBlocks genesisBlock =
     (,) <$> genStandaloneBlock
         <*> resize 1 (genBlockchainFrom genesisBlock)
@@ -65,8 +64,8 @@ genGetBlocks genesisBlock =
 
 testStoreLookupBlock
     :: IsCrypto c
-    => Block c (RadTx c) (Sealed c DummySeal)
-    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    => Block c (Tx c) (Sealed c DummySeal)
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
     -> Assertion
 testStoreLookupBlock blk (publicAPI, privateAPI) = do
     Abstract.insertBlock privateAPI blk
@@ -76,8 +75,8 @@ testStoreLookupBlock blk (publicAPI, privateAPI) = do
 
 testStoreLookupTx
     :: IsCrypto c
-    => Block c (RadTx c) (Sealed c DummySeal)
-    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    => Block c (Tx c) (Sealed c DummySeal)
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
     -> Assertion
 testStoreLookupTx blk (publicAPI, privateAPI) = do
     Abstract.insertBlock privateAPI blk
@@ -92,15 +91,15 @@ testStoreLookupTx blk (publicAPI, privateAPI) = do
 testGetGenesisBlock
     :: IsCrypto c
     => ()
-    -> Abstract.BlockStore c (RadTx c) DummySeal IO -> Assertion
+    -> Abstract.BlockStore c (Tx c) DummySeal IO -> Assertion
 testGetGenesisBlock () (publicAPI, _privateAPI) = do
     blk <- Abstract.getGenesisBlock publicAPI
     defaultGenesis @?= blk
 
 testGetBlocks
     :: IsCrypto c
-    => (Block c (RadTx c) (Sealed c DummySeal), Blockchain c (RadTx c) DummySeal)
-    -> Abstract.BlockStore c (RadTx c) DummySeal IO
+    => (Block c (Tx c) (Sealed c DummySeal), Blockchain c (Tx c) DummySeal)
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
     -> Assertion
 testGetBlocks (block, chain) (publicAPI, privateAPI) = do
     Abstract.insertBlocksNaive privateAPI (Chrono.reverse $ blocks chain)

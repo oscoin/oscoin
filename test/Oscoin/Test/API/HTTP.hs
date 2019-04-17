@@ -10,14 +10,11 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (txPubKey)
+import           Oscoin.Data.Tx (Tx, txPubKey)
 import           Oscoin.Test.Crypto.Blockchain.Generators
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
 import           Oscoin.Time.Chrono (toNewestFirst)
-
-import           Data.Default (def)
 
 import           Network.HTTP.Types.Status
 import           Web.HttpApiData (toUrlPiece)
@@ -79,7 +76,7 @@ smokeTestOscoinAPI = do
         -- The mempool is empty.
         get "/transactions" >>=
             assertStatus ok200 <>
-            assertResultOK ([] @(API.RadTx c))
+            assertResultOK ([] @(Tx c))
 
         -- Submit the transaction to the mempool.
         post "/transactions" tx >>=
@@ -95,7 +92,7 @@ smokeTestOscoinAPI = do
 
 unconfirmedTx
     :: IsCrypto c
-    => API.RadTx c
+    => Tx c
     -> API.TxLookupResponse c
 unconfirmedTx tx = API.TxLookupResponse
     { txHash = Crypto.hash tx
@@ -107,7 +104,7 @@ unconfirmedTx tx = API.TxLookupResponse
 
 getTransactionReturns
     :: IsCrypto c
-    => Hashed c (API.RadTx c)
+    => Hashed c (Tx c)
     -> API.TxLookupResponse c
     -> Session c ()
 getTransactionReturns txHash expected =
@@ -128,7 +125,7 @@ getExistingBlock = do
     let g = genesis chain
     let blockId = toUrlPiece $ blockHash g
 
-    liftIO $ httpTest (nodeState mempty chain def) $
+    liftIO $ httpTest (nodeState mempty chain mempty) $
         get ("/blocks/" <> blockId) >>=
             assertStatus ok200 <>
             assertResultOK g
@@ -137,7 +134,7 @@ getBestChain :: IsCrypto c => PropertyM IO (HTTPTest c)
 getBestChain = do
     chain <- pick genBlockchain
 
-    liftIO $ httpTest (nodeState mempty chain def) $ do
+    liftIO $ httpTest (nodeState mempty chain mempty) $ do
         get "/blockchain/best?depth=1" >>=
             assertStatus ok200 <>
             assertResultOK (take 1 . toNewestFirst $ blocks chain)

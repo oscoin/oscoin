@@ -33,7 +33,7 @@ import           Oscoin.Crypto.Blockchain.Eval (Receipt)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
-import qualified Oscoin.Data.RadicleTx as RadicleTx
+import           Oscoin.Data.Tx
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Trans
@@ -62,10 +62,10 @@ withNode
     => Config
     -> i
     -> Mempool.Handle c tx
-    -> Ledger.Ledger c s tx RadicleTx.Message st IO
+    -> Ledger.Ledger c s tx (TxOutput c tx) (TxState c tx) IO
     -> Protocol.Handle c tx s IO
-    -> Consensus c tx s (NodeT c tx st s i IO)
-    -> (Handle c tx st s i -> IO a)
+    -> Consensus c tx s (NodeT c tx s i IO)
+    -> (Handle c tx s i -> IO a)
     -> IO a
 withNode hConfig hNodeId hMempool hLedger hProtocol hConsensus =
     bracket open close
@@ -104,12 +104,12 @@ miner
        , Serialise   tx
        , Hashable  c tx
        , Serialise s
-       , Hashable  c st
+       , Hashable  c (TxState c tx)
        , Serialise (Hash c)
        , AuthTree.MerkleHash (Hash c)
        , Log.Buildable (Hash c)
        )
-    => NodeT c tx st s i m a
+    => NodeT c tx s i m a
 miner = do
     metrics <- asks (cfgTelemetry . hConfig)
     forever $ do
@@ -148,11 +148,11 @@ mineBlock
        , MonadClock m
        , Serialise tx
        , Hashable c tx
-       , Hashable c st
+       , Hashable c (TxState c tx)
        , Serialise (Hash c)
        , AuthTree.MerkleHash (Hash c)
        )
-    => NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
+    => NodeT c tx s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
     Handle{hConsensus, hProtocol} <- ask
     time <- currentTick
@@ -179,7 +179,7 @@ storage
        , Log.Buildable (Hash c)
        )
     => (Block c tx (Sealed c s) -> Either (ValidationError c) ())
-    -> Storage c tx s (NodeT c tx st s i m)
+    -> Storage c tx s (NodeT c tx s i m)
 storage validateBasic = Storage
     { storageApplyBlock = \blk -> do
         Handle{hProtocol, hConfig} <- ask
@@ -197,17 +197,18 @@ storage validateBasic = Storage
         Storage.lookupTx bs tx
     }
 
-getMempool :: MonadIO m => NodeT c tx st s i m (Mempool c tx)
+getMempool :: MonadIO m => NodeT c tx s i m (Mempool c tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 
 -- | Get a value from the given state hash.
 getPath
     :: ( Query st
+       , st ~ TxState c tx
        , MonadIO m
        )
     => StateHash c
     -> [Text]
-    -> NodeT c tx st s i m (Maybe (QueryVal st))
+    -> NodeT c tx s i m (Maybe (QueryVal st))
 getPath stateHash p = do
     ledger <- getLedger
     result <- Ledger.lookupState ledger (Crypto.toHashed stateHash)
@@ -217,10 +218,11 @@ getPath stateHash p = do
 getPathLatest
     :: ( MonadIO m
        , Query st
+       , st ~ TxState c tx
        , Crypto.Hashable c tx
        )
     => [Text]
-    -> NodeT c tx st s i m (Maybe (QueryVal st))
+    -> NodeT c tx s i m (Maybe (QueryVal st))
 getPathLatest path = do
     ledger <- getLedger
     Ledger.getTipWithState ledger >>= \case
@@ -230,17 +232,20 @@ getPathLatest path = do
 getBlocks
     :: MonadIO m
     => Depth
-    -> NodeT c tx st s i m [Block c tx (Sealed c s)]
+    -> NodeT c tx s i m [Block c tx (Sealed c s)]
 getBlocks d = do
     bs <- getBlockStoreReader
     Chrono.toNewestFirst <$> BlockStore.getBlocksByDepth bs d
 
-lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx st s i m (Maybe (TxLookup c tx))
+lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx s i m (Maybe (TxLookup c tx))
 lookupTx tx = do
     bs <- getBlockStoreReader
     BlockStore.lookupTx bs tx
 
-lookupReceipt :: (MonadIO m, Crypto.Hashable c tx) => Hashed c tx -> NodeT c tx st s i m (Maybe (Receipt c tx RadicleTx.Output))
+lookupReceipt
+    :: (MonadIO m, Crypto.Hashable c tx)
+    => Hashed c tx
+    -> NodeT c tx s i m (Maybe (Receipt c tx (TxOutput c tx)))
 lookupReceipt txHash = do
     ledger <- getLedger
     Ledger.lookupReceipt ledger txHash
@@ -248,7 +253,7 @@ lookupReceipt txHash = do
 lookupBlock
     :: (MonadIO m)
     => BlockHash c
-    -> NodeT c tx st s i m (Maybe (Block c tx (Sealed c s)))
+    -> NodeT c tx s i m (Maybe (Block c tx (Sealed c s)))
 lookupBlock h = do
     bs <- getBlockStoreReader
     BlockStore.lookupBlock bs h

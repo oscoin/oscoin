@@ -4,12 +4,11 @@ module Test.Oscoin.Node.Mempool
 
 import           Oscoin.Prelude
 
-import qualified Oscoin.API.Types as API
+import           Oscoin.Data.Tx
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck.Monadic
@@ -27,7 +26,7 @@ prop_mempool Dict = monadicIO $ do
     mp <- lift (Mempool.newIO @c)
 
     -- Create some arbitrary transactions.
-    txs <- pick (arbitrary @[API.RadTx c])
+    txs <- pick (arbitrary @[Tx c])
 
     -- Subscribe to the mempool with the subscription tokens.
     (chan1, chan2, evs1, evs2) <- lift $ atomically $ do

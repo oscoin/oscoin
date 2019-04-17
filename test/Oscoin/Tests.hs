@@ -9,7 +9,6 @@ import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain (testBlockchain)
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import qualified Oscoin.Test.Storage.Block.Cache as BlockCache
 import qualified Oscoin.Test.Storage.Block.Equivalence as StorageEquivalence

@@ -1,7 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.API.Types
-    ( RadTx
-    , Result(..)
+    ( Result(..)
     , TxLookupResponse(..)
     , isOk
     , isErr
@@ -13,8 +12,7 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey, Signature)
-import           Oscoin.Data.RadicleTx (RadTx)
-import qualified Oscoin.Data.RadicleTx as RadicleTx
+import           Oscoin.Data.Tx
 import           Oscoin.Prelude
 
 import qualified Codec.Serialise as Serial
@@ -40,11 +38,11 @@ resultToEither (Err t) = Left t
 
 -- | Response type of a transaction lookup API operation.
 data TxLookupResponse c = TxLookupResponse
-    { txHash          :: Hashed c (RadicleTx.RadTx c)
+    { txHash          :: Hashed c (Tx c)
     -- ^ Hash of the transaction.
     , txBlockHash     :: Maybe (BlockHash c)
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
-    , txOutput        :: Maybe (Either EvalError RadicleTx.Output)
+    , txOutput        :: Maybe (Either EvalError (TxOutput c (Tx c)))
     -- ^ Output of the transaction if it was evaluated. If the
     -- evaluation was successful the transaction is included in the
     -- block 'txBlockHash'.
@@ -52,16 +50,27 @@ data TxLookupResponse c = TxLookupResponse
     -- ^ Block depth of the 'Block' in which the transaction was included,
     -- which is the number of blocks from the tip up until, and including,
     -- the 'Block' referenced by 'txBlockHash'.
-    , txPayload       :: RadicleTx.RadTx c
+    , txPayload       :: Tx c
     -- ^ The transaction itself.
     } deriving (Generic)
 
-deriving instance (HasHashing c, Show (Hash c), Show (RadTx c)) => Show (TxLookupResponse c)
-deriving instance (Eq (Hash c), Eq (RadTx c))                   => Eq (TxLookupResponse c)
+deriving instance ( HasHashing c
+                  , Show (Hash c)
+                  , Show (Tx c)
+                  , Show (Signature c)
+                  , Show (TxOutput c (Tx c))
+                  ) => Show (TxLookupResponse c)
+deriving instance ( Eq (Hash c)
+                  , Eq (Tx c)
+                  , Eq (Signature c)
+                  , Eq (TxOutput c (Tx c))
+                  ) => Eq (TxLookupResponse c)
 
 instance ( Serial.Serialise (Hash c)
          , Serial.Serialise (PublicKey c)
          , Serial.Serialise (Signature c)
+         , Serial.Serialise (Tx c)
+         , Serial.Serialise (TxOutput c (Tx c))
          ) => Serial.Serialise (TxLookupResponse c)
 
 -- | A transaction receipt. Contains the hashed transaction.
