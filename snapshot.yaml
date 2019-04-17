@@ -31,9 +31,6 @@ packages:
       - Spock
       - Spock-core
 
-- git: http://github.com/oscoin/radicle
-  commit: eaf70a9e0b36af44d02d0372bc0ac2dcc3d1b29c
-
 - git: https://github.com/oscoin/avl-auth
   commit: dfc468845a82cdd7d759943b20853999bc026505
 

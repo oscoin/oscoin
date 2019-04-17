@@ -74,8 +74,7 @@ instance
     ( Serialise (Hash c)
     , Serialise (PublicKey c)
     , Serialise (Signature c)
-    , Serialise msg
-    ) => IsTxRow (Tx c msg) where
+    ) => IsTxRow (Tx c) where
     toTxRow Tx{..} = TxRow
         { txRowContext = LBS.toStrict $ serialise txContext
         , txRowMessage = LBS.toStrict $ serialise txMessage

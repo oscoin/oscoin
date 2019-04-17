@@ -9,11 +9,13 @@ import           Oscoin.Prelude
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary
 
-import           Data.ByteArray (ByteArrayAccess)
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances.ByteString ()
 
-instance (IsCrypto c, ByteArrayAccess a, Arbitrary a) => Arbitrary (Tx c a) where
+instance Arbitrary DummyPayload where
+    arbitrary = DummyPayload <$> arbitrary
+
+instance (IsCrypto c) => Arbitrary (Tx c) where
     arbitrary = do
         (pub :: PublicKey c, priv) <- arbitraryKeyPair
         msg           <- arbitrarySignedWith priv

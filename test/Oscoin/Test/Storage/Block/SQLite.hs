@@ -9,14 +9,13 @@ import           Oscoin.Prelude
 
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Data.RadicleTx
+import           Oscoin.Data.Tx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite as Sqlite
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 import qualified Oscoin.Time as Time
 
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Data.Rad.Arbitrary ()
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck
@@ -37,8 +36,8 @@ withSqliteDB
     :: ( IsCrypto c
        , Show a
        )
-    => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
-    -> (a -> Sqlite.Handle c (RadTx c) DummySeal -> IO ())
+    => (Block c (Tx c) (Sealed c DummySeal) -> Gen a)
+    -> (a -> Sqlite.Handle c (Tx c) DummySeal -> IO ())
     -> Property
 withSqliteDB genTestData action = monadicIO $ do
     testData <- pick (genTestData defaultGenesis)
@@ -52,8 +51,8 @@ withMemStore
     :: ( IsCrypto c
        , Show a
        )
-    => (Block c (RadTx c) (Sealed c DummySeal) -> Gen a)
-    -> (a -> Abstract.BlockStore c (RadTx c) DummySeal IO -> IO ())
+    => (Block c (Tx c) (Sealed c DummySeal) -> Gen a)
+    -> (a -> Abstract.BlockStore c (Tx c) DummySeal IO -> IO ())
     -> Property
 withMemStore genTestData action = monadicIO $ do
     testData <- pick (genTestData defaultGenesis)

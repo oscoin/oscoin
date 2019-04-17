@@ -11,8 +11,7 @@ import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.RadicleTx as RadicleTx
-import           Oscoin.Data.Tx (verifyTx)
+import           Oscoin.Data.Tx (Tx, verifyTx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Telemetry (telemetryStoreL)
@@ -41,7 +40,7 @@ getTransaction :: ( Serialise (BlockHash c)
                   , Serialise (Crypto.Signature c)
                   , Crypto.HasHashing c
                   )
-               => Hashed c (RadTx c)
+               => Hashed c (Tx c)
                -> ApiAction c s i ()
 getTransaction txId = do
     (tx, bh, confirmations) <- node (lookupTx txId) >>= \case
@@ -133,7 +132,7 @@ getStatePath _chain = do
 -- | Runs a NodeT action in a MonadApi monad.
 node
     :: (MonadApi c s i m)
-    => Node.NodeT c (RadTx c) (RadicleTx.Env c) s i IO a
+    => Node.NodeT c (Tx c) s i IO a
     -> m a
 node s = withHandle $ \h ->
     Node.runNodeT h s

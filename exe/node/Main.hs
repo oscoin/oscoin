@@ -10,8 +10,8 @@ import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
-import           Oscoin.Data.RadicleTx (RadTx)
-import qualified Oscoin.Data.RadicleTx as Rad (pureEnv, txEval)
+import qualified Oscoin.Data.OscoinTx as OscoinTx
+import           Oscoin.Data.Tx
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -38,7 +38,7 @@ import qualified Data.Yaml as Yaml
 import           Options.Applicative
 
 type GenesisBlock =
-    Block Crypto (RadTx Crypto) (Sealed Crypto Nakamoto.PoW)
+    Block Crypto (Tx Crypto) (Sealed Crypto Nakamoto.PoW)
 
 main :: IO ()
 main = do
@@ -74,7 +74,10 @@ main = do
 
             blkStore <- managed $
                 BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen
-            ledger <- liftIO $ Ledger.newFromBlockStoreIO Rad.txEval (fst blkStore) Rad.pureEnv
+            -- FIXME(adn) Replace with a proper evaluator & state once we switch to
+            -- the OscoinTx type.
+            let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+            ledger <- liftIO $ Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
 
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)

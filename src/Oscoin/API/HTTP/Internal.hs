@@ -22,7 +22,7 @@ module Oscoin.API.HTTP.Internal
 import           Oscoin.Prelude hiding (State, state)
 
 import           Oscoin.API.Types
-import qualified Oscoin.Data.RadicleTx as RadicleTx
+import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 
 import           Codec.Serialise (Serialise)
@@ -52,15 +52,15 @@ data State = State ()
 
 -- | The type of all actions (effects) in our HTTP handlers.
 type ApiAction c s i =
-    SpockAction (Node.Handle c (RadTx c) (RadicleTx.Env c) s i) () State
+    SpockAction (Node.Handle c (Tx c) s i) () State
 
 -- | The type of our api.
 type Api c s i =
-    SpockM (Node.Handle c (RadTx c) (RadicleTx.Env c) s i) () State
+    SpockM (Node.Handle c (Tx c) s i) () State
 
 -- | Represents any monad which can act like an ApiAction.
 type MonadApi c s i m =
-    (HasSpock m, SpockConn m ~ Node.Handle c (RadTx c) (RadicleTx.Env c) s i)
+    (HasSpock m, SpockConn m ~ Node.Handle c (Tx c) s i)
 
 -- | Create an empty state.
 mkState :: State
@@ -129,14 +129,14 @@ getBody = do
 
 runApi :: Api c s i ()
     -> Int
-    -> Node.Handle c (RadTx c) (RadicleTx.Env c) s i
+    -> Node.Handle c (Tx c) s i
     -> IO ()
 runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
     :: Api c s i ()
-    -> Node.Handle c (RadTx c) (RadicleTx.Env c) s i
+    -> Node.Handle c (Tx c) s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

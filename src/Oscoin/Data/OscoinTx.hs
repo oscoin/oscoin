@@ -6,7 +6,7 @@
 --
 module Oscoin.Data.OscoinTx where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (length)
 
 import           Oscoin.Configuration (Network(..))
 import           Oscoin.Crypto.Address
@@ -17,7 +17,9 @@ import           Oscoin.Data.Ledger
 
 import qualified Codec.Serialise as CBOR
 import qualified Crypto.Data.Auth.Tree as WorldState
-import           Data.ByteArray (ByteArrayAccess)
+import qualified Data.Aeson as JSON
+import           Data.ByteArray (ByteArrayAccess(..))
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 
 -------------------------------------------------------------------------------
@@ -68,7 +70,16 @@ data TxPayload c =
     deriving (Generic)
 
 -- | Transaction output, included in the receipts tree. (Placeholder)
-data TxOutput = TxOutput
+data TxOutput = TxOutput deriving (Show, Eq, Generic)
+
+instance CBOR.Serialise TxOutput
+
+instance JSON.ToJSON   TxOutput
+instance JSON.FromJSON TxOutput
+
+instance ByteArrayAccess TxOutput where
+    length = length . LBS.toStrict . CBOR.serialise
+    withByteArray ba = withByteArray (LBS.toStrict . CBOR.serialise $ ba)
 
 -- | A transaction evaluation error.
 data TxError c =
@@ -140,6 +151,10 @@ applyTx tx@Tx'{..} author ws = do
     -- TODO(cloudhead): Verify transaction size
 
     applyTxPayload txPayload author ws
+
+-- FIXME(adn) This is currently a stub.
+verifyTx :: Tx c -> Bool
+verifyTx _ = True
 
 -- | Apply the transaction payload to a world state.
 applyTxPayload

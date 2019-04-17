@@ -14,6 +14,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Mock
 import           Oscoin.Crypto.PubKey
+import           Oscoin.Data.Tx
 import           Oscoin.Test.Util
 
 import           Codec.Serialise (Serialise)
@@ -25,8 +26,6 @@ import           Database.SQLite.Simple.FromField
 import           Database.SQLite.Simple.Orphans ()
 import           Database.SQLite.Simple.ToField
 import           Formatting.Buildable (Buildable)
-import           Oscoin.API.Types
-import qualified Oscoin.Data.RadicleTx as Rad
 import           Web.HttpApiData (FromHttpApiData(..))
 
 import           Data.ByteArray.Hash
@@ -89,14 +88,14 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Hashable c ByteString
                   , Hashable c LByteString
                   , Hashable c (PublicKey c)
-                  , Hashable c (Rad.Env c)
+                  , Hashable c (TxState c (Tx c))
                   , AuthTree.MerkleHash (Hash c)
                   , Ord (Hash c)
                   , ByteArrayAccess (BlockHash c)
                   , ByteArrayAccess (ShortHash c)
                   , Buildable (Hash c)
                   , ToField (BlockHash c)
-                  , ToField (Hashed c (RadTx c))
+                  , ToField (Hashed c (Tx c))
                   , ToField (Sealed c Text)  -- DummySeal ~ Text
                   , FromField (Hash c)
                   , FromField (Sealed c Text)  -- DummySeal ~ Text

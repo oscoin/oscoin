@@ -40,7 +40,6 @@ library:
     - conduit-extra
     - containers
     - cryptonite
-    - data-default
     - deepseq
     - directory
     - direct-sqlite
@@ -68,12 +67,10 @@ library:
     - multihash-serialise
     - network
     - optparse-applicative
-    - pointed
     - prettyprinter
     - pretty-terminal
     - profunctors
     - protolude
-    - radicle
     - random
     - retry
     - safe-exceptions
@@ -147,7 +144,6 @@ tests:
       - conduit
       - containers
       - cryptonite
-      - data-default
       - directory
       - dns
       - filepath
@@ -170,7 +166,6 @@ tests:
       - oscoin
       - quickcheck-instances
       - process
-      - radicle
       - random
       - random-shuffle
       - retry

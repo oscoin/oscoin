@@ -27,6 +27,7 @@ import           Oscoin.CLI.KeyStore
 import qualified Oscoin.Configuration as Config
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
+import           Oscoin.Data.Tx
 import qualified Oscoin.Time as Time
 
 import           Crypto.Random.Types (MonadRandom(..))
@@ -82,7 +83,7 @@ newtype TestCommandRunner c a = TestCommandRunner
     deriving (Functor, Applicative, Monad, MonadIO, MonadState (TestCommandState c))
 
 data TestCommandState c = TestCommandState
-    { transactions  :: Map.Map (Hashed c (RadTx c)) (RadTx c)
+    { transactions  :: Map.Map (Hashed c (Tx c)) (Tx c)
     , storedKeyPair :: Maybe (Crypto.PublicKey c, Crypto.PrivateKey c)
     , commandOutput :: Text
     }
@@ -91,7 +92,7 @@ instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
     sleep _       = pure ()
     putLine t     = putStr (t <> "\n")
     putString t   = modify $ \s -> s { commandOutput = commandOutput s <> t }
-    readRadFile _ = pure $ Left "can't read file in tests"
+    readTxFile _  = pure $ Left "can't read file in tests"
     getTime       = pure Time.epoch
 
 
