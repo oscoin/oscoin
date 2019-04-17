@@ -13,7 +13,7 @@ module Oscoin.Storage.Block.Abstract
 
     , hoistBlockStoreReader
     , insertBlocksNaive
-    , isNovelBlock
+    , member
 
     -- * Internals
     , BlockStoreWriter(..)
@@ -113,5 +113,7 @@ insertBlocksNaive
     -> m ()
 insertBlocksNaive bs = traverse_ (insertBlock bs)
 
-isNovelBlock :: Functor m => BlockStoreReader c tx s m -> BlockHash c -> m Bool
-isNovelBlock bs = map isNothing . lookupBlock bs
+-- | Returns 'True' if the input 'BlockHash' corresponds to a block stored
+-- inside the 'BlockStore'.
+member :: Functor m => BlockStoreReader c tx s m -> BlockHash c -> m Bool
+member bs = map isJust . lookupBlock bs

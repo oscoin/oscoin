@@ -49,9 +49,9 @@ newBlockTreeInternal o cfg validateFull scoreBlock bs =
             , insertOrphan = \blk -> do
                 o' <- chainSelection (O.insertOrphan blk o) cfg validateFull scoreBlock bs
                 pure $ newBlockTreeInternal o' cfg validateFull scoreBlock bs
-            , isNovelBlock = \h -> do
-                  insideBlockStore <- not <$> BlockStore.isNovelBlock (fst bs) h
-                  pure (not insideBlockStore && not (O.member o h))
+            , member = \h -> do
+                  insideBlockStore <- BlockStore.member (fst bs) h
+                  pure (insideBlockStore || O.member o h)
             }
     in btree
 

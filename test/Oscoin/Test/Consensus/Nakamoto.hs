@@ -95,7 +95,7 @@ instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState 
                            , dispatchBlockAsync = dispatchSync
                            , isNovelBlock = \h -> do
                                let (bs,_) = testableBlockStore
-                               Abstract.isNovelBlock bs h
+                               not <$> Abstract.member bs h
                            }
     testableBestChain nodeState =
         let blockStore = nodeState ^. nakBlockstoreL

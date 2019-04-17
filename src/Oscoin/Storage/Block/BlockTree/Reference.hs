@@ -24,6 +24,6 @@ newBlockTree bs =
                 pure $ btree
             -- The pure 'BlockTree' searches automatically both in the main
             -- chain /and/ in the orphans.
-            , isNovelBlock = BlockStore.isNovelBlock (fst bs)
+            , member = BlockStore.member (fst bs)
             }
     in btree

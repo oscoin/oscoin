@@ -15,5 +15,5 @@ data BlockTree c tx s m = BlockTree
     , insertOrphan     :: Block c tx (Sealed c s) -> m (BlockTree c tx s m)
     -- | Returns 'True' if the input block is novel to the 'BlockTree', i.e it's
     -- neither in the orphan store nor in the block store.
-    , isNovelBlock     :: BlockHash c -> m Bool
+    , member           :: BlockHash c -> m Bool
     }

@@ -102,7 +102,7 @@ runProtocol validateFull scoreBlock telemetry btree config use =
                   events <- modifyMVar proto $ \p -> stepProtocol p blk
                   forM_ events (Telemetry.emit telemetry)
               , dispatchBlockAsync = atomically . writeTBQueue incomingBlocksQueue
-              , isNovelBlock = \h -> withMVar proto $ \p -> BlockTree.isNovelBlock (protoBlockTree p) h
+              , isNovelBlock = \h -> withMVar proto $ \p -> not <$> BlockTree.member (protoBlockTree p) h
               }
 
         worker <- Async.async $ do
