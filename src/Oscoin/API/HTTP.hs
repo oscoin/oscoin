@@ -14,8 +14,8 @@ import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.RealWorld ()
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
-import qualified Oscoin.Node.Trans as Node.Trans
-import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
+import qualified Oscoin.Node.Trans as Node
+import           Oscoin.Telemetry.Middleware (loggingMiddleware)
 
 import qualified Oscoin.API.HTTP.Handlers as Handlers
 import           Oscoin.API.HTTP.Internal
@@ -31,25 +31,17 @@ import           Web.Spock
 import           Codec.Serialise (Serialise)
 import           Formatting.Buildable (Buildable)
 
-withTelemetryMiddleware :: Node.Handle c tx s i
-                        -> (Wai.Middleware -> IO a)
-                        -> IO a
-withTelemetryMiddleware hdl action = do
-    let handle = Node.cfgTelemetry . Node.Trans.hConfig $ hdl
-    action (telemetryMiddleware handle)
-
 -- | Runner specialised over the production 'Crypto', as we use a separate
 -- node handle for tests.
-run
-    :: (Serialise s)
+run :: (Serialise s)
     => Int
     -> Node.Handle Crypto (Tx Crypto) s i
     -> IO ()
 run port hdl =
-    withTelemetryMiddleware hdl $ \mdlware -> runApi (api mdlware) port hdl
+    withLogging hdl $ \logging ->
+        runApi (api logging) port hdl
 
-app
-    :: ( Typeable c
+app :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
@@ -62,8 +54,8 @@ app
     => Node.Handle c (Tx c) s i
     -> IO Wai.Application
 app hdl =
-    withTelemetryMiddleware hdl $ \mdlware ->
-        spockAsApp $ mkMiddleware (api mdlware) hdl
+    withLogging hdl $ \logging ->
+        spockAsApp $ mkMiddleware (api logging) hdl
 
 -- | Policy for static file serving.
 staticFilePolicy :: Wai.Policy
@@ -73,8 +65,7 @@ staticFilePolicy =
                >-> Wai.addBase "static"
 
 -- | Entry point for API.
-api
-    :: ( Typeable c
+api :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
@@ -114,3 +105,10 @@ api mdlware = do
     -- /state/:chain ----------------------------------------------------------
 
     get ("state" <//> wildcard) Handlers.getStatePath
+
+
+-- Internal --------------------------------------------------------------------
+
+withLogging :: Node.Handle c tx s i -> (Wai.Middleware -> IO a) -> IO a
+withLogging hdl action =
+    action . loggingMiddleware . Node.cfgTelemetry $ Node.hConfig hdl

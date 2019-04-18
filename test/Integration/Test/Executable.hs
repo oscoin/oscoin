@@ -5,12 +5,14 @@ module Integration.Test.Executable
 import           Oscoin.Prelude
 
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy as LBS
 
 import           Network.HTTP.Client
                  ( defaultManagerSettings
-                 , httpNoBody
+                 , httpLbs
                  , newManager
                  , parseRequest
+                 , responseBody
                  , responseStatus
                  )
 import           Network.HTTP.Types (statusCode)
@@ -23,16 +25,13 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 
 tests :: TestTree
-tests = testGroup "Integration.Test.Executable"
-    [ testCase "testStartsOK"  testStartsOK
-    , testCase "testMinerOK"   testMinerOK
-    , testCase "testMetricsOK" testMetricsOK
-    ]
+tests = testCase "Integration.Test.Executable" testSmoke
 
 data Ports = Ports
-    { gossipPort :: Int
-    , apiPort    :: Int
-    , ekgPort    :: Int
+    { gossipPort  :: Int
+    , apiPort     :: Int
+    , ekgPort     :: Int
+    , metricsPort :: Int
     }
 
 randomPorts :: IO Ports
@@ -40,6 +39,7 @@ randomPorts = Ports
     <$> randomRIO (6000, 7990)
     <*> randomRIO (8000, 8990)
     <*> randomRIO (9000, 10000)
+    <*> randomRIO (10000, 11990)
 
 withOscoinExe :: Ports -> (Handle -> Handle -> Assertion) -> Assertion
 withOscoinExe Ports{..} f = do
@@ -63,6 +63,12 @@ withOscoinExe Ports{..} f = do
                                  , randomNetwork
                                  , "--seed"
                                  , "127.0.0.1:" <> show gossipPort
+                                 , "--metrics-host"
+                                 , "127.0.0.1"
+                                 , "--metrics-port"
+                                 , show metricsPort
+                                 , "--ekg-host"
+                                 , "127.0.0.1"
                                  , "--ekg-port"
                                  , show ekgPort
                                  , "--blockstore"
@@ -72,28 +78,41 @@ withOscoinExe Ports{..} f = do
                                  ] defaultSandboxOptions $
                 \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
 
-testStartsOK :: Assertion
-testStartsOK = do
-    ports <- randomPorts
-    withOscoinExe ports $ \stdoutHandle _stdErrHandle -> do
-        -- TODO(adn) In the future we want a better handshake string here.
-        actual <- C8.hGet stdoutHandle 100
-        assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
-                   ("node starting" `C8.isInfixOf` actual)
+testSmoke :: Assertion
+testSmoke = do
+    ports@Ports { apiPort, ekgPort, metricsPort } <- randomPorts
+    withOscoinExe ports $ \stdoutHdl _ -> do
+        out <- C8.hGet stdoutHdl 2048
+        expectOutputContains "node starting" out
+        expectOutputContains "mined block"   out
 
-testMinerOK :: Assertion
-testMinerOK = do
-    ports <- randomPorts
-    withOscoinExe ports $ \stdoutHandle _stdErrHandle -> do
-        actual <- C8.hGet stdoutHandle 2000
-        assertBool ("oscoin started but gave unexpected output: " <> C8.unpack actual)
-                   ("mined block" `C8.isInfixOf` actual)
-
-testMetricsOK :: Assertion
-testMetricsOK = do
-    ports <- randomPorts
-    withOscoinExe ports $ \_ _ -> do
         mgr <- newManager defaultManagerSettings
-        req <- parseRequest $ "HEAD http://127.0.0.1:" <> show (ekgPort ports)
-        res <- statusCode . responseStatus <$> httpNoBody req mgr
-        assertEqual "Unexpected status code" 200 res
+        -- API root is actually a CBOR encoded 'Nothing :: Maybe ()'. lol
+        checkEndpoint mgr (mkUrl apiPort     mempty    ) 200 noEmptyBody
+        checkEndpoint mgr (mkUrl ekgPort     mempty    ) 200 noEmptyBody
+        checkEndpoint mgr (mkUrl metricsPort "/metrics") 200 noEmptyBody
+        checkEndpoint mgr (mkUrl metricsPort "/healthz") 200 emptyBody
+  where
+    expectOutputContains expected actual =
+        assertBool ("Expected `" <> toS expected <> "` in output: " <> toS actual) $
+            expected `C8.isInfixOf` actual
+
+    noEmptyBody url bdy =
+        assertBool (url <> ": Empty response") $
+            C8.length bdy > 0
+
+    emptyBody url bdy =
+        assertBool (url <> ": Non-empty response: " <> toS bdy) $
+            C8.length bdy == 0
+
+    mkUrl port path = "http://127.0.0.1:" <> show port <> path
+
+    checkEndpoint mgr url code assertBody = do
+        rq <- parseRequest url
+        rs <- httpLbs rq mgr
+        let
+            rsStatus = statusCode  $ responseStatus rs
+            rsBody   = LBS.toStrict $ responseBody   rs
+         in do
+            assertEqual (url <> ": Unexpected status code") code rsStatus
+            assertBody url rsBody

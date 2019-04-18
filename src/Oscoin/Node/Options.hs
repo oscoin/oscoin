@@ -28,8 +28,10 @@ data Options = Options
     , optBlockTimeLower :: Duration
     , optPaths          :: Paths
     , optEnvironment    :: Environment
-    , optEkgHost        :: HostName
-    , optEkgPort        :: PortNumber
+    , optMetricsHost    :: Maybe HostName
+    , optMetricsPort    :: Maybe PortNumber
+    , optEkgHost        :: Maybe HostName
+    , optEkgPort        :: Maybe PortNumber
     }
 
 nodeOptionsParser :: ConfigPaths -> Parser Options
@@ -65,15 +67,27 @@ nodeOptionsParser cps = Options
         )
     <*> pathsParser cps
     <*> environmentParser
-    <*> option str
-        ( long "ekg-host"
-       <> help "Host name to bind to for the EKG server"
-       <> value "127.0.0.1"
-       <> showDefault
+    <*> optional
+        ( option str
+          ( long "metrics-host"
+         <> help "Host name to bind to for the prometheus metrics endpoint"
+          )
         )
-    <*> option auto
-        ( long "ekg-port"
-       <> help "Port number to bind to for the EKG server"
-       <> value 8090
-       <> showDefault
+    <*> optional
+        ( option auto
+          ( long "metrics-port"
+         <> help "Port number to bind to for the prometheus metrics endpoint"
+          )
+        )
+    <*> optional
+        ( option str
+          ( long "ekg-host"
+         <> help "Host name to bind to for the EKG server"
+          )
+        )
+    <*> optional
+        ( option auto
+          ( long "ekg-port"
+         <> help "Port number to bind to for the EKG server"
+          )
         )

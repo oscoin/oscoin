@@ -36,5 +36,5 @@ tests d@Dict config = testGroup "Oscoin"
     , testGroup      "SQLite Storage blackbox"        (SQLite.Blackbox.tests d)
     , testGroup      "SQLite Storage whitebox"        (SQLite.Whitebox.tests d)
     , testBlockchain d config
-    , testGroup      "Telemetry"                      (Telemetry.tests d)
+    , testGroup      "Telemetry"                      Telemetry.tests
     ]

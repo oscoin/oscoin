@@ -4,6 +4,9 @@
 
 module Oscoin.Telemetry.Middleware
     ( telemetryMiddleware
+    , loggingMiddleware
+    , metricsMiddleware
+    , healthMiddleware
       -- * Internal  functions, testing only
     , renderCounter
     , renderGauge
@@ -42,10 +45,15 @@ import qualified Oscoin.Time as Time
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
 
+-- | Composition of 'loggingMiddleware', 'healthMiddleware', and
+-- 'metricsMiddleware'
 telemetryMiddleware :: Handle -> Wai.Middleware
-telemetryMiddleware store = loggingMiddleware store
-                          . telemetryApiMiddleware store
+telemetryMiddleware store =
+      loggingMiddleware store
+    . healthMiddleware  store
+    . metricsMiddleware store
 
+-- | Log HTTP requests
 loggingMiddleware :: Handle -> Wai.Middleware
 loggingMiddleware telemetryStore app req respond = do
     t0 <- Time.now
@@ -55,12 +63,31 @@ loggingMiddleware telemetryStore app req respond = do
         emit telemetryStore evt
         respond res
 
+-- | Exposes a health check endpoint at @/healthz@.
+--
+-- Currently, this simply responds with an empty 200 response. In the future, we
+-- may include more informative response bodies.
+--
+-- Note that it is __NOT__ advisable to expose this endpoint publicly.
+--
+healthMiddleware :: Handle -> Wai.Middleware
+healthMiddleware _ app req respond
+    | Wai.requestMethod req == HTTP.methodGet
+   && Wai.pathInfo      req == ["healthz"]    =
+        -- TODO(kim): this should check the metrics store for some anomalies
+        respond $ Wai.responseLBS HTTP.status200 mempty mempty
+    | otherwise                               =
+        app req respond
+
 -- | Exposes the telemetry metrics using @Prometheus@ 's
 -- < https://prometheus.io/docs/instrumenting/exposition_formats/ exposition format>.
 -- However, there is no formal dependency on @Prometheus@ itself as part of this
 -- 'Middleware', which can be re-interpreted to be served, say, as JSON.
-telemetryApiMiddleware :: Handle -> Wai.Middleware
-telemetryApiMiddleware Handle{telemetryMetrics} app req respond =
+--
+-- Note that it is __NOT__ advisable to expose this endpoint publicly.
+--
+metricsMiddleware :: Handle -> Wai.Middleware
+metricsMiddleware Handle{telemetryMetrics} app req respond =
     if     Wai.requestMethod req == HTTP.methodGet
         && Wai.pathInfo req == ["metrics"]
     then respondWithMetrics else app req respond

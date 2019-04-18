@@ -30,10 +30,15 @@ import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (withStdLogger)
 import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
+import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
 
 import           Control.Monad.Managed (managed, runManaged)
 import qualified Data.Set as Set
+import           Data.String (fromString)
 import qualified Data.Yaml as Yaml
+import           Network.HTTP.Types.Status (notFound404)
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
 
 import           Options.Applicative
 
@@ -126,7 +131,10 @@ main = do
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)
                 <> Concurrently (miner node gossip)
-                <> Concurrently (runEkg metricsStore optEkgHost optEkgPort)
+                <> (Concurrently $
+                        maybeRunMetrics telemetry optMetricsHost optMetricsPort)
+                <> (Concurrently $
+                        maybeRunEkg metricsStore optEkgHost optEkgPort)
 
     either (const exitFailure) (const exitSuccess) res
   where
@@ -145,7 +153,25 @@ main = do
     storage nod =
         hoistStorage (runNodeT nod) (Node.storage Nakamoto.validateBasic)
 
-    runEkg store host port = do
+    maybeRunEkg store (Just host) (Just port) = do
         tid <- forkEkgServer store host port
         withException (threadDelay maxBound) $ \(e :: SomeAsyncException) ->
             throwTo tid e
+    maybeRunEkg _ _ _ = pure ()
+
+    maybeRunMetrics store (Just host) (Just port) =
+        let
+            settings =
+                  Warp.setHost (fromString host)
+                . Warp.setPort (fromIntegral port)
+                . Warp.setOnException (\_ ex ->
+                    when (Warp.defaultShouldDisplayException ex) $
+                        throwIO ex)
+                $ Warp.defaultSettings
+
+            app =
+                telemetryMiddleware store $ \_ respond ->
+                    respond $ Wai.responseLBS notFound404 mempty mempty
+         in
+            Warp.runSettings settings app
+    maybeRunMetrics _ _ _ = pure ()

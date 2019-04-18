@@ -94,10 +94,13 @@ executables:
     dependencies:
       - async
       - containers
+      - http-types
       - managed
       - optparse-applicative
       - oscoin
       - semigroups
+      - wai
+      - warp
       - yaml
     ghc-options:
       - -with-rtsopts=-T
