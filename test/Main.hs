@@ -8,7 +8,6 @@ import           Oscoin.Crypto
 import           Oscoin.Crypto.Hash.Mock ()
 import           Oscoin.Crypto.PubKey.Mock ()
 
-import qualified Crypto.Test.Hash.Multi as Multihash
 import qualified Integration.Tests as Integration
 import           Oscoin.Test.Crypto
 import qualified Oscoin.Tests as Oscoin
@@ -36,7 +35,6 @@ main = do
     let crypto = Dict @CryptoUnderTest
     defaultMainWithIngredients (map failFast defaultIngredients) $ testGroup "All"
         [ Oscoin.tests crypto config
-        , Multihash.tests
         , Integration.tests
         , Test.Control.Concurrent.RateLimit.tests
         , Test.Data.Conduit.Serialise.tests

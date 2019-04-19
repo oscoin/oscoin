@@ -28,14 +28,14 @@ import           Oscoin.Prelude
 import qualified Oscoin.Configuration as Config
 import           Oscoin.Crypto.Address.Internal
 import           Oscoin.Crypto.Address.Serialisation as Serialisation
-import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.Hash hiding (decodeAtBase, encodeAtBase)
 import           Oscoin.Crypto.PubKey
 
 import qualified Codec.CBOR.ByteArray as CBOR
 import qualified Codec.Serialise as CBOR
 import           Data.ByteArray (ByteArrayAccess, convert)
 import           Data.ByteString.BaseN
-                 (decodeBase32z, encodeBase32z, encodedText)
+                 (Base(Base32z), decodeAtBase, encodeAtBase, encodedText)
 import           Data.Tagged
 import qualified Formatting as F
 
@@ -73,7 +73,7 @@ decodeAddress
     => ByteString
     -> Either Serialisation.DeserializeError (Address c)
 decodeAddress base32zBlob =
-    case decodeBase32z base32zBlob of
+    case decodeAtBase Base32z base32zBlob of
         Nothing -> Left $ Serialisation.InvalidBase32zEncoding base32zBlob
         Just bs -> Serialisation.deserializeAddress bs
 
@@ -98,4 +98,4 @@ fmtAddress
        , ByteArrayAccess (ShortHash c)
        )
     => F.Format r (Address c -> r)
-fmtAddress = F.mapf (encodedText . encodeBase32z . serializeAddress) F.stext
+fmtAddress = F.mapf (encodedText . encodeAtBase Base32z . serializeAddress) F.stext

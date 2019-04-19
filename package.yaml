@@ -27,10 +27,6 @@ library:
     - aeson
     - async
     - avl-auth
-    - base16-bytestring
-    - base58-bytestring
-    - base64-bytestring
-    - z-base32-bytestring
     - binary
     - bytestring
     - cacophony >= 0.10.1
@@ -63,6 +59,7 @@ library:
     - microlens-mtl
     - mmorph
     - mtl
+    - multibase
     - multihash-cryptonite
     - multihash-serialise
     - network
@@ -159,7 +156,7 @@ tests:
       - microlens
       - microlens-mtl
       - mtl
-      - multihash-cryptonite
+      - multibase
       - network
       - nicify-lib
       - optparse-applicative

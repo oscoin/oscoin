@@ -63,7 +63,7 @@ instance HasHashing MockCrypto where
 
     compactHash (FnvHash (FnvHash64 w64)) = BS.take 7
                                         . BaseN.encodedBytes
-                                        . BaseN.encodeBase58
+                                        . BaseN.encodeBase58btc
                                         . toS
                                         . BL.toLazyByteString
                                         . BL.word64LE

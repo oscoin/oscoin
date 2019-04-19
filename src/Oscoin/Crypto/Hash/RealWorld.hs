@@ -109,7 +109,7 @@ instance ToJSON (Hash Crypto) where
 instance FromJSON (Hash Crypto) where
     parseJSON = withText "Hash" $
         either fail pure
-            . second Hash . decodeAtBase BaseN.Base58 . encodeUtf8
+            . second Hash . decodeAtBase BaseN.Base58btc . encodeUtf8
 
 instance Sql.ToField (Hash Crypto) where
     toField = Sql.SQLText . F.sformat formatHash
@@ -119,7 +119,7 @@ instance Sql.FromField (Hash Crypto) where
         case Sql.fieldData f of
             Sql.SQLText t ->
                 either (const sqlErr) (Sql.Ok . Hash)
-                       (decodeAtBase BaseN.Base58 $ encodeUtf8 t)
+                       (decodeAtBase BaseN.Base58btc $ encodeUtf8 t)
             _ ->
                 sqlErr
       where
@@ -140,13 +140,13 @@ instance Serialise (ShortHash Crypto) where
 
 instance Multihashable (HashAlgorithm Crypto) => FromHttpApiData (Hash Crypto) where
     parseQueryParam =
-        bimap T.pack Hash . decodeAtBase BaseN.Base58 . encodeUtf8
+        bimap T.pack Hash . decodeAtBase BaseN.Base58btc . encodeUtf8
 
 -- FIXME: this should use multihash encoding and satisfy @read . show = id@
 instance Show.Show (Hash Crypto) where
     show (Hash d) = C8.unpack
                   . BaseN.encodedBytes
-                  . BaseN.encodeBase58
+                  . BaseN.encodeBase58btc
                   . convert
                   $ d
 
@@ -158,7 +158,7 @@ instance H.Hashable (Hash Crypto) where
 instance Buildable (Hash Crypto) where
     build (Hash digest) =
         BaseN.encodedTextBuilder $
-            encodeAtBase BaseN.Base58 . Multihash.fromDigest $ digest
+            encodeAtBase BaseN.Base58btc . Multihash.fromDigest $ digest
 
 instance MerkleHash (Hash Crypto) where
     emptyHash    = Hash Cryptonite.emptyHash
@@ -184,6 +184,6 @@ compactHashRealWorld :: Hash Crypto -> ByteString
 compactHashRealWorld (Hash d) =
       BS.take 7
     . BaseN.encodedBytes
-    . BaseN.encodeBase58
+    . BaseN.encodeBase58btc
     . convert
     $ d

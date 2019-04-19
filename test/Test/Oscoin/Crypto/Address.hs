@@ -16,7 +16,7 @@ import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairFrom)
 import           Oscoin.Test.Util (condensed)
 
 import qualified Data.ByteString as BS
-import           Data.ByteString.BaseN (decodeBase32z)
+import           Data.ByteString.BaseN (Base(Base32z), decodeAtBase)
 import           Data.IORef
 import qualified Data.Set as Set
 import           Formatting
@@ -65,7 +65,7 @@ propRenderDecodeRoundtrip Dict = property $ do
     (pk, _) <- genKeyPair @c
     address <- forAll $ genAddress pk
     let (b32 :: ByteString) = toS $ sformat fmtAddress address
-    decodeBase32z b32 === Just (serializeAddress address)
+    decodeAtBase Base32z b32 === Just (serializeAddress address)
     (decodeAddress . toS . sformat fmtAddress $ address) === Right address
 
 propInvalidChecksum :: forall c. Dict (IsCrypto c) -> Property

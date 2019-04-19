@@ -35,7 +35,7 @@ newtype DummyTx = DummyTx ByteString
 
 -- Displays the base58-encoded 8 byte payload
 instance Show DummyTx where
-    show (DummyTx dat) = "DummyTx " <> toS (BaseN.encodedText (BaseN.encodeBase58 dat))
+    show (DummyTx dat) = "DummyTx " <> toS (BaseN.encodedText (BaseN.encodeBase58btc dat))
 
 instance Arbitrary DummyTx where
     -- This needs to guarantee that with high probability all generated
