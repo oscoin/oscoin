@@ -24,11 +24,14 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getChainHashes
     , switchToFork
     , storeBlock
+    , lookupBlock
+    , lookupTx
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Depth)
+import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
@@ -39,7 +42,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  , parentHash
                  )
-import           Oscoin.Crypto.Hash (Hash)
+import           Oscoin.Crypto.Hash (Hash, Hashed, fromHashed, zeroHash)
 import           Oscoin.Storage.Block.SQLite.Transaction
 import           Oscoin.Time (Timestamp)
 import           Oscoin.Time.Chrono (OldestFirst(..))
@@ -390,3 +393,39 @@ getTipInternal
     -> Transaction IO (Block c tx (Sealed c s))
 getTipInternal cache =
     headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocksInternal cache 1
+
+lookupBlock
+    :: forall c tx s.
+       ( Serialise s
+       , FromField (Sealed c s)
+       , FromField (Hash c)
+       , StorableTx c tx
+       )
+    => Handle c tx s
+    -> BlockHash c
+    -> IO (Maybe (Block c tx (Sealed c s)))
+lookupBlock Handle{hConn} h = runTransaction hConn $ do
+    conn <- ask
+    result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> liftIO (Sql.query conn
+        [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
+                FROM blocks
+               WHERE hash = ? |] (Only h))
+
+    txs :: [tx] <- liftIO $ getBlockTxs conn h
+
+    for result $ \bh ->
+        pure $ mkBlock bh txs
+
+-- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
+-- type out of the database.
+lookupTx
+    :: StorableTx c tx
+    => Handle c tx s
+    -> Hashed c tx
+    -> IO (Maybe (TxLookup c tx))
+lookupTx Handle{hConn} hash = runTransaction hConn $ do
+    conn <- ask
+    maybeTx <- liftIO $ getTx conn (fromHashed hash)
+    pure $ case maybeTx of
+        Nothing -> Nothing
+        Just tx -> Just $ TxLookup tx zeroHash 0

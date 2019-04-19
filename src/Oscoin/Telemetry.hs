@@ -82,6 +82,12 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
         BlockMinedEvent blockHash ->
             Log.withNamespace "node" $
                 Log.infoM "mined block" fmtBlockHash blockHash
+        BlockchainTipExtended blockHash ->
+            Log.withNamespace "blocktree" $
+                Log.infoM "block added to the main chain" fmtBlockHash blockHash
+        RollbackOccurred depth ->
+            Log.withNamespace "blocktree" $
+                Log.infoM "rollback occurred" (ftag "depth" % int) (fromIntegral @_ @Int depth)
         BlockBroadcastFailedEvent blockHash e ->
             Log.withNamespace "node" $
                 Log.errM "block broadcast failed"
@@ -319,6 +325,10 @@ toActions = \case
       ]
     BlockMinedEvent _ -> [
         CounterIncrease "oscoin.blocks_mined.total" noLabels
+      ]
+    BlockchainTipExtended _ -> []
+    RollbackOccurred _depth -> [
+        CounterIncrease "oscoin.rollbacks.total" noLabels
       ]
     BlockBroadcastFailedEvent _ _ -> [
         CounterIncrease "oscoin.blocks_sent.errors.total" noLabels

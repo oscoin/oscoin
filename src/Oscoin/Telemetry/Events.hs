@@ -5,6 +5,7 @@ module Oscoin.Telemetry.Events
 import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Types as Consensus
+import           Oscoin.Crypto.Blockchain (Depth)
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
@@ -27,6 +28,11 @@ data NotableEvent where
     -- | Triggered every time a new block is mined.
     BlockMinedEvent :: forall c. (Buildable (Hash c), HasHashing c)
                     => Hash c -> NotableEvent
+    -- | Triggered every time a new block is added to the main chain.
+    BlockchainTipExtended :: forall c. (Buildable (Hash c), HasHashing c)
+                          => Hash c -> NotableEvent
+    -- | Triggered every time a rollback of the give depth occurred.
+    RollbackOccurred :: Depth -> NotableEvent
     -- | Triggered when broadcasting a newly mined block fails.
     BlockBroadcastFailedEvent
         :: forall c. (Buildable (Hash c), HasHashing c)
