@@ -105,9 +105,11 @@ data TxError c =
     -- ^ The transaction is not valid.
     | ErrOverflow                    (Address c)
     -- ^ Executing the transaction would result in an overflow.
-    deriving (Generic, Eq, Ord)
+    deriving (Generic)
 
 deriving instance (Show (PublicKey c), Show (Crypto.Hash c)) => Show (TxError c)
+deriving instance (Eq (Signature c), Eq (BlockHash c), Eq (PublicKey c)) => Eq (TxError c)
+deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (PublicKey c)) => Ord (TxError c)
 
 -------------------------------------------------------------------------------
 
@@ -124,8 +126,8 @@ mkTx p = Tx'
 -- | Apply a transaction to the world state, and return either an error,
 -- or a new world state with the output of the transaction.
 applyTx
-    :: ( ByteArrayAccess (Crypto.ShortHash c)
-       , CBOR.Serialise (Crypto.ShortHash c)
+    :: ( CBOR.Serialise (PublicKey c)
+       , Ord (PublicKey c)
        )
     => Tx c
     -- ^ The transaction to apply.
@@ -158,8 +160,8 @@ verifyTx _ = True
 
 -- | Apply the transaction payload to a world state.
 applyTxPayload
-    :: ( ByteArrayAccess (Crypto.ShortHash c)
-       , CBOR.Serialise (Crypto.ShortHash c)
+    :: ( CBOR.Serialise (PublicKey c)
+       , Ord (PublicKey c)
        )
     => TxPayload c
     -> Address c
@@ -259,8 +261,10 @@ mapHandlerError = first ErrHandlerFailed
 
 -- | Lookup a member in the state.
 lookupMember
-    :: (ByteArrayAccess (Crypto.ShortHash c), CBOR.Serialise (Crypto.ShortHash c))
-    => Address c -> WorldState c -> Either (TxError c) (Member c)
+    :: CBOR.Serialise (PublicKey c)
+    => Address c
+    -> WorldState c
+    -> Either (TxError c) (Member c)
 lookupMember addr ws =
     case WorldState.lookup key ws of
         Just (MemberVal m) -> Right m
@@ -271,8 +275,10 @@ lookupMember addr ws =
 
 -- | Lookup a project in the state.
 lookupProject
-    :: (ByteArrayAccess (Crypto.ShortHash c), CBOR.Serialise (Crypto.ShortHash c))
-    => Address c -> WorldState c -> Either (TxError c) (Project c)
+    :: CBOR.Serialise (PublicKey c)
+    => Address c
+    -> WorldState c
+    -> Either (TxError c) (Project c)
 lookupProject addr ws =
     case WorldState.lookup (addressKey addr) ws of
         Just (ProjectVal p) -> Right p
@@ -283,8 +289,10 @@ lookupProject addr ws =
 
 -- | Lookup an account in the state.
 lookupAccount
-    :: (ByteArrayAccess (Crypto.ShortHash c), CBOR.Serialise (Crypto.ShortHash c))
-    => Address c -> WorldState c -> Either (TxError c) (Account c)
+    :: CBOR.Serialise (PublicKey c)
+    => Address c
+    -> WorldState c
+    -> Either (TxError c) (Account c)
 lookupAccount addr ws =
     case WorldState.lookup key ws of
         Just (AccountVal a) -> Right a
@@ -312,17 +320,20 @@ minimumTxFee = const 1
 deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
+    , Show (PublicKey c)
     , Crypto.HasHashing c
     ) => Show (TxPayload c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
+    , Eq (PublicKey c)
     ) => Eq (TxPayload c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
+    , Ord (PublicKey c)
     ) => Ord (TxPayload c)
 
 -------------------------------------------------------------------------------
@@ -332,15 +343,18 @@ deriving instance
 deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
+    , Show (PublicKey c)
     , Crypto.HasHashing c
     ) => Show (Tx' version flags c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
+    , Eq (PublicKey c)
     ) => Eq (Tx' version flags c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
+    , Ord (PublicKey c)
     ) => Ord (Tx' version flags c)

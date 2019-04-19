@@ -2,8 +2,13 @@
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 module Oscoin.Crypto.Address.Serialisation
     ( DeserializeError(..)
+    , Decoder
     , serializeAddress
     , deserializeAddress
+
+    -- * Internal & testing use only
+    , deserializeAddressPrefix
+    , isValidChecksum
     ) where
 
 import           Oscoin.Prelude
@@ -11,18 +16,15 @@ import           Oscoin.Prelude
 import           Oscoin.Configuration (Network(..))
 import qualified Oscoin.Crypto.Address.Bech32 as Bech32
 import           Oscoin.Crypto.Address.Internal
-import           Oscoin.Crypto.Hash
+import           Oscoin.Crypto.PubKey (PublicKey)
 
-import           Codec.CBOR.ByteArray (toSliced)
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
-import           Control.Monad.Except (Except, liftEither, throwError)
+import           Control.Monad.Except (liftEither, throwError)
 import           Control.Monad.Fail (fail)
-import           Data.ByteArray (ByteArrayAccess)
-import qualified Data.ByteString as BS
+import           Data.Binary.Decoding
 import qualified Data.ByteString.Builder as BL
-import           Data.Tagged
 
 
 {------------------------------------------------------------------------------
@@ -31,9 +33,8 @@ import           Data.Tagged
 ------------------------------------------------------------------------------}
 
 data DeserializeError =
-      NotEnoughInput  ByteString
-      -- ^ The deserialisation failed as the decoder was expecting more
-      -- input.
+      DecodeError GetError
+      -- ^ The deserialisation failed with a parsing error.
     | DeserializePayloadError CBOR.DeserialiseFailure
       -- ^ The deserialisation process failed while deserialising the
       -- 'AddressPayload'.
@@ -50,42 +51,6 @@ data DeserializeError =
       -- ^ The input bytestring wasn't a valid base32z-encoded one
     deriving (Eq, Show)
 
--- | A 'Decoder' is simply a 'StateT' transformer which carries around the
--- binary blob being decoded (and consumed) and using 'Except' at the bottom
--- of the stack, in order to be able to report precise errors in case the
--- decoding process fails.
-type Decoder a = StateT ByteString (Except DeserializeError) a
-
--- | Consumes some input at the end of the blob. It doesn't consume anything
--- in case of failure.
-consumeFromEnd :: Int -> Decoder ByteString
-consumeFromEnd need = do
-    x <- BS.unfoldrN need (map swap . BS.unsnoc) <$> get
-    case x of
-      (bs, Just rest) | BS.length bs == need -> do
-          put rest
-          pure (BS.reverse bs)
-      (bs, _) -> lift . throwError $ NotEnoughInput bs
-
--- | Consumes some input at the start of the blob. It doesn't consume anything
--- in case of failure.
-consume :: Int -> Decoder ByteString
-consume need = do
-    x <- BS.unfoldrN need BS.uncons <$> get
-    case x of
-      (bs, Just rest) | BS.length bs == need -> do
-          put rest
-          pure bs
-      _ -> lift . throwError $ NotEnoughInput mempty
-
--- | Decodes a 'Word8', or fails otherwise.
-decodeWord8 :: Decoder Word8
-decodeWord8 = do
-    x <- consume 1
-    case BS.unpack x of
-      [w] -> pure w
-      _   -> throwError $ NotEnoughInput x
-
 {------------------------------------------------------------------------------
     Computing the checksum
 ------------------------------------------------------------------------------}
@@ -94,9 +59,7 @@ decodeWord8 = do
 -- for <bech32 https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#bech32>
 -- addresses, which offers better performances and error-checking capabilities.
 checksum
-    :: ( CBOR.Serialise (ShortHash c)
-       , ByteArrayAccess (ShortHash c)
-       )
+    :: CBOR.Serialise (PublicKey c)
     => Address c
     -> Checksum
 checksum Address{addressPrefix, addressPayload} =
@@ -113,30 +76,35 @@ isValidChecksum blob = Bech32.verifyChecksum blob
   Deserialisation
 ------------------------------------------------------------------------------}
 
+type Decoder a = ExceptT DeserializeError (State ByteString) a
+
 -- | Deserializes an 'Address'.
 deserializeAddress
-    :: ( CBOR.Serialise (ShortHash c)
-       , ByteArrayAccess (ShortHash c)
-       )
+    :: CBOR.Serialise (PublicKey c)
     => ByteString
     -> Either DeserializeError (Address c)
-deserializeAddress blob = runExcept . flip evalStateT blob $ do
-    crc <- Checksum <$> consumeFromEnd 6
+deserializeAddress blob = flip evalState blob . runExceptT $ do
+    crc <- Checksum <$> withExceptT DecodeError (consumeFromEnd 6)
     protectedData <- get
 
     unless (isValidChecksum protectedData crc) $
         throwError (InvalidChecksum crc)
 
-    prefix <- AddressPrefix <$> deserializeProtocolVersion
-                            <*> deserializeAddressType
-                            <*> deserializeAddressFormat
-    _reservedBytes <- consume 2
+    prefix <- deserializeAddressPrefix
+    _reservedBytes <- withExceptT DecodeError (consume 2)
     Address <$> pure prefix <*> deserializeAddressPayload (addressFormat prefix)
+
+-- | Deserializes the 'AddressPrefix'.
+deserializeAddressPrefix :: Decoder AddressPrefix
+deserializeAddressPrefix =
+    AddressPrefix <$> deserializeProtocolVersion
+                  <*> deserializeAddressType
+                  <*> deserializeAddressFormat
 
 -- | Deserializes the 'ProtocolVersion'.
 deserializeProtocolVersion :: Decoder ProtocolVersion
 deserializeProtocolVersion = do
-    tag <- decodeWord8
+    tag <- withExceptT DecodeError getWord8
     case tag of
       0x01 -> pure $ ProtocolVersion ProtocolVersion_V1
       _    -> throwError $ UnknownProtocolVersion tag
@@ -144,7 +112,7 @@ deserializeProtocolVersion = do
 -- | Deserializes the 'AddressType'.
 deserializeAddressType :: Decoder AddressType
 deserializeAddressType = do
-    tag <- decodeWord8
+    tag <- withExceptT DecodeError getWord8
     case tag of
       0x01 -> pure $ AddressType Mainnet
       0x02 -> pure $ AddressType Testnet
@@ -154,16 +122,14 @@ deserializeAddressType = do
 -- | Deserializes the 'AddressFormat'.
 deserializeAddressFormat :: Decoder AddressFormat
 deserializeAddressFormat = do
-    tag <- decodeWord8
+    tag <- withExceptT DecodeError getWord8
     case tag of
       0x01 -> pure $ AddressFormat AddressFormatTag_CBOR
       _    -> throwError $ UnknownAddressFormat tag
 
 -- | Deserializes the 'AddressPayload' by piggybacking on CBOR.
 deserializeAddressPayload
-    :: ( ByteArrayAccess (ShortHash c)
-       , CBOR.Serialise (ShortHash c)
-       )
+    :: CBOR.Serialise (PublicKey c)
     => AddressFormat
     -> Decoder (AddressPayload c)
 deserializeAddressPayload (AddressFormat tag) = do
@@ -171,7 +137,7 @@ deserializeAddressPayload (AddressFormat tag) = do
     -- Extension point to support multiple payloads in the future.
     case tag of
       AddressFormatTag_CBOR ->
-          lift . liftEither $
+          liftEither $
               first DeserializePayloadError
                     (CBOR.deserialiseOrFail (toS binaryBlob))
 
@@ -179,18 +145,16 @@ deserializeAddressPayload (AddressFormat tag) = do
   Serialisation
 ------------------------------------------------------------------------------}
 
-instance ( ByteArrayAccess (ShortHash c)
-         , CBOR.Serialise (ShortHash c)
-         ) => CBOR.Serialise (AddressPayload c) where
-    encode (AddressPayload (Tagged p)) =
+instance CBOR.Serialise (PublicKey c) => CBOR.Serialise (AddressPayload c) where
+    encode (AddressPayload_V0 pk) =
            CBOR.encodeListLen 2
         <> CBOR.encode (0 :: Word8)
-        <> CBOR.encodeByteArray (toSliced p)
+        <> CBOR.encode pk
     decode = do
         CBOR.decodeListLenCanonicalOf 2
         tag <- CBOR.decodeWordCanonical
         case tag of
-          0 -> AddressPayload . Tagged <$> CBOR.decodeByteArrayCanonical
+          0 -> AddressPayload_V0 <$> CBOR.decode
           _ -> fail $ "Invalid tag when decoding an AddressPayload: " <> show tag
 
 -- There is no 'Serialise' instance for 'Address', because in order to create
@@ -199,9 +163,7 @@ instance ( ByteArrayAccess (ShortHash c)
 
 -- | Serializes an 'Address'.
 serializeAddress
-    :: ( CBOR.Serialise (ShortHash c)
-       , ByteArrayAccess (ShortHash c)
-       )
+    :: CBOR.Serialise (PublicKey c)
     => Address c
     -> ByteString
 serializeAddress addr@Address{..} =

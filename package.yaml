@@ -76,7 +76,6 @@ library:
     - splitmix
     - sqlite-simple
     - stm >=2.4.5.0
-    - tagged
     - text
     - transformers
     - vector
@@ -141,6 +140,7 @@ tests:
       - binary
       - bytestring
       - cacophony
+      - cborg
       - conduit
       - containers
       - cryptonite

@@ -1,14 +1,11 @@
+{-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Address.Internal where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Configuration
-import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.PubKey
-
-import           Codec.CBOR.ByteArray (ByteArray)
-import           Data.Tagged
 
 {------------------------------------------------------------------------------
   Types
@@ -33,7 +30,11 @@ import           Data.Tagged
 data Address c = Address
     { addressPrefix  :: AddressPrefix
     , addressPayload :: AddressPayload c
-    } deriving (Eq, Ord, Show)
+    }
+
+deriving instance Eq (PublicKey c)   => Eq (Address c)
+deriving instance Ord (PublicKey c)  => Ord (Address c)
+deriving instance Show (PublicKey c) => Show (Address c)
 
 data AddressPrefix = AddressPrefix
     { protocolVersion :: ProtocolVersion
@@ -79,17 +80,14 @@ data AddressFormatTag =
     AddressFormatTag_CBOR
     deriving (Eq, Ord, Show)
 
--- | The 'AddressPayload' is simply the hash of a 'PublicKey'.
+-- | The 'AddressPayload' is (currently) simply a 'PublicKey'.
 --
-newtype AddressPayload c =
-    AddressPayload {
-       -- NOTE(adn): The use of 'Tagged' here is due to the fact we cannot encode
-       -- directly 'ShortHashed c (PublicKey c)' as there is no isomorphism between
-       -- a 'ShortHashed' and a 'ByteString', i.e. when decoding we wouldn't otherwise
-       -- be able to go from a 'ByteString' to a 'ShortHashed' in a meaningful way.
-        getAddressPayload :: Tagged (ShortHashed c (PublicKey c)) ByteArray
-    }
-    deriving (Eq, Ord, Show)
+data AddressPayload c where
+    AddressPayload_V0 :: PublicKey c -> AddressPayload c
+
+deriving instance Eq (PublicKey c)   => Eq (AddressPayload c)
+deriving instance Ord (PublicKey c)  => Ord (AddressPayload c)
+deriving instance Show (PublicKey c) => Show (AddressPayload c)
 
 newtype Checksum = Checksum { fromChecksum :: ByteString }
     deriving (Show, Eq)

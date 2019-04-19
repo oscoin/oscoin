@@ -36,12 +36,11 @@ import           Oscoin.Crypto.Address.Serialisation (serializeAddress)
 import           Oscoin.Crypto.Blockchain (Height)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Crypto.PubKey (Signature, Signed)
+import           Oscoin.Crypto.PubKey (PublicKey, Signature, Signed)
 
 import qualified Codec.Serialise as CBOR
 import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as WorldState
-import           Data.ByteArray (ByteArrayAccess)
 import           Data.ByteString (ByteString)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -112,9 +111,9 @@ mkAccount addr = Account
 
 -- | Convert an 'Address' into a StateKey
 addressKey
-    :: ByteArrayAccess (Crypto.ShortHash c)
-    => CBOR.Serialise (Crypto.ShortHash c)
-    => Address c -> StateKey
+    :: CBOR.Serialise  (PublicKey c)
+    => Address c
+    -> StateKey
 addressKey = serializeAddress
 
 -------------------------------------------------------------------------------
@@ -176,17 +175,20 @@ newtype Label = Label Word8
 deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
+    , Show (PublicKey c)
     , Crypto.HasHashing c
     ) => Show (Contribution c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
+    , Eq (PublicKey c)
     ) => Eq (Contribution c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
+    , Ord (PublicKey c)
     ) => Ord (Contribution c)
 
 -------------------------------------------------------------------------------
@@ -199,9 +201,9 @@ data DependencyUpdate c =
     -- ^ Stop depending on a project.
     deriving (Generic)
 
-deriving instance (Eq (Crypto.Hash c))   => Eq   (DependencyUpdate c)
-deriving instance (Ord (Crypto.Hash c))  => Ord  (DependencyUpdate c)
-deriving instance (Show (Crypto.Hash c)) => Show (DependencyUpdate c)
+deriving instance (Eq (Crypto.Hash c), Eq (PublicKey c))     => Eq   (DependencyUpdate c)
+deriving instance (Ord (Crypto.Hash c), Ord (PublicKey c))   => Ord  (DependencyUpdate c)
+deriving instance (Show (Crypto.Hash c), Show (PublicKey c)) => Show (DependencyUpdate c)
 
 -- | Additional signatures used to authorize a transaction in a
 -- /multi-sig/ scenario.
@@ -234,7 +236,7 @@ data Project c = Project
     , pUpdateContract  :: UpdateContract' c
     }
 
-mkProject :: Address c -> Project c
+mkProject :: Ord (PublicKey c) => Address c -> Project c
 mkProject addr = Project
     { pAccount          = mkAccount addr
     , pMaintainers      = mempty
@@ -390,7 +392,7 @@ burnReward :: ReceiveReward' c
 burnReward _ _ _ = []
 
 -- | Distribute reward equally to all project members. Store any remainder in the project fund.
-distributeRewardEqually :: ReceiveReward' c
+distributeRewardEqually :: Ord (PublicKey c) => ReceiveReward' c
 distributeRewardEqually bal _epoch p@Project{..} =
     let members     = Map.keysSet $ pContributors <> pMaintainers <> pSupporters
         (dist, rem) = distribute bal members
@@ -407,7 +409,7 @@ type Checkpoint' c =
     -> Either HandlerError ()
 
 -- | By default, authorize any checkpoint signed by a maintainer.
-defaultCheckpoint :: Checkpoint' c
+defaultCheckpoint :: Ord (PublicKey c) => Checkpoint' c
 defaultCheckpoint _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -419,7 +421,7 @@ type Unregister' c =
     -> Member c                   -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultUnregister :: Unregister' c
+defaultUnregister :: Ord (PublicKey c) => Unregister' c
 defaultUnregister = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -432,7 +434,7 @@ type Authorize' c =
     -> Member c                     -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultAuthorize :: Authorize' c
+defaultAuthorize :: Ord (PublicKey c) => Authorize' c
 defaultAuthorize _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -445,7 +447,7 @@ type Deauthorize' c =
     -> Member c                   -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultDeauthorize :: Deauthorize' c
+defaultDeauthorize :: Ord (PublicKey c) => Deauthorize' c
 defaultDeauthorize _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -459,7 +461,7 @@ type UpdateContract' c =
     -> Member c                 -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultUpdateContract :: UpdateContract' c
+defaultUpdateContract :: Ord (PublicKey c) => UpdateContract' c
 defaultUpdateContract _ _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -475,7 +477,11 @@ distribute bal accs =
     remainder = bal `mod` share
 
 -- | Return 'Right ()' if the member is a project maintainer and 'Left' otherwise.
-requireMaintainer :: Project c -> Member c -> Either HandlerError ()
+requireMaintainer
+    :: Ord (PublicKey c)
+    => Project c
+    -> Member c
+    -> Either HandlerError ()
 requireMaintainer Project{..} Member{..} =
     if Map.member memberAccount pMaintainers
        then Right ()
