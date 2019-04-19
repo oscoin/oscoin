@@ -1,5 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
-
 -- | Disk-backed block storage using SQLite.
 module Oscoin.Storage.Block.SQLite
     ( withBlockStore

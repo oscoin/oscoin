@@ -1,10 +1,6 @@
--- | An opaque 'BlockTree', composed by its public and private API. Its main
--- responsibilities are:
---
--- 1. Storing main blocks.
--- 2. Storing orphan blocks.
--- 3. Performing chain selection.
--- 4. Perform full-chain validation.
+-- | An opaque 'BlockTree', composed by its public and private API. This is
+-- the main module meant to be imported and used throughout the codebase. For
+-- a description of the types themselves, see the '.Internal' module.
 
 module Oscoin.Storage.BlockTree
     ( BlockTree

@@ -1,4 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
 module Oscoin.Storage.BlockTree.SQLite
     ( withBlockTree
     ) where
@@ -8,9 +7,9 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus (validateBlockchain)
 import           Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Types (Validate)
-import           Oscoin.Crypto.Blockchain (Blockchain(..), Score)
+import           Oscoin.Crypto.Blockchain (Blockchain(..))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), Depth, Sealed, isGenesisBlock)
+                 (Block(..), Depth, ScoreFn, Sealed, isGenesisBlock)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Telemetry.Events (NotableEvent(..))
@@ -49,7 +48,7 @@ withBlockTree
     => Consensus.Config
     -> Validate c tx s
     -- ^ A function to validate a block (or a chain of blocks)
-    -> (Block c tx (Sealed c s) -> Score)
+    -> ScoreFn c tx (Sealed c s)
     -- ^ A function to score a block.
     -> String
     -- ^ The path where the DB will live on disk
@@ -112,7 +111,7 @@ insertBlock
        )
     => Depth
     -> Validate c tx s
-    -> (Block c tx (Sealed c s) -> Score)
+    -> ScoreFn c tx (Sealed c s)
     -> MVar (Orphanage c tx s)
     -> SQLite.Handle c tx s
     -> Block c tx (Sealed c s)
@@ -146,13 +145,11 @@ insertBlock mutableChainDepth validateFull scoreBlock orphanVar handle incomingB
            -- After all, the genesis block should never be considered an orphan.
            else if isGenesisBlock incomingBlock
                then pure (orphanage, mempty)
-               else do
-                   (o', events) <- selectBestChain mutableChainDepth
-                                                   validateFull
-                                                   scoreBlock
-                                                   (O.insertOrphan incomingBlock orphanage)
-                                                   handle
-                   pure (o', events)
+               else selectBestChain mutableChainDepth
+                                    validateFull
+                                    scoreBlock
+                                    (O.insertOrphan incomingBlock orphanage)
+                                    handle
 
 selectBestChain
     :: forall c tx s.
@@ -166,7 +163,7 @@ selectBestChain
        )
     => Depth
     -> Validate c tx s
-    -> (Block c tx (Sealed c s) -> Score)
+    -> ScoreFn c tx (Sealed c s)
     -> Orphanage c tx s
     -> Handle c tx s
     -> IO (Orphanage c tx s, OldestFirst [] NotableEvent)

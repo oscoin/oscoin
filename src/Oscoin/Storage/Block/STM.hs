@@ -7,16 +7,17 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
 import           Oscoin.Crypto.Blockchain.Block (ScoreFn, Sealed)
-import           Oscoin.Crypto.Hash (Hashable)
+import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
 import           Oscoin.Time.Chrono as Chrono
 
-import           Control.Concurrent.STM (TVar, modifyTVar', newTVarIO, readTVar)
+import           Control.Concurrent.STM (TVar, newTVarIO, readTVar, stateTVar)
+import           Formatting
 
 -- | A bracket-style initialiser for an in-memory block store.
 withBlockStore
-    :: (Hashable c tx)
+    :: (Hashable c tx, Buildable (Hash c))
     => Blockchain c tx s
     -- ^ The initial blockchain to initialise this store with
     -> ScoreFn c tx (Sealed c s)
@@ -26,7 +27,7 @@ withBlockStore
     -> IO b
 withBlockStore chain score action = do
     hdl <- newTVarIO (Pure.initWithChain chain score)
-    let modifyHandle = atomically . modifyTVar' hdl
+    let modifyHandle = atomically . stateTVar hdl
         newBlockStore  =
             ( Abstract.BlockStoreReader
                 { Abstract.getGenesisBlock  = withHandle Pure.getGenesisBlock hdl
@@ -39,7 +40,9 @@ withBlockStore chain score action = do
                 , Abstract.getTip          = withHandle Pure.getTip hdl
                 }
             , Abstract.BlockStoreWriter
-                { Abstract.insertBlock     = modifyHandle . Pure.insert
+                { Abstract.insertBlock     = \blk -> do
+                    _evts <- modifyHandle (swap . Pure.insert blk)
+                    pure ()
                 -- The STM blockstore piggybacks on the pure store which doesn't
                 -- really support switchToFork.
                 , Abstract.switchToFork    = \_ _ -> pure ()

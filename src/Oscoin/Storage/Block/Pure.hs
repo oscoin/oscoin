@@ -23,12 +23,14 @@ import           Oscoin.Consensus.Types (ChainScoreFn)
 import           Oscoin.Crypto.Blockchain hiding (lookupTx)
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Block)
-import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed)
+import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Telemetry.Events (NotableEvent(..))
 import           Oscoin.Time.Chrono as Chrono
 
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
+import           Formatting
 import           Lens.Micro
 import           Lens.Micro.Mtl
 import           Text.Show (Show(..))
@@ -48,7 +50,7 @@ instance Show (Handle c tx s) where
 -- | Create an abstract 'BlockStore' for a state monad that has access
 -- to a pure blockstore 'Handle'.
 mkStateBlockStore
-    :: (MonadState state m, Hashable c tx)
+    :: (MonadState state m, Hashable c tx, Buildable (Hash c))
     => Lens' state (Handle c tx s)
     -> Abstract.BlockStore c tx s m
 mkStateBlockStore bsHandleL = (blockStoreReader, blockStoreWriter)
@@ -69,7 +71,7 @@ mkStateBlockStore bsHandleL = (blockStoreReader, blockStoreWriter)
         , getTip =  getTip <$> use bsHandleL
         }
     blockStoreWriter = Abstract.BlockStoreWriter
-        { insertBlock = \b -> bsHandleL %= insert b
+        { insertBlock = \b -> bsHandleL %= fst . insert b
         , switchToFork = \_ _ -> pure ()
         }
 
@@ -146,12 +148,30 @@ getGenesisBlock Handle{hChains} =
     -- any.
 
 insert
-    :: Ord (BlockHash c)
+    :: ( Ord (BlockHash c)
+       , Buildable (Hash c)
+       , HasHashing c
+       )
     => Block c tx (Sealed c s)
     -> Handle c tx s
-    -> Handle c tx s
+    -> (Handle c tx s, OldestFirst [] NotableEvent)
 insert blk bs@Handle{..} =
-    linkBlocks $ bs { hOrphans = Map.insert (blockHash blk) blk hOrphans }
+    let oldChain = getBestChain bs
+        handle'  = linkBlocks $ bs { hOrphans = Map.insert (blockHash blk) blk hOrphans }
+        newChain = getBestChain handle'
+        chainDifference = map blockHash (toNewestFirst . Blockchain.blocks $ newChain) List.\\
+                          map blockHash (toNewestFirst . Blockchain.blocks $ oldChain)
+    in case length chainDifference of
+         0 -> -- Nothing happened (orphan added)
+              (handle', mempty)
+         1 -> -- Either a switch-to-fork occurred (of length one) or the chain
+              -- was extended at tip (we can't tell)
+              (handle', OldestFirst [BlockchainTipExtended (blockHash blk)])
+         depth ->
+              (handle', OldestFirst $
+                    RollbackOccurred (fromIntegral depth)
+                  : map BlockchainTipExtended chainDifference
+              )
 
 -- | /O(n)/. Lookup a block in all chains.
 lookupBlock

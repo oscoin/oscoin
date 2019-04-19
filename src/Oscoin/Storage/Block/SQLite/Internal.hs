@@ -30,8 +30,7 @@ module Oscoin.Storage.Block.SQLite.Internal
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Depth)
-import           Oscoin.Crypto.Blockchain (TxLookup(..))
+import           Oscoin.Crypto.Blockchain (Depth, TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
