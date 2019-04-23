@@ -116,7 +116,8 @@ genBlockWith parentBlock txs st = do
     blockSeal  <- arbitrary
     blockDiffi <- genDifficultyFrom (blockTargetDifficulty prevHeader)
     let header = (emptyHeader :: BlockHeader c Unsealed)
-               { blockPrevHash         = headerHash prevHeader
+               { blockHeight           = succ . blockHeight $ prevHeader
+               , blockPrevHash         = headerHash prevHeader
                , blockDataHash         = hashTxs txs
                , blockStateHash        = hashState st
                , blockSeal

@@ -80,13 +80,13 @@ buildBlock
     -> Timestamp
     -> st
     -> [tx]
-    -> BlockHash c
+    -> Block c tx s
     -> (Block c tx Unsealed, st, [Receipt c tx o])
-buildBlock eval tick st txs parentHash =
+buildBlock eval tick st txs parentBlock =
     let initialState = st
         (txOutputs, newState) = evalTraverse eval txs initialState
         validTxs = [tx | (tx, Right _) <- txOutputs]
-        newBlock = mkUnsealedBlock parentHash tick validTxs newState
+        newBlock = mkUnsealedBlock (Just parentBlock) tick validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
      in (newBlock, newState, receipts)
 
@@ -104,15 +104,10 @@ buildBlockStrict
     -> Timestamp
     -> st
     -> [tx]
-    -> BlockHash c
+    -> Block c tx s
     -> Either (tx, EvalError) (Block c tx Unsealed)
-buildBlockStrict eval tick st txs parentHash =
-    mkEvaledUnsealedBlock
-        eval
-        tick
-        txs
-        parentHash
-        st
+buildBlockStrict eval tick st txs parent =
+    mkUnsealedBlock (Just parent) tick txs <$> evalEither txs eval st
 
 -- | Try to build a genesis block. See 'buildBlockStrict' for more information.
 buildGenesis
@@ -126,13 +121,8 @@ buildGenesis
     -> [tx]
     -> st
     -> Either (tx, EvalError) (Block c tx Unsealed)
-buildGenesis eval tick txs s =
-    mkEvaledUnsealedBlock
-        eval
-        tick
-        txs
-        Crypto.zeroHash
-        s
+buildGenesis eval tick txs st =
+    mkUnsealedBlock Nothing tick txs <$> evalEither txs eval st
 
 -- | Evaluate the transactions contained in the block against the given
 -- state and return the new state and all the produced Receipts.
@@ -179,39 +169,37 @@ evalToState eval tx = state go
 -- | Return an unsealed block holding the given transactions and state
 -- on top of the given parent block.
 mkUnsealedBlock
-    :: forall c t tx st.
-       ( Foldable t
-       , Serialise tx
+    :: forall c tx s st.
+       ( Serialise tx
        , AuthTree.MerkleHash (Hash c)
        , Crypto.Hashable c (BlockHeader c Unsealed)
        , Crypto.Hashable c st
        )
-    => BlockHash c -> Timestamp -> t tx -> st -> Block c tx Unsealed
-mkUnsealedBlock parent blockTimestamp txs blockState =
-    let (hdr :: BlockHeader c Unsealed) = emptyHeader
-    in mkBlock (header hdr) txs
-  where
-    header hdr = hdr
-        { blockPrevHash  = parent
-        , blockDataHash  = hashTxs txs
-        , blockStateHash = Crypto.fromHashed (Crypto.hash blockState)
-        , blockTimestamp
-        }
-
-mkEvaledUnsealedBlock
-    :: ( Serialise tx
-       , Crypto.Hashable c st
-       , Crypto.Hashable c (BlockHeader c Unsealed)
-       , AuthTree.MerkleHash (Hash c)
-       )
-    => Evaluator st tx o
+    => Maybe (Block c tx s)
     -> Timestamp
     -> [tx]
-    -> BlockHash c
     -> st
-    -> Either (tx, EvalError) (Block c tx Unsealed)
-mkEvaledUnsealedBlock eval tick txs parent initState =
-    mkUnsealedBlock parent tick txs <$> foldlM step initState txs
+    -> Block c tx Unsealed
+mkUnsealedBlock parent blockTimestamp txs blockState =
+    let (hdr :: BlockHeader c Unsealed) = emptyHeader
+          { blockDataHash  = hashTxs txs
+          , blockStateHash = Crypto.fromHashed (Crypto.hash blockState)
+          , blockTimestamp
+          }
+    in mkBlock (header hdr) txs
+  where
+    header hdr = case parent of
+        Nothing -> hdr -- We are creating 'genesis'
+        Just p  -> hdr { blockHeight    = succ . blockHeight . blockHeader $ p
+                       , blockPrevHash  = blockHash p
+                       }
+
+evalEither
+    :: [tx]
+    -> Evaluator st tx o
+    -> st
+    -> Either (tx, EvalError) st
+evalEither txs eval initState = foldlM step initState txs
   where
     step s tx =
         case eval tx s of

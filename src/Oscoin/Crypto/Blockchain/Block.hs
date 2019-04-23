@@ -90,7 +90,8 @@ newtype Sealed c s = SealedWith s
 
 -- | Block header.
 data BlockHeader crypto s = BlockHeader
-    { blockPrevHash         :: Crypto.Hash crypto
+    { blockHeight           :: Height
+    , blockPrevHash         :: Crypto.Hash crypto
     , blockDataHash         :: Crypto.Hash crypto
     , blockStateHash        :: Crypto.Hash crypto
     , blockTimestamp        :: Timestamp
@@ -102,7 +103,35 @@ deriving instance (Show (Hash c), Show s) => Show (BlockHeader c s)
 deriving instance (Ord (Hash c), Ord s) => Ord (BlockHeader c s)
 deriving instance (Eq (Hash c), Eq s) => Eq (BlockHeader c s)
 
-instance (Serialise (Hash c), Serialise s) => Serialise (BlockHeader c s)
+instance (Serialise (Hash c), Serialise s) => Serialise (BlockHeader c s) where
+    encode BlockHeader{..} =
+           Serialise.encodeListLen 8
+        <> Serialise.encodeWord 0
+        <> Serialise.encode blockHeight
+        <> Serialise.encode blockPrevHash
+        <> Serialise.encode blockDataHash
+        <> Serialise.encode blockStateHash
+        <> Serialise.encode blockTimestamp
+        <> Serialise.encode blockTargetDifficulty
+        <> Serialise.encode blockSeal
+
+    decode = do
+        Serialise.decodeListLenOf 8
+        tag <- Serialise.decodeWord
+        case tag of
+            0 -> do
+                !blockHeight           <- Serialise.decode
+                !blockPrevHash         <- Serialise.decode
+                !blockDataHash         <- Serialise.decode
+                !blockStateHash        <- Serialise.decode
+                !blockTimestamp        <- Serialise.decode
+                !blockTargetDifficulty <- Serialise.decode
+                !blockSeal             <- Serialise.decode
+
+                pure BlockHeader{..}
+            _ ->
+                fail "Error decoding block header: unknown tag"
+
 
 instance (Serialise (Hash c), Serialise s, Crypto.HasHashing c)
     => Crypto.Hashable c (BlockHeader c s) where
@@ -116,7 +145,8 @@ instance FromJSON s => FromJSON (Sealed c s) where
 
 instance (ToJSON (Hash c), ToJSON s) => ToJSON (BlockHeader c s) where
     toJSON BlockHeader{..} = object
-        [ "parentHash"       .= blockPrevHash
+        [ "height"           .= blockHeight
+        , "parentHash"       .= blockPrevHash
         , "timestamp"        .= blockTimestamp
         , "dataHash"         .= blockDataHash
         , "stateHash"        .= blockStateHash
@@ -126,6 +156,7 @@ instance (ToJSON (Hash c), ToJSON s) => ToJSON (BlockHeader c s) where
 
 instance (FromJSON (Hash c), FromJSON s) => FromJSON (BlockHeader c s) where
   parseJSON = withObject "BlockHeader" $ \o -> do
+        blockHeight           <- o .: "height"
         blockPrevHash         <- o .: "parentHash"
         blockTimestamp        <- o .: "timestamp"
         blockDataHash         <- o .: "dataHash"
@@ -144,7 +175,8 @@ blockHeaderPrevHashL = lens blockPrevHash (\h x -> h { blockPrevHash = x })
 -- | Create an empty block header.
 emptyHeader :: Crypto.HasHashing c => BlockHeader c Unsealed
 emptyHeader = BlockHeader
-    { blockPrevHash = Crypto.zeroHash
+    { blockHeight   = 0
+    , blockPrevHash = Crypto.zeroHash
     , blockDataHash = Crypto.zeroHash
     , blockStateHash = Crypto.zeroHash
     , blockSeal = Unsealed

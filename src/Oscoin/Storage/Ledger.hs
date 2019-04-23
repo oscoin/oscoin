@@ -192,7 +192,8 @@ buildNextBlock
     -> m (Either (LedgerError crypto) (Block crypto tx Unsealed))
 buildNextBlock ledger time txs = runExceptT $ do
     (currentTip, tipState) <- ExceptT $ getTipWithState ledger
-    let (newBlock, newState, receipts) = buildBlock (ledgerEvaluator ledger) time tipState txs (blockHash currentTip)
+    let (newBlock, newState, receipts) =
+            buildBlock (ledgerEvaluator ledger) time tipState txs currentTip
     lift $ do
         storeHashContent (ledgerStateStore ledger) newState
         forM_ receipts $ ReceiptStore.storeReceipt (ledgerReceiptStore ledger)

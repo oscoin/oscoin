@@ -197,7 +197,7 @@ getGenesisBlockInternal = do
     conn <- ask
     Only bHash :. bHeader <-
         headDef (panic "No genesis block!") <$> liftIO (Sql.query_ conn
-            [sql|   SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+            [sql|   SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
                       FROM blocks
                      WHERE parenthash IS NULL |])
     bTxs <- liftIO (getBlockTxs @c conn bHash)
@@ -232,7 +232,7 @@ getChainSuffixInternal hsh = do
             conn <- ask
             liftIO $ do
                 rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
-                    [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+                    [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
                              FROM blocks WHERE timestamp > ?
                          ORDER BY timestamp DESC
                             |] (Only t)
@@ -310,8 +310,8 @@ storeBlock' hBlockCache blk = do
     -- for each row in the transactions table.
     liftIO $ do
         Sql.execute hConn
-            [sql| INSERT INTO blocks  (hash, timestamp, parenthash, datahash, statehash, difficulty, seal)
-                  VALUES              (?, ?, ?, ?, ?, ?, ?) |] row
+            [sql| INSERT INTO blocks  (hash, timestamp, height, parenthash, datahash, statehash, difficulty, seal)
+                  VALUES              (?, ?, ?, ?, ?, ?, ?, ?) |] row
 
         storeTxs hConn (blockHash blk) (toList $ blockData blk)
 
@@ -321,6 +321,7 @@ storeBlock' hBlockCache blk = do
   where
     row = ( blockHash blk
           , blockTimestamp bh
+          , blockHeight bh
           , blockParent
           , blockDataHash bh
           , blockStateHash bh
@@ -362,7 +363,7 @@ getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
     -- Hit the cache first
     liftIO $ BlockCache.cached hBlockCache depth (\backFillSize -> do
         rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query conn
-            [sql|  SELECT hash, parenthash, datahash, statehash, timestamp, difficulty, seal
+            [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
                      FROM blocks
                  ORDER BY timestamp DESC
                     LIMIT ? |] (Only (fromIntegral backFillSize :: Integer))
