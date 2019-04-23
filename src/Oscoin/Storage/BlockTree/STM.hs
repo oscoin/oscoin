@@ -1,4 +1,4 @@
-module Oscoin.Storage.BlockTree.Pure
+module Oscoin.Storage.BlockTree.STM
     ( withBlockTree
     ) where
 

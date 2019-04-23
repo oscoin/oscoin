@@ -30,7 +30,7 @@ data BlockTreeReader c tx s m = BlockTreeReader
     , getBlocksByParentHash :: BlockHash c -> m (NewestFirst [] (Block c tx (Sealed c s)))
     -- ^ Returns the blocks starting from the input parent hash.
     , getTip          :: m (Block c tx (Sealed c s))
-    -- ^ Returns the tip of the chain.
+    -- ^ Returns the tip of the best chain in the tree.
     }
 
 data BlockTreeWriter c tx s m = BlockTreeWriter
