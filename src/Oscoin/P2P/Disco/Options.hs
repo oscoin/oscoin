@@ -36,6 +36,7 @@ data Options network = Options
     , optSeeds      :: [SeedAddr Crypto]
     , optSDDomains  :: [HostName]
     , optEnableMDns :: Bool
+    , optEnableGCE  :: Bool
     , optNameserver :: Maybe (HostName, PortNumber) -- only for testing currently
     }
 
@@ -140,5 +141,9 @@ discoParser = Options
     <*> switch
         ( long "enable-mdns"
        <> help "Enable mDNS discovery"
+        )
+    <*> switch
+        ( long "enable-gce-sd"
+       <> help "Enable instance discovery on Google Compute Engine"
         )
     <*> pure Nothing

@@ -3,6 +3,9 @@ resolver: lts-13.16
 
 packages:
 - github-0.20
+- gogol-0.4.0@sha256:c2065fa419553781b7f972e3ec9f14e74df2c8ff2f1edf1151c7297f2c8a0729
+- gogol-compute-0.4.0@sha256:ffab3f609a8f8e71d079f6a625d37dd95a79a2de0ec7189f819e4f256ba9143f
+- gogol-core-0.4.0@sha256:764a6648535bf2e248c220fe85d4d63fa4c21f896e7f0e23322b2bb8cc3e81c6
 - hedgehog-quickcheck-0.1@sha256:03bb3c3cb1301d6ad0a6dae13b7bac3d547e82c555bb43b11bf83098d4a4ef22
 - tasty-fail-fast-0.0.3@sha256:0a5a850d7fb5aecb9058d847fa1e634357c2b83bad4b31e41ed1ba6c2d2f1828
 - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34

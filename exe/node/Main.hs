@@ -116,10 +116,11 @@ main = do
                     instr :: HasCallStack => P2P.Disco.DiscoEvent -> IO ()
                     instr = Telemetry.emit telemetry . Telemetry.DiscoEvent
                  in
-                    P2P.Disco.withDisco instr optDiscovery' $ Set.fromList
-                        [ MDns.Service "gossip" MDns.TCP optHost optGossipPort
-                        , MDns.Service "http"   MDns.TCP optHost optApiPort
-                        ]
+                    P2P.Disco.withDisco instr optDiscovery' optGossipPort $
+                        Set.fromList
+                            [ MDns.Service "gossip" MDns.TCP optHost optGossipPort
+                            , MDns.Service "http"   MDns.TCP optHost optApiPort
+                            ]
 
             seeds  <- liftIO disco
             gossip <- managed $

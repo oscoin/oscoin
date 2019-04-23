@@ -71,12 +71,13 @@ runPropMulticast net =
              , optSeeds      = []
              , optSDDomains  = []
              , optEnableMDns = True
+             , optEnableGCE  = False
              , optNameserver = Nothing
              }
      in
-        withDisco noTracing opts (srvs 6942) $ \resolve0 ->
-        withDisco noTracing opts (srvs 4269) $ \resolve1 ->
-        withDisco noTracing opts (srvs 6666) $ \resolve2 ->
+        withDisco noTracing opts 6942 (srvs 6942) $ \resolve0 ->
+        withDisco noTracing opts 4269 (srvs 4269) $ \resolve1 ->
+        withDisco noTracing opts 6666 (srvs 6666) $ \resolve2 ->
             (,,) <$> retry resolve0
                  <*> retry resolve1
                  <*> retry resolve2
@@ -100,6 +101,7 @@ prop_staticPeers = withTests 1 . property $ do
                      , optSeeds      = seeds
                      , optSDDomains  = []
                      , optEnableMDns = False
+                     , optEnableGCE  = False
                      , optNameserver = Just ("127.0.0.1", port)
                      }
              in
@@ -135,6 +137,7 @@ prop_dnsSD = withTests 1 . property $ do
                      , optSeeds      = []
                      , optSDDomains  = ["svc.cluster.local"]
                      , optEnableMDns = False
+                     , optEnableGCE  = False
                      , optNameserver = Just ("127.0.0.1", port)
                      }
              in
@@ -166,7 +169,7 @@ haveIPv6 = do
 
 
 runDisco :: Options Network -> Set MDns.Service -> IO (Set SockAddr)
-runDisco opts srvs = withDisco (const $ pure ()) opts srvs identity
+runDisco opts srvs = withDisco (const $ pure ()) opts 6942 srvs identity
 
 runNameserver :: (PortNumber -> IO a) -> IO a
 runNameserver k =

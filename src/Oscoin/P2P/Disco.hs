@@ -25,6 +25,10 @@
 --
 -- DNSSEC is not currently supported.
 --
+-- When running on Google Compute Engine (GCE), and 'optEnableGCE' is 'True', it
+-- is attempted to find similar instances in the same VPC (see
+-- "Oscoin.P2P.Disco.GCE").
+--
 module Oscoin.P2P.Disco
     ( DiscoEvent(..)
 
@@ -36,6 +40,7 @@ module Oscoin.P2P.Disco
 
 import           Oscoin.Prelude hiding (option)
 
+import qualified Oscoin.P2P.Disco.GCE as GCE
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import           Oscoin.P2P.Disco.Options
 import           Oscoin.P2P.Types
@@ -49,10 +54,15 @@ import           Oscoin.P2P.Types
                  , renderNetwork
                  )
 
+import qualified Data.HashMap.Strict as Map
 import           Data.IP
 import qualified Data.Set as Set
+import           Lens.Micro (set)
 import           Lens.Micro.Extras (view)
 import qualified Network.DNS as DNS
+import qualified Network.Google as Goog
+import qualified Network.Google.Compute as Goog (computeReadOnlyScope)
+import qualified Network.Google.Compute.Metadata as Goog (getProjectId)
 import           Network.Socket
                  ( AddrInfo(..)
                  , AddrInfoFlag(AI_ADDRCONFIG, AI_ALL, AI_NUMERICHOST)
@@ -74,8 +84,8 @@ data DiscoEvent =
     | DNSError           DNS.DNSError
     deriving Show
 
--- | Set up the discovery machinery, and pass an a continuation to perform
--- actual discovery.
+-- | Set up the discovery machinery, and pass an action to the continuation to
+-- perform actual discovery.
 --
 -- Note that, if 'optEnableMDns' is 'True', this will also start the mDNS
 -- responder at 'Oscoin.P2P.Disco.MDns.defaultMCastAddr'.
@@ -83,11 +93,12 @@ data DiscoEvent =
 withDisco
     :: (HasCallStack => DiscoEvent -> IO ())
     -> Options Network
+    -> PortNumber
     -> Set MDns.Service
     -> (IO (Set SockAddr) -> IO a)
     -> IO a
-withDisco tracer opt !advertise k = do
-    rs <-
+withDisco tracer opt defaultGossipPort !advertise k = do
+    rslv <-
         DNS.makeResolvSeed
             . maybe identity
                     (\ns -> \rc -> rc { DNS.resolvInfo = uncurry DNS.RCHostPort ns })
@@ -95,28 +106,58 @@ withDisco tracer opt !advertise k = do
             $ DNS.defaultResolvConf
                 { DNS.resolvCache = Just DNS.defaultCacheConf }
 
-    run $ k (resolve rs)
+    mrslv <-
+        if optEnableMDns opt then
+            Just <$> MDns.newResolver (tracer . MDnsResolverEvent)
+        else
+            pure Nothing
+
+    goog <-
+        if optEnableGCE opt then
+                Just
+             .  set Goog.envScopes Goog.computeReadOnlyScope
+             .  set Goog.envLogger (\_ _ -> pure ())
+            <$> Goog.newEnv
+        else
+            pure Nothing
+
+    run $ k (resolve rslv mrslv goog)
   where
     run = if optEnableMDns opt then withResponder else identity
 
-    resolve rs = do
-        addrs <-
-            liftA2 (<>)
-                   (map Set.fromList
-                        . flip concatMapM (optSDDomains opt)
-                        $ resolveSRV tracer rs (optNetwork opt))
-                   (map Set.fromList
-                        . flip concatMapM (optSeeds opt)
-                        $ \NodeAddr { nodeHost, nodePort } ->
-                            resolveA tracer rs nodeHost nodePort)
+    resolve rslv mrslv goog = runConcurrently $ (\a b c d -> a <> b <> c <> d)
+        <$> (Concurrently
+                . map Set.fromList
+                . flip concatMapM (optSDDomains opt)
+                $ resolveSRV tracer rslv (optNetwork opt))
+        <*> (Concurrently
+                . map Set.fromList
+                . flip concatMapM (optSeeds opt)
+                $ \NodeAddr { nodeHost, nodePort } ->
+                    resolveA tracer rslv nodeHost nodePort)
+        <*> (Concurrently $
+                map (fromMaybe mempty) . for mrslv $ \r ->
+                    Set.fromList <$> resolveMDns tracer rslv r (optNetwork opt))
+        <*> (Concurrently $
+                map (fromMaybe mempty) . for goog $ \g -> do
+                    -- TODO(kim): we may want to allow passing in the project
+                    -- id, so we're not limited to running GCE disco on GCE only
+                    -- (although the utility of that is debatable)
+                    proj <- Goog.getProjectId (view Goog.envManager g)
+                    rs   <-
+                        Set.toList
+                            <$> GCE.lookup proj
+                                           gceLabels
+                                           gcePortLabel
+                                           (optNetwork opt)
+                                           g
+                    map Set.fromList . flip concatMapM rs $ \(ip, port) ->
+                        getSockAddrs tracer
+                                     ip
+                                     (fromMaybe defaultGossipPort port))
 
-        if optEnableMDns opt then do
-            msrvs <- do
-                mrs <- MDns.newResolver $ tracer . MDnsResolverEvent
-                Set.fromList <$> resolveMDns tracer rs mrs (optNetwork opt)
-            pure $ addrs <> msrvs
-        else
-            pure addrs
+    gceLabels    = Map.fromList [("app", "oscoin-node")]
+    gcePortLabel = "gossipPort"
 
     withResponder io =
         withAsync runResponder $ \r ->
