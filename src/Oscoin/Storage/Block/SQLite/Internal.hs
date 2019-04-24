@@ -33,6 +33,7 @@ import           Oscoin.Crypto.Blockchain.Block
                  ( Block(..)
                  , BlockHash
                  , BlockHeader(..)
+                 , Height
                  , Sealed
                  , blockHash
                  , isGenesisBlock
@@ -41,7 +42,6 @@ import           Oscoin.Crypto.Blockchain.Block
                  )
 import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Storage.Block.SQLite.Transaction
-import           Oscoin.Time (Timestamp)
 import           Oscoin.Time.Chrono (OldestFirst(..))
 import           Oscoin.Time.Chrono as Chrono
 
@@ -136,16 +136,15 @@ isStored bh = do
         [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE hash = ?) |] (Only bh))
 
 -- | Check if a given block is conflicting with the main chain. This means a
--- block already exists with the same parent.
+-- block already exists with the same height.
 isConflicting
-    :: ToField (Hash c)
-    => Block c tx s
+    :: Block c tx s
     -> Transaction IO Bool
 isConflicting block = do
     conn <- ask
     headDef False . map fromOnly <$> liftIO (Sql.query conn
-        [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE parenthash = ?) |]
-        (Only $ blockPrevHash $ blockHeader block))
+        [sql| SELECT EXISTS (SELECT 1 FROM blocks WHERE height = ?) |]
+        (Only $ blockHeight $ blockHeader block))
 
 -- | Store a block, along with its transactions in the block store.
 -- Invariant: the input block must have passed \"basic\" validation.
@@ -171,7 +170,9 @@ storeBlock Handle{..} blk = runTransaction hConn $ do
 
   where
     extendsTip :: Block c tx (Sealed c s) -> Bool
-    extendsTip currentTip = blockHash currentTip == parentHash blk
+    extendsTip currentTip =
+        (blockHash currentTip            == parentHash blk) &&
+        ((blockHeight . blockHeader $ blk) == (succ . blockHeight . blockHeader $ currentTip))
 
 
 getGenesisBlock
@@ -225,17 +226,17 @@ getChainSuffixInternal
     => BlockHash c
     -> Transaction IO (NewestFirst [] (Block c tx s))
 getChainSuffixInternal hsh = do
-    result <- lookupBlockTimestamp hsh
+    result <- lookupBlockHeight hsh
     case result of
         Nothing -> pure mempty
-        Just t -> do
+        Just height -> do
             conn <- ask
             liftIO $ do
                 rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
                     [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
-                             FROM blocks WHERE timestamp > ?
-                         ORDER BY timestamp DESC
-                            |] (Only t)
+                             FROM blocks WHERE height > ?
+                         ORDER BY height DESC
+                            |] (Only height)
                 map NewestFirst <$> for rows $ \(Only h :. bh) ->
                     mkBlock bh <$> getBlockTxs conn h
 
@@ -246,7 +247,7 @@ getChainHashes
     -> IO [BlockHash c]
 getChainHashes conn (fromIntegral -> depth :: Integer) =
     map fromOnly <$>
-      Sql.query conn [sql| SELECT hash FROM blocks ORDER BY timestamp DESC LIMIT ? |] (Only depth)
+      Sql.query conn [sql| SELECT hash FROM blocks ORDER BY height DESC LIMIT ? |] (Only depth)
 
 -- | Rollback 'n' blocks.
 rollbackBlocks
@@ -258,7 +259,7 @@ rollbackBlocks blockCache (fromIntegral -> depth :: Integer) = do
     liftIO $ do
         Sql.execute conn
             [sql| DELETE FROM blocks WHERE hash IN
-                  (SELECT hash from blocks ORDER BY timestamp DESC LIMIT ?)
+                  (SELECT hash from blocks ORDER BY height DESC LIMIT ?)
             |] (Only depth)
         BlockCache.invalidate blockCache
 
@@ -274,19 +275,20 @@ switchToFork Handle{..} depth newChain = runTransaction hConn $ do
     rollbackBlocks hBlockCache depth
     traverse_ (storeBlock' hBlockCache) (toOldestFirst newChain)
 
-lookupBlockTimestamp
+lookupBlockHeight
     :: ToField (Hash c)
     => BlockHash c
-    -> Transaction IO (Maybe Timestamp)
-lookupBlockTimestamp hsh = do
+    -> Transaction IO (Maybe Height)
+lookupBlockHeight hsh = do
     conn <- ask
     liftIO $
         map fromOnly . listToMaybe <$>
-            Sql.query conn [sql| SELECT timestamp FROM blocks WHERE hash = ? |] (Only hsh)
+            Sql.query conn [sql| SELECT height FROM blocks WHERE hash = ? |] (Only hsh)
 
 -- | Store a block in the block store.
 --
 -- Must be called from within a transaction. Must include a valid parent reference.
+-- /precondition:/ This block must extend the tip.
 storeBlock'
     :: ( StorableTx c tx
        , ToField (Sealed c s)
@@ -296,15 +298,13 @@ storeBlock'
     -> Transaction IO ()
 storeBlock' hBlockCache blk = do
     hConn <- ask
-    parentTimestamp <- lookupBlockTimestamp (blockPrevHash bh)
+    parentHeight <- lookupBlockHeight (blockPrevHash bh)
 
-    -- Since we rely on the timestamp for block ordering, make sure this
-    -- invariant is checked. Note that parent references are checked by the
-    -- database.
-    for_ parentTimestamp $ \t ->
-        unless (blockTimestamp bh > t) $
+    -- Enforce the precondition by checking the parent height.
+    for_ parentHeight $ \prevHeight ->
+        unless (blockHeight bh > prevHeight) $
             panic $ "Oscoin.Storage.Block.SQLite: "
-                 <> "attempt to store block with invalid timestamp"
+                 <> "attempt to store block with invalid height (<= of tip)."
 
     -- Nb. To relate transactions with blocks, we store an extra block hash field
     -- for each row in the transactions table.
@@ -365,7 +365,7 @@ getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
         rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query conn
             [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
                      FROM blocks
-                 ORDER BY timestamp DESC
+                 ORDER BY height DESC
                     LIMIT ? |] (Only (fromIntegral backFillSize :: Integer))
 
         Chrono.NewestFirst <$>
