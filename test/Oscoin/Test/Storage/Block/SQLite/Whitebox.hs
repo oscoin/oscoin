@@ -66,5 +66,7 @@ testIsConflicting (blk, blk') h@Handle{..} = do
     result <- runTransaction hConn $ isConflicting blk'
     result @?= True
 
+    -- Linking parents doesn't affect the height, so the block is still
+    -- considered as conflicting with a previously-stored one.
     result' <- runTransaction hConn $ isConflicting (linkParent blk blk')
-    result' @?= False
+    result' @?= True
