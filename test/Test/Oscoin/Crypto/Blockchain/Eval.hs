@@ -119,4 +119,4 @@ buildTestBlock
     -> [Tx]
     -> (Block c Tx Unsealed, St, [Receipt c Tx Output])
 buildTestBlock Dict st txs =
-    buildBlock evalTx epoch st txs (blockHash $ emptyGenesisBlock epoch)
+    buildBlock evalTx epoch st txs (emptyGenesisBlock epoch)

@@ -31,7 +31,8 @@ instance ( Crypto.HasHashing c
          , FromField s
          ) => FromRow (BlockHeader c s) where
     fromRow = BlockHeader
-        <$> fieldWith fromPrevHashField
+        <$> field
+        <*> fieldWith fromPrevHashField
         <*> field
         <*> field
         <*> field

@@ -80,7 +80,7 @@ lookupBlock
 lookupBlock Handle{hConn} h = runTransaction hConn $ do
     conn <- ask
     result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> liftIO (Sql.query conn
-        [sql| SELECT parenthash, datahash, statehash, timestamp, difficulty, seal
+        [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal
                 FROM blocks
                WHERE hash = ? |] (Only h))
 
