@@ -171,7 +171,7 @@ storeBlock Handle{..} blk = runTransaction hConn $ do
   where
     extendsTip :: Block c tx (Sealed c s) -> Bool
     extendsTip currentTip =
-        (blockHash currentTip            == parentHash blk) &&
+        (blockHash currentTip              == parentHash blk) &&
         ((blockHeight . blockHeader $ blk) == (succ . blockHeight . blockHeader $ currentTip))
 
 
