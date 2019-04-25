@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -eoux pipefail
+
+#
+# GCE deployment prerequisites
+#
+# This exists mostly for documentation purposes. You may want to adapt this to
+# your provisioning tool of choice.
+#
+# Note that, for deploying from Google Cloud Build, you will also need to grant
+# some permissions to the cloud build service account:
+#
+# ```
+# gcloud project add-iam-policy-binding $GCE_PROJECT_ID \
+#   --member="serviceAccount:$NUMERIC_PROJECT_ID@cloudbuild.gserviceaccount.com" \
+#   --role="roles/compute.instanceAdmin.v1"
+#
+# gcloud project add-iam-policy-binding $GCE_PROJECT_ID \
+#   --member="serviceAccount:$NUMERIC_PROJECT_ID@cloudbuild.gserviceaccount.com" \
+#   --role="roles/dns.admin"
+#
+# gcloud iam service-accounts add-iam-policy-binding \
+#   "$GCE_SERVICEACCOUNT_NAME@$GCE_PROJECT_ID.iam.gserviceaccount.com" \
+#   --member="serviceAccount:$NUMERIC_PROJECT_ID@cloudbuild.gserviceaccount.com" \
+#   --role="roles/iam.serviceAccountUser"
+# ```
+#
+
+GCE_PROJECT_ID=${GCE_PROJECT_ID:-opensourcecoin}
+
+GCE_VPC=${GCE_VPC:?VPC name not set}
+GCE_SERVICEACCOUNT_NAME=${GCE_SERVICEACCOUNT_NAME:?Service account name not set}
+GCE_DNS_ZONE=${GCE_DNS_ZONE:?DNS zone name not set}
+GCE_DNS_DOMAIN=${GCE_DNS_DOMAIN:?DNS domain not set}
+
+# create vpc
+gcloud compute networks create $GCE_VPC --subnet-mode=auto
+
+# create firewall rules
+_cidrs=$(gcloud compute networks describe devnet --format="value(subnetworks)" \
+  | tr -d '\n' \
+  | xargs -d';' -n1 -P8 \
+    gcloud compute networks subnets describe --format="value(ipCidrRange)" \
+  | tr '\n' ',')
+
+gcloud compute firewall-rules create "${GCE_VPC}-allow-internal" \
+    --description="Allow all VPC-internal traffic in $GCE_VPC" \
+    --network="$GCE_VPC" \
+    --allow=tcp \
+    --source-ranges="$_cidrs"
+
+# create service account
+gcloud iam service-accounts create $GCE_SERVICEACCOUNT_NAME
+
+_roles="roles/compute.imageUser
+roles/compute.networkUser
+roles/compute.viewer
+roles/logging.logWriter
+roles/monitoring.metricWriter
+"
+_member="serviceAccount:${GCE_SERVICEACCOUNT_NAME}@${GCE_PROJECT_ID}.iam.gserviceaccount.com"
+
+for role in $_roles; do
+    gcloud iam service-accounts add-iam-policy-binding $GCE_PROJECT_ID \
+        --member="$_member" \
+        --role="$role"
+done
+
+# create DNS private zone
+gcloud dns managed-zone create $GCE_DNS_ZONE \
+    --description="The $GCE_DNS_ZONE zone" \
+    --dns-name="$GCE_DNS_DOMAIN" \
+    --visibility=private

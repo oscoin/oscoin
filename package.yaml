@@ -47,6 +47,7 @@ library:
     - fast-logger
     - filepath
     - formatting
+    - generic-lens
     - generics-sop
     - gossip
     - hashable
@@ -64,6 +65,7 @@ library:
     - multihash-cryptonite
     - multihash-serialise
     - network
+    - network-uri
     - optparse-applicative
     - prettyprinter
     - pretty-terminal
@@ -79,6 +81,7 @@ library:
     - stm >=2.4.5.0
     - text
     - transformers
+    - unix
     - unordered-containers
     - vector
     - wai
@@ -114,6 +117,17 @@ executables:
       ld-options: -static
     dependencies:
       - oscoin
+
+  oscoin-deploy:
+    main: exe/deploy/Main.hs
+    when:
+    - condition: "flag(static)"
+      ld-options: -static
+    dependencies:
+      - optparse-applicative
+      - oscoin
+    ghc-options:
+      - -with-rtsopts=-I0
 
 tests:
   documentation:

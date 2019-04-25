@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+
+set -eoux pipefail
+
+#
+# Deploy a full node on GCE
+#
+# See ./bootstrap for assumptions about the environment.
+#
+# Note: the 'gcloud' beta commands have to be installed (`gcloud components
+# install beta`).
+#
+
+DRY_RUN=${DRY_RUN:-""}
+
+OSCOIN_VERSION=${OSCOIN_VERSION:-$(git rev-parse HEAD)}
+OSCOIN_NETWORK=${OSCOIN_NETWORK:?Network not set}
+OSCOIN_REPLICAS=${OSCOIN_REPLICAS:-3}
+OSCOIN_GOSSIP_PORT=${OSCOIN_GOSSIP_PORT:-6942}
+OSCOIN_API_PORT=${OSCOIN_API_PORT:-8080}
+OSCOIN_METRICS_PORT=${OSCOIN_METRICS_PORT:-8081}
+OSCOIN_BENEFICIARY=${OSCOIN_BENEFICIARY:?Beneficiary address not set}
+
+GCE_PROJECT_ID=${GCE_PROJECT_ID:-opensourcecoin}
+GCE_REGION=${GCE_REGION:-europe-west1}
+GCE_VPC=${GCE_VPC:-$OSCOIN_NETWORK}
+GCE_SERVICEACCOUNT=${GCE_SERVICEACCOUNT:-oscoin-node@opensourcecoin.iam.gserviceaccount.com}
+GCE_MACHINE_TYPE=${GCE_MACHINE_TYPE:-n1-standard-1}
+GCE_DNS_ZONE=${GCE_DNS_ZONE:-oscoin-internal}
+GCE_DNS_DOMAIN=${GCE_DNS_DOMAIN:-oscoin.internal}
+GCE_NUM_SSDS=${GCE_NUM_SSDS:-1};
+GCE_NUM_SSDS=$((GCE_NUM_SSDS > 8 ? 8 : (GCE_NUM_SSDS < 1 ? 1 : GCE_NUM_SSDS)))
+GCE_UPDATE_MIN_READY=${GCE_UPDATE_MIN_READY:-t2m}
+
+OSCOIN_DEPLOY=${OSCOIN_DEPLOY:-cabal v2-run -- oscoin-deploy}
+
+# create machine config via cloud-init
+_clowninit=$(mktemp "/tmp/node.cloudinit.yaml.XXXXX")
+$OSCOIN_DEPLOY node \
+    --format=cloud-init \
+    --version="$OSCOIN_VERSION" \
+    --network="$OSCOIN_NETWORK" \
+    --host="0.0.0.0" \
+    --gossip-port="$OSCOIN_GOSSIP_PORT" \
+    --api-port="$OSCOIN_API_PORT" \
+    --metrics-port="$OSCOIN_METRICS_PORT" \
+    --sd-domain="$GCE_DNS_DOMAIN" \
+    --environment=development \
+    --beneficiary="$OSCOIN_BENEFICIARY" \
+    --allow-ephemeral-keys \
+    --output="$_clowninit" \
+    "$@" \
+    gce \
+    --num-ssds="${GCE_NUM_SSDS}"
+
+if [[ "x$DRY_RUN" != "x" ]]; then
+    exit 0
+fi
+
+# create instance template per $OSCOIN_NETWORK + $OSCOIN_VERSION
+_ssds=$(for _ in $(seq 1 $GCE_NUM_SSDS); do
+  echo "--local-ssd=interface=nvme"
+done)
+
+gcloud compute instance-templates create \
+    "oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+    --image-project=cos-cloud \
+    --image-family=cos-stable \
+    $_ssds \
+    --machine-type="$GCE_MACHINE_TYPE" \
+    --region="$GCE_REGION" \
+    --service-account="$GCE_SERVICEACCOUNT" \
+    --scopes=monitoring-write,logging-write,storage-ro \
+    --tags="oscoin-node,oscoin-$OSCOIN_NETWORK" \
+    --labels="gossip-port=${OSCOIN_GOSSIP_PORT},api-port=${OSCOIN_API_PORT},metrics-port=${OSCOIN_METRICS_PORT}" \
+    --metadata=google-logging-enabled=true \
+    --metadata-from-file="user-data=$_clowninit"
+
+# find or create instance group per $OSCOIN_NETWORK
+_grp=$(gcloud compute instance-groups managed list \
+    --filter="region:$GCE_REGION AND name:oscoin-node-$OSCOIN_NETWORK" \
+    --format="value(name)" \
+    | wc -l)
+
+if [[ "$_grp" == "0" ]]; then
+    gcloud compute instance-groups managed create \
+        "oscoin-node-$OSCOIN_NETWORK" \
+        --size="$OSCOIN_REPLICAS" \
+        --template="oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --region="$GCE_REGION"
+else
+    # replace template and start rolling update
+    gcloud compute instance-groups managed set-instance-template \
+        "oscoin-node-$OSCOIN_NETWORK" \
+        --template="oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --region="$GCE_REGION"
+
+    # Note:
+    #
+    # Spin up new instances before demoting old ones, ie.
+    # --max-surge=$OSCOIN_REPLICAS. This allows the new nodes to join via
+    # the SRV records pointing to the old nodes.
+    #
+    # Also, wait $GCE_UPDATE_MIN_READY before a new node is considered up. This
+    # is to allow it to sync with the old nodes. Obviously, this needs to be
+    # reconsidered.
+    gcloud beta compute instance-groups managed rolling-action start-update \
+        "oscoin-node-$OSCOIN_NETWORK" \
+        --version="template=oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --max-surge="$OSCOIN_REPLICAS" \
+        --max-unavailable=0 \
+        --min-ready="${GCE_UPDATE_MIN_READY}" \
+        --region="$GCE_REGION" \
+        --type=proactive
+fi
+
+gcloud compute instance-groups managed wait-until-stable \
+    "oscoin-node-$OSCOIN_NETWORK" \
+    --region="$GCE_REGION"
+
+# update SRV records
+_instances=$(gcloud compute instance-groups managed list-instances \
+    "oscoin-node-$OSCOIN_NETWORK" \
+    --format="value(instance)" \
+    --region="$GCE_REGION")
+
+_zonefile=$(mktemp "/tmp/${GCE_DNS_ZONE}.zone.XXXXX")
+for x in $_instances; do
+    echo "_gossip._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_GOSSIP_PORT} ${x}.c.${GCE_PROJECT_ID}.internal."   >> "$_zonefile"
+    echo "_api._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_API_PORT} ${x}.c.${GCE_PROJECT_ID}.internal."         >> "$_zonefile"
+    echo "_metrics._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_METRICS_PORT} ${x}.c.${GCE_PROJECT_ID}.internal." >> "$_zonefile"
+done
+gcloud dns record-sets import --zone="$GCE_DNS_ZONE" \
+    --zone-file-format \
+    --delete-all-existing \
+    "$_zonefile"

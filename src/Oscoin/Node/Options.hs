@@ -25,7 +25,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P.Disco (discoOpts, discoParser)
 import qualified Oscoin.P2P.Disco as P2P.Disco
-import           Oscoin.Time (Duration, seconds)
 
 import           Data.IP (IP)
 import qualified Data.Text as T
@@ -39,7 +38,7 @@ data Options crypto network = Options
     , optGossipPort         :: PortNumber
     , optApiPort            :: PortNumber
     , optDiscovery          :: P2P.Disco.Options crypto network
-    , optBlockTimeLower     :: Duration
+    , optBlockTimeLower     :: Word8
     , optPaths              :: Paths
     , optEnvironment        :: Environment
     , optMetricsHost        :: Maybe HostName
@@ -77,7 +76,7 @@ nodeOptionsParser cps = Options
        <> showDefault
         )
     <*> discoParser
-    <*> option (map (* seconds) auto)
+    <*> option auto
         ( long "block-time-lower"
        <> help "Lower bound on the block time. Applies only to empty blocks in \
                \the development environment, and is useful to avoid busy looping \
@@ -146,7 +145,7 @@ nodeOptionsOpts
     , pure . Opt "gossip-port" $ show optGossipPort
     , pure . Opt "api-port"    $ show optApiPort
     , discoOpts optDiscovery
-    , pure . Opt "block-time-lower" . show . (`div` seconds) $ optBlockTimeLower
+    , pure . Opt "block-time-lower" . show $ optBlockTimeLower
     , pathsOpts optPaths
     , environmentOpts optEnvironment
     , maybe [] (pure . Opt "metrics-host" . toS)  optMetricsHost

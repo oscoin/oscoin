@@ -125,7 +125,7 @@ steps:
     - STACK_ROOT=/workspace/.stack # weeder uses stack under the hood
     args: ["stack", "exec", "--", "weeder", "."]
 
-  - id: "Build images"
+  - id: "Publish images"
     waitFor:
     - Lint (weeder)
     name: gcr.io/cloud-builders/docker
@@ -144,7 +144,40 @@ steps:
         /workspace/bin/oscoin-cli
       )
 
-      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/docker/build-image.sh
+      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/docker/publish-image.sh
+
+  - id: Deploy
+    waitFor:
+    - Publish images
+    name: "gcr.io/cloud-builders/gcloud"
+    entrypoint: bash
+    env:
+    - BRANCH_NAME=$BRANCH_NAME
+    - OSCOIN_VERSION=$COMMIT_SHA
+    - OSCOIN_NETWORK=devnet
+    - OSCOIN_BENEFICIARY=0x0000000000000000000000000000000000000000
+    - OSCOIN_REPLICAS=3
+    - OSCOIN_GOSSIP_PORT=6942
+    - OSCOIN_API_PORT=8080
+    - OSCOIN_METRICS_PORT=8081
+    - OSCOIN_DEPLOY=bin/oscoin-deploy
+    - GCE_PROJECT_ID=$PROJECT_ID
+    - GCE_REGION=europe-west1
+    - GCE_VPC=devnet
+    - GCE_SERVICEACCOUNT=oscoin-node@opensourcecoin.iam.gserviceaccount.com
+    - GCE_MACHINE_TYPE=n1-standard-1
+    - GCE_DNS_ZONE=oscoin-internal
+    - GCE_DNS_DOMAIN=oscoin.internal
+    args:
+    - "-c"
+    - |
+      set -euo pipefail
+
+      if [[ "$BRANCH_NAME" == "master" ]]; then
+        ./scripts/deploy/gce/node
+      else
+        DRY_RUN=yes ./scripts/deploy/gce/node
+      fi
 
   - id: "Publish Haddocks"
     waitFor:
@@ -161,6 +194,4 @@ steps:
 
       gsutil -m rsync -d -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
 images:
-- "eu.gcr.io/$PROJECT_ID/oscoin"
-- "eu.gcr.io/$PROJECT_ID/oscoin-cli"
 - "eu.gcr.io/$PROJECT_ID/haskell-scratch:integer-gmp"

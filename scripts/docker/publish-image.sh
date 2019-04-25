@@ -27,4 +27,6 @@ if [[ $BRANCH_NAME == "master" ]]; then
   docker tag "$img:$BRANCH_NAME" "$img:latest"
 fi
 
+docker push "$img"
+
 popd

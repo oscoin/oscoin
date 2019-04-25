@@ -29,7 +29,7 @@ import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Node.Mempool.Class
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import qualified Oscoin.Telemetry as Telemetry
-import           Oscoin.Time (Duration)
+import           Oscoin.Time (seconds)
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.Except (liftEither, runExcept)
@@ -49,7 +49,7 @@ nakamotoConsensusLenient
        , Hashable c (BlockHeader c (Sealed c PoW))
        )
     => Telemetry.Tracer m
-    -> Duration -- ^ Block time lower bound (see 'mineLenient')
+    -> Word8 -- ^ Block time lower bound in seconds (see 'mineLenient')
     -> Consensus c tx PoW m
 nakamotoConsensusLenient probed blkTimeLower =
     let nak = nakamotoConsensus probed :: Consensus c tx PoW m
@@ -78,20 +78,20 @@ validateLenient prefix@(parent:_) blk = runExcept $ do
 
 -- | Modify mining behaviour when the network does not produce transactions.
 --
--- Currently, this simply delays mining an empty block by 'blockTime' or
--- 'Duration', whichever is lower. Mainly useful to avoid busy looping in an
--- idle network, while retaining correctness.
+-- Currently, this simply delays mining an empty block by 'blockTime' or 'Word8'
+-- seconds, whichever is lower. Mainly useful to avoid busy looping in an idle
+-- network, while retaining correctness.
 --
 mineLenient
     :: forall c tx m. (MonadIO m, MonadMempool c tx m)
-    => Duration
+    => Word8 -- Block time lower bound in seconds
     -> Miner c PoW m
     -> Miner c PoW m
-mineLenient blkTimeLower inner getBlocks unsealedBlock = do
+mineLenient blkTimeLowerSecs inner getBlocks unsealedBlock = do
     nTxs <- Mempool.numTxs
     when (nTxs == 0) $
         let
-            blkTime   = min blkTimeLower blockTime
+            blkTime   = min (fromIntegral blkTimeLowerSecs * seconds) blockTime
             blkTimeMu = fromIntegral blkTime `div` 1000
          in
             liftIO $ threadDelay blkTimeMu

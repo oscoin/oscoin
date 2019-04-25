@@ -26,8 +26,8 @@ genNodeOptions = Options
     <*> P2P.Gen.genPortNumber
     <*> P2P.Gen.genPortNumber
     <*> Disco.Gen.genOptions
-    <*> ((* seconds) . (`div` seconds)
-            <$> Gen.int64 (Range.constant (1 * seconds) Nakamoto.blockTime))
+    <*> Gen.word8
+            (Range.constant 1 (fromIntegral $ Nakamoto.blockTime `div` seconds))
     <*> Config.Gen.paths
     <*> Config.Gen.environment
     <*> Gen.maybe (toS . renderHostname <$> P2P.Gen.genHostname)
