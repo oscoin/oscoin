@@ -36,6 +36,17 @@ Then run ``:main`` from the repl to run the tests, and reload with ``:r`` as
 necessary. You can run a subset of tests with ``:main -p "test
 pattern"``.
 
+Using the ``--crypto`` option allow the tests to be run with either the
+mock crypto::
+
+  stack test --ta "--crypto mock"
+
+Or with the "real world" implementation (i.e. the same one used in production)::
+
+  stack test --ta "--crypto realworld"
+
+If no ``--crypto`` option is specified, it defaults to the mock one.
+
 Test organization
 ~~~~~~~~~~~~~~~~~
 
