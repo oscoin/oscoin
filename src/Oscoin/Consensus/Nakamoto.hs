@@ -83,7 +83,6 @@ validateFull
 validateFull [] blk =
     validateBasic blk
 validateFull prefix@(parent:_) blk = runExcept $ do
-    validateHeight     parent blk
     validateParentHash parent blk
     validateDifficulty chainDifficulty prefix blk
     validateTimestamp  parent blk

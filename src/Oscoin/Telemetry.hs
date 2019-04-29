@@ -491,10 +491,6 @@ fmtValidationError
     :: F.Buildable (Crypto.Hash c)
     => Format r (Consensus.ValidationError c -> r)
 fmtValidationError = ferror $ \case
-    Consensus.InvalidHeight expected actual ->
-        sformat ("Invalid height" % ftag "expected" % int % ftag "actual" % int)
-                expected
-                actual
     Consensus.InvalidParentHash parentHash ->
         sformat ("Parent hash " % formatHash % " was invalid") parentHash
     Consensus.InvalidDataHash dataHash ->

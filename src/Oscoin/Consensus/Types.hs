@@ -31,14 +31,9 @@ type Validate c tx s =
     -> Block c tx (Sealed c s)       -- ^ Block to be validated.
     -> Either (ValidationError c) () -- ^ Either an error or @()@.
 
-type Expected a = a
-type Actual   a = a
-
 -- | A block validation error.
 data ValidationError c =
-      InvalidHeight           (Expected Height) (Actual Height)
-    -- ^ Expected and actual height mismatch
-    | InvalidParentHash       (Crypto.Hash c)
+      InvalidParentHash       (Crypto.Hash c)
     -- ^ Parent block hash doesn't match
     | InvalidDataHash         (Crypto.Hash c)
     -- ^ Block data hash doesn't match data

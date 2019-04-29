@@ -170,8 +170,7 @@ genNakamotoBlockWith prefix@(parent:|_) txs = do
     blockSeal  <- genPoWSeal
     blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
     let header = (emptyHeader :: BlockHeader c Unsealed)
-               { blockHeight           = succ (blockHeight prevHeader)
-               , blockPrevHash         = headerHash prevHeader
+               { blockPrevHash         = headerHash prevHeader
                , blockDataHash         = hashTxs txs
                , blockStateHash        = hashState blockState
                , blockSeal
