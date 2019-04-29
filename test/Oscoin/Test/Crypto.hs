@@ -5,11 +5,13 @@ module Oscoin.Test.Crypto
     , Dict(..)
     , Hashable
     , HasHashing
+    , upperBoundBytes
     ) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto
+import           Oscoin.Crypto.Address
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Mock
@@ -56,6 +58,18 @@ instance (Semigroup (Hash c), Hashable c a) => Hashable c (Seq a) where
 instance (Semigroup (Hash c), Hashable c k, Hashable c v) => Hashable c (Map k v) where
     hash = toHashed . fromHashed . hash . Map.toList
 
+-- | A typeclass for estimating the serialised size in bytes of certain
+-- data structures.
+class Sized a where
+    -- | The maximum (estimated) size in bytes.
+    upperBoundBytes :: proxy a -> Int
+
+instance Sized (Address Crypto) where
+    upperBoundBytes _ = 238 -- (!!)
+
+instance Sized (Address MockCrypto) where
+    upperBoundBytes _ = 31
+
 
 -- | Kitchen-sink for all the constraints our cryptography must abide to.
 type IsCrypto c = ( HasDigitalSignature c
@@ -100,4 +114,5 @@ type IsCrypto c = ( HasDigitalSignature c
                   , ToField (Sealed c Text)  -- DummySeal ~ Text
                   , FromField (Hash c)
                   , FromField (Sealed c Text)  -- DummySeal ~ Text
+                  , Sized (Address c)
                   )

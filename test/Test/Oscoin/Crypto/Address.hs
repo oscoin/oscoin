@@ -242,7 +242,7 @@ propLengthCheck Dict = property $ do
     address <- forAll $ genAddress pk
     let len = BS.length $ serializeAddress address
     annotateShow len
-    assert (len > 0 && len <= 31)
+    assert (len > 0 && len <= upperBoundBytes (Proxy @(Address c)))
 
 {------------------------------------------------------------------------------
   Generators and other mythological creatures
