@@ -2,7 +2,8 @@
 -- sophisticated ones.
 -}
 module Oscoin.Consensus.Validation
-    ( validateParentHash
+    ( validateHeight
+    , validateParentHash
     , validateDifficulty
     , validateTimestamp
     ) where
@@ -10,12 +11,26 @@ module Oscoin.Consensus.Validation
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Types
-import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain hiding (height)
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Time
 
 import           Control.Monad.Except (Except, throwError)
+
+-- | Rejects a block if its height is not the direct successor of the
+-- parent's one.
+validateHeight
+    :: Block c tx s
+    -> Block c tx s
+    -> Except (ValidationError c) ()
+validateHeight parent blk
+    | height <- blockHeight (blockHeader blk)
+    , height /= succ parentHeight =
+        throwError $ InvalidHeight (succ parentHeight) height
+    | otherwise = pure ()
+  where
+    parentHeight = blockHeight . blockHeader $ parent
 
 -- | Rejects a block if its parent's hash is not the same as the hash of
 -- the input (parent) block.
