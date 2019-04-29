@@ -25,12 +25,16 @@ import           Oscoin.Crypto.PubKey.Internal (PK(..), SK(..))
 
 instance HasDigitalSignature Crypto where
 
+    -- N.b. The uses of 'data' instead of a 'newtype' are essential to avoid
+    -- a runtime crash (triggered by 'cryptonite' on
+    -- some data structures being erroneously deallocated).
+
     newtype PublicKey Crypto =
         PublicKey (PK Crypto Ed25519.PublicKey) deriving (Show, Eq, Ord)
 
-    newtype PrivateKey Crypto = PrivateKey (SK Ed25519.SecretKey)
+    data PrivateKey Crypto = PrivateKey (SK Ed25519.SecretKey)
 
-    newtype Signature Crypto =
+    data Signature Crypto =
         Signature Ed25519.Signature deriving Show
 
     sign (PrivateKey (SK sk)) bytes =
