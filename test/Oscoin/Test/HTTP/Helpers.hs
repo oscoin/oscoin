@@ -38,7 +38,6 @@ import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -152,7 +151,7 @@ withNode NodeState{..} k = do
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
-    let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+    let dummyEval _ s = Right ([], s)
     ledger <- Ledger.newFromBlockStoreIO dummyEval blockStoreReader statestoreState
     runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode

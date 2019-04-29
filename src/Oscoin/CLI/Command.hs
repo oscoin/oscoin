@@ -15,7 +15,6 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash, Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Tx
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time (Timestamp)
@@ -103,7 +102,7 @@ printGenesisYaml txs diffi = do
     time <- getTime
 
     -- FIXME(adn) Pass a real evaluator and a real state.
-    let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+    let dummyEval _ s = Right ([], s)
     case buildGenesis @c dummyEval time txs (mempty :: DummyEnv) of
         Left (_, err) ->
             pure $ ResultError (fromEvalError err)

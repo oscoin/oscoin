@@ -11,7 +11,6 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import qualified Oscoin.Crypto.PubKey as Crypto
-import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Tx
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
@@ -94,7 +93,7 @@ main = do
                 BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen
             -- FIXME(adn) Replace with a proper evaluator & state once we switch to
             -- the OscoinTx type.
-            let dummyEval _ s = Right (OscoinTx.TxOutput, s)
+            let dummyEval _ s = Right ([], s)
             ledger <- liftIO $ Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
 
             proto <- managed $

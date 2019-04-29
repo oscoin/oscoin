@@ -27,6 +27,7 @@ tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     [ testProperty "Transfer balance"        (propTransferBalance @c Dict)
     , testProperty "Apply transaction"       (propApplyTx         @c Dict)
+    , testProperty "Multi-message"           (propMultiTransfer   @c Dict)
     ]
 
 propApplyTx :: forall c. Dict (IsCrypto c) -> Property
@@ -35,11 +36,11 @@ propApplyTx Dict = property $ do
 
     pk /== pk'
 
-    -- We use a `TxRegisterProject` transaction because it cannot fail
-    -- at the payload level.  This lets us test the "generic" part
-    -- of transaction processing.
+    -- We use an empty transaction message list, as this lets us test
+    -- the "generic" part of the transaction processing without worrying about
+    -- the messages.
+    tx    <- pure (mkTx [])
     ws    <- forAll genWorldState
-    tx    <- mkTx <$> forAll (genRegisterProject pk)
     alice <- forAll (genAddress pk')
     bal   <- forAll genBalancePositive
 
@@ -73,30 +74,53 @@ propTransferBalance Dict = property $ do
                                >>= creditAccount bob maxBound
 
     -- A transfer that would overflow the account should fail
-    forAll (pure $ TxTransfer alice bob 1) >>= \payload ->
-        applyTxPayload payload alice ws === Left (ErrOverflow bob)
+    forAll (pure $ TxTransfer alice bob 1) >>= \msg ->
+        applyTxMessage msg alice ws === Left (ErrOverflow bob)
 
     -- A transfer of zero balance should always fail
-    forAll (pure $ TxTransfer alice bob 0) >>= \payload ->
-        applyTxPayload payload alice ws === Left (ErrInvalidTransfer 0)
+    forAll (pure $ TxTransfer alice bob 0) >>= \msg ->
+        applyTxMessage msg alice ws === Left (ErrInvalidTransfer 0)
 
     -- A transfer from bob to alice
-    forAll (genTransfer bob alice (Range.constantFrom 1 1 100)) >>= \payload -> do
+    forAll (genTransfer bob alice (Range.constantFrom 1 1 100)) >>= \msg -> do
         -- Should fail if alice is the author of the transaction
-        applyTxPayload payload alice ws === Left (ErrNotAuthorized alice)
+        applyTxMessage msg alice ws === Left (ErrNotAuthorized alice)
         -- Should succeed if bob is the author of this transaction
-        (ws', _) <- evalEither $ applyTxPayload payload bob ws
+        (ws', _) <- evalEither $ applyTxMessage msg bob ws
         -- Shouldn't create or destroy coins
         balanceTotal ws' === balanceTotal ws
 
     -- A transfer from alice to bob of an amount greater than her balance
-    forAll (genTransfer alice bob (Range.singleton (bal + 1))) >>= \payload ->
+    forAll (genTransfer alice bob (Range.singleton (bal + 1))) >>= \msg ->
         -- Should fail since alice doesn't have the required balance
-        applyTxPayload payload alice ws === Left (ErrInsufficientBalance bal)
+        applyTxMessage msg alice ws === Left (ErrInsufficientBalance bal)
+
+propMultiTransfer :: forall c. Dict (IsCrypto c) -> Property
+propMultiTransfer Dict = property $ do
+    (alice, bob)  <- addressPair @c
+    bal           <- forAll genBalancePositive
+    ws            <- evalEither $ creditAccount alice bal WorldState.empty
+
+    t0            <- pure (TxTransfer alice bob 0)
+    t1            <- pure (TxTransfer alice bob 1)
+    t2            <- pure (TxTransfer alice bob 2)
+
+    -- A single invalid message (`t0`) fails the transaction
+    invalidTx <- pure (mkTx [t1, t0, t2])
+    applyTx (invalidTx { txFee = minimumTxFee invalidTx }) alice ws === Left (ErrInvalidTransfer 0)
+
+    -- Multiple messages combine
+    tx <- pure (mkTx [t1, t1, t2])
+    (ws', _) <- evalEither $ applyTx (tx { txFee = minimumTxFee tx }) alice ws
+
+    lookupBalance bob ws' === Right 4
 
 -------------------------------------------------------------------------------
 -- Utility
 -------------------------------------------------------------------------------
+
+lookupBalance :: forall c. (IsCrypto c) => Address c -> WorldState c -> Either (TxError c) Balance
+lookupBalance addr ws = accountBalance <$> lookupAccount addr ws
 
 publicKey :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c)
 publicKey = fst <$> genKeyPair
@@ -149,13 +173,13 @@ genAccount :: Address c -> Gen (Account c)
 genAccount addr = Account addr <$> genBalance <*> genNonce 0 maxBound
 
 genTx :: IsCrypto c => PublicKey c -> Gen (Tx c)
-genTx pk = mkTx <$> genTxPayload pk
+genTx pk = mkTx . pure <$> genTxMessage pk
 
 genWorldState :: Gen (WorldState c)
 genWorldState = pure WorldState.empty
 
-genTxPayload :: IsCrypto c => PublicKey c -> Gen (TxPayload c)
-genTxPayload pk = Gen.choice
+genTxMessage :: IsCrypto c => PublicKey c -> Gen (TxMessage c)
+genTxMessage pk = Gen.choice
     [ genRegisterProject pk
     , genUnregisterProject pk
     , genAuthorize pk
@@ -164,19 +188,19 @@ genTxPayload pk = Gen.choice
     , genUpdateContract pk
     ]
 
-genRegisterProject :: PublicKey c -> Gen (TxPayload c)
+genRegisterProject :: PublicKey c -> Gen (TxMessage c)
 genRegisterProject pk = TxRegisterProject <$> genAddress pk
 
-genUnregisterProject :: PublicKey c -> Gen (TxPayload c)
+genUnregisterProject :: PublicKey c -> Gen (TxMessage c)
 genUnregisterProject pk = TxUnregisterProject <$> genAddress pk
 
-genAuthorize :: PublicKey c -> Gen (TxPayload c)
+genAuthorize :: PublicKey c -> Gen (TxMessage c)
 genAuthorize pk = TxAuthorize <$> genAddress pk <*> genAddress pk
 
-genDeauthorize :: PublicKey c -> Gen (TxPayload c)
+genDeauthorize :: PublicKey c -> Gen (TxMessage c)
 genDeauthorize pk = TxAuthorize <$> genAddress pk <*> genAddress pk
 
-genCheckpoint :: IsCrypto c => PublicKey c -> Gen (TxPayload c)
+genCheckpoint :: IsCrypto c => PublicKey c -> Gen (TxMessage c)
 genCheckpoint pk =
     TxCheckpoint
         <$> genAddress pk
@@ -184,10 +208,10 @@ genCheckpoint pk =
         <*> genContributions
         <*> genDependencyUpdates
 
-genUpdateContract :: PublicKey c -> Gen (TxPayload c)
+genUpdateContract :: PublicKey c -> Gen (TxMessage c)
 genUpdateContract pk = TxUpdateContract <$> genAddress pk
 
-genTransfer :: Address c -> Address c -> Range Balance -> Gen (TxPayload c)
+genTransfer :: Address c -> Address c -> Range Balance -> Gen (TxMessage c)
 genTransfer a b range =
     TxTransfer a b <$> Gen.integral range
 

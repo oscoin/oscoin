@@ -113,7 +113,7 @@ instance Condensed DeserializeError where
 
 instance ( Serialise (PublicKey c)
          , Crypto.HasHashing c
-         ) => Condensed (TxPayload c)
+         ) => Condensed (TxMessage c)
   where
     condensed (TxRegisterProject addr) =
         "TxRegisterProject " <> condensed addr
@@ -156,14 +156,14 @@ instance (Serialise (PublicKey c))
     condensed (ErrOverflow a)            = "ErrOverflow " <> condensed a
     condensed (ErrHandlerFailed _)       = "ErrHandlerFailed"
 
-instance Condensed TxOutput where
-    condensed _ = "TxOutput"
+instance Condensed TxMessageOutput where
+    condensed _ = "TxMessageOutput"
 
 instance ( Serialise (PublicKey c)
          , Crypto.HasHashing c
          ) => Condensed (Tx c)
   where
-    condensed Tx'{..} = condensed txPayload
+    condensed Tx'{..} = condensed txMessages
 
 -- NOTE(adn) It's a bit of a security hazard to implement a 'Show' instance
 -- for a private key, as that might end up in public logs and other crazy things.

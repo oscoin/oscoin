@@ -9,7 +9,6 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain.Block (blockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Tx (DummyPayload(..))
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -89,7 +88,7 @@ tests Dict = testGroup "Test.Oscoin.API"
                     { txHash = Crypto.hash tx
                     , txBlockHash = Just (blockHash blk)
                     , txConfirmations = 6
-                    , txOutput = Just (Right OscoinTx.TxOutput)
+                    , txOutput = Just (Right [])
                     , txPayload = tx
                     }
             response @?= API.Ok expected

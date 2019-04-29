@@ -31,15 +31,15 @@ type Tx c = Tx' 1 0 c
 
 -- | A transaction with parametric version and flags.
 data Tx' (version :: Nat) (flags :: Nat) c = Tx'
-    { txPayload :: TxPayload c
+    { txMessages :: [TxMessage c]
     -- ^ Transaction message.
-    , txNetwork :: Network
+    , txNetwork  :: Network
     -- ^ Network this transaction belongs to.
-    , txNonce   :: Word64
+    , txNonce    :: Word64
     -- ^ Account nonce.
-    , txFee     :: Balance
+    , txFee      :: Balance
     -- ^ Transaction fee to miner.
-    , txBurn    :: Balance
+    , txBurn     :: Balance
     -- ^ Transaction burn.
     } deriving (Generic)
 
@@ -51,8 +51,8 @@ txVersion _ = fromIntegral (natVal (Proxy @version))
 txFlags :: forall version flags c. KnownNat flags => Tx' version flags c -> Word16
 txFlags _ = fromIntegral (natVal (Proxy @flags))
 
--- | A transaction payload.
-data TxPayload c =
+-- | A transaction message.
+data TxMessage c =
       TxRegisterProject   (Address c)
     -- ^ Register a project.
     | TxUnregisterProject (Address c)
@@ -70,13 +70,16 @@ data TxPayload c =
     deriving (Generic)
 
 -- | Transaction output, included in the receipts tree. (Placeholder)
-data TxOutput = TxOutput
+type TxOutput = [TxMessageOutput]
+
+-- | Transaction message output, included in 'TxOutput'.
+data TxMessageOutput = TxMessageOutput
     deriving (Show, Eq, Generic)
 
-instance CBOR.Serialise TxOutput
+instance CBOR.Serialise TxMessageOutput
 
-instance JSON.ToJSON   TxOutput
-instance JSON.FromJSON TxOutput
+instance JSON.ToJSON   TxMessageOutput
+instance JSON.FromJSON TxMessageOutput
 
 instance ByteArrayAccess TxOutput where
     length = length . LBS.toStrict . CBOR.serialise
@@ -114,14 +117,14 @@ deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (PublicKey c)) => Ord
 
 -------------------------------------------------------------------------------
 
--- | Make a transaction with the given payload.
-mkTx :: TxPayload c -> Tx c
-mkTx p = Tx'
-    { txPayload = p
-    , txNetwork = Devnet
-    , txNonce   = 0
-    , txFee     = 0
-    , txBurn    = 0
+-- | Make a transaction with the given messages.
+mkTx :: [TxMessage c] -> Tx c
+mkTx ms = Tx'
+    { txMessages = ms
+    , txNetwork  = Devnet
+    , txNonce    = 0
+    , txFee      = 0
+    , txBurn     = 0
     }
 
 -- | Apply a transaction to the world state, and return either an error,
@@ -154,46 +157,60 @@ applyTx tx@Tx'{..} author ws = do
     -- TODO(cloudhead): Verify transaction size
     -- TODO(cloudhead): Increment nonce
 
-    applyTxPayload txPayload author ws
+    applyTxMessages txMessages author ws
 
 -- FIXME(adn) This is currently a stub.
 verifyTx :: Tx c -> Bool
 verifyTx _ = True
 
--- | Apply the transaction payload to a world state.
-applyTxPayload
+-- | Apply a 'TxMessage' list to a 'WorldState' and return the new state and outputs.
+applyTxMessages
+    :: (CBOR.Serialise (PublicKey c), Ord (PublicKey c), Foldable t)
+    => t (TxMessage c)
+    -> Address c
+    -> WorldState c
+    -> Either (TxError c) (WorldState c, [TxMessageOutput])
+applyTxMessages msgs author ws =
+    foldM f (ws, []) msgs
+  where
+    f (s, out) msg = do
+        (s', out') <- applyTxMessage msg author s
+        pure (s', out <> out')
+
+-- | Apply the transaction message to a world state.
+applyTxMessage
     :: ( CBOR.Serialise (PublicKey c)
        , Ord (PublicKey c)
        )
-    => TxPayload c
+    => TxMessage c
     -> Address c
     -> WorldState c
     -> Either (TxError c) (WorldState c, TxOutput)
 
-applyTxPayload (TxRegisterProject addr) _ ws =
+applyTxMessage (TxRegisterProject addr) _ ws =
     if WorldState.member key ws
        then Left (ErrProjectExists addr)
        else Right ( WorldState.insert key (ProjectVal (mkProject addr)) ws
-                  , TxOutput )
+                  , [] )
   where
     key = addressKey addr
 
-applyTxPayload (TxUnregisterProject addr) author ws = do
+applyTxMessage (TxUnregisterProject addr) author ws = do
     p@Project{..} <- lookupProject addr   ws
     member        <- lookupMember  author ws
 
     mapHandlerError (pUnregister p member)
-    pure (WorldState.delete projKey ws, TxOutput)
+    pure (WorldState.delete projKey ws, [])
   where
     projKey = addressKey addr
 
-applyTxPayload (TxAuthorize addr pk) author ws = do
+applyTxMessage (TxAuthorize addr pk) author ws = do
     p@Project{..} <- lookupProject addr    ws
     member        <- lookupMember  author  ws
     epoch         <- lookupEpoch           ws
 
     mapHandlerError (pAuthorize pk p member)
-    pure (adjust (addKey epoch) projKey ws, TxOutput)
+    pure (adjust (addKey epoch) projKey ws, [])
   where
     projKey = addressKey addr
 
@@ -202,12 +219,12 @@ applyTxPayload (TxAuthorize addr pk) author ws = do
             p { pMaintainers = Map.insert pk (mkMember pk e) (pMaintainers p) }
         _ -> v
 
-applyTxPayload (TxDeauthorize addr pk) author ws = do
+applyTxMessage (TxDeauthorize addr pk) author ws = do
     p@Project{..} <- lookupProject addr    ws
     member        <- lookupMember  author  ws
 
     mapHandlerError (pDeauthorize pk p member)
-    pure (adjust removeKey projKey ws, TxOutput)
+    pure (adjust removeKey projKey ws, [])
   where
     projKey = addressKey addr
 
@@ -216,19 +233,19 @@ applyTxPayload (TxDeauthorize addr pk) author ws = do
             p { pMaintainers = Map.delete pk (pMaintainers p) }
         _ -> v
 
-applyTxPayload TxCheckpoint{} _ _ws = notImplemented
-applyTxPayload TxUpdateContract{} _ _ws = notImplemented
+applyTxMessage TxCheckpoint{} _ _ws = notImplemented
+applyTxMessage TxUpdateContract{} _ _ws = notImplemented
 
-applyTxPayload (TxTransfer _ _ bal) _ _ | bal == 0 =
+applyTxMessage (TxTransfer _ _ bal) _ _ | bal == 0 =
     Left (ErrInvalidTransfer bal)
-applyTxPayload (TxTransfer sender receiver bal) author ws = do
+applyTxMessage (TxTransfer sender receiver bal) author ws = do
     when (author /= sender) $
         Left (ErrNotAuthorized author)
 
     ws'  <- debitAccount  sender   bal ws
         >>= creditAccount receiver bal
 
-    pure (ws', TxOutput)
+    pure (ws', [])
 
 -- | Credit an account with coins.
 --
@@ -349,7 +366,7 @@ minimumTxFee :: Tx c -> Balance
 minimumTxFee = const 1
 
 -------------------------------------------------------------------------------
--- TxPayload instances
+-- TxMessage instances
 -------------------------------------------------------------------------------
 
 deriving instance
@@ -357,19 +374,19 @@ deriving instance
     , Show (BlockHash c)
     , Show (PublicKey c)
     , Crypto.HasHashing c
-    ) => Show (TxPayload c)
+    ) => Show (TxMessage c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
     , Eq (PublicKey c)
-    ) => Eq (TxPayload c)
+    ) => Eq (TxMessage c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
     , Ord (PublicKey c)
-    ) => Ord (TxPayload c)
+    ) => Ord (TxMessage c)
 
 -------------------------------------------------------------------------------
 -- Tx instances
