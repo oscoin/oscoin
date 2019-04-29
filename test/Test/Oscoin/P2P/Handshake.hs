@@ -1,4 +1,4 @@
-module Test.Oscoin.P2P.Handshake (tests, props, genKeyPair) where
+module Test.Oscoin.P2P.Handshake (tests, props, genKeyPair, genKeyPairPair) where
 
 import           Oscoin.Prelude
 

@@ -24,8 +24,10 @@ import           Oscoin.Prelude
                  , Word8
                  , div
                  , fromIntegral
+                 , map
                  , maxBound
                  , mod
+                 , sum
                  , ($)
                  , (.)
                  , (<>)
@@ -63,6 +65,8 @@ data StateVal c =
     | MemberVal  (Member c)
     | NatVal     Natural
 
+deriving instance (Eq (PublicKey c)) => Eq (StateVal c)
+
 -- | Like 'Map.adjust', but for 'WorldState'.
 adjust :: (StateVal c -> StateVal c) -> StateKey -> WorldState c -> WorldState c
 adjust f k ws =
@@ -80,6 +84,13 @@ alter f k ws =
     case f (WorldState.lookup k ws) of
         Just v  -> WorldState.insert k v ws
         Nothing -> WorldState.delete k ws
+
+-- | /O(n)/. Returns the total supply of tokens in the ledger.
+balanceTotal :: WorldState c -> Balance
+balanceTotal ws = sum $ map f (WorldState.toList ws)
+  where
+    f (_, AccountVal acc) = accountBalance acc
+    f _                   = 0
 
 -------------------------------------------------------------------------------
 -- Core types
@@ -101,6 +112,8 @@ data Account c = Account
     -- ^ The nonce is equal to the number of transactions
     -- made from this account.
     }
+
+deriving instance (Eq (PublicKey c)) => Eq (Account c)
 
 mkAccount :: Address c -> Account c
 mkAccount addr = Account
@@ -145,10 +158,12 @@ data Checkpoint c = Checkpoint
     -- ^ Updates to the dependencies since the last checkpoint.
     }
 
-instance Eq (Checkpoint c) where
-    a == b = checkpointNumber a == checkpointNumber b
+deriving instance
+    (Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Eq (Checkpoint c)
 
-instance Ord (Checkpoint c) where
+instance
+    (Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Ord (Checkpoint c)
+  where
     a <= b = checkpointNumber a <= checkpointNumber b
 
 -- | A contribution to a project.
@@ -236,6 +251,9 @@ data Project c = Project
     , pUpdateContract  :: UpdateContract' c
     }
 
+instance (Eq (PublicKey c)) => Eq (Project c) where
+    (==) a b = projectAddr a == projectAddr b
+
 mkProject :: Ord (PublicKey c) => Address c -> Project c
 mkProject addr = Project
     { pAccount          = mkAccount addr
@@ -243,7 +261,7 @@ mkProject addr = Project
     , pContributors     = mempty
     , pSupporters       = mempty
     , pDependencies     = mempty
-    , pCheckpoints      = mempty
+    , pCheckpoints      = Set.empty
     , pSendTransfer     = defaultSendTransfer
     , pReceiveTransfer  = defaultReceiveTransfer
     , pReceiveReward    = defaultReceiveReward
@@ -281,6 +299,9 @@ data Member c = Member
     , memberSince         :: Epoch
     , memberContributions :: Set (Contribution c)
     }
+
+instance (Eq (PublicKey c)) => Eq (Member c) where
+    (==) a b = memberAccount a == memberAccount b
 
 mkMember
     :: Address c -> Epoch -> Member c

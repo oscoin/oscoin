@@ -1,16 +1,24 @@
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Test.Util where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto
+import           Oscoin.Crypto.Address
+import           Oscoin.Crypto.Address.Serialisation (DeserializeError)
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Crypto.PubKey.Internal (SK(..))
 import           Oscoin.Crypto.PubKey.Mock
 import           Oscoin.Crypto.PubKey.RealWorld
+import           Oscoin.Data.Ledger
+import           Oscoin.Data.OscoinTx
 
+import           Codec.Serialise (Serialise)
+import qualified Crypto.Data.Auth.Tree as Tree
+import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -35,6 +43,18 @@ instance Condensed Int where
 
 instance Condensed Char where
     condensed = show
+
+instance Condensed Text where
+    condensed = toS
+
+instance Condensed Word64 where
+    condensed = show
+
+instance Condensed Word32 where
+    condensed = show
+
+instance Condensed ByteString where
+    condensed bs = BaseN.encodedText (BaseN.encodeBase16 bs)
 
 instance Condensed a => Condensed (Set a) where
     condensed = condensed . Set.toList
@@ -73,6 +93,77 @@ instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
 
 instance Condensed (PublicKey Crypto) where
     condensed = show
+
+instance ( Serialise (PublicKey c)
+         ) => Condensed (Address c) where
+    condensed = renderAddress
+
+instance ( Serialise (PublicKey c)
+         ) => Condensed (StateVal c) where
+    condensed v =
+        case v of
+            AccountVal Account{..} ->
+                "Account@" <> condensed accountAddr <> " $" <> condensed accountBalance
+            ProjectVal project -> "Project@" <> condensed (projectAddr project)
+            MemberVal  member  -> "Member@" <> condensed (memberAccount member)
+            NatVal     natural -> condensed $ (fromIntegral natural :: Integer)
+
+instance Condensed DeserializeError where
+    condensed _ = "DeserializerError"
+
+instance ( Serialise (PublicKey c)
+         , Crypto.HasHashing c
+         ) => Condensed (TxPayload c)
+  where
+    condensed (TxRegisterProject addr) =
+        "TxRegisterProject " <> condensed addr
+    condensed (TxUnregisterProject addr) =
+        "TxUnregisterProject " <> condensed addr
+    condensed (TxAuthorize addr user) =
+        "TxAuthorize " <> condensed addr <> " " <> condensed user
+    condensed (TxDeauthorize addr user) =
+        "TxDeauthorize " <> condensed addr <> " " <> condensed user
+    condensed (TxCheckpoint addr hsh _cs _ds) =
+        "TxCheckpoint " <> condensed addr <> " " <> condensed hsh
+    condensed (TxUpdateContract addr) =
+        "TxUpdateContract " <> condensed addr
+    condensed (TxTransfer addr1 addr2 bal) =
+        "TxTransfer "
+            <> condensed addr1 <> " "
+            <> condensed addr2 <> " "
+            <> condensed bal
+
+instance
+    ( Serialise (PublicKey c)
+    ) => Condensed (Tree.Tree StateKey (StateVal c))
+  where
+    condensed ws =
+        let xs = [(k, v) | (k, v) <- Tree.toList ws]
+         in condensed [(k, v) | (k, v) <- xs]
+
+instance (Serialise (PublicKey c))
+    => Condensed (TxError c)
+  where
+    condensed (ErrKeyNotFound k)         = "ErrKeyNotFound " <> condensed k
+    condensed (ErrInvalidFee f)          = "ErrInvalidFee " <> condensed f
+    condensed (ErrInsufficientBalance b) = "ErrInsufficientBalance " <> condensed b
+    condensed (ErrNotAuthorized a)       = "ErrNotAuthorized " <> condensed a
+    condensed (ErrInvalidNonce n)        = "ErrInvalidNonce " <> condensed n
+    condensed (ErrInvalidTransfer b)     = "ErrInvalidTransfer " <> condensed b
+    condensed (ErrTypeMismatch k)        = "ErrTypeMismatch " <> condensed k
+    condensed (ErrProjectExists p)       = "ErrProjectExists " <> condensed p
+    condensed (ErrInvalidTx t)           = "ErrInvalidTx " <> condensed t
+    condensed (ErrOverflow a)            = "ErrOverflow " <> condensed a
+    condensed (ErrHandlerFailed _)       = "ErrHandlerFailed"
+
+instance Condensed TxOutput where
+    condensed _ = "TxOutput"
+
+instance ( Serialise (PublicKey c)
+         , Crypto.HasHashing c
+         ) => Condensed (Tx c)
+  where
+    condensed Tx'{..} = condensed txPayload
 
 -- NOTE(adn) It's a bit of a security hazard to implement a 'Show' instance
 -- for a private key, as that might end up in public logs and other crazy things.

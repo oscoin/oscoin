@@ -70,7 +70,8 @@ data TxPayload c =
     deriving (Generic)
 
 -- | Transaction output, included in the receipts tree. (Placeholder)
-data TxOutput = TxOutput deriving (Show, Eq, Generic)
+data TxOutput = TxOutput
+    deriving (Show, Eq, Generic)
 
 instance CBOR.Serialise TxOutput
 
@@ -151,6 +152,7 @@ applyTx tx@Tx'{..} author ws = do
     -- TODO(cloudhead): Transfer fee
     -- TODO(cloudhead): Destroy burn
     -- TODO(cloudhead): Verify transaction size
+    -- TODO(cloudhead): Increment nonce
 
     applyTxPayload txPayload author ws
 
@@ -220,40 +222,73 @@ applyTxPayload TxUpdateContract{} _ _ws = notImplemented
 applyTxPayload (TxTransfer _ _ bal) _ _ | bal == 0 =
     Left (ErrInvalidTransfer bal)
 applyTxPayload (TxTransfer sender receiver bal) author ws = do
-    senderAcc   <- lookupAccount sender   ws
-    receiverAcc <- lookupAccount receiver ws
-
     when (author /= sender) $
         Left (ErrNotAuthorized author)
 
-    when (bal > accountBalance senderAcc) $
-        Left (ErrInsufficientBalance (accountBalance senderAcc))
+    ws'  <- debitAccount  sender   bal ws
+        >>= creditAccount receiver bal
 
-    when (bal > maxBound - accountBalance receiverAcc) $
-        Left (ErrOverflow receiver)
+    pure (ws', TxOutput)
 
-    pure (transfer, TxOutput)
+-- | Credit an account with coins.
+--
+-- Increases the total coin supply and creates the account if it does not exist.
+--
+-- * Returns 'ErrTypeMismatch' if the value under the given address is not an account.
+-- * Returns 'ErrOverflow' if crediting the account would result in an integer overflow.
+--
+-- Nb. using this function without a matching 'debitAccount' creates supply.
+--
+creditAccount
+    :: CBOR.Serialise (PublicKey c)
+    => Address c
+    -> Balance
+    -> WorldState c
+    -> Either (TxError c) (WorldState c)
+creditAccount addr bal ws =
+    case lookupAccount addr ws of
+        Right acc
+            | bal > maxBound - accountBalance acc ->
+                Left (ErrOverflow addr)
+            | otherwise ->
+                Right $ WorldState.insert (addressKey addr)
+                    (AccountVal $ acc { accountBalance = accountBalance acc + bal }) ws
+        Left (ErrKeyNotFound key) -> -- Account doesn't exist, create it.
+            Right $ WorldState.insert key
+                (AccountVal $ (mkAccount addr) { accountBalance = bal }) ws
+        Left err ->
+            Left err
+
+-- | Debit an account.
+--
+-- Decreases the total coin supply and deletes the account if its balance reaches zero.
+--
+-- * Returns 'ErrTypeMismatch' if the value under the given address is not an account.
+-- * Returns 'ErrInsufficientBalance' if the account cannot be debited by the full amount.
+-- * Returns 'ErrKeyNotFound' if the account cannot be found.
+--
+-- Nb. using this function without a matching 'creditAccount' burns supply.
+--
+debitAccount
+    :: CBOR.Serialise (PublicKey c)
+    => Address c
+    -> Balance
+    -> WorldState c
+    -> Either (TxError c) (WorldState c)
+debitAccount addr bal ws =
+    case lookupAccount addr ws of
+        Right acc
+            | bal > accountBalance acc ->
+                Left $ ErrInsufficientBalance (accountBalance acc)
+            | bal == accountBalance acc ->
+                Right $ WorldState.delete key ws
+            | otherwise ->
+                Right $ WorldState.insert key
+                    (AccountVal $ acc { accountBalance = accountBalance acc - bal }) ws
+        Left err ->
+            Left err
   where
-    senderKey   = addressKey sender
-    receiverKey = addressKey receiver
-
-    transfer =
-        alter (withAccount (withdraw bal)) senderKey   .
-        alter (withAccount (deposit bal))  receiverKey $ ws
-
-    deposit  n acc = acc { accountBalance = accountBalance acc + n }
-    withdraw n acc = acc { accountBalance = accountBalance acc - n }
-
-    withAccount f v = case v of
-        -- Account exists. Update balance or delete account if zero balance.
-        Just (AccountVal acc) -> case f acc of
-            acc'@Account{..} | accountBalance == 0 -> Nothing
-                             | otherwise           -> Just (AccountVal acc')
-        -- Account doesn't exist. Create it.
-        Nothing -> Just . AccountVal $ (mkAccount receiver) { accountBalance = bal }
-
-        -- This branch should never be reached, since the keys must exist at this point.
-        _ -> undefined
+    key = addressKey addr
 
 -- | Map a handler error into a transaction error.
 mapHandlerError :: Either HandlerError a -> Either (TxError c) a

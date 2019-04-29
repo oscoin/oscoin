@@ -2,7 +2,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Crypto.PubKey.Mock where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (length)
+import qualified Oscoin.Prelude as Prelude
 
 import           Oscoin.Crypto (MockCrypto)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -14,7 +15,9 @@ import           Codec.Serialise
 import           Codec.Serialise.JSON (deserialiseParseJSON, serialiseToJSON)
 import           Crypto.Random
 import           Data.Aeson hiding (decode, encode)
+import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
 
 newtype MockKey = MockKey [Word8] deriving (Eq, Ord, Show)
@@ -42,8 +45,8 @@ instance HasDigitalSignature MockCrypto where
         pk  <- BS.unpack <$> getRandomBytes 8
         sk0 <- BS.unpack <$> getRandomBytes 8
         -- Pad the PrivateKey at the end, otherwise the xor trick won't work.
-        let sk = if length pk > length sk0
-                    then sk0 <> replicate (length pk - length sk0) 0
+        let sk = if Prelude.length pk > Prelude.length sk0
+                    then sk0 <> replicate (Prelude.length pk - Prelude.length sk0) 0
                     else sk0
         let !mockPk = MockPK $ PK (MockKey pk) (Crypto.hash (MockKey pk))
         let !mockSk = MockSK $ SK (MockKey $ zipWith xor pk sk, sk)
@@ -63,6 +66,10 @@ instance ToJSON (PublicKey MockCrypto) where
 
 instance FromJSON (PublicKey MockCrypto) where
     parseJSON = deserialiseParseJSON
+
+instance ByteArrayAccess (PublicKey MockCrypto) where
+    length             = fromIntegral . LBS.length . serialise
+    withByteArray pk f = withByteArray (LBS.toStrict (serialise pk)) f
 
 instance Eq a => Eq (PK MockCrypto a) where
     (PK a1 b1) == (PK a2 b2) = a1 == a2 && b1 == b2

@@ -2,6 +2,7 @@
 module Test.Oscoin.Crypto.Address
     ( tests
     , props
+    , genAddress
     ) where
 
 import           Oscoin.Prelude
