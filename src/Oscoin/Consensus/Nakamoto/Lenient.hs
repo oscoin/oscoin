@@ -19,7 +19,11 @@ import           Oscoin.Consensus.Nakamoto
                  )
 import           Oscoin.Consensus.Types
 import           Oscoin.Consensus.Validation
-                 (validateDifficulty, validateParentHash, validateTimestamp)
+                 ( validateDifficulty
+                 , validateHeight
+                 , validateParentHash
+                 , validateTimestamp
+                 )
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Node.Mempool.Class
@@ -63,6 +67,7 @@ validateLenient
 validateLenient [] blk =
     validateBasic blk
 validateLenient prefix@(parent:_) blk = runExcept $ do
+    validateHeight     parent blk
     validateParentHash parent blk
     validateDifficulty chainDifficulty prefix blk
     validateTimestamp  parent blk
