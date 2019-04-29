@@ -93,6 +93,7 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Ord (Hash c)
                   , ByteArrayAccess (BlockHash c)
                   , ByteArrayAccess (ShortHash c)
+                  , ByteArrayAccess (PublicKey c)
                   , Buildable (Hash c)
                   , ToField (BlockHash c)
                   , ToField (Hashed c (Tx c))

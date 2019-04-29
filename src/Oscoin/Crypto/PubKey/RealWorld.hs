@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Oscoin.Crypto.PubKey.RealWorld where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding (length)
 
 import qualified Codec.CBOR.Read as CBOR (deserialiseFromBytes)
 import qualified Codec.CBOR.Write as CBOR (toLazyByteString)
@@ -15,6 +15,7 @@ import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import           Crypto.PubKey.ECC.Generate (generate)
 import           Crypto.PubKey.ECC.Types (CurveName(SEC_p256k1), getCurveByName)
 import           Data.Aeson hiding (decode, encode)
+import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Hashable as H
 import           Oscoin.Crypto (Crypto)
@@ -82,6 +83,10 @@ instance Ord (PK Crypto ECDSA.PublicKey) where
 
 instance H.Hashable (PublicKey Crypto) where
     hashWithSalt salt (PublicKey (PK _ h)) = H.hashWithSalt salt . fromHashed $ h
+
+instance ByteArrayAccess (PublicKey Crypto) where
+    length             = fromIntegral . LBS.length . serialise
+    withByteArray pk f = withByteArray (LBS.toStrict (serialise pk)) f
 
 instance Serialise (PublicKey Crypto) where
     encode (PublicKey (PK pk _)) = encode pk
