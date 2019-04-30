@@ -52,11 +52,6 @@ main = do
         info (helper <*> Node.nodeOptionsParser cfgPaths)
              (progDesc "Oscoin Node")
 
-    let consensus =
-            case optEnvironment of
-                Production  -> Consensus.nakamotoConsensus
-                Development -> Consensus.nakamotoConsensusLenient optBlockTimeLower
-
     keys         <- runReaderT readKeyPair (Just $ keysDir optPaths)
     nid          <- pure (mkNodeId $ fst keys)
     mem          <- Mempool.newIO
@@ -76,6 +71,16 @@ main = do
         . runManaged
         $ do
             let telemetry = Telemetry.newTelemetryStore lgr metricsStore
+
+            let probe   = Telemetry.telemetryProbe telemetry
+                        & Telemetry.hoistProbe liftIO
+            let consensus =
+                    case optEnvironment of
+                        Production  ->
+                            Consensus.nakamotoConsensus (Telemetry.probed probe)
+                        Development ->
+                            Consensus.nakamotoConsensusLenient (Telemetry.probed probe) optBlockTimeLower
+
 
             blkStore <- managed $
                 BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen

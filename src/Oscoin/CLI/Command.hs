@@ -17,6 +17,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Tx
+import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time (Timestamp)
 
 import           Codec.Serialise (Serialise)
@@ -108,7 +109,7 @@ printGenesisYaml txs diffi = do
             pure $ ResultError (fromEvalError err)
         Right blk -> do
             result <- mineGenesis
-                (mineNakamoto (const diffi)) blk
+                (mineNakamoto (Telemetry.probed Telemetry.noProbe) (const (pure diffi))) blk
 
             case result of
                 Left err  ->

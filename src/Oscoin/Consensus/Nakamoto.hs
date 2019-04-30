@@ -23,6 +23,8 @@ import           Oscoin.Consensus.Validation
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash, Hashable)
+import qualified Oscoin.Telemetry as Telemetry
+import           Oscoin.Telemetry.Events
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -65,10 +67,11 @@ nakamotoConsensus
        , Monad m
        , Serialise tx
        )
-    => Consensus c tx PoW m
-nakamotoConsensus = Consensus
+    => (forall a. Telemetry.Traced a -> m a)
+    -> Consensus c tx PoW m
+nakamotoConsensus probed = Consensus
     { cScore = comparing chainScore
-    , cMiner = mineNakamoto chainDifficulty
+    , cMiner = mineNakamoto probed chainDifficulty
     , cValidate = validateFull
     }
 
@@ -85,7 +88,7 @@ validateFull [] blk =
 validateFull prefix@(parent:_) blk = runExcept $ do
     validateHeight     parent blk
     validateParentHash parent blk
-    validateDifficulty chainDifficulty prefix blk
+    validateDifficulty (Telemetry.tracing_ . chainDifficulty) prefix blk
     validateTimestamp  parent blk
     validateBlockAge
     liftEither (validateBasic blk)
@@ -129,12 +132,14 @@ mineNakamoto
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        )
-    => (forall tx. [Block c tx (Sealed c PoW)] -> Difficulty)
+    => (forall a. Telemetry.Traced a -> m a)
+    -> (forall tx. [Block c tx (Sealed c PoW)] -> Telemetry.Traced Difficulty)
     -> Miner c PoW m
-mineNakamoto difiFn getBlocks unsealedBlock = do
-    blks <- getBlocks difficultyBlocks
+mineNakamoto probed difiFn getBlocks unsealedBlock = do
+    blks  <- getBlocks difficultyBlocks
+    diffy <- probed (difiFn blks)
 
-    let bh = (blockHeader unsealedBlock) { blockTargetDifficulty = difiFn blks }
+    let bh = (blockHeader unsealedBlock) { blockTargetDifficulty = diffy }
         candidateBlock = unsealedBlock { blockHeader = bh }
 
     pure $ (`sealBlock` candidateBlock) <$> mine bh (PoW 0)
@@ -182,16 +187,18 @@ difficultyBlocks :: Depth
 difficultyBlocks = 2016
 
 -- | Calculate the difficulty of a blockchain.
-chainDifficulty :: [Block c tx s] -> Difficulty
+chainDifficulty :: [Block c tx s] -> Telemetry.Traced Difficulty
 chainDifficulty [] =
-    minDifficulty
+    pure minDifficulty
 chainDifficulty (NonEmpty.fromList -> blks)
-    | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 =
-        encodeDifficulty $ fst (decodeDifficulty currentDifficulty)
-                         * fromIntegral targetElapsed
-                         `div` toInteger actualElapsed
+    | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 = do
+        let newDifficulty =
+                encodeDifficulty $ fst (decodeDifficulty currentDifficulty)
+                                 * fromIntegral targetElapsed
+                                 `div` toInteger actualElapsed
+        Telemetry.traced (DifficultyAdjustedEvent newDifficulty currentDifficulty) newDifficulty
     | otherwise =
-        prevDifficulty
+        pure prevDifficulty
   where
     blocksConsidered  = fromIntegral difficultyBlocks
     prevDifficulty    = blockTargetDifficulty . blockHeader $ NonEmpty.head blks

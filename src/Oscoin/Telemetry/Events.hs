@@ -5,6 +5,7 @@ module Oscoin.Telemetry.Events
 import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Types as Consensus
+import           Oscoin.Crypto.Blockchain.Block.Difficulty (Difficulty)
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
@@ -61,6 +62,11 @@ data NotableEvent where
                                => Hash c
                                -> Eval.EvalError
                                -> NotableEvent
+    -- | Triggered when the 'Difficulty' is adjusted. The first argument is
+    -- the new difficulty, the second the (now) previous one.
+    DifficultyAdjustedEvent :: Difficulty
+                            -> Difficulty
+                            -> NotableEvent
     -- | Triggered every time a transaction is successfully sent.
     TxSentEvent :: forall c tx. Buildable (Hash c)
                 => Hashed c tx
