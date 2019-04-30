@@ -28,6 +28,7 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Node.Mempool.Class
 import qualified Oscoin.Node.Mempool.Class as Mempool
+import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time (Duration)
 
 import           Codec.Serialise (Serialise)
@@ -47,10 +48,11 @@ nakamotoConsensusLenient
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        )
-    => Duration -- ^ Block time lower bound (see 'mineLenient')
+    => (forall a. Telemetry.Traced a -> m a)
+    -> Duration -- ^ Block time lower bound (see 'mineLenient')
     -> Consensus c tx PoW m
-nakamotoConsensusLenient blkTimeLower =
-    let nak = nakamotoConsensus :: Consensus c tx PoW m
+nakamotoConsensusLenient probed blkTimeLower =
+    let nak = nakamotoConsensus probed :: Consensus c tx PoW m
      in nak { cValidate = validateLenient
             , cMiner    = mineLenient blkTimeLower (cMiner nak)
             }
@@ -69,7 +71,7 @@ validateLenient [] blk =
 validateLenient prefix@(parent:_) blk = runExcept $ do
     validateHeight     parent blk
     validateParentHash parent blk
-    validateDifficulty chainDifficulty prefix blk
+    validateDifficulty (Telemetry.tracing_ . chainDifficulty) prefix blk
     validateTimestamp  parent blk
     liftEither (validateBasic blk)
 

@@ -3,6 +3,17 @@ module Oscoin.Telemetry
       Handle -- opaque
     , HasTelemetry(..)
 
+    -- * Tracing events
+    , Traced
+    , tracing
+    , tracing_
+    , traced
+    , Probe(..)
+    , hoistProbe
+    , probed
+    , noProbe
+    , telemetryProbe
+
     -- * API
     , newTelemetryStore
     , emit
@@ -19,6 +30,7 @@ module Oscoin.Telemetry
 import           Oscoin.Prelude
 
 import           Control.Concurrent.Async (AsyncCancelled(..))
+import           Control.Monad.State.Strict (modify')
 import qualified Data.Text as T
 import           Data.Text.Lazy.Builder (Builder)
 import           Formatting
@@ -51,6 +63,7 @@ import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 import           Oscoin.Time as Time
+import           Oscoin.Time.Chrono
 
 {------------------------------------------------------------------------------
   Typeclasses
@@ -58,6 +71,45 @@ import           Oscoin.Time as Time
 
 class HasTelemetry a where
     telemetryStoreL :: SimpleGetter a Handle
+
+
+{------------------------------------------------------------------------------
+  Tracing events within pure code.
+------------------------------------------------------------------------------}
+newtype Traced a =
+    Traced (StateT (OldestFirst [] NotableEvent) Identity a)
+    deriving (Functor, Applicative, Monad)
+
+tracing :: Traced a -> (a, OldestFirst [] NotableEvent)
+tracing (Traced t) = runIdentity . flip runStateT mempty $ t
+
+-- | Like 'tracing', but ignores the traced events.
+tracing_ :: Traced a -> a
+tracing_ (Traced t) = fst . runIdentity . flip runStateT mempty $ t
+
+traced :: NotableEvent -> a -> Traced a
+traced evt a = Traced $ do
+    modify' $ \nf -> nf `seq` nf <> OldestFirst [evt]
+    pure a
+
+data Probe m where
+    Probe :: (NotableEvent -> m ()) -> Probe m
+
+
+probed :: Monad m => Probe m -> Traced a -> m a
+probed (Probe runProbe) t = do
+    let (a, evts) = tracing t
+    forM_ (toOldestFirst evts) runProbe
+    pure a
+
+noProbe :: Monad m => Probe m
+noProbe = Probe (\_ -> pure ())
+
+telemetryProbe :: Handle -> Probe IO
+telemetryProbe h = Probe (emit h)
+
+hoistProbe :: (forall x. m x -> n x) -> Probe m -> Probe n
+hoistProbe natTrans (Probe fn) = Probe (natTrans . fn)
 
 {------------------------------------------------------------------------------
   Single, unified API for both logging and metrics recording.
@@ -113,6 +165,13 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                      (fmtBlockHash % " " % ferror Eval.fromEvalError)
                      blockHash
                      evalError
+        DifficultyAdjustedEvent newDifficulty previousDifficulty ->
+            let fmt = ftag "new" % shown % " " % ftag "old" % shown
+            in Log.withNamespace "consensus" $
+                   Log.infoM "difficulty adjustment"
+                             fmt
+                             newDifficulty
+                             previousDifficulty
         TxSentEvent txHash ->
             Log.withNamespace "p2p" $
                 Log.infoM "tx sent"
@@ -344,6 +403,11 @@ toActions = \case
      ]
     BlockEvaluationFailedEvent _ _evalError -> [
         CounterIncrease "oscoin.blocks_failed_evaluation.total" noLabels
+     ]
+    -- NOTE(adn) If we find it useful, we could include also separate counters
+    -- for how many times the difficulty increased or decreased.
+    DifficultyAdjustedEvent _ _ -> [
+        CounterIncrease "oscoin.consensus.difficulty_adjustments.total" noLabels
      ]
     TxSentEvent _ -> [
         CounterIncrease "oscoin.storage.txs_sent.total" noLabels
