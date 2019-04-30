@@ -57,7 +57,7 @@ instance Eq (Signature Crypto) where
 
 instance Ord (Signature Crypto) where
     (Signature a) <= (Signature b) =
-        BA.convert @_ @ByteString a <= BA.convert @_ @ByteString b
+        convert @_ @ByteString a <= convert @_ @ByteString b
 
 instance ToJSON (Signature Crypto) where
     toJSON = serialiseToJSON
@@ -69,7 +69,7 @@ instance Serialise (Signature Crypto) where
     encode (Signature ed25519) =
            CBOR.encodeListLen 2
         <> CBOR.encodeWord 0
-        <> CBOR.encodeBytes (BA.convert ed25519)
+        <> CBOR.encodeBytes (convert ed25519)
 
     decode = do
         pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
@@ -95,7 +95,7 @@ instance ByteArrayAccess (PublicKey Crypto) where
     withByteArray pk f = withByteArray (LBS.toStrict (serialise pk)) f
 
 instance Serialise (PublicKey Crypto) where
-    encode (PublicKey (PK pk _)) = CBOR.encodeBytes (BA.convert pk)
+    encode (PublicKey (PK pk _)) = CBOR.encodeBytes (convert pk)
     decode = do
         pkE <- Ed25519.publicKey <$> CBOR.decodeBytes
         case eitherCryptoError pkE of
@@ -121,7 +121,7 @@ serialisePrivateKey (PrivateKey (SK sk)) =
     CBOR.toLazyByteString $
        CBOR.encodeListLen 2
     <> CBOR.encodeWord 0
-    <> CBOR.encodeBytes (BA.convert sk)
+    <> CBOR.encodeBytes (convert sk)
 
 deserialisePrivateKey
     :: LBS.ByteString

@@ -65,7 +65,7 @@ class Sized a where
     upperBoundBytes :: proxy a -> Int
 
 instance Sized (Address Crypto) where
-    upperBoundBytes _ = 238 -- (!!)
+    upperBoundBytes _ = 47
 
 instance Sized (Address MockCrypto) where
     upperBoundBytes _ = 31
