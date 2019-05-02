@@ -9,12 +9,14 @@ module Oscoin.CLI.KeyStore
 
 import           Oscoin.Crypto
 import           Oscoin.Prelude
+import qualified Prelude
 
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.PubKey.RealWorld as Crypto.RealWorld
 
-import           Codec.Serialise (deserialiseOrFail, serialise)
+import           Codec.Serialise
+                 (DeserialiseFailure, deserialiseOrFail, serialise)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           System.Directory
@@ -61,6 +63,23 @@ ensureConfigDir mbUserPath = do
     configDir <- getConfigPath mbUserPath
     liftIO $ createDirectoryIfMissing True configDir
 
+data KeyStoreError =
+    -- | A key couldn't be deserialised correctly. The first
+    -- argument is the path to the key on disk.
+    KeyDeserialisationFailure FilePath DeserialiseFailure
+
+instance Show KeyStoreError where
+    show = \case
+      KeyDeserialisationFailure configPath cborError ->
+          mconcat [
+                    "Loading the key from "
+                  , configPath
+                  , " failed. The reason was: "
+                  , show cborError
+                  ]
+
+instance Exception KeyStoreError
+
 instance MonadKeyStore Crypto (ReaderT (Maybe FilePath) IO) where
     keysPath = ask
     writeKeyPair (pk, sk) =  do
@@ -76,9 +95,13 @@ instance MonadKeyStore Crypto (ReaderT (Maybe FilePath) IO) where
         mbUserPath <- keysPath
         liftIO $ do
             skPath <- getSecretKeyPath mbUserPath
-            sk <- fromRightThrow =<< Crypto.RealWorld.deserialisePrivateKey <$> readFileLbs skPath
+            sk <- do
+                skE <- Crypto.RealWorld.deserialisePrivateKey <$> readFileLbs skPath
+                fromRightThrow $ first (KeyDeserialisationFailure skPath) skE
             pkPath <- getPublicKeyPath mbUserPath
-            pk <- fromRightThrow =<< deserialiseOrFail <$> readFileLbs pkPath
+            pk <- do
+                pkE <- deserialiseOrFail <$> readFileLbs pkPath
+                fromRightThrow $ first (KeyDeserialisationFailure pkPath) pkE
             pure (pk, sk)
       where
         fromRightThrow = either throwM pure
