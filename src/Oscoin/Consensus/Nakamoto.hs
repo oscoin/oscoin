@@ -23,8 +23,8 @@ import           Oscoin.Consensus.Validation
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash, Hashable)
+import           Oscoin.Telemetry (NotableEvent(..), extract)
 import qualified Oscoin.Telemetry as Telemetry
-import           Oscoin.Telemetry.Events
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise)
@@ -88,7 +88,7 @@ validateFull [] blk =
 validateFull prefix@(parent:_) blk = runExcept $ do
     validateHeight     parent blk
     validateParentHash parent blk
-    validateDifficulty (Telemetry.tracing_ . chainDifficulty) prefix blk
+    validateDifficulty (extract . chainDifficulty) prefix blk
     validateTimestamp  parent blk
     validateBlockAge
     liftEither (validateBasic blk)
