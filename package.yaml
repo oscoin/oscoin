@@ -30,6 +30,7 @@ library:
     - binary
     - bytestring
     - cacophony >= 0.10.1
+    - comonad
     - cborg
     - clock
     - conduit

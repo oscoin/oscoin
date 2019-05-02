@@ -4,14 +4,7 @@ module Oscoin.Telemetry
     , HasTelemetry(..)
 
     -- * Tracing events
-    , Traced
-    , tracing
-    , tracing_
-    , traced
-    , Probe(..)
-    , hoistProbe
-    , probed
-    , noProbe
+    , module Oscoin.Telemetry.Trace
     , telemetryProbe
 
     -- * API
@@ -30,7 +23,6 @@ module Oscoin.Telemetry
 import           Oscoin.Prelude
 
 import           Control.Concurrent.Async (AsyncCancelled(..))
-import           Control.Monad.State.Strict (modify')
 import qualified Data.Text as T
 import           Data.Text.Lazy.Builder (Builder)
 import           Formatting
@@ -62,8 +54,8 @@ import           Oscoin.Telemetry.Events
 import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
+import           Oscoin.Telemetry.Trace
 import           Oscoin.Time as Time
-import           Oscoin.Time.Chrono
 
 {------------------------------------------------------------------------------
   Typeclasses
@@ -74,42 +66,10 @@ class HasTelemetry a where
 
 
 {------------------------------------------------------------------------------
-  Tracing events within pure code.
+  Probe using the telemetry system.
 ------------------------------------------------------------------------------}
-newtype Traced a =
-    Traced (StateT (OldestFirst [] NotableEvent) Identity a)
-    deriving (Functor, Applicative, Monad)
-
-tracing :: Traced a -> (a, OldestFirst [] NotableEvent)
-tracing (Traced t) = runIdentity . flip runStateT mempty $ t
-
--- | Like 'tracing', but ignores the traced events.
-tracing_ :: Traced a -> a
-tracing_ (Traced t) = fst . runIdentity . flip runStateT mempty $ t
-
-traced :: NotableEvent -> a -> Traced a
-traced evt a = Traced $ do
-    modify' $ \nf -> nf `seq` nf <> OldestFirst [evt]
-    pure a
-
-data Probe m where
-    Probe :: (NotableEvent -> m ()) -> Probe m
-
-
-probed :: Monad m => Probe m -> Traced a -> m a
-probed (Probe runProbe) t = do
-    let (a, evts) = tracing t
-    forM_ (toOldestFirst evts) runProbe
-    pure a
-
-noProbe :: Monad m => Probe m
-noProbe = Probe (\_ -> pure ())
-
 telemetryProbe :: Handle -> Probe IO
 telemetryProbe h = Probe (emit h)
-
-hoistProbe :: (forall x. m x -> n x) -> Probe m -> Probe n
-hoistProbe natTrans (Probe fn) = Probe (natTrans . fn)
 
 {------------------------------------------------------------------------------
   Single, unified API for both logging and metrics recording.
