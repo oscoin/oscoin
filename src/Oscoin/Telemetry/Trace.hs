@@ -1,3 +1,5 @@
+{-# LANGUAGE ImplicitParams #-}
+
 module Oscoin.Telemetry.Trace
     ( Traced
     , tracing
@@ -21,6 +23,7 @@ import           Oscoin.Time.Chrono
 
 import           Control.Comonad
 import           Control.Monad.State.Strict (modify')
+import           GHC.Stack
 
 
 {------------------------------------------------------------------------------
@@ -28,19 +31,20 @@ import           Control.Monad.State.Strict (modify')
 ------------------------------------------------------------------------------}
 
 newtype Traced a =
-    Traced (StateT (OldestFirst [] NotableEvent) Identity a)
+    Traced (StateT (OldestFirst [] (CallStack, NotableEvent)) Identity a)
     deriving (Functor, Applicative, Monad)
 
-tracing :: Traced a -> (a, OldestFirst [] NotableEvent)
+tracing :: Traced a -> (a, OldestFirst [] (CallStack, NotableEvent))
 tracing (Traced t) = runIdentity . flip runStateT mempty $ t
 
 -- | Like 'tracing', but ignores the traced events.
 tracing_ :: Traced a -> a
 tracing_ (Traced t) = fst . runIdentity . flip runStateT mempty $ t
 
-traced :: NotableEvent -> a -> Traced a
+traced :: HasCallStack => NotableEvent -> a -> Traced a
 traced evt a = Traced $ do
-    modify' $ \nf -> nf `seq` nf <> OldestFirst [evt]
+    modify' $ \nf ->
+        nf `seq` nf <> OldestFirst [(freezeCallStack callStack, evt)]
     pure a
 
 instance Comonad Traced where
@@ -69,7 +73,15 @@ type Tracer m = HasCallStack => forall a. Traced a -> m a
 probed :: (HasCallStack, Monad m) => Probe m -> Traced a -> m a
 probed (Probe runProbe) t = do
     let (a, evts) = tracing t
-    forM_ (toOldestFirst evts) runProbe
+    for_ (toOldestFirst evts) $ \(cs,evt) ->
+        let
+            ?callStack =
+                freezeCallStack $
+                    foldr' pushCallStack
+                           (popCallStack callStack)
+                           (getCallStack cs)
+         in
+            runProbe evt
     pure a
 
 -- | The \"identity\" probe.
