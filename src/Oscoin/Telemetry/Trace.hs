@@ -7,6 +7,9 @@ module Oscoin.Telemetry.Trace
     , probed
     , noProbe
 
+    -- * Running the probes
+    , Tracer
+
     -- * Re-exports from 'Control.Comonad'
     , extract
     ) where
@@ -54,12 +57,16 @@ instance Comonad Traced where
 
 -- | A 'Probe' over @m@.
 data Probe m where
-    Probe :: (NotableEvent -> m ()) -> Probe m
+    Probe :: (HasCallStack => NotableEvent -> m ()) -> Probe m
 
+-- | A 'Tracer' is simply a Rank-2 function that also carry a 'CallStack'.
+-- This is purely syntactic sugar for library users, as it's tiring and
+-- error prone to annotate each \"tracer\" with a 'HasCallStack' constraint.
+type Tracer m = HasCallStack => forall a. Traced a -> m a
 
 -- | When given a 'Probe' and a 'Traced' @a@, it collects the traces, output
 -- them using the 'Probe' and returns the traced value @a@.
-probed :: Monad m => Probe m -> Traced a -> m a
+probed :: (HasCallStack, Monad m) => Probe m -> Traced a -> m a
 probed (Probe runProbe) t = do
     let (a, evts) = tracing t
     forM_ (toOldestFirst evts) runProbe

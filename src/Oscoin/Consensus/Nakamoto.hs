@@ -67,7 +67,7 @@ nakamotoConsensus
        , Monad m
        , Serialise tx
        )
-    => (forall a. Telemetry.Traced a -> m a)
+    => Telemetry.Tracer m
     -> Consensus c tx PoW m
 nakamotoConsensus probed = Consensus
     { cScore = comparing chainScore
@@ -132,7 +132,7 @@ mineNakamoto
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        )
-    => (forall a. Telemetry.Traced a -> m a)
+    => Telemetry.Tracer m
     -> (forall tx. [Block c tx (Sealed c PoW)] -> Telemetry.Traced Difficulty)
     -> Miner c PoW m
 mineNakamoto probed difiFn getBlocks unsealedBlock = do
