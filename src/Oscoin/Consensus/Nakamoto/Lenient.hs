@@ -49,7 +49,7 @@ nakamotoConsensusLenient
        , Hashable c (BlockHeader c (Sealed c PoW))
        , Hashable c (BlockHeader c Unsealed)
        )
-    => (forall a. Telemetry.Traced a -> m a)
+    => Telemetry.Tracer m
     -> Duration -- ^ Block time lower bound (see 'mineLenient')
     -> Consensus c tx PoW m
 nakamotoConsensusLenient probed blkTimeLower =
