@@ -199,6 +199,7 @@ tests:
       - temporary
       - text
       - transformers
+      - unordered-containers
       - wai
       - wai-extra
 
