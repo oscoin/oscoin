@@ -5,6 +5,7 @@
 -- deterimine the directory to store keys in.
 module Oscoin.CLI.KeyStore
     ( MonadKeyStore(..)
+    , KeyStoreError(..)
     ) where
 
 import           Oscoin.Crypto
@@ -17,10 +18,12 @@ import qualified Oscoin.Crypto.PubKey.RealWorld as Crypto.RealWorld
 
 import           Codec.Serialise
                  (DeserialiseFailure, deserialiseOrFail, serialise)
+import           Control.Monad.Except (liftEither)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import           System.Directory
 import           System.FilePath
+import           System.IO.Error (isDoesNotExistError)
 
 
 class (Crypto.HasHashing c, Monad m) => MonadKeyStore c m | m -> c where
@@ -64,19 +67,23 @@ ensureConfigDir mbUserPath = do
     liftIO $ createDirectoryIfMissing True configDir
 
 data KeyStoreError =
+    -- | Key file at specified path doesn't exist.
+      KeyNotFound FilePath
     -- | A key couldn't be deserialised correctly. The first
     -- argument is the path to the key on disk.
-    KeyDeserialisationFailure FilePath DeserialiseFailure
+    | KeyDeserialisationFailure FilePath DeserialiseFailure
 
 instance Show KeyStoreError where
     show = \case
-      KeyDeserialisationFailure configPath cborError ->
-          mconcat [
-                    "Loading the key from "
-                  , configPath
-                  , " failed. The reason was: "
-                  , show cborError
-                  ]
+        KeyNotFound configPath ->
+            "Key file doesn't exist: " <> configPath
+
+        KeyDeserialisationFailure configPath cborError ->
+            mconcat [ "Loading the key from "
+                    , configPath
+                    , " failed. The reason was: "
+                    , show cborError
+                    ]
 
 instance Exception KeyStoreError
 
@@ -95,15 +102,20 @@ instance MonadKeyStore Crypto (ReaderT (Maybe FilePath) IO) where
         mbUserPath <- keysPath
         liftIO $ do
             skPath <- getSecretKeyPath mbUserPath
-            sk <- do
-                skE <- Crypto.RealWorld.deserialisePrivateKey <$> readFileLbs skPath
-                fromRightThrow $ first (KeyDeserialisationFailure skPath) skE
             pkPath <- getPublicKeyPath mbUserPath
-            pk <- do
-                pkE <- deserialiseOrFail <$> readFileLbs pkPath
-                fromRightThrow $ first (KeyDeserialisationFailure pkPath) pkE
-            pure (pk, sk)
+            keys   <-
+                runExceptT $ liftA2 (,)
+                    (readFileLbs pkPath >>=
+                        liftEither
+                            . first (KeyDeserialisationFailure pkPath)
+                            . deserialiseOrFail)
+                    (readFileLbs skPath >>=
+                        liftEither
+                            . first (KeyDeserialisationFailure skPath)
+                            . Crypto.RealWorld.deserialisePrivateKey)
+            either throwM pure keys
       where
-        fromRightThrow = either throwM pure
-        -- Avoiding lazy IO
-        readFileLbs path = LBS.fromStrict <$> BS.readFile path
+        readFileLbs path = ExceptT $
+            map (first . const $ KeyNotFound path)
+                . tryJust (guard . isDoesNotExistError)
+                $ LBS.fromStrict <$> BS.readFile path

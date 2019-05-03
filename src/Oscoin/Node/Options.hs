@@ -21,17 +21,18 @@ import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 
 data Options = Options
-    { optHost           :: IP
-    , optGossipPort     :: PortNumber
-    , optApiPort        :: PortNumber
-    , optDiscovery      :: P2P.Disco.Options P2P.Disco.OptNetwork
-    , optBlockTimeLower :: Duration
-    , optPaths          :: Paths
-    , optEnvironment    :: Environment
-    , optMetricsHost    :: Maybe HostName
-    , optMetricsPort    :: Maybe PortNumber
-    , optEkgHost        :: Maybe HostName
-    , optEkgPort        :: Maybe PortNumber
+    { optHost               :: IP
+    , optGossipPort         :: PortNumber
+    , optApiPort            :: PortNumber
+    , optDiscovery          :: P2P.Disco.Options P2P.Disco.OptNetwork
+    , optBlockTimeLower     :: Duration
+    , optPaths              :: Paths
+    , optEnvironment        :: Environment
+    , optMetricsHost        :: Maybe HostName
+    , optMetricsPort        :: Maybe PortNumber
+    , optEkgHost            :: Maybe HostName
+    , optEkgPort            :: Maybe PortNumber
+    , optAllowEphemeralKeys :: Bool
     }
 
 nodeOptionsParser :: ConfigPaths -> Parser Options
@@ -90,4 +91,8 @@ nodeOptionsParser cps = Options
           ( long "ekg-port"
          <> help "Port number to bind to for the EKG server"
           )
+        )
+    <*> switch
+        ( long "allow-ephemeral-keys"
+       <> help "Create a fresh keypair if none could be found"
         )
