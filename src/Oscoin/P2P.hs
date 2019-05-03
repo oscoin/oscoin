@@ -5,6 +5,8 @@ module Oscoin.P2P
       GossipT
     , withGossip
     , runGossipT
+    , getPeers
+    , getPeers'
 
     -- * Re-exports
     , module Oscoin.P2P.Class
@@ -47,6 +49,7 @@ import qualified Codec.Serialise as CBOR
 import           Data.ByteArray (ByteArrayAccess(..))
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 import           Data.Hashable (Hashable)
+import           Data.HashSet (HashSet)
 import           Formatting.Buildable (Buildable)
 import           Network.Socket (SockAddr, Socket)
 
@@ -284,3 +287,25 @@ deserialisePayload
     => ByteString
     -> Either CBOR.DeserialiseFailure (Msg c tx s)
 deserialisePayload = CBOR.deserialiseOrFail . fromStrict
+
+-------------------------------------------------------------------------------
+-- Membership queries
+-------------------------------------------------------------------------------
+
+getPeers
+    :: ( Eq (Crypto.PublicKey c)
+       , Hashable (Crypto.PublicKey c)
+       , MonadIO m
+       )
+    => Gossip.Run.Env (NodeId c)
+    -> m (HashSet (Gossip.Peer (NodeId c)))
+getPeers = liftIO . Gossip.Run.getPeers
+
+getPeers'
+    :: ( Eq (Crypto.PublicKey c)
+       , Hashable (Crypto.PublicKey c)
+       , MonadIO m
+       )
+    => Gossip.Run.Env (NodeId c)
+    -> m (Membership.Peers (Gossip.Peer (NodeId c)))
+getPeers' = liftIO . Gossip.Run.getPeers'

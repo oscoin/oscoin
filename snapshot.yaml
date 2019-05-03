@@ -36,7 +36,7 @@ packages:
   commit: dfc468845a82cdd7d759943b20853999bc026505
 
 - git: https://github.com/oscoin/gossip
-  commit: 78e457dc23f7225d8956381eb5312aa2a0d98356
+  commit: 5e3219cc4679bda311842426d7120ed9b7ce435e
 
 - git: https://github.com/oscoin/ipfs
   commit: 46a3a9e9e7444eda5aa586cbdb67807406afb1f9
