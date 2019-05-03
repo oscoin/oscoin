@@ -103,6 +103,18 @@ getBestChain = do
     blks <- node $ Node.getBlocks n
     respond ok200 $ Ok blks
 
+getTip
+    :: ( Serialise s
+       , Crypto.HasHashing c
+       , Serialise (BlockHash c)
+       , Serialise (Crypto.PublicKey c)
+       , Serialise (Crypto.Signature c)
+       )
+    => ApiAction c s i a
+getTip = do
+    tip <- node $ Node.getTip
+    respond ok200 $ Ok tip
+
 getBlock
     :: ( Serialise s
        , Crypto.HasHashing c

@@ -16,6 +16,7 @@ module Oscoin.Node
     , getPath
     , getPathLatest
     , getBlocks
+    , getTip
     , lookupTx
     , lookupReceipt
     , lookupBlock
@@ -236,6 +237,11 @@ getBlocks
 getBlocks d = do
     bs <- getBlockStoreReader
     Chrono.toNewestFirst <$> BlockStore.getBlocksByDepth bs d
+
+getTip
+    :: MonadIO m
+    => NodeT c tx s i m (Block c tx (Sealed c s))
+getTip = getBlockStoreReader >>= BlockStore.getTip
 
 lookupTx :: (MonadIO m) => Hashed c tx -> NodeT c tx s i m (Maybe (TxLookup c tx))
 lookupTx tx = do

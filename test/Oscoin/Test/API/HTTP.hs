@@ -5,7 +5,7 @@ module Oscoin.Test.API.HTTP
 import           Oscoin.Prelude hiding (get, state)
 
 import qualified Oscoin.API.Types as API
-import           Oscoin.Crypto.Blockchain (blocks, genesis)
+import           Oscoin.Crypto.Blockchain (blocks, genesis, tip)
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -37,6 +37,9 @@ tests Dict =
         ]
     , testGroup "GET /blockchain/best"
         [ test "No depth specified" (getBestChain @c)
+        ]
+    , testGroup "GET /blockchain/tip"
+        [ test "returns the tip of the blockchain" (getTip @c)
         ]
     ]
   where
@@ -142,3 +145,12 @@ getBestChain = do
         get "/blockchain/best" >>=
             assertStatus ok200 <>
             assertResultOK (take 3 . toNewestFirst $ blocks chain)
+
+getTip :: IsCrypto c => PropertyM IO (HTTPTest c)
+getTip = do
+    chain <- pick genBlockchain
+
+    liftIO $ httpTest (nodeState mempty chain mempty) $
+        get "/blockchain/tip" >>=
+            assertStatus ok200 <>
+            assertResultOK (tip chain)

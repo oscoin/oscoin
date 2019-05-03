@@ -89,6 +89,10 @@ api mdlware = do
 
     get ("blocks" <//> var) Handlers.getBlock
 
+    -- /blockchain/tip -------------------------------------------------------
+
+    get ("blockchain" <//> "tip") Handlers.getTip
+
     -- /blockchain/best -------------------------------------------------------
 
     get ("blockchain" <//> "best") Handlers.getBestChain
