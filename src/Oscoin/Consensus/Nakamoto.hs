@@ -23,7 +23,7 @@ import           Oscoin.Consensus.Validation
 import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash, Hashable)
-import           Oscoin.Telemetry (NotableEvent(..), extract)
+import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time
 
@@ -87,7 +87,7 @@ validateFull [] blk =
 validateFull prefix@(parent:_) blk = runExcept $ do
     validateHeight     parent blk
     validateParentHash parent blk
-    validateDifficulty (extract . chainDifficulty) prefix blk
+    validateDifficulty chainDifficulty prefix blk
     validateTimestamp  parent blk
     validateBlockAge
     liftEither (validateBasic blk)
@@ -131,11 +131,18 @@ mineNakamoto
        , Hashable c (BlockHeader c (Sealed c PoW))
        )
     => Telemetry.Tracer m
-    -> (forall tx. [Block c tx (Sealed c PoW)] -> Telemetry.Traced Difficulty)
+    -> (forall tx. [Block c tx (Sealed c PoW)] -> Difficulty)
     -> Miner c PoW m
 mineNakamoto probed difiFn getBlocks unsealedBlock = do
     blks  <- getBlocks difficultyBlocks
-    diffy <- probed (difiFn blks)
+    let currentDifficulty = blockTargetDifficulty
+                          . blockHeader
+                          . NonEmpty.head
+                          . NonEmpty.fromList
+                          $ blks
+    let diffy = difiFn blks
+    when (currentDifficulty /= diffy) $
+         probed $ Telemetry.traced (DifficultyAdjustedEvent diffy currentDifficulty) ()
 
     let bh = (blockHeader unsealedBlock) { blockTargetDifficulty = diffy }
         candidateBlock = unsealedBlock { blockHeader = bh }
@@ -189,18 +196,18 @@ difficultyBlocks :: Depth
 difficultyBlocks = 2016
 
 -- | Calculate the difficulty of a blockchain. Blocks are ordered newest-first.
-chainDifficulty :: [Block c tx s] -> Telemetry.Traced Difficulty
+chainDifficulty :: [Block c tx s] -> Difficulty
 chainDifficulty [] = -- FIXME(adn) Use 'NewestFirst' here.
-    pure minDifficulty
+    minDifficulty
 chainDifficulty (NonEmpty.fromList -> blks)
-    | adjustmentRequired = do
+    | adjustmentRequired =
         let newDifficulty =
                 encodeDifficulty $ fst (decodeDifficulty currentDifficulty)
                                  * fromIntegral targetElapsed
                                  `div` toInteger actualElapsed
-        Telemetry.traced (DifficultyAdjustedEvent newDifficulty currentDifficulty) newDifficulty
+        in newDifficulty
     | otherwise =
-        pure prevDifficulty
+        prevDifficulty
   where
 
     -- The difficulty is adjusted every 'difficultyBlocks' blocks, and only if we do have

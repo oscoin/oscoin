@@ -28,7 +28,6 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Node.Mempool.Class
 import qualified Oscoin.Node.Mempool.Class as Mempool
-import           Oscoin.Telemetry (extract)
 import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time (Duration)
 
@@ -71,7 +70,7 @@ validateLenient [] blk =
 validateLenient prefix@(parent:_) blk = runExcept $ do
     validateHeight     parent blk
     validateParentHash parent blk
-    validateDifficulty (extract . chainDifficulty) prefix blk
+    validateDifficulty chainDifficulty prefix blk
     validateTimestamp  parent blk
     liftEither (validateBasic blk)
 

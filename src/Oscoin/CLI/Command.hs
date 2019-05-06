@@ -109,7 +109,7 @@ printGenesisYaml txs diffi = do
             pure $ ResultError (fromEvalError err)
         Right blk -> do
             result <- mineGenesis
-                (mineNakamoto (Telemetry.probed Telemetry.noProbe) (const (pure diffi))) blk
+                (mineNakamoto (Telemetry.probed Telemetry.noProbe) (const diffi)) blk
 
             case result of
                 Left err  ->

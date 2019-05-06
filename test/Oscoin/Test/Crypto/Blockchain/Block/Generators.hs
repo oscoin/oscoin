@@ -19,7 +19,6 @@ import           Codec.Serialise (Serialise)
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Telemetry (extract)
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto
@@ -169,7 +168,7 @@ genNakamotoBlockWith prefix@(parent:|_) txs = do
     elapsed    <- choose (60 * seconds, 120 * seconds)
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- genPoWSeal
-    blockDiffi <- pure $ extract (Nakamoto.chainDifficulty (toList prefix))
+    blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockHeight           = succ (blockHeight prevHeader)
                , blockPrevHash         = headerHash prevHeader
