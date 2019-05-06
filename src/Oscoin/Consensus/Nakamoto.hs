@@ -62,7 +62,6 @@ emptyPoW = PoW 0
 nakamotoConsensus
     :: ( AuthTree.MerkleHash (Hash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
-       , Hashable c (BlockHeader c Unsealed)
        , ByteArrayAccess (BlockHash c)
        , Monad m
        , Serialise tx
@@ -130,7 +129,6 @@ mineNakamoto
        ( Monad m
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
-       , Hashable c (BlockHeader c Unsealed)
        )
     => Telemetry.Tracer m
     -> (forall tx. [Block c tx (Sealed c PoW)] -> Telemetry.Traced Difficulty)
@@ -146,10 +144,14 @@ mineNakamoto probed difiFn getBlocks unsealedBlock = do
 
   where
     mine :: BlockHeader c Unsealed -> PoW -> Maybe PoW
-    mine hdr (PoW nonce)
-        | hasPoW hdr        = Just (PoW nonce)
-        | nonce < maxBound  = mine hdr (PoW (nonce + 1))
-        | otherwise         = Nothing
+    mine hdr pow@(PoW nonce)
+        | hasPoW (sealHeader pow hdr) = Just pow
+        | nonce < maxBound            = mine hdr (PoW (nonce + 1))
+        | otherwise                   = Nothing
+
+    sealHeader :: PoW -> BlockHeader c Unsealed -> BlockHeader c (Sealed c PoW)
+    sealHeader seal hdr =
+        hdr { blockSeal = SealedWith seal }
 
 -- | The block score is equivalent to the /average/ difficulty of computing
 -- its proof-of-work.
@@ -186,12 +188,12 @@ difficulty = encodeDifficulty . os2ip . headerHash
 difficultyBlocks :: Depth
 difficultyBlocks = 2016
 
--- | Calculate the difficulty of a blockchain.
+-- | Calculate the difficulty of a blockchain. Blocks are ordered newest-first.
 chainDifficulty :: [Block c tx s] -> Telemetry.Traced Difficulty
-chainDifficulty [] =
+chainDifficulty [] = -- FIXME(adn) Use 'NewestFirst' here.
     pure minDifficulty
 chainDifficulty (NonEmpty.fromList -> blks)
-    | NonEmpty.length blks `mod` fromIntegral difficultyBlocks == 0 = do
+    | adjustmentRequired = do
         let newDifficulty =
                 encodeDifficulty $ fst (decodeDifficulty currentDifficulty)
                                  * fromIntegral targetElapsed
@@ -200,6 +202,16 @@ chainDifficulty (NonEmpty.fromList -> blks)
     | otherwise =
         pure prevDifficulty
   where
+
+    -- The difficulty is adjusted every 'difficultyBlocks' blocks, and only if we do have
+    -- 2016 blocks at hand to compute the new one. As the 'height' of genesis
+    -- is 0, we need to add 1 to the value returned by 'blockHeight', to be
+    -- sure to trigger an adjustment every 'difficultyBlocks' blocks.
+    adjustmentRequired =
+        (bHeight (NonEmpty.head blks) + 1) `mod` fromIntegral difficultyBlocks == 0
+        && NonEmpty.length blks == fromIntegral difficultyBlocks
+
+    bHeight           = blockHeight . blockHeader
     blocksConsidered  = fromIntegral difficultyBlocks
     prevDifficulty    = blockTargetDifficulty . blockHeader $ NonEmpty.head blks
 

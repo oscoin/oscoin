@@ -126,12 +126,15 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                      blockHash
                      evalError
         DifficultyAdjustedEvent newDifficulty previousDifficulty ->
-            let fmt = ftag "new" % shown % " " % ftag "old" % shown
+            let fmt = ftag "new" % stext % " "
+                    % ftag "old" % stext % " "
+                    % ftag "direction" % stext
             in Log.withNamespace "consensus" $
                    Log.infoM "difficulty adjustment"
                              fmt
-                             newDifficulty
-                             previousDifficulty
+                             (prettyDifficulty newDifficulty)
+                             (prettyDifficulty previousDifficulty)
+                             (if newDifficulty > previousDifficulty then "increasing" else "decreasing")
         TxSentEvent txHash ->
             Log.withNamespace "p2p" $
                 Log.infoM "tx sent"

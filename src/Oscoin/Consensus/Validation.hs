@@ -55,7 +55,7 @@ validateDifficulty
     -> Except (ValidationError c) ()
 validateDifficulty chainDifficulty prefix blk
     | actual <- blockTargetDifficulty (blockHeader blk)
-    , expected <- chainDifficulty prefix
+    , expected <- chainDifficulty (blk : prefix)
     , actual /= expected =
         throwError $ InvalidTargetDifficulty expected actual
     | otherwise = pure ()

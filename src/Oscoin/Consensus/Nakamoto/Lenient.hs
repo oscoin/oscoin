@@ -47,7 +47,6 @@ nakamotoConsensusLenient
        , AuthTree.MerkleHash (Hash c)
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
-       , Hashable c (BlockHeader c Unsealed)
        )
     => Telemetry.Tracer m
     -> Duration -- ^ Block time lower bound (see 'mineLenient')

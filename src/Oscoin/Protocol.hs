@@ -181,6 +181,7 @@ stepProtocol mgr incomingBlock = do
               -- full block validation.
               let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
               ancestors <- BlockStore.getBlocksByDepth bsPublicAPI depth
+
               case protoValidateFull mgr (toNewestFirst ancestors) incomingBlock of
                   Left validationError ->
                       let evt = BlockValidationFailedEvent (blockHash incomingBlock) validationError
