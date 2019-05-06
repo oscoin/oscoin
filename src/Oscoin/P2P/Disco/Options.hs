@@ -1,18 +1,24 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Oscoin.P2P.Disco.Options
     ( Options(..)
     , discoParser
+    , discoOpts
+    , renderDiscoOpts
 
-    , OptNetwork
+    , CanRenderNetwork
+    , OptNetwork(..)
     , showOptNetwork
 
     , evalOptions
+    , evalYesNo
     )
 where
 
 import           Oscoin.Prelude hiding (option)
 
 import qualified Oscoin.Configuration as Global
-import           Oscoin.Crypto (Crypto)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.P2P.Types
                  ( Network(..)
                  , SeedAddr
@@ -21,24 +27,31 @@ import           Oscoin.P2P.Types
                  , readNetwork
                  , readNodeAddr
                  , renderNetwork
+                 , showNodeAddr
                  )
 
 import qualified Data.Text as T
+import qualified Formatting as F
 import           Network.Socket (HostName, PortNumber)
 import           Options.Applicative
 import           Options.Applicative.Help
                  (paragraph, stringChunk, unChunk, vcatChunks, vsepChunks)
+import           System.Console.Option (Opt(Flag, Opt))
 import           System.IO (hFlush, stdout)
 import           System.Random.SplitMix (newSMGen)
+import           Text.Show (Show(..))
 
-data Options network = Options
+data Options crypto network = Options
     { optNetwork    :: network
-    , optSeeds      :: [SeedAddr Crypto]
+    , optSeeds      :: [SeedAddr crypto]
     , optSDDomains  :: [HostName]
     , optEnableMDns :: Bool
     , optEnableGCE  :: Bool
     , optNameserver :: Maybe (HostName, PortNumber) -- only for testing currently
-    }
+    } deriving (Generic)
+
+deriving instance (Eq   (PublicKey c), Eq   n) => Eq   (Options c n)
+deriving instance (Show (PublicKey c), Show n) => Show (Options c n)
 
 data YesNo = Yes | No
 
@@ -46,6 +59,17 @@ data OptNetwork =
       Confirm   Text (YesNo -> Either String Network)
     | NoConfirm Network
     | Random
+
+-- nb. Eq + Show for testing
+
+instance Eq OptNetwork where
+    (Confirm   a _) == (Confirm   b _) = a == b
+    (NoConfirm a  ) == (NoConfirm b  ) = a == b
+    Random          == Random          = True
+    _               == _               = False
+
+instance Show OptNetwork where
+    show = showOptNetwork
 
 showOptNetwork :: OptNetwork -> String
 showOptNetwork (Confirm s _) = toS $ "`" <> s <> "` (confirmation required)"
@@ -61,13 +85,15 @@ optNetworkReader = eitherReader $ map mkOpt . readNetwork
         Devnet       -> NoConfirm Devnet
         sn@Somenet{} -> NoConfirm sn
 
-    evalYesNo x = \case
-        Yes -> pure x
-        No  -> Left "Cancelled"
+evalYesNo :: a -> YesNo -> Either String a
+evalYesNo x = \case
+    Yes -> pure x
+    No  -> Left "Cancelled"
 
-evalOptions :: Options OptNetwork -> IO (Either String (Options Network))
+evalOptions :: Options c OptNetwork -> IO (Either String (Options c Network))
 evalOptions opt =
-    map (\n -> opt { optNetwork = n }) <$> evalOptNetwork (optNetwork opt)
+    map (\n -> opt { optNetwork = n })
+        <$> evalOptNetwork (optNetwork opt)
 
 -- | Interactively obtain a 'YesNo' value.
 promptYesNo :: Text -> IO YesNo
@@ -88,7 +114,7 @@ evalOptNetwork (Confirm s f) = f <$> promptYesNo msg
   where
     msg = "Are you sure you want to join network `" <> s <> "` [yes/no]:"
 
-discoParser :: Parser (Options OptNetwork)
+discoParser :: Parser (Options c OptNetwork)
 discoParser = Options
     <$> option optNetworkReader
         ( long "network"
@@ -147,3 +173,34 @@ discoParser = Options
        <> help "Enable instance discovery on Google Compute Engine"
         )
     <*> pure Nothing
+
+class CanRenderNetwork a where
+    renderNetwork' :: a -> Maybe Text
+
+instance CanRenderNetwork OptNetwork where
+    renderNetwork' = \case
+        Confirm n _ -> pure n
+        NoConfirm n -> pure $ renderNetwork n
+        _           -> Nothing
+
+instance CanRenderNetwork Network where
+    renderNetwork' = pure . renderNetwork
+
+discoOpts :: CanRenderNetwork n => Options c n -> [Opt Text]
+discoOpts
+    (Options
+        optNetwork
+        optSeeds
+        optSDDomains
+        optEnableMDns
+        optEnableGCE
+        _optNameserver) = concat
+    [ fromMaybe [] . map (pure . Opt "network") . renderNetwork' $ optNetwork
+    , map (Opt "seed" . toS . showNodeAddr) optSeeds
+    , map (Opt "sd-domain" . toS) optSDDomains
+    , bool [] (pure (Flag "enable-mdns"))   optEnableMDns
+    , bool [] (pure (Flag "enable-gce-sd")) optEnableGCE
+    ]
+
+renderDiscoOpts :: Options c OptNetwork -> [Text]
+renderDiscoOpts = map (F.sformat F.build) . discoOpts

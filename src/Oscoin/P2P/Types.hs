@@ -33,6 +33,7 @@ module Oscoin.P2P.Types
     , SeedAddr
     , NodeAddr(..)
     , readNodeAddr
+    , showNodeAddr
 
     , Msg(..)
     , MsgId(..)
@@ -292,6 +293,12 @@ readNodeAddr = \case
             <$> readHost host
             <*> note "Invalid port number" (readMaybe port)
 
+-- | Show the 'NodeAddr' suitable for consumption by 'readNodeAddr'.
+showNodeAddr :: NodeAddr Maybe c -> String
+showNodeAddr NodeAddr { nodeHost, nodePort } =
+    toS $ case nodeHost of
+        NumericHost IPv6{} -> "[" <> renderHost nodeHost <> "]:" <> show nodePort
+        _                  -> renderHost nodeHost <> ":" <> show nodePort
 
 data Msg c tx s =
       BlockMsg (Block c tx s)

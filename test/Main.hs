@@ -24,6 +24,7 @@ import qualified Test.Oscoin.Crypto.Hash
 import qualified Test.Oscoin.Crypto.PubKey
 import qualified Test.Oscoin.Data.OscoinTx
 import qualified Test.Oscoin.Node.Mempool
+import qualified Test.Oscoin.Node.Options
 import qualified Test.Oscoin.Protocol
 import qualified Test.Oscoin.Storage.Block.Orphanage
 import qualified Test.Oscoin.Storage.Ledger
@@ -80,6 +81,7 @@ main = do
                 , Test.Oscoin.Crypto.PubKey.tests crypto
                 , Test.Oscoin.Data.OscoinTx.tests crypto
                 , Test.Oscoin.Node.Mempool.tests crypto
+                , Test.Oscoin.Node.Options.tests crypto
                 , Test.Oscoin.Protocol.tests crypto
                 , Test.Oscoin.Storage.Block.Orphanage.tests crypto
                 , Test.Oscoin.Storage.Ledger.tests crypto

@@ -15,7 +15,6 @@ import           Oscoin.Data.Tx
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
-import           Oscoin.Node.Options (Options(..))
 import qualified Oscoin.Node.Options as Node
 import           Oscoin.P2P (mkNodeId, runGossipT, withGossip)
 import qualified Oscoin.P2P as P2P
@@ -48,32 +47,50 @@ type GenesisBlock =
 main :: IO ()
 main = do
     cfgPaths <- getConfigPaths
-    Node.Options{..} <- execParser $
-        info (helper <*> Node.nodeOptionsParser cfgPaths)
-             (progDesc "Oscoin Node")
+    Node.Options
+        { optHost
+        , optGossipPort
+        , optApiPort
+        , optDiscovery
+        , optBlockTimeLower
+        , optPaths
+        , optEnvironment
+        , optMetricsHost
+        , optMetricsPort
+        , optEkgHost
+        , optEkgPort
+        , optAllowEphemeralKeys
+        } <-
+        execParser $
+            info (helper <*> Node.nodeOptionsParser cfgPaths)
+                 (progDesc "Oscoin Node")
 
-    keys         <-
-        flip runReaderT (Just (keysDir optPaths)) $
+    keys <-
+        flip runReaderT (Just $ keysDir optPaths) $
             catches readKeyPair
                 [ Handler $ \case
                     KeyNotFound{}
                       | optAllowEphemeralKeys -> liftIO Crypto.generateKeyPair
                     e                         -> throwM e
                 ]
-    nid          <- pure (mkNodeId $ fst keys)
-    mem          <- Mempool.newIO
-    gen          <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
+
+    nid <- pure (mkNodeId $ fst keys)
+    mem <- Mempool.newIO
+    gen <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
+
     metricsStore <-
-        newMetricsStore $
-            labelsFromList [("env", renderEnvironment optEnvironment)]
+        newMetricsStore $ labelsFromList
+            [("env", renderEnvironment optEnvironment)]
+
     let consensusConfig = Consensus.configForEnvironment optEnvironment
+    let logConfig       = Log.configForEnvironment optEnvironment
 
     optDiscovery' <-
         either (die . toS) pure =<< P2P.Disco.evalOptions optDiscovery
 
     res :: Either SomeException () <-
           try
-        $ withStdLogger (Log.configForEnvironment optEnvironment) $ \lgr ->
+        $ withStdLogger logConfig $ \lgr ->
           Log.withExceptionLogged lgr
         . runManaged
         $ do
@@ -84,17 +101,23 @@ main = do
             let consensus =
                     case optEnvironment of
                         Production  ->
-                            Consensus.nakamotoConsensus (Telemetry.probed probe)
+                            Consensus.nakamotoConsensus
+                                (Telemetry.probed probe)
                         Development ->
-                            Consensus.nakamotoConsensusLenient (Telemetry.probed probe) optBlockTimeLower
+                            Consensus.nakamotoConsensusLenient
+                                (Telemetry.probed probe)
+                                optBlockTimeLower
 
 
             blkStore <- managed $
-                BlockStore.SQLite.withBlockStore (blockstorePath optPaths) gen
+                BlockStore.SQLite.withBlockStore
+                    (blockstorePath optPaths)
+                    gen
             -- FIXME(adn) Replace with a proper evaluator & state once we switch to
             -- the OscoinTx type.
             let dummyEval _ s = Right ([], s)
-            ledger <- liftIO $ Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
+            ledger <- liftIO $
+                Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
 
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)
@@ -139,7 +162,8 @@ main = do
                            (Set.map (Nothing,) seeds)
                            (storage node)
                            (Handshake.secureHandshake
-                               keys (P2P.Disco.optNetwork optDiscovery'))
+                               keys
+                               (P2P.Disco.optNetwork optDiscovery'))
 
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)

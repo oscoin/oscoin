@@ -4,6 +4,7 @@ module Test.Oscoin.P2P.Gen
     , genHost
     , genHostname
     , genIP
+    , genPortNumber
     , genMsg
     , genMsgId
     )
@@ -27,6 +28,7 @@ import           Oscoin.P2P.Types
 
 import           Data.IP (IP(..), toIPv4, toIPv6)
 import qualified Data.Text as T
+import           Network.Socket (PortNumber)
 import           System.Random.SplitMix (mkSMGen)
 
 import           Oscoin.Test.Crypto
@@ -34,12 +36,12 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
-import           Hedgehog (Gen)
+import           Hedgehog (MonadGen)
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
 
-genNetwork :: Gen Network
+genNetwork :: MonadGen m => m Network
 genNetwork = Gen.choice
     [ pure Mainnet
     , pure Testnet
@@ -48,18 +50,18 @@ genNetwork = Gen.choice
     ]
 
 -- | Generate a random 'Somenet'
-genSomeNetwork :: Gen Network
+genSomeNetwork :: MonadGen m => m Network
 genSomeNetwork = do
     rng <- mkSMGen <$> Gen.word64 Range.linearBounded
     pure $ randomNetwork rng
 
-genHost :: Gen Host
+genHost :: MonadGen m => m Host
 genHost = Gen.choice
     [ numericHost <$> genIP
     , namedHost   <$> genHostname
     ]
 
-genHostname :: Gen Hostname
+genHostname :: MonadGen m => m Hostname
 genHostname = do
     hostname <-
         Gen.filter isRight $ do
@@ -75,19 +77,22 @@ genHostname = do
         Right x -> pure x
         Left  _ -> panic "Test.Oscoin.P2P.Gen: unexpected Left"
 
-genIP :: Gen IP
+genIP :: MonadGen m => m IP
 genIP = Gen.choice [ ipv4, ipv6 ]
   where
     ipv4 = IPv4 . toIPv4 <$> replicateM 4 (Gen.int (Range.constant 0 255))
     ipv6 = IPv6 . toIPv6 <$> replicateM 8 (Gen.int (Range.constant 0 65535))
 
-genMsg :: IsCrypto c => Gen (Msg c Text (Sealed c Text))
+genPortNumber :: MonadGen m => m PortNumber
+genPortNumber = fromIntegral <$> Gen.word16 Range.constantBounded
+
+genMsg :: (IsCrypto c, MonadGen m) => m (Msg c Text (Sealed c Text))
 genMsg = Gen.choice [ blkMsg, txMsg ]
   where
     blkMsg = BlockMsg <$> quickcheck genStandaloneBlock
     txMsg  = TxMsg    <$> Gen.text (Range.constant 0 512) Gen.unicodeAll
 
-genMsgId :: forall c. IsCrypto c => Gen (MsgId c Text)
+genMsgId :: forall c m. (IsCrypto c, MonadGen m) => m (MsgId c Text)
 genMsgId = Gen.choice [ blkMsgId, txMsgId ]
   where
     blkMsgId = BlockId . blockHash <$> quickcheck (genStandaloneBlock @c @Text @(Sealed c Text))

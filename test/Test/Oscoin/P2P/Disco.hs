@@ -168,7 +168,7 @@ haveIPv6 = do
     hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_ALL, AI_NUMERICHOST] }
 
 
-runDisco :: Options Network -> Set MDns.Service -> IO (Set SockAddr)
+runDisco :: Options c Network -> Set MDns.Service -> IO (Set SockAddr)
 runDisco opts srvs = withDisco (const $ pure ()) opts 6942 srvs identity
 
 runNameserver :: (PortNumber -> IO a) -> IO a

@@ -92,7 +92,7 @@ data DiscoEvent =
 --
 withDisco
     :: (HasCallStack => DiscoEvent -> IO ())
-    -> Options Network
+    -> Options crypto Network
     -> PortNumber
     -> Set MDns.Service
     -> (IO (Set SockAddr) -> IO a)
@@ -137,7 +137,8 @@ withDisco tracer opt defaultGossipPort !advertise k = do
                     resolveA tracer rslv nodeHost nodePort)
         <*> (Concurrently $
                 map (fromMaybe mempty) . for mrslv $ \r ->
-                    Set.fromList <$> resolveMDns tracer rslv r (optNetwork opt))
+                    Set.fromList <$>
+                        resolveMDns tracer rslv r (optNetwork opt))
         <*> (Concurrently $
                 map (fromMaybe mempty) . for goog $ \g -> do
                     -- TODO(kim): we may want to allow passing in the project

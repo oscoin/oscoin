@@ -7,6 +7,8 @@ module Oscoin.Configuration
 
     , Paths(..)
     , pathsParser
+    , pathsOpts
+    , renderPathsOpts
 
     , Environment(..)
     , allEnvironments
@@ -14,6 +16,8 @@ module Oscoin.Configuration
     , readEnvironment
     , readEnvironmentText
     , environmentParser
+    , environmentOpts
+    , renderEnvironmentOpts
 
     , Network(..)
     , allNetworks
@@ -23,8 +27,10 @@ module Oscoin.Configuration
 
 import           Oscoin.Prelude hiding (option, (<.>))
 
+import qualified Formatting as F
 import           Options.Applicative
 import           Paths_oscoin (getDataDir)
+import           System.Console.Option (Opt(Opt))
 import           System.Directory (XdgDirectory(..), getXdgDirectory)
 import           System.FilePath ((<.>), (</>))
 
@@ -32,7 +38,7 @@ data ConfigPaths = ConfigPaths
     { xdgConfigHome :: FilePath
     , xdgConfigData :: FilePath
     , dataDir       :: FilePath
-    }
+    } deriving Show
 
 getConfigPaths :: IO ConfigPaths
 getConfigPaths = ConfigPaths
@@ -53,7 +59,7 @@ data Paths = Paths
     -- ^ Path to the genesis YAML file.
     --
     -- Default: $oscoin_datadir/data/genesis.yaml
-    }
+    } deriving (Eq, Show, Generic)
 
 pathsParser :: ConfigPaths -> Parser Paths
 pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
@@ -81,6 +87,16 @@ pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
        <> value (dataDir </> "data" </> "genesis" <.> "yaml")
        <> showDefault
         )
+
+pathsOpts :: Paths -> [Opt Text]
+pathsOpts (Paths keysDir blockstorePath genesisPath) =
+    [ Opt "keys"       . toS $ keysDir
+    , Opt "blockstore" . toS $ blockstorePath
+    , Opt "genesis"    . toS $ genesisPath
+    ]
+
+renderPathsOpts :: Paths -> [Text]
+renderPathsOpts = map (F.sformat F.build) . pathsOpts
 
 -- | Deployment environment
 data Environment = Production | Development
@@ -110,6 +126,12 @@ environmentParser = option (eitherReader readEnvironment)
    <> value Development
    <> showDefaultWith (toS . renderEnvironment)
     )
+
+environmentOpts :: Environment -> [Opt Text]
+environmentOpts = pure . Opt "environment" . renderEnvironment
+
+renderEnvironmentOpts :: Environment -> [Text]
+renderEnvironmentOpts = map (F.sformat F.build) . environmentOpts
 
 -- | A logical oscoin network.
 data Network =

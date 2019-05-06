@@ -44,3 +44,7 @@
 - ignore: {name: Avoid reverse}
 - ignore: {name: Use print}
 - ignore: {name: Use camelCase}
+
+- ignore:
+    name: Avoid restricted qualification
+    within: [System.Console.Option]
