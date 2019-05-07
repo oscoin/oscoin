@@ -54,7 +54,7 @@ import           Formatting.Buildable (Buildable)
 import           Network.Socket (SockAddr, Socket)
 
 type Wire c =
-    Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer (NodeId c)))
+    Gossip.WireMessage (Gossip.Run.ProtocolMessage (Gossip.Peer (NodeInfo c)))
 
 instance ( Hashable (Crypto.PublicKey c)
          , Eq (Crypto.PublicKey c)
@@ -63,14 +63,14 @@ instance ( Hashable (Crypto.PublicKey c)
     length           = length . toStrict . CBOR.serialise
     withByteArray ba = withByteArray (toStrict $ CBOR.serialise ba)
 
-newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeId c)) m a)
+newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeInfo c)) m a)
     deriving ( Functor
              , Applicative
              , Alternative
              , Monad
              , MonadIO
              , MonadTrans
-             , MonadReader (Gossip.Run.Env (NodeId c))
+             , MonadReader (Gossip.Run.Env (NodeInfo c))
              , MonadThrow
              , MonadCatch
              , MonadMask
@@ -93,7 +93,7 @@ instance ( Hashable (Crypto.PublicKey c)
 
 instance MonadClock m => MonadClock (GossipT c m)
 
-runGossipT :: Gossip.Run.Env (NodeId c) -> GossipT c m a -> m a
+runGossipT :: Gossip.Run.Env (NodeInfo c) -> GossipT c m a -> m a
 runGossipT r (GossipT ma) = runReaderT ma r
 
 -- | Start listening to gossip and pass the gossip handle to the runner.
@@ -113,18 +113,18 @@ withGossip
        , Serialise (BlockHash c)
        )
     => Telemetry.Handle
-    -> SelfAddr c
-    -> Set (Maybe (NodeId c), SockAddr)
+    -> SelfInfo c
+    -> Set (Maybe (NodeInfo c), SockAddr)
     -> Storage c tx s IO
-    -> Handshake e (NodeId c) (Wire c) o
-    -> (Gossip.Run.Env (NodeId c) -> IO a)
+    -> Handshake e (NodeInfo c) (Wire c) o
+    -> (Gossip.Run.Env (NodeInfo c) -> IO a)
     -> IO a
 withGossip telemetryStore selfAddr peers Storage{..} handshake run = do
     self  <-
         Gossip.knownPeer
-            (runIdentity (nodeId selfAddr))
-            (hostToHostName (nodeHost selfAddr))
-            (nodePort selfAddr)
+            (runIdentity . bootNodeId $ selfAddr)
+            (hostToHostName . addrHost . bootGossipAddr $ selfAddr)
+            (addrPort . bootGossipAddr $ selfAddr)
 
     Gossip.Run.withGossip
         self
@@ -150,12 +150,12 @@ wrapHandshake
        , Buildable (Crypto.Hash c)
        )
     => Telemetry.Handle
-    -> Handshake e (NodeId c) (Wire c) o
+    -> Handshake e (NodeInfo c) (Wire c) o
     -> Gossip.Socket.HandshakeRole
     -> Socket
     -> SockAddr
-    -> Maybe (NodeId c)
-    -> IO (Gossip.Socket.Connection (NodeId c) (Wire c))
+    -> Maybe (NodeInfo c)
+    -> IO (Gossip.Socket.Connection (NodeInfo c) (Wire c))
 wrapHandshake telemetry handshake role sock addr psk = do
     hres <-
         runHandshakeT (Transport.framed sock) $
@@ -167,7 +167,7 @@ wrapHandshake telemetry handshake role sock addr psk = do
             throwM e
         Right r -> do
             let peer = Gossip.Peer
-                        { Gossip.peerNodeId = hrPeerId r
+                        { Gossip.peerNodeId = hrPeerInfo r
                         , Gossip.peerAddr   = addr
                         }
             emit telemetry . Telemetry.HandshakeEvent $ HandshakeComplete peer
@@ -297,8 +297,8 @@ getPeers
        , Hashable (Crypto.PublicKey c)
        , MonadIO m
        )
-    => Gossip.Run.Env (NodeId c)
-    -> m (HashSet (Gossip.Peer (NodeId c)))
+    => Gossip.Run.Env (NodeInfo c)
+    -> m (HashSet (Gossip.Peer (NodeInfo c)))
 getPeers = liftIO . Gossip.Run.getPeers
 
 getPeers'
@@ -306,6 +306,6 @@ getPeers'
        , Hashable (Crypto.PublicKey c)
        , MonadIO m
        )
-    => Gossip.Run.Env (NodeId c)
-    -> m (Membership.Peers (Gossip.Peer (NodeId c)))
+    => Gossip.Run.Env (NodeInfo c)
+    -> m (Membership.Peers (Gossip.Peer (NodeInfo c)))
 getPeers' = liftIO . Gossip.Run.getPeers'

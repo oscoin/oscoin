@@ -204,7 +204,7 @@ mkResult peerId conv nst = do
         Transport.framedEnvelope (noiseSend peerId conv ref)
                                  (noiseRecv peerId conv ref')
     pure HandshakeResult
-        { hrPeerId   = peerId
+        { hrPeerInfo = peerId
         , hrPreSend  = noiseSend peerId conv ref
         , hrPostRecv = noiseRecv peerId conv ref'
         }

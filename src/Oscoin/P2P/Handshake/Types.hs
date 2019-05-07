@@ -12,6 +12,7 @@ module Oscoin.P2P.Handshake.Types
     , HandshakeResult (..)
     , mapInput
     , mapOutput
+    , mapInfo
     )
 where
 
@@ -64,7 +65,7 @@ modifyTransport
 modifyTransport f = HandshakeT $ modify' f
 
 data HandshakeResult i o n = HandshakeResult
-    { hrPeerId   :: n
+    { hrPeerInfo :: n
     , hrPreSend  :: i -> IO o
     , hrPostRecv :: o -> IO i
     } deriving Functor
@@ -88,3 +89,9 @@ mapOutput f g hr = hr
     { hrPreSend  = hrPreSend hr >=> f
     , hrPostRecv = g >=> hrPostRecv hr
     }
+
+mapInfo
+    :: (n  -> n')
+    -> HandshakeResult i o n
+    -> HandshakeResult i o n'
+mapInfo = map

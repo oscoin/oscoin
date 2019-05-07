@@ -153,16 +153,21 @@ main = do
                             ]
 
             seeds  <- liftIO disco
+            let myHost     = P2P.numericHost optHost
+            let myApiInfo  = P2P.mkAddr myHost optApiPort
+            let myNodeInfo = P2P.mkNodeInfo myApiInfo nid
             gossip <- managed $
                 withGossip telemetry
-                           P2P.NodeAddr { P2P.nodeId   = pure nid
-                                        , P2P.nodeHost = P2P.numericHost optHost
-                                        , P2P.nodePort = optGossipPort
-                                        }
+                           P2P.BootstrapInfo
+                               { P2P.bootNodeId      = pure myNodeInfo
+                               , P2P.bootHttpApiAddr = pure myApiInfo
+                               , P2P.bootGossipAddr  = P2P.mkAddr myHost optGossipPort
+                               }
                            (Set.map (Nothing,) seeds)
                            (storage node)
                            (Handshake.secureHandshake
                                keys
+                               myApiInfo
                                (P2P.Disco.optNetwork optDiscovery'))
 
             liftIO . runConcurrently $

@@ -3,16 +3,17 @@ module Test.Oscoin.P2P.Types (tests , props) where
 import           Oscoin.Prelude
 
 import           Oscoin.P2P.Types
-                 ( MsgId
-                 , NodeAddr(..)
+                 ( BootstrapInfo(..)
+                 , MsgId
                  , domainToHostname
                  , hostToEither
                  , hostnameToDomain
+                 , mkAddr
                  , randomNetwork
+                 , readBootstrapInfo
                  , readHost
                  , readHostnameText
                  , readNetworkText
-                 , readNodeAddr
                  , renderHost
                  , renderHostname
                  , renderNetwork
@@ -47,24 +48,24 @@ tests d = testGroup "Test.Oscoin.P2P.Types"
     , testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
     , testProperty "prop_roundtripHostnameStringly" prop_roundtripHostnameStringly
     , testProperty "prop_roundtripHostnameDomain"   prop_roundtripHostnameDomain
-    , testProperty "prop_readNodeAddr"              (prop_readNodeAddr d)
-    , testProperty "prop_roundtripShowReadNodeAddr" (prop_roundtripShowReadNodeAddr d)
+    , testProperty "prop_roundtripShowReadBoostrapInfo" (prop_roundtripShowReadBoostrapInfo d)
+    , testProperty "prop_readBootstrapInfo"         (prop_readBootstrapInfo d)
     , testProperty "prop_roundtripMsgSerialise"     (prop_roundtripMsgSerialise d)
     , testProperty "prop_roundtripMsgIdSerialise"   (prop_roundtripMsgIdSerialise d)
     ]
 
 props :: Dict (IsCrypto c) -> IO Bool
 props d = checkParallel $ Group "Test.Oscoin.P2P.Types"
-    [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly   )
-    , ("prop_randomNetworkValid"       , prop_randomNetworkValid         )
-    , ("prop_roundtripNetworkSerialise", prop_roundtripNetworkSerialise  )
-    , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly      )
-    , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly  )
-    , ("prop_roundtripHostnameDomain"  , prop_roundtripHostnameDomain    )
-    , ("prop_readNodeAddr"             , prop_readNodeAddr d             )
-    , ("prop_roundtripShowReadNodeAddr", prop_roundtripShowReadNodeAddr d)
-    , ("prop_roundtripMsgSerialise"    , prop_roundtripMsgSerialise d    )
-    , ("prop_roundtripMsgIdSerialise"  , prop_roundtripMsgIdSerialise d  )
+    [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly )
+    , ("prop_randomNetworkValid"       , prop_randomNetworkValid       )
+    , ("prop_roundtripNetworkSerialise", prop_roundtripNetworkSerialise)
+    , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
+    , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly)
+    , ("prop_roundtripHostnameDomain"  , prop_roundtripHostnameDomain  )
+    , ("prop_readBootstrapInfo"        , prop_readBootstrapInfo d      )
+    , ("prop_roundtripShowReadBoostrapInfo", prop_roundtripShowReadBoostrapInfo d)
+    , ("prop_roundtripMsgSerialise"    , prop_roundtripMsgSerialise d  )
+    , ("prop_roundtripMsgIdSerialise"  , prop_roundtripMsgIdSerialise d)
     ]
 
 prop_roundtripNetworkStringly :: Property
@@ -97,8 +98,8 @@ prop_roundtripHostnameDomain = property $ do
     name <- forAll genHostname
     tripping name hostnameToDomain domainToHostname
 
-prop_readNodeAddr :: forall c. Dict (IsCrypto c) -> Property
-prop_readNodeAddr Dict = property $ do
+prop_readBootstrapInfo :: forall c. Dict (IsCrypto c) -> Property
+prop_readBootstrapInfo Dict = property $ do
     host <- forAll genHost
     port <- forAll genPortNumber
     case hostToEither host of
@@ -107,17 +108,17 @@ prop_readNodeAddr Dict = property $ do
                 valid   = '[' : show ip <> "]:" <> show port
                 invalid = show ip <> ":" <> show port
              in do
-                readNodeAddr @c valid === Right (NodeAddr Nothing host port)
-                assert $ isLeft (readNodeAddr @c invalid)
+                readBootstrapInfo @c valid === Right (BootstrapInfo Nothing Nothing (mkAddr host port))
+                assert $ isLeft (readBootstrapInfo @c invalid)
 
         _ ->
             let
                 valid = toS (renderHost host) <> ":" <> show port
              in
-                readNodeAddr @c valid === Right (NodeAddr Nothing host port)
+                readBootstrapInfo @c valid === Right (BootstrapInfo Nothing Nothing (mkAddr host port))
 
-prop_roundtripShowReadNodeAddr :: forall c. Dict (IsCrypto c) -> Property
-prop_roundtripShowReadNodeAddr Dict = property $ do
+prop_roundtripShowReadBoostrapInfo :: forall c. Dict (IsCrypto c) -> Property
+prop_roundtripShowReadBoostrapInfo Dict = property $ do
     addr <- forAll $ NodeAddr Nothing <$> genHost <*> genPortNumber
     tripping addr showNodeAddr (readNodeAddr @c)
 

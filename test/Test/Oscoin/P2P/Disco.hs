@@ -8,7 +8,7 @@ import           Oscoin.Prelude hiding (retry)
 
 import           Oscoin.P2P.Disco (Options(..), withDisco)
 import qualified Oscoin.P2P.Disco.MDns as MDns
-import           Oscoin.P2P.Types (Network, readNodeAddr)
+import           Oscoin.P2P.Types (Network, readBootstrapInfo)
 
 import           Control.Retry
 import qualified Data.Set as Set
@@ -92,7 +92,7 @@ runPropMulticast net =
 prop_staticPeers :: Property
 prop_staticPeers = withTests 1 . property $ do
     net   <- forAll $ Gen.prune genSomeNetwork
-    seeds <- for seedAddrs (either (const failure) pure . readNodeAddr)
+    seeds <- for seedAddrs (either (const failure) pure . readBootstrapInfo)
     found <-
         evalIO . runNameserver $ \port ->
             let
