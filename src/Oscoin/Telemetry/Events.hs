@@ -102,11 +102,11 @@ data NotableEvent where
     HttpApiRequest :: HTTP.Request -> HTTP.Status -> Duration -> NotableEvent
     -- | Events emitted by the @gossip@ library
     GossipEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
-                => Gossip.Traceable (P2P.NodeId c)
+                => Gossip.Traceable (P2P.NodeInfo c)
                 -> NotableEvent
     -- | Events emitted during the p2p handshake phase
     HandshakeEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
-                   => P2P.HandshakeEvent (P2P.NodeId c)
+                   => P2P.HandshakeEvent (P2P.NodeInfo c)
                    -> NotableEvent
     -- | Peer discovery discovery events
     DiscoEvent :: P2P.Disco.DiscoEvent -> NotableEvent

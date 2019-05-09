@@ -21,13 +21,13 @@ import qualified Oscoin.Configuration as Global
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.P2P.Types
                  ( Network(..)
-                 , SeedAddr
+                 , SeedInfo
                  , pattern Somenet
                  , randomNetwork
+                 , readBootstrapInfo
                  , readNetwork
-                 , readNodeAddr
                  , renderNetwork
-                 , showNodeAddr
+                 , showBootstrapInfo
                  )
 
 import qualified Data.Text as T
@@ -43,7 +43,7 @@ import           Text.Show (Show(..))
 
 data Options crypto network = Options
     { optNetwork    :: network
-    , optSeeds      :: [SeedAddr crypto]
+    , optSeeds      :: [SeedInfo crypto]
     , optSDDomains  :: [HostName]
     , optEnableMDns :: Bool
     , optEnableGCE  :: Bool
@@ -126,7 +126,7 @@ discoParser = Options
        <> showDefaultWith showOptNetwork
         )
     <*> many
-        ( option (eitherReader readNodeAddr)
+        ( option (eitherReader readBootstrapInfo)
             ( long "seed"
            <> helpDoc
                ( unChunk $ vsepChunks
@@ -196,7 +196,7 @@ discoOpts
         optEnableGCE
         _optNameserver) = concat
     [ fromMaybe [] . map (pure . Opt "network") . renderNetwork' $ optNetwork
-    , map (Opt "seed" . toS . showNodeAddr) optSeeds
+    , map (Opt "seed" . toS . showBootstrapInfo) optSeeds
     , map (Opt "sd-domain" . toS) optSDDomains
     , bool [] (pure (Flag "enable-mdns"))   optEnableMDns
     , bool [] (pure (Flag "enable-gce-sd")) optEnableGCE

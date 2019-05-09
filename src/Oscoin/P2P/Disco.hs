@@ -44,9 +44,11 @@ import qualified Oscoin.P2P.Disco.GCE as GCE
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import           Oscoin.P2P.Disco.Options
 import           Oscoin.P2P.Types
-                 ( Host
+                 ( BootstrapInfo(..)
+                 , Host
                  , Network
-                 , NodeAddr(..)
+                 , addrHost
+                 , addrPort
                  , hostEither
                  , hostnameToDomain
                  , namedHost
@@ -133,8 +135,8 @@ withDisco tracer opt defaultGossipPort !advertise k = do
         <*> (Concurrently
                 . map Set.fromList
                 . flip concatMapM (optSeeds opt)
-                $ \NodeAddr { nodeHost, nodePort } ->
-                    resolveA tracer rslv nodeHost nodePort)
+                $ \BootstrapInfo { bootGossipAddr } ->
+                    resolveA tracer rslv (addrHost bootGossipAddr) (addrPort bootGossipAddr))
         <*> (Concurrently $
                 map (fromMaybe mempty) . for mrslv $ \r ->
                     Set.fromList <$>

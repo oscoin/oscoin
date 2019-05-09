@@ -7,6 +7,9 @@ module Test.Oscoin.P2P.Gen
     , genPortNumber
     , genMsg
     , genMsgId
+    , genKeyPair
+    , genAddr
+    , genNodeInfo
     )
 where
 
@@ -14,12 +17,19 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (Sealed, blockHash)
 import           Oscoin.Crypto.Hash (hash)
+import           Oscoin.Crypto.PubKey
+                 (HasDigitalSignature, KeyPair, PrivateKey, PublicKey)
 import           Oscoin.P2P.Types
-                 ( Host
+                 ( Addr
+                 , Host
                  , Hostname
                  , Msg(..)
                  , MsgId(..)
                  , Network(Devnet, Mainnet, Testnet)
+                 , NodeInfo
+                 , mkAddr
+                 , mkNodeId
+                 , mkNodeInfo
                  , namedHost
                  , numericHost
                  , randomNetwork
@@ -34,9 +44,12 @@ import           System.Random.SplitMix (mkSMGen)
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
 import           Oscoin.Test.Data.Tx.Arbitrary ()
+import           Oscoin.Test.Util (Condensed, condensedS)
 
-import           Hedgehog (MonadGen)
+import           Hedgehog
+                 (Gen, MonadGen, PropertyT, annotate, failure, forAllWith)
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
@@ -97,3 +110,29 @@ genMsgId = Gen.choice [ blkMsgId, txMsgId ]
   where
     blkMsgId = BlockId . blockHash <$> quickcheck (genStandaloneBlock @c @Text @(Sealed c Text))
     txMsgId  = TxId    . hash      <$> Gen.text (Range.constant 0 512) Gen.unicodeAll
+
+genKeyPair
+    :: forall c.
+    ( HasHashing            c
+    , HasDigitalSignature   c
+    , Condensed (PublicKey  c)
+    , Condensed (PrivateKey c)
+    )
+    => PropertyT IO (KeyPair c)
+genKeyPair =
+    forAllWith condensedS (quickcheck (arbitraryKeyPairs @c 1)) >>= \case
+        [a] -> pure a
+        x   -> annotate (condensedS x) *> failure
+
+genAddr
+    :: Gen Addr
+genAddr = do
+    host <- genHost
+    port <- fromIntegral <$> Gen.word16 Range.constantBounded
+    pure $ mkAddr host port
+
+genNodeInfo :: PublicKey c -> Gen (NodeInfo c)
+genNodeInfo pk = do
+    apiAddr <- genAddr
+    pure $ mkNodeInfo apiAddr (mkNodeId pk)
+

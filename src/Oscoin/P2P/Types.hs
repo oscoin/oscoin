@@ -1,4 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Oscoin.P2P.Types
     ( Network(Mainnet, Testnet, Devnet)
@@ -12,6 +13,16 @@ module Oscoin.P2P.Types
     , NodeId
     , mkNodeId
     , fromNodeId
+
+    , NodeInfo
+    , mkNodeInfo
+    , nodeHttpApiAddr
+    , nodeNodeId
+
+    , Addr
+    , mkAddr
+    , addrHost
+    , addrPort
 
     , Host
     , numericHost
@@ -29,11 +40,11 @@ module Oscoin.P2P.Types
     , hostnameToDomain
     , domainToHostname
 
-    , SelfAddr
-    , SeedAddr
-    , NodeAddr(..)
-    , readNodeAddr
-    , showNodeAddr
+    , SelfInfo
+    , SeedInfo
+    , BootstrapInfo(..)
+    , readBootstrapInfo
+    , showBootstrapInfo
 
     , Msg(..)
     , MsgId(..)
@@ -176,10 +187,85 @@ instance (Serialise (PublicKey c))          => Serialise (NodeId c)
 mkNodeId :: PublicKey c -> NodeId c
 mkNodeId = NodeId
 
+data Addr = Addr
+    { addrHost :: Host
+    , addrPort :: PortNumber
+    } deriving (Show, Eq, Ord)
+
+mkAddr :: Host -> PortNumber -> Addr
+mkAddr = Addr
+
+instance Hashable Addr where
+    hashWithSalt s Addr{..} =
+        hashWithSalt  s (renderHost addrHost)
+        `hashWithSalt`  fromEnum addrPort
+
+instance Serialise Addr where
+    encode Addr{..} =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord 0
+        <> CBOR.encode addrHost
+        <> CBOR.encode (fromEnum addrPort)
+    decode = do
+        CBOR.decodeListLenOf 3
+        tag <- CBOR.decodeWord
+        case tag of
+            0 -> Addr <$> CBOR.decode
+                             <*> map toEnum CBOR.decode
+            _ ->
+                fail "Error decoding Addr: unknown tag"
+
+data NodeInfo c = NodeInfo
+    { nodeHttpApiAddr :: Addr
+    , nodeNodeId      :: NodeId c
+    } deriving (Generic)
+
+deriving instance Show (NodeId c) => Show (NodeInfo c)
+deriving instance Eq (NodeId c)  => Eq (NodeInfo c)
+deriving instance Ord (NodeId c) => Ord (NodeInfo c)
+
+instance Hashable (NodeId c) => Hashable (NodeInfo c) where
+    hashWithSalt s NodeInfo{..} =
+        hashWithSalt s nodeNodeId `hashWithSalt` nodeHttpApiAddr
+
+instance (Serialise (NodeId c)) => Serialise (NodeInfo c) where
+    encode NodeInfo{..} =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord 0
+        <> CBOR.encode nodeHttpApiAddr
+        <> CBOR.encode nodeNodeId
+    decode = do
+        CBOR.decodeListLenOf 3
+        tag <- CBOR.decodeWord
+        case tag of
+            0 -> NodeInfo <$> CBOR.decode
+                          <*> CBOR.decode
+            _ ->
+                fail "Error decoding NodeInfo: unknown tag"
+
+mkNodeInfo :: Addr -> NodeId c -> NodeInfo c
+mkNodeInfo = NodeInfo
 
 -- | A host address either as an IP address or 'Hostname'
 data Host = NumericHost IP | NamedHost Hostname
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic)
+
+instance Serialise Host where
+    encode h =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 0
+        <> CBOR.encode (renderHost h)
+    decode = do
+        CBOR.decodeListLenOf 2
+        tag <- CBOR.decodeWord
+        case tag of
+            0 -> do
+                stringyHost <- CBOR.decode
+                case readHost stringyHost of
+                  Left e  -> fail ("Error decoding Host: " <> e)
+                  Right h -> pure h
+            _ ->
+                fail "Error decoding Host: unknown tag"
 
 numericHost :: IP -> Host
 numericHost = NumericHost
@@ -224,7 +310,9 @@ hostToHostName = \case
 -- would need to be passed punycode-encoded to 'readHostnameText'.
 --
 newtype Hostname = Hostname (Vector Text)
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic)
+
+instance Serialise Hostname
 
 renderHostname :: Hostname -> Text
 renderHostname (Hostname labels) =
@@ -256,22 +344,31 @@ domainToHostname :: DNS.Domain -> Either String Hostname
 domainToHostname = readHostnameText . toS
 
 
--- | 'NodeAddr' of this node. Must specify a 'NodeId'.
-type SelfAddr = NodeAddr Identity
+-- | 'BootstrapInfo' of the current node.
+--
+-- Must include the 'NodeId' and HTTP API 'Addr'.
+type SelfInfo = BootstrapInfo Identity
 
--- | 'NodeAddr' of a seed node. May specify a 'NodeId'.
-type SeedAddr = NodeAddr Maybe
+-- | 'BootstrapInfo' of a seed node discovered via "Oscoin.P2P.Disco".
+--
+-- Must include the gossip 'Addr', and may include the 'NodeId' and
+-- HTTP API 'Addr'.
+type SeedInfo = BootstrapInfo Maybe
 
-data NodeAddr f c = NodeAddr
-    { nodeId   :: f (NodeId c)
-    , nodeHost :: Host
-    , nodePort :: PortNumber
+data BootstrapInfo f c = BootstrapInfo
+    { bootNodeId      :: f (NodeInfo c)
+    , bootHttpApiAddr :: f Addr
+    , bootGossipAddr  ::   Addr
     }
 
-deriving instance Eq   (f (NodeId c)) => Eq   (NodeAddr f c)
-deriving instance Show (f (NodeId c)) => Show (NodeAddr f c)
+deriving instance ( Eq (f (NodeInfo c))
+                  , Eq (f Addr)
+                  ) => Eq   (BootstrapInfo f c)
+deriving instance ( Show (f (NodeInfo c))
+                  , Show (f Addr)
+                  ) => Show (BootstrapInfo f c)
 
--- | Read a 'NodeAddr Maybe' from a 'String'. For use in CLI parsers.
+-- | Read a 'BootstrapInfo Maybe' from a 'String'. For use in CLI parsers.
 --
 -- The 'NodeId' is always 'Nothing'.
 --
@@ -280,25 +377,26 @@ deriving instance Show (f (NodeId c)) => Show (NodeAddr f c)
 -- enclosed in square brackets as per <https://tools.ietf.org/html/rfc3986#section-3.2.2 RFC 3986, Section 3.2.2>
 -- in order to delimit it from the port number.
 --
-readNodeAddr :: String -> Either String (NodeAddr Maybe c)
-readNodeAddr = \case
+readBootstrapInfo :: String -> Either String (BootstrapInfo Maybe c)
+readBootstrapInfo = \case
     ('[' : more) ->
         case break (== ']') more of
             (xs, ']' : ':' : rest) -> go xs rest
             _                      -> Left "Unmatched '[' when reading IPv6"
     xs           -> uncurry go . second (dropWhile (== ':')) $ break (== ':') xs
   where
-    go host port =
-        NodeAddr Nothing
-            <$> readHost host
-            <*> note "Invalid port number" (readMaybe port)
+    go :: String -> String -> Either String (BootstrapInfo Maybe c)
+    go host port = do
+        h <- readHost host
+        p <- note "Invalid port number" (readMaybe port)
+        pure $ BootstrapInfo Nothing Nothing (Addr h p)
 
 -- | Show the 'NodeAddr' suitable for consumption by 'readNodeAddr'.
-showNodeAddr :: NodeAddr Maybe c -> String
-showNodeAddr NodeAddr { nodeHost, nodePort } =
-    toS $ case nodeHost of
-        NumericHost IPv6{} -> "[" <> renderHost nodeHost <> "]:" <> show nodePort
-        _                  -> renderHost nodeHost <> ":" <> show nodePort
+showBootstrapInfo :: BootstrapInfo Maybe c -> String
+showBootstrapInfo BootstrapInfo { bootGossipAddr } =
+    toS $ case addrHost bootGossipAddr of
+        NumericHost IPv6{} -> "[" <> renderHost (addrHost bootGossipAddr) <> "]:" <> show (addrPort bootGossipAddr)
+        _                  -> renderHost (addrHost bootGossipAddr) <> ":" <> show (addrPort bootGossipAddr)
 
 data Msg c tx s =
       BlockMsg (Block c tx s)

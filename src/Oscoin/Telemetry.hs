@@ -192,17 +192,17 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                     Log.infoM "bootstrapped" fmtPeer self
 
             Gossip.TraceConnection e -> case e of
-                Gossip.Connecting addr mnid ->
+                Gossip.Connecting addr minfo ->
                     Log.infoM "connecting"
                         ( ftag "addr" % fmtSockAddr
                         % " "
                         % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
                         )
                         addr
-                        mnid
+                        (map P2P.nodeNodeId minfo)
                 Gossip.Connected peer ->
                     Log.infoM "connected" fmtPeer peer
-                Gossip.ConnectFailed addr mnid ex ->
+                Gossip.ConnectFailed addr minfo ex ->
                     Log.errM "failed to connect"
                              ( ftag "addr" % fmtSockAddr
                              % " "
@@ -211,7 +211,7 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                              % fexception
                              )
                              addr
-                             mnid
+                             (map P2P.nodeNodeId minfo)
                              ex
                 Gossip.ConnectionLost peer ex ->
                     Log.infoM "connection reset by peer"
@@ -570,11 +570,11 @@ fmtPeer
        ( Crypto.Hashable c (PublicKey c)
        , Buildable (Crypto.Hash c)
        )
-    => Format r (Gossip.Peer (P2P.NodeId c) -> r)
+    => Format r (Gossip.Peer (P2P.NodeInfo c) -> r)
 fmtPeer =
        mapf Gossip.peerAddr   (ftag "peer_addr"   % fmtSockAddr)
      % " "
-    <> mapf Gossip.peerNodeId (ftag "peer_nodeid" % fmtNodeId @c)
+    <> mapf (P2P.nodeNodeId . Gossip.peerNodeId) (ftag "peer_nodeid" % fmtNodeId @c)
 
 {------------------------------------------------------------------------------
   Labels

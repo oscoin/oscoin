@@ -10,9 +10,10 @@ import           Oscoin.Prelude
 import           Oscoin.P2P.Disco.Options
                  (OptNetwork(..), Options(..), evalYesNo)
 import           Oscoin.P2P.Types
-                 ( Network(..)
-                 , NodeAddr(..)
-                 , SeedAddr
+                 ( BootstrapInfo(..)
+                 , Network(..)
+                 , SeedInfo
+                 , mkAddr
                  , renderHostname
                  , renderNetwork
                  )
@@ -43,5 +44,7 @@ genOptNetwork = Gen.choice [confirm, noConfirm, pure Random]
     noConfirm =
         NoConfirm <$> Gen.choice [genSomeNetwork, pure Devnet]
 
-genSeed :: MonadGen m => m (SeedAddr c)
-genSeed = NodeAddr Nothing <$> genHost <*> genPortNumber
+genSeed :: MonadGen m => m (SeedInfo c)
+genSeed = do
+    h <- genHost
+    BootstrapInfo Nothing Nothing . mkAddr h <$> genPortNumber

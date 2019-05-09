@@ -2,6 +2,7 @@
 module Oscoin.P2P.Handshake.Simple
     ( SimpleError (..)
     , keyExchange
+    , infoExchange
     -- * Combinators
     , signedPayloads
     , whitelist
@@ -25,14 +26,14 @@ import           Data.ByteArray (ByteArrayAccess)
 import           Data.ByteArray.Orphans ()
 
 
-data HandshakeMessage c =
-      Hai (Crypto.PublicKey c) Network
-    -- ^ Present a pubkey and network name.
+data HandshakeMessage payload =
+      Hai payload Network
+    -- ^ Present some payload and network name.
     | Bai SimpleError
     -- ^ At any point, either side may bail out.
     deriving (Generic)
 
-instance Serialise (Crypto.PublicKey c) => Serialise (HandshakeMessage c)
+instance Serialise payload => Serialise (HandshakeMessage payload)
 
 data SimpleError =
       InvalidSignature
@@ -65,17 +66,30 @@ keyExchange
     => Crypto.KeyPair c
     -> Network
     -> Handshake SimpleError (Crypto.PublicKey c) p p
-keyExchange (myPK, mySK) net _role peerId = do
-    handshakeSend $ Hai myPK net
+keyExchange (myPK, mySK) net role peerId = do
+    hr <- infoExchange myPK net role peerId
+    modifyTransport $
+        Transport.framedEnvelope (sign mySK) (verify (hrPeerInfo hr))
+    pure hr
+
+-- | Exchanges some generic (serializable) infos over the wire.
+infoExchange
+    :: forall info p.
+       ( Serialise info
+       , Eq info
+       )
+    => info
+    -> Network
+    -> Handshake SimpleError info p p
+infoExchange info net _role peerId = do
+    handshakeSend $ Hai info net
     hai <- handshakeRecv mapRecvError
     case hai of
         Bai err              -> throwError err
-        Hai theirPK theirNet | net /= theirNet -> throwError NetworkMismatch
-                             | otherwise       -> do
-            modifyTransport $
-                Transport.framedEnvelope (sign mySK) (verify theirPK)
-            guardPeerId (Proxy @c) peerId  HandshakeResult
-                { hrPeerId   = theirPK
+        Hai theirInfo theirNet | net /= theirNet -> throwError NetworkMismatch
+                               | otherwise       ->
+            guardPeerId (Proxy @info) peerId  HandshakeResult
+                { hrPeerInfo = theirInfo
                 , hrPreSend  = idM
                 , hrPostRecv = idM
                 }
@@ -89,21 +103,21 @@ signedPayloads
     => Crypto.PrivateKey c
     -> HandshakeResult i o                   (Crypto.PublicKey c)
     -> HandshakeResult i (Crypto.Signed c o) (Crypto.PublicKey c)
-signedPayloads sk hr = mapOutput (sign sk) (verify (hrPeerId hr)) hr
+signedPayloads sk hr = mapOutput (sign sk) (verify (hrPeerInfo hr)) hr
 
--- | Transform a 'Handshake' with a lookup action for the obtained 'hrPeerId'.
+-- | Transform a 'Handshake' with a lookup action for the obtained 'hrPeerInfo'.
 --
--- If the 'hrPeerId' is not found by the lookup action (ie. it returns 'IO
+-- If the 'hrPeerInfo' is not found by the lookup action (ie. it returns 'IO
 -- False'), the handshake is aborted with 'Unauthorized'.
 whitelist
-    :: forall i o n c proxy. (Eq n, Serialise (Crypto.PublicKey c))
-    => proxy c
+    :: forall i o n payload proxy. (Eq n, Serialise payload)
+    => proxy payload
     -> (n -> IO Bool) -- ^ 'True' if this peer id is granted access, 'False' otherwise
     -> Handshake SimpleError n i o
     -> Handshake SimpleError n i o
 whitelist p acl f role peerId = do
     res <- f role peerId
-    ok  <- lift $ acl (hrPeerId res)
+    ok  <- lift $ acl (hrPeerInfo res)
     if ok then guardPeerId p peerId res else throwError Unauthorized
 
 --------------------------------------------------------------------------------
@@ -115,24 +129,24 @@ mapRecvError = \case
     Transport.RecvConnReset -> Gone
 
 guardResult
-    :: forall i o n c proxy. Serialise (Crypto.PublicKey c)
-    => proxy c
+    :: forall i o n payload proxy. Serialise payload
+    => proxy payload
     -> (HandshakeResult i o n -> Bool)
     -> SimpleError
     -> HandshakeResult i o n
     -> HandshakeT SimpleError IO (HandshakeResult i o n)
 guardResult _ predicate e res
-  | predicate res = handshakeSend (Bai e :: HandshakeMessage c) *> throwError e
+  | predicate res = handshakeSend (Bai e :: HandshakeMessage payload) *> throwError e
   | otherwise     = pure res
 
 peerIdMatch :: Eq n => n -> HandshakeResult i o n -> Bool
-peerIdMatch peerId res = peerId == hrPeerId res
+peerIdMatch peerId res = peerId == hrPeerInfo res
 
 -- | If the given peer id is 'Just n', assert that 'n' is the same has
--- 'hrPeerId' of the 'HandshakeResult'.
+-- 'hrPeerInfo' of the 'HandshakeResult'.
 guardPeerId
-    :: forall i o n c proxy. (Eq n, Serialise (Crypto.PublicKey c))
-    => proxy c
+    :: forall i o n payload proxy. (Eq n, Serialise payload)
+    => proxy payload
     -> Maybe n
     -> HandshakeResult i o n
     -> HandshakeT SimpleError IO (HandshakeResult i o n)
@@ -141,11 +155,11 @@ guardPeerId proxy peerId =
                 (maybe (const False) (\pid -> not . peerIdMatch pid) peerId)
                 IdMismatch
 
--- | Assert that the given peer id 'n' is /not/ the same as 'hrPeerId' of the
+-- | Assert that the given peer id 'n' is /not/ the same as 'hrPeerInfo' of the
 -- 'HandshakeResult'.
 guardPeerIdNot
-    :: forall i o n c proxy. (Eq n, (Serialise (Crypto.PublicKey c)))
-    => proxy c
+    :: forall i o n payload proxy. (Eq n, Serialise payload)
+    => proxy payload
     -> n
     -> HandshakeResult i o n
     -> HandshakeT SimpleError IO (HandshakeResult i o n)
