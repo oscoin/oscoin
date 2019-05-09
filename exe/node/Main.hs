@@ -168,7 +168,7 @@ main = do
                            (storage node)
                            (Handshake.secureHandshake
                                mySK
-                               myApiInfo
+                               myNodeInfo
                                (P2P.Disco.optNetwork optDiscovery'))
 
             liftIO . runConcurrently $

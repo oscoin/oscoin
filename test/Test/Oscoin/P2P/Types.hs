@@ -3,8 +3,11 @@ module Test.Oscoin.P2P.Types (tests , props) where
 import           Oscoin.Prelude
 
 import           Oscoin.P2P.Types
-                 ( BootstrapInfo(..)
+                 ( Addr
+                 , BootstrapInfo(..)
+                 , Host
                  , MsgId
+                 , NodeInfo
                  , domainToHostname
                  , hostToEither
                  , hostnameToDomain
@@ -17,7 +20,7 @@ import           Oscoin.P2P.Types
                  , renderHost
                  , renderHostname
                  , renderNetwork
-                 , showNodeAddr
+                 , showBootstrapInfo
                  )
 
 import           Codec.Serialise (deserialiseOrFail, serialise)
@@ -25,12 +28,16 @@ import           Data.IP (IP(IPv6))
 import           System.Random.SplitMix (mkSMGen)
 
 import           Oscoin.Test.Crypto
+import           Test.Oscoin.P2P.Disco.Options.Gen (genSeed)
 import           Test.Oscoin.P2P.Gen
-                 ( genHost
+                 ( genAddr
+                 , genHost
                  , genHostname
+                 , genKeyPair
                  , genMsg
                  , genMsgId
                  , genNetwork
+                 , genNodeInfo
                  , genPortNumber
                  )
 
@@ -42,30 +49,36 @@ import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.P2P.Types"
-    [ testProperty "prop_roundtripNetworkStringly"  prop_roundtripNetworkStringly
-    , testProperty "prop_randomNetworkValid"        prop_randomNetworkValid
-    , testProperty "prop_roundtripNetworkSerialise" prop_roundtripNetworkSerialise
-    , testProperty "prop_roundtripHostStringly"     prop_roundtripHostStringly
-    , testProperty "prop_roundtripHostnameStringly" prop_roundtripHostnameStringly
-    , testProperty "prop_roundtripHostnameDomain"   prop_roundtripHostnameDomain
+    [ testProperty "prop_roundtripNetworkStringly"    prop_roundtripNetworkStringly
+    , testProperty "prop_randomNetworkValid"          prop_randomNetworkValid
+    , testProperty "prop_roundtripNetworkSerialise"   prop_roundtripNetworkSerialise
+    , testProperty "prop_roundtripHostStringly"       prop_roundtripHostStringly
+    , testProperty "prop_roundtripHostnameStringly"   prop_roundtripHostnameStringly
+    , testProperty "prop_roundtripHostnameDomain"     prop_roundtripHostnameDomain
+    , testProperty "prop_readBootstrapInfo"          (prop_readBootstrapInfo d)
     , testProperty "prop_roundtripShowReadBoostrapInfo" (prop_roundtripShowReadBoostrapInfo d)
-    , testProperty "prop_readBootstrapInfo"         (prop_readBootstrapInfo d)
-    , testProperty "prop_roundtripMsgSerialise"     (prop_roundtripMsgSerialise d)
-    , testProperty "prop_roundtripMsgIdSerialise"   (prop_roundtripMsgIdSerialise d)
+    , testProperty "prop_roundtripMsgSerialise"      (prop_roundtripMsgSerialise d)
+    , testProperty "prop_roundtripMsgIdSerialise"    (prop_roundtripMsgIdSerialise d)
+    , testProperty "prop_roundtripAddrSerialise"      prop_roundtripAddrSerialise
+    , testProperty "prop_roundtripHostSerialise"      prop_roundtripHostSerialise
+    , testProperty "prop_roundtripNodeInfoSerialise" (prop_roundtripNodeInfoSerialise d)
     ]
 
 props :: Dict (IsCrypto c) -> IO Bool
 props d = checkParallel $ Group "Test.Oscoin.P2P.Types"
-    [ ("prop_roundtripNetworkStringly" , prop_roundtripNetworkStringly )
-    , ("prop_randomNetworkValid"       , prop_randomNetworkValid       )
-    , ("prop_roundtripNetworkSerialise", prop_roundtripNetworkSerialise)
-    , ("prop_roundtripHostStringly"    , prop_roundtripHostStringly    )
-    , ("prop_roundtripHostnameStringly", prop_roundtripHostnameStringly)
-    , ("prop_roundtripHostnameDomain"  , prop_roundtripHostnameDomain  )
-    , ("prop_readBootstrapInfo"        , prop_readBootstrapInfo d      )
+    [ ("prop_roundtripNetworkStringly"  , prop_roundtripNetworkStringly    )
+    , ("prop_randomNetworkValid"        , prop_randomNetworkValid          )
+    , ("prop_roundtripNetworkSerialise" , prop_roundtripNetworkSerialise   )
+    , ("prop_roundtripHostStringly"     , prop_roundtripHostStringly       )
+    , ("prop_roundtripHostnameStringly" , prop_roundtripHostnameStringly   )
+    , ("prop_roundtripHostnameDomain"   , prop_roundtripHostnameDomain     )
+    , ("prop_readBootstrapInfo"         , prop_readBootstrapInfo d         )
     , ("prop_roundtripShowReadBoostrapInfo", prop_roundtripShowReadBoostrapInfo d)
-    , ("prop_roundtripMsgSerialise"    , prop_roundtripMsgSerialise d  )
-    , ("prop_roundtripMsgIdSerialise"  , prop_roundtripMsgIdSerialise d)
+    , ("prop_roundtripMsgSerialise"     , prop_roundtripMsgSerialise d     )
+    , ("prop_roundtripMsgIdSerialise"   , prop_roundtripMsgIdSerialise d   )
+    , ("prop_roundtripAddrSerialise"    , prop_roundtripAddrSerialise      )
+    , ("prop_roundtripHostSerialise"    , prop_roundtripHostSerialise      )
+    , ("prop_roundtripNodeInfoSerialise", prop_roundtripNodeInfoSerialise d)
     ]
 
 prop_roundtripNetworkStringly :: Property
@@ -119,8 +132,8 @@ prop_readBootstrapInfo Dict = property $ do
 
 prop_roundtripShowReadBoostrapInfo :: forall c. Dict (IsCrypto c) -> Property
 prop_roundtripShowReadBoostrapInfo Dict = property $ do
-    addr <- forAll $ NodeAddr Nothing <$> genHost <*> genPortNumber
-    tripping addr showNodeAddr (readNodeAddr @c)
+    addr <- forAll genSeed
+    tripping addr showBootstrapInfo (readBootstrapInfo @c)
 
 prop_roundtripMsgSerialise :: forall c. Dict (IsCrypto c) -> Property
 prop_roundtripMsgSerialise Dict = property $ do
@@ -131,3 +144,19 @@ prop_roundtripMsgIdSerialise :: forall c. Dict (IsCrypto c) -> Property
 prop_roundtripMsgIdSerialise Dict = property $ do
     mid <- forAll (genMsgId :: Gen (MsgId c Text))
     tripping mid serialise deserialiseOrFail
+
+prop_roundtripHostSerialise :: Property
+prop_roundtripHostSerialise = property $ do
+    host <- forAll (genHost :: Gen Host)
+    tripping host serialise deserialiseOrFail
+
+prop_roundtripAddrSerialise :: Property
+prop_roundtripAddrSerialise = property $ do
+    addr <- forAll (genAddr :: Gen Addr)
+    tripping addr serialise deserialiseOrFail
+
+prop_roundtripNodeInfoSerialise :: forall c. Dict (IsCrypto c) -> Property
+prop_roundtripNodeInfoSerialise Dict = property $ do
+    (pk, _) <- genKeyPair
+    ninfo <- forAll (genNodeInfo pk :: Gen (NodeInfo c))
+    tripping ninfo serialise deserialiseOrFail

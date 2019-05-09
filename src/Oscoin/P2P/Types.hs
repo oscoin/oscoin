@@ -392,11 +392,11 @@ readBootstrapInfo = \case
         pure $ BootstrapInfo Nothing Nothing (Addr h p)
 
 -- | Show the 'NodeAddr' suitable for consumption by 'readNodeAddr'.
-showBoostrapInfo :: BootstrapInfo Maybe c -> String
-showBoostrapInfo BootstrapInfo { bootGossipAddr } =
+showBootstrapInfo :: BootstrapInfo Maybe c -> String
+showBootstrapInfo BootstrapInfo { bootGossipAddr } =
     toS $ case addrHost bootGossipAddr of
-        NumericHost IPv6{} -> "[" <> renderHost (addrHost bootGossipAddr) <> "]:" <> show nodePort
-        _                  -> renderHost nodeHost <> ":" <> show nodePort
+        NumericHost IPv6{} -> "[" <> renderHost (addrHost bootGossipAddr) <> "]:" <> show (addrPort bootGossipAddr)
+        _                  -> renderHost (addrHost bootGossipAddr) <> ":" <> show (addrPort bootGossipAddr)
 
 data Msg c tx s =
       BlockMsg (Block c tx s)

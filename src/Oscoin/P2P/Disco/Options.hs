@@ -27,7 +27,7 @@ import           Oscoin.P2P.Types
                  , readBootstrapInfo
                  , readNetwork
                  , renderNetwork
-                 , showNodeAddr
+                 , showBootstrapInfo
                  )
 
 import qualified Data.Text as T
@@ -196,7 +196,7 @@ discoOpts
         optEnableGCE
         _optNameserver) = concat
     [ fromMaybe [] . map (pure . Opt "network") . renderNetwork' $ optNetwork
-    , map (Opt "seed" . toS . showNodeAddr) optSeeds
+    , map (Opt "seed" . toS . showBootstrapInfo) optSeeds
     , map (Opt "sd-domain" . toS) optSDDomains
     , bool [] (pure (Flag "enable-mdns"))   optEnableMDns
     , bool [] (pure (Flag "enable-gce-sd")) optEnableGCE

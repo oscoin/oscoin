@@ -180,6 +180,12 @@ instance Condensed (PrivateKey MockCrypto) where
 instance Show (Signature c) => Condensed (Signed c Text) where
     condensed = show
 
+-------------------------------------------------------------------------------
+-- Utility functions
+-------------------------------------------------------------------------------
+condensedS :: Condensed a => a -> String
+condensedS = toS . condensed
+
 -- The Ed's Kmett one weird trick.
 
 data Dict a where

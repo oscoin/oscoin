@@ -6,10 +6,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P.Handshake as Handshake
 import           Oscoin.P2P.Types
-                 ( Addr
-                 , NodeInfo
+                 ( NodeInfo
                  , fromNodeId
-                 , mkAddr
                  , mkNodeId
                  , mkNodeInfo
                  , nodeHttpApiAddr
@@ -18,8 +16,9 @@ import           Oscoin.P2P.Types
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
-import           Oscoin.Test.Util (Condensed, condensed)
-import           Test.Oscoin.P2P.Gen (genHost, genNetwork)
+import           Oscoin.Test.Util (Condensed, condensedS)
+import           Test.Oscoin.P2P.Gen
+                 (genAddr, genKeyPair, genNetwork, genNodeInfo)
 import           Test.Oscoin.P2P.Helpers (framedPair)
 
 import qualified Crypto.Noise.Exception as Noise
@@ -27,7 +26,6 @@ import qualified Crypto.Noise.Exception as Noise
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
-import qualified Hedgehog.Range as Range
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
 
@@ -289,34 +287,6 @@ nidHash
     => NodeInfo c
     -> Crypto.Hashed c (PublicKey c)
 nidHash = Crypto.hash . fromNodeId . nodeNodeId
-
-condensedS :: Condensed a => a -> String
-condensedS = toS . condensed
-
-genNodeInfo :: PublicKey c -> Gen (NodeInfo c)
-genNodeInfo pk = do
-    apiAddr <- genAddr
-    pure $ mkNodeInfo apiAddr (mkNodeId pk)
-
-genKeyPair
-    :: forall c.
-    ( HasHashing            c
-    , HasDigitalSignature   c
-    , Condensed (PublicKey  c)
-    , Condensed (PrivateKey c)
-    )
-    => PropertyT IO (KeyPair c)
-genKeyPair =
-    forAllWith condensedS (quickcheck (arbitraryKeyPairs @c 1)) >>= \case
-        [a] -> pure a
-        x   -> annotate (condensedS x) *> failure
-
-genAddr
-    :: Gen Addr
-genAddr = do
-    host <- genHost
-    port <- fromIntegral <$> Gen.word16 Range.constantBounded
-    pure $ mkAddr host port
 
 genKeyPairPair
     :: forall c.
