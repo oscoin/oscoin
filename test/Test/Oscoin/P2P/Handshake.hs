@@ -13,7 +13,7 @@ import           Oscoin.P2P.Types
                  , mkNodeId
                  , mkNodeInfo
                  , nodeHttpApiAddr
-                 , nodeInfo2Id
+                 , nodeNodeId
                  )
 
 import           Oscoin.Test.Crypto
@@ -164,26 +164,23 @@ prop_simpleApiInfoExchange Dict = withTests 1 . property $ do
 
 prop_secure :: forall c. Dict (IsCrypto c) -> Property
 prop_secure Dict = withTests 1 . property $ do
-    network                                    <- forAll genNetwork
-    (keysAlice@(pkAlice,_), keysBob@(pkBob,_)) <- genKeyPairPair @c
+    network                            <- forAll genNetwork
+    ((pkAlice,skAlice), (pkBob,skBob)) <- genKeyPairPair @c
 
-    let nidAlice  = mkNodeId pkAlice
-    infoAlice    <- forAll genAddr
+    infoAlice <- forAll $ genNodeInfo pkAlice
+    infoBob   <- forAll $ genNodeInfo pkBob
 
-    let nidBob    = mkNodeId pkBob
-    infoBob      <- forAll genAddr
+    let hsAlice = Handshake.secureHandshake @LByteString skAlice infoAlice network
+    let hsBob   = Handshake.secureHandshake @LByteString skBob   infoBob   network
 
-    let hsAlice   = Handshake.secureHandshake @LByteString keysAlice infoAlice network
-    let hsBob     = Handshake.secureHandshake @LByteString keysBob   infoBob   network
-
-    hrs <- runHandshake (mkNodeInfo infoAlice nidAlice) hsAlice hsBob
+    hrs <- runHandshake infoAlice hsAlice hsBob
     case hrs of
         (Left e, _) -> annotateShow e *> failure
         (_, Left e) -> annotateShow e *> failure
         (Right hrAlice, Right hrBob) -> do
             -- Alice and Bob know the other's key, respectively
-            nidHash (Handshake.hrPeerInfo hrAlice) === nidHash (mkNodeInfo infoBob nidBob)
-            nidHash (Handshake.hrPeerInfo hrBob  ) === nidHash (mkNodeInfo infoAlice nidAlice)
+            nidHash (Handshake.hrPeerInfo hrAlice) === nidHash infoBob
+            nidHash (Handshake.hrPeerInfo hrBob  ) === nidHash infoAlice
 
             -- Payload messages are encrypted
             let msg = "are we encrypted yet?"
@@ -212,14 +209,12 @@ prop_secureRejectsSelf :: forall c. Dict (IsCrypto c) -> Property
 prop_secureRejectsSelf Dict = withTests 1 . property $ do
     network  <- forAll genNetwork
     (pk, sk) <- genKeyPair @c
+    myInfo   <- forAll $ genNodeInfo pk
 
-    let myNid = mkNodeId pk
-    myInfo <- forAll genAddr
+    let hsAlice = Handshake.secureHandshake @ByteString sk myInfo network
+    let hsBob   = Handshake.secureHandshake @ByteString sk myInfo network
 
-    let hsAlice = Handshake.secureHandshake @ByteString (pk, sk) myInfo network
-    let hsBob   = Handshake.secureHandshake @ByteString (pk, sk) myInfo network
-
-    hrs <- runHandshake (mkNodeInfo myInfo myNid) hsAlice hsBob
+    hrs <- runHandshake myInfo hsAlice hsBob
     case hrs of
         (Left (Handshake.SimpleHandshakeError Handshake.DuplicateId), _) -> success
         (_, Left (Handshake.SimpleHandshakeError Handshake.DuplicateId)) -> success
@@ -232,17 +227,15 @@ prop_secureNetworkMismatch Dict = withTests 1 . property $ do
         b <- Gen.filter (/= a) genNetwork
         pure (a, b)
 
-    (keysAlice@(pkAlice,_), keysBob) <- genKeyPairPair @c
+    ((pkAlice,skAlice), (pkBob,skBob)) <- genKeyPairPair @c
 
-    let nidAlice = mkNodeId pkAlice
-    infoAlice   <- forAll genAddr
+    infoAlice <- forAll $ genNodeInfo pkAlice
+    infoBob   <- forAll $ genNodeInfo pkBob
 
-    infoBob     <- forAll genAddr
+    let hsAlice = Handshake.secureHandshake @ByteString skAlice infoAlice netAlice
+    let hsBob   = Handshake.secureHandshake @ByteString skBob   infoBob   netBob
 
-    let hsAlice = Handshake.secureHandshake @ByteString keysAlice infoAlice netAlice
-    let hsBob   = Handshake.secureHandshake @ByteString keysBob   infoBob   netBob
-
-    hrs <- runHandshake (mkNodeInfo infoAlice nidAlice) hsAlice hsBob
+    hrs <- runHandshake infoAlice hsAlice hsBob
     case hrs of
         ( Left (Handshake.SimpleHandshakeError Handshake.NetworkMismatch),
           Left (Handshake.SimpleHandshakeError Handshake.NetworkMismatch))
@@ -251,25 +244,23 @@ prop_secureNetworkMismatch Dict = withTests 1 . property $ do
 
 prop_secureApiInfoExchange :: forall c. Dict (IsCrypto c) -> Property
 prop_secureApiInfoExchange Dict = withTests 1 . property $ do
-    network                          <- forAll genNetwork
-    (keysAlice@(pkAlice,_), keysBob) <- genKeyPairPair @c
+    network                            <- forAll genNetwork
+    ((pkAlice,skAlice), (pkBob,skBob)) <- genKeyPairPair @c
 
-    let nidAlice  = mkNodeId pkAlice
-    infoAlice    <- forAll genAddr
+    infoAlice <- forAll $ genNodeInfo pkAlice
+    infoBob   <- forAll $ genNodeInfo pkBob
 
-    infoBob      <- forAll genAddr
+    let hsAlice   = Handshake.secureHandshake @LByteString skAlice infoAlice network
+    let hsBob     = Handshake.secureHandshake @LByteString skBob   infoBob   network
 
-    let hsAlice   = Handshake.secureHandshake @LByteString keysAlice infoAlice network
-    let hsBob     = Handshake.secureHandshake @LByteString keysBob   infoBob   network
-
-    hrs <- runHandshake (mkNodeInfo infoAlice nidAlice) hsAlice hsBob
+    hrs <- runHandshake infoAlice hsAlice hsBob
     case hrs of
         (Left e, _) -> annotateShow e *> failure
         (_, Left e) -> annotateShow e *> failure
         (Right hrAlice, Right hrBob) -> do
-            -- Alice and Bob know the other's Http info, respectively
-            nodeHttpApiAddr (Handshake.hrPeerInfo hrAlice) === infoBob
-            nodeHttpApiAddr (Handshake.hrPeerInfo hrBob  ) === infoAlice
+            -- Alice and Bob know the other's NodeInfo info, respectively
+            Handshake.hrPeerInfo hrAlice === infoBob
+            Handshake.hrPeerInfo hrBob   === infoAlice
 
 --------------------------------------------------------------------------------
 
@@ -297,10 +288,15 @@ nidHash
     :: Crypto.Hashable c (PublicKey c)
     => NodeInfo c
     -> Crypto.Hashed c (PublicKey c)
-nidHash = Crypto.hash . fromNodeId . nodeInfo2Id
+nidHash = Crypto.hash . fromNodeId . nodeNodeId
 
 condensedS :: Condensed a => a -> String
 condensedS = toS . condensed
+
+genNodeInfo :: PublicKey c -> Gen (NodeInfo c)
+genNodeInfo pk = do
+    apiAddr <- genAddr
+    pure $ mkNodeInfo apiAddr (mkNodeId pk)
 
 genKeyPair
     :: forall c.

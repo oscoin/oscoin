@@ -15,9 +15,9 @@ module Oscoin.P2P.Types
     , fromNodeId
 
     , NodeInfo
-    , nodeHttpApiAddr
     , mkNodeInfo
-    , nodeInfo2Id
+    , nodeHttpApiAddr
+    , nodeNodeId
 
     , Addr
     , mkAddr
@@ -232,8 +232,8 @@ instance (Serialise (NodeId c)) => Serialise (NodeInfo c) where
     encode NodeInfo{..} =
            CBOR.encodeListLen 3
         <> CBOR.encodeWord 0
-        <> CBOR.encode nodeNodeId
         <> CBOR.encode nodeHttpApiAddr
+        <> CBOR.encode nodeNodeId
     decode = do
         CBOR.decodeListLenOf 3
         tag <- CBOR.decodeWord
@@ -245,9 +245,6 @@ instance (Serialise (NodeId c)) => Serialise (NodeInfo c) where
 
 mkNodeInfo :: Addr -> NodeId c -> NodeInfo c
 mkNodeInfo = NodeInfo
-
-nodeInfo2Id :: NodeInfo c -> NodeId c
-nodeInfo2Id = nodeNodeId
 
 -- | A host address either as an IP address or 'Hostname'
 data Host = NumericHost IP | NamedHost Hostname

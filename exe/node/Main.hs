@@ -156,6 +156,7 @@ main = do
             let myHost     = P2P.numericHost optHost
             let myApiInfo  = P2P.mkAddr myHost optApiPort
             let myNodeInfo = P2P.mkNodeInfo myApiInfo nid
+            let mySK       = snd keys
             gossip <- managed $
                 withGossip telemetry
                            P2P.BootstrapInfo
@@ -166,7 +167,7 @@ main = do
                            (Set.map (Nothing,) seeds)
                            (storage node)
                            (Handshake.secureHandshake
-                               keys
+                               mySK
                                myApiInfo
                                (P2P.Disco.optNetwork optDiscovery'))
 

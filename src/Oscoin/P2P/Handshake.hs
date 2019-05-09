@@ -33,8 +33,7 @@ import           Oscoin.P2P.Types
                  , fromNodeId
                  , mkNodeId
                  , mkNodeInfo
-                 , nodeHttpApiAddr
-                 , nodeInfo2Id
+                 , nodeNodeId
                  )
 
 import           Codec.Serialise (Serialise)
@@ -71,7 +70,7 @@ simpleHandshake keys myApiAddr net role peerId = do
     let
         proxy       = Proxy @(Crypto.PublicKey c)
         myPk        = let (pk,_) = keys in mkNodeId pk
-        knownPeerId = map nodeInfo2Id peerId
+        knownPeerId = map nodeNodeId peerId
         guards self selfId = guardPeerIdNot proxy self >=> guardPeerId proxy selfId
      in
         mapInfo (mkNodeInfo (hrPeerInfo inf)) <$> guards myPk knownPeerId res
@@ -88,43 +87,38 @@ secureHandshake
        , Serialise (Crypto.Signature c)
        , Crypto.HasDigitalSignature c
        )
-    => Crypto.KeyPair c
-    -> Addr
+    => Crypto.PrivateKey c
+    -> NodeInfo c
     -> Network
     -> Handshake HandshakeError
                  (NodeInfo c)
                  p
                  (NoisePayload (Crypto.Signed c NoiseHandshakeHash, p))
-secureHandshake keys myInfo net role mbPeerInfo = do
-    noise  <- withHandshakeT NoiseHandshakeError $ noiseNNHandshake role Nothing
-    infoex <-
-        withHandshakeT SimpleHandshakeError $ do
-            pk   <- keyExchange  keys net role theirPk >>= guardPeerIdNot proxy self
-            addr <- infoExchange myInfo net role theirInfo >>= guardPeerIdNot proxy myInfo
-            pure $ map (hrPeerInfo addr,) pk
+secureHandshake mySK myInfo net role mbPeerInfo = do
+    noise     <-
+        withHandshakeT NoiseHandshakeError $ noiseNNHandshake role Nothing
+    theirInfo <-
+        withHandshakeT SimpleHandshakeError $
+            infoExchange myInfo net role mbPeerInfo >>=
+                guardPeerIdNot (Proxy @(Crypto.PublicKey c)) myInfo
     let
-        clear     = signedHandshakeHash (snd keys) $ map (,hrPeerInfo noise) infoex
+        clear     = signedHandshakeHash mySK $ map (,hrPeerInfo noise) theirInfo
         sendClear = hrPreSend clear
         recvClear = hrPostRecv clear
      in
-        pure . map (const . uncurry mkNodeInfo . second mkNodeId $ hrPeerInfo clear)
+        pure . map (const $ hrPeerInfo clear)
              $ mapInput sendClear recvClear noise
-  where
-    self      = fst keys
-    theirPk   = map (fromNodeId . nodeInfo2Id) mbPeerInfo
-    theirInfo = map nodeHttpApiAddr mbPeerInfo
-    proxy     = Proxy @(Crypto.PublicKey c)
 
 -- Internal --------------------------------------------------------------------
 
 signedHandshakeHash
     :: Crypto.HasDigitalSignature c
     => Crypto.PrivateKey c
-    -> HandshakeResult i o                                       ((info, Crypto.PublicKey c), NoiseHandshakeHash)
-    -> HandshakeResult i (Crypto.Signed c NoiseHandshakeHash, o)  (info, Crypto.PublicKey c)
+    -> HandshakeResult i o                                       (NodeInfo c, NoiseHandshakeHash)
+    -> HandshakeResult i (Crypto.Signed c NoiseHandshakeHash, o) (NodeInfo c)
 signedHandshakeHash sk hr = map fst $ mapOutput send recv hr
   where
-    ((_info, theirPK), handhakeHash) = hrPeerInfo hr
+    (theirPK, handhakeHash) = first (fromNodeId . nodeNodeId) $ hrPeerInfo hr
 
     send p = (,p) <$> Crypto.sign sk handhakeHash
 

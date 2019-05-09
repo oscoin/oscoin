@@ -66,22 +66,11 @@ keyExchange
     => Crypto.KeyPair c
     -> Network
     -> Handshake SimpleError (Crypto.PublicKey c) p p
-keyExchange (myPK, mySK) net _role peerId = do
-    handshakeSend $ Hai myPK net
-    hai <- handshakeRecv mapRecvError
-    case hai of
-        Bai err              -> throwError err
-        Hai theirPK theirNet | net /= theirNet -> throwError NetworkMismatch
-                             | otherwise       -> do
-            modifyTransport $
-                Transport.framedEnvelope (sign mySK) (verify theirPK)
-            guardPeerId (Proxy @(Crypto.PublicKey c)) peerId  HandshakeResult
-                { hrPeerInfo = theirPK
-                , hrPreSend  = idM
-                , hrPostRecv = idM
-                }
-  where
-    idM = pure . identity
+keyExchange (myPK, mySK) net role peerId = do
+    hr <- infoExchange myPK net role peerId
+    modifyTransport $
+        Transport.framedEnvelope (sign mySK) (verify (hrPeerInfo hr))
+    pure hr
 
 -- | Exchanges some generic (serializable) infos over the wire.
 infoExchange
