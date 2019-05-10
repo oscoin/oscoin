@@ -9,7 +9,6 @@ module Oscoin.Data.OscoinTx where
 import           Oscoin.Prelude hiding (length)
 
 import           Oscoin.Configuration (Network(..))
-import           Oscoin.Crypto.Address
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
@@ -53,19 +52,19 @@ txFlags _ = fromIntegral (natVal (Proxy @flags))
 
 -- | A transaction message.
 data TxMessage c =
-      TxRegisterProject   (Address c)
+      TxRegisterProject   (AccountId c)
     -- ^ Register a project.
-    | TxUnregisterProject (Address c)
+    | TxUnregisterProject (AccountId c)
     -- ^ Unregister a project.
-    | TxAuthorize         (Address c) (Address c)
+    | TxAuthorize         (AccountId c) (AccountId c)
     -- ^ Authorize an account to operate on a project.
-    | TxDeauthorize       (Address c) (Address c)
+    | TxDeauthorize       (AccountId c) (AccountId c)
     -- ^ De-authorize an account to operate on a project.
-    | TxCheckpoint        (Address c) (Crypto.Hash c) [Contribution c] [DependencyUpdate c]
+    | TxCheckpoint        (AccountId c) (Crypto.Hash c) [Contribution c] [DependencyUpdate c]
     -- ^ Checkpoint a project's state.
-    | TxUpdateContract    (Address c)
+    | TxUpdateContract    (AccountId c)
     -- ^ Update a project's contract.
-    | TxTransfer          (Address c) (Address c) Balance
+    | TxTransfer          (AccountId c) (AccountId c) Balance
     -- ^ Transfer balance between two accounts.
     deriving (Generic)
 
@@ -89,7 +88,7 @@ instance ByteArrayAccess TxOutput where
 data TxError c =
       ErrInsufficientBalance         Balance
     -- ^ Insufficient balance in the account to execute transfer.
-    | ErrNotAuthorized               (Address c)
+    | ErrNotAuthorized               (AccountId c)
     -- ^ This account is not authorized to execute the operation.
     | ErrInvalidTransfer             Balance
     -- ^ A balance transfer of this amount is not valid.
@@ -97,7 +96,7 @@ data TxError c =
     -- ^ The key was not found in the state.
     | ErrTypeMismatch                StateKey
     -- ^ The value under this key does not have the expected type.
-    | ErrProjectExists               (Address c)
+    | ErrProjectExists               (AccountId c)
     -- ^ The project already exists in the state.
     | ErrHandlerFailed               HandlerError
     -- ^ A contract handler failed and returned an error.
@@ -107,7 +106,7 @@ data TxError c =
     -- ^ The transaction fee is not valid.
     | ErrInvalidTx                   Text
     -- ^ The transaction is not valid.
-    | ErrOverflow                    (Address c)
+    | ErrOverflow                    (AccountId c)
     -- ^ Executing the transaction would result in an overflow.
     deriving (Generic)
 
@@ -135,7 +134,7 @@ applyTx
        )
     => Tx c
     -- ^ The transaction to apply.
-    -> Address c
+    -> AccountId c
     -- ^ The author or \"signer\" of the transaction.
     -> WorldState c
     -- ^ The input world state.
@@ -172,8 +171,8 @@ incrementNonce acc = acc { accountNonce = accountNonce acc + 1 }
 -- is not an account.
 adjustAccount
     :: CBOR.Serialise (PublicKey c)
-    => (Account c -> Account c) -> Address c -> WorldState c -> WorldState c
-adjustAccount f (addressKey -> k) ws =
+    => (Account c -> Account c) -> AccountId c -> WorldState c -> WorldState c
+adjustAccount f (accountKey -> k) ws =
     case WorldState.lookup k ws of
         Just (AccountVal v) -> WorldState.insert k (AccountVal (f v)) ws
         _                   -> ws
@@ -182,7 +181,7 @@ adjustAccount f (addressKey -> k) ws =
 applyTxMessages
     :: (CBOR.Serialise (PublicKey c), Ord (PublicKey c), Foldable t)
     => t (TxMessage c)
-    -> Address c
+    -> AccountId c
     -> WorldState c
     -> Either (TxError c) (WorldState c, [TxMessageOutput])
 applyTxMessages msgs author ws =
@@ -198,52 +197,52 @@ applyTxMessage
        , Ord (PublicKey c)
        )
     => TxMessage c
-    -> Address c
+    -> AccountId c
     -> WorldState c
     -> Either (TxError c) (WorldState c, TxOutput)
 
-applyTxMessage (TxRegisterProject addr) author ws =
+applyTxMessage (TxRegisterProject acc) author ws =
     if WorldState.member key ws
-       then Left (ErrProjectExists addr)
+       then Left (ErrProjectExists acc)
        else Right ( WorldState.insert key (ProjectVal prj) ws
                   , [] )
   where
-    key = addressKey addr
-    prj = (mkProject addr) { pMaintainers = Map.singleton author mem }
+    key = accountKey acc
+    prj = (mkProject acc) { pMaintainers = Map.singleton author mem }
     mem = mkMember author 0
 
-applyTxMessage (TxUnregisterProject addr) author ws = do
-    p@Project{..} <- lookupProject addr   ws
+applyTxMessage (TxUnregisterProject acc) author ws = do
+    p@Project{..} <- lookupProject acc    ws
     member        <- lookupAccount author ws
 
     mapHandlerError (pUnregister p member)
     pure (WorldState.delete projKey ws, [])
   where
-    projKey = addressKey addr
+    projKey = accountKey acc
 
-applyTxMessage (TxAuthorize addr pk) author ws = do
-    p@Project{..} <- lookupProject addr    ws
+applyTxMessage (TxAuthorize acc pk) author ws = do
+    p@Project{..} <- lookupProject acc    ws
     member        <- lookupAccount author  ws
     epoch         <- lookupEpoch           ws
 
     mapHandlerError (pAuthorize pk p member)
     pure (adjust (addKey epoch) projKey ws, [])
   where
-    projKey = addressKey addr
+    projKey = accountKey acc
 
     addKey e v = case v of
         ProjectVal p -> ProjectVal $
             p { pMaintainers = Map.insert pk (mkMember pk e) (pMaintainers p) }
         _ -> v
 
-applyTxMessage (TxDeauthorize addr pk) author ws = do
-    p@Project{..} <- lookupProject addr    ws
+applyTxMessage (TxDeauthorize acc pk) author ws = do
+    p@Project{..} <- lookupProject acc     ws
     member        <- lookupAccount author  ws
 
     mapHandlerError (pDeauthorize pk p member)
     pure (adjust removeKey projKey ws, [])
   where
-    projKey = addressKey addr
+    projKey = accountKey acc
 
     removeKey v = case v of
         ProjectVal p -> ProjectVal $
@@ -268,28 +267,28 @@ applyTxMessage (TxTransfer sender receiver bal) author ws = do
 --
 -- Increases the total coin supply and creates the account if it does not exist.
 --
--- * Returns 'ErrTypeMismatch' if the value under the given address is not an account.
+-- * Returns 'ErrTypeMismatch' if the value under the given account id is not an account.
 -- * Returns 'ErrOverflow' if crediting the account would result in an integer overflow.
 --
 -- Nb. using this function without a matching 'debitAccount' creates supply.
 --
 creditAccount
     :: CBOR.Serialise (PublicKey c)
-    => Address c
+    => AccountId c
     -> Balance
     -> WorldState c
     -> Either (TxError c) (WorldState c)
-creditAccount addr bal ws =
-    case lookupAccount addr ws of
+creditAccount id bal ws =
+    case lookupAccount id ws of
         Right acc
             | bal > maxBound - accountBalance acc ->
-                Left (ErrOverflow addr)
+                Left (ErrOverflow id)
             | otherwise ->
-                Right $ WorldState.insert (addressKey addr)
+                Right $ WorldState.insert (accountKey id)
                     (AccountVal $ acc { accountBalance = accountBalance acc + bal }) ws
         Left (ErrKeyNotFound key) -> -- Account doesn't exist, create it.
             Right $ WorldState.insert key
-                (AccountVal $ (mkAccount addr) { accountBalance = bal }) ws
+                (AccountVal $ (mkAccount id) { accountBalance = bal }) ws
         Left err ->
             Left err
 
@@ -297,7 +296,7 @@ creditAccount addr bal ws =
 --
 -- Decreases the total coin supply and deletes the account if its balance reaches zero.
 --
--- * Returns 'ErrTypeMismatch' if the value under the given address is not an account.
+-- * Returns 'ErrTypeMismatch' if the value under the given account id is not an account.
 -- * Returns 'ErrInsufficientBalance' if the account cannot be debited by the full amount.
 -- * Returns 'ErrKeyNotFound' if the account cannot be found.
 --
@@ -305,12 +304,12 @@ creditAccount addr bal ws =
 --
 debitAccount
     :: CBOR.Serialise (PublicKey c)
-    => Address c
+    => AccountId c
     -> Balance
     -> WorldState c
     -> Either (TxError c) (WorldState c)
-debitAccount addr bal ws =
-    case lookupAccount addr ws of
+debitAccount id bal ws =
+    case lookupAccount id ws of
         Right acc
             | bal > accountBalance acc ->
                 Left $ ErrInsufficientBalance (accountBalance acc)
@@ -322,7 +321,7 @@ debitAccount addr bal ws =
         Left err ->
             Left err
   where
-    key = addressKey addr
+    key = accountKey id
 
 -- | Map a handler error into a transaction error.
 mapHandlerError :: Either HandlerError a -> Either (TxError c) a
@@ -331,30 +330,30 @@ mapHandlerError = first ErrHandlerFailed
 -- | Lookup a project in the state.
 lookupProject
     :: CBOR.Serialise (PublicKey c)
-    => Address c
+    => AccountId c
     -> WorldState c
     -> Either (TxError c) (Project c)
-lookupProject addr ws =
-    case WorldState.lookup (addressKey addr) ws of
+lookupProject acc ws =
+    case WorldState.lookup (accountKey acc) ws of
         Just (ProjectVal p) -> Right p
         Nothing             -> Left (ErrKeyNotFound key)
         _                   -> Left (ErrTypeMismatch key)
   where
-    key = addressKey addr
+    key = accountKey acc
 
 -- | Lookup an account in the state.
 lookupAccount
     :: CBOR.Serialise (PublicKey c)
-    => Address c
+    => AccountId c
     -> WorldState c
     -> Either (TxError c) (Account c)
-lookupAccount addr ws =
+lookupAccount acc ws =
     case WorldState.lookup key ws of
         Just (AccountVal a) -> Right a
         Nothing             -> Left (ErrKeyNotFound key)
         _                   -> Left (ErrTypeMismatch key)
   where
-    key = addressKey addr
+    key = accountKey acc
 
 -- | Lookup the current epoch.
 lookupEpoch :: WorldState c -> Either (TxError c) Epoch

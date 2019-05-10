@@ -33,8 +33,6 @@ import           Oscoin.Prelude
                  , (<>)
                  )
 
-import           Oscoin.Crypto.Address (Address)
-import           Oscoin.Crypto.Address.Serialisation (serializeAddress)
 import           Oscoin.Crypto.Blockchain (Height)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -44,6 +42,7 @@ import qualified Codec.Serialise as CBOR
 import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as WorldState
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Numeric.Natural
@@ -101,9 +100,12 @@ type Balance = Word64
 -- | An account nonce to prevent replay attacks.
 type Nonce = Word64
 
+-- | An account identifier.
+type AccountId c = PublicKey c
+
 -- | An account which holds a balance.
 data Account c = Account
-    { accountAddr    :: Address c
+    { accountId      :: AccountId c
     -- ^ The account identifier.
     , accountBalance :: Balance
     -- ^ The oscoin balance.
@@ -114,19 +116,19 @@ data Account c = Account
 
 deriving instance (Eq (PublicKey c)) => Eq (Account c)
 
-mkAccount :: Address c -> Account c
-mkAccount addr = Account
-    { accountAddr    = addr
+mkAccount :: AccountId c -> Account c
+mkAccount acc = Account
+    { accountId      = acc
     , accountBalance = 0
     , accountNonce   = 0
     }
 
--- | Convert an 'Address' into a StateKey
-addressKey
-    :: CBOR.Serialise  (PublicKey c)
-    => Address c
+-- | Convert an 'AccountId' into a StateKey
+accountKey
+    :: CBOR.Serialise (PublicKey c)
+    => AccountId c
     -> StateKey
-addressKey = serializeAddress
+accountKey = LBS.toStrict . CBOR.serialise
 
 -------------------------------------------------------------------------------
 
@@ -172,8 +174,8 @@ data Contribution c = Contribution
     , contribParentHash :: Maybe (Crypto.Hash c)
     -- ^ The parent contribution, or 'Nothing' if it's the first.
     -- Matches with 'contribHash', forming a hash-linked list.
-    , contribAddr       :: Address c
-    -- ^ The address of the contributor.
+    , contribAccount    :: AccountId c
+    -- ^ The account id of the contributor.
     , contribSignoff    :: Maybe (Signoff c)
     -- ^ An optional sign-off signature.
     , contribLabels     :: Set Label
@@ -209,9 +211,9 @@ deriving instance
 
 -- | An update to a project dependency.
 data DependencyUpdate c =
-      Depend       (Address c) (Crypto.Hash c)
+      Depend       (AccountId c) (Crypto.Hash c)
     -- ^ Start depending on a project starting from the given state hash.
-    | Undepend     (Address c)
+    | Undepend     (AccountId c)
     -- ^ Stop depending on a project.
     deriving (Generic)
 
@@ -232,10 +234,10 @@ data Project c = Project
     { pAccount         :: Account c
     -- ^ The project account or /fund/.
 
-    , pMaintainers     :: Map (Address c) (Member c)
-    , pContributors    :: Map (Address c) (Member c)
-    , pSupporters      :: Map (Address c) (Member c)
-    , pDependencies    :: Map (Address c) (Dependency c)
+    , pMaintainers     :: Map (AccountId c) (Member c)
+    , pContributors    :: Map (AccountId c) (Member c)
+    , pSupporters      :: Map (AccountId c) (Member c)
+    , pDependencies    :: Map (AccountId c) (Dependency c)
 
     , pCheckpoints     :: Set (Checkpoint c)
 
@@ -251,11 +253,11 @@ data Project c = Project
     }
 
 instance (Eq (PublicKey c)) => Eq (Project c) where
-    (==) a b = projectAddr a == projectAddr b
+    (==) a b = projectId a == projectId b
 
-mkProject :: Ord (PublicKey c) => Address c -> Project c
-mkProject addr = Project
-    { pAccount          = mkAccount addr
+mkProject :: Ord (PublicKey c) => AccountId c -> Project c
+mkProject acc = Project
+    { pAccount          = mkAccount acc
     , pMaintainers      = mempty
     , pContributors     = mempty
     , pSupporters       = mempty
@@ -271,17 +273,17 @@ mkProject addr = Project
     , pUpdateContract   = defaultUpdateContract
     }
 
--- | Get the address of a project.
-projectAddr :: Project c -> Address c
-projectAddr = accountAddr . pAccount
+-- | Get the account id of a project.
+projectId :: Project c -> AccountId c
+projectId = accountId . pAccount
 
 -- | A delegation of oscoin between two accounts. Allows members to become
 -- /supporters/ by delegating their voting rights to a project. Allows projects
 -- to use the delegated tokens to vote.
 data Delegation c = Delegation
-    { delegDelegator  :: Address c
+    { delegDelegator  :: AccountId c
     -- ^ Account delegating.
-    , delegReceiver   :: Address c
+    , delegReceiver   :: AccountId c
     -- ^ Account receiving the delegation.
     , delegBalance    :: Balance
     -- ^ Balance being delegated.
@@ -293,7 +295,7 @@ data Delegation c = Delegation
 
 -- | A member of a project. Includes maintainers, contributors and supporters.
 data Member c = Member
-    { memberAccount       :: Address c
+    { memberAccount       :: AccountId c
     , memberDelegation    :: Maybe (Delegation c)
     , memberSince         :: Epoch
     , memberContributions :: Set (Contribution c)
@@ -303,9 +305,9 @@ instance (Eq (PublicKey c)) => Eq (Member c) where
     (==) a b = memberAccount a == memberAccount b
 
 mkMember
-    :: Address c -> Epoch -> Member c
-mkMember addr e = Member
-    { memberAccount       = addr
+    :: AccountId c -> Epoch -> Member c
+mkMember acc e = Member
+    { memberAccount       = acc
     , memberDelegation    = Nothing
     , memberSince         = e
     , memberContributions = Set.empty
@@ -313,8 +315,8 @@ mkMember addr e = Member
 
 -- | A dependency between two projects.
 data Dependency c = Dependency
-    { depFrom :: Address c
-    , depTo   :: Address c
+    { depFrom :: AccountId c
+    , depTo   :: AccountId c
     , depHash :: Crypto.Hash c
     -- ^ Hash of the checkpoint state being depended on.
     } deriving (Generic)
@@ -356,8 +358,8 @@ newtype HandlerError = HandlerError Text
 
 type SendTransfer' c =
        Account c                -- ^ Transaction signer
-    -> Address c                -- ^ Sender
-    -> Address c                -- ^ Receiver
+    -> AccountId c              -- ^ Sender
+    -> AccountId c              -- ^ Receiver
     -> Balance                  -- ^ Balance to transfer
     -> Signatures c             -- ^ Sign-offs
     -> Either HandlerError ()
@@ -379,9 +381,9 @@ mkSendTransfer maxBalance = sendTransfer
 
 type ReceiveTransfer' c =
        Balance
-    -> Address c               -- ^ Sender
+    -> AccountId c               -- ^ Sender
     -> Project c
-    -> [(Address c, Balance)]
+    -> [(AccountId c, Balance)]
 
 defaultReceiveTransfer :: ReceiveTransfer' c
 defaultReceiveTransfer = depositToFund
@@ -391,7 +393,7 @@ mkReceiveTransfer _ _ _ = []
 
 depositToFund :: ReceiveTransfer' c
 depositToFund bal _ p =
-    [(projectAddr p, bal)]
+    [(projectId p, bal)]
 
 -------------------------------------------------------------------------------
 -- ReceiveReward
@@ -401,7 +403,7 @@ type ReceiveReward' c =
        Balance                    -- ^ The balance being rewarded
     -> Epoch                      -- ^ The current epoch
     -> Project c                  -- ^ The project dictionary
-    -> [(Address c, Balance)]     -- ^ A balance distribution
+    -> [(AccountId c, Balance)]   -- ^ A balance distribution
 
 -- | By default, burn the reward.
 defaultReceiveReward :: ReceiveReward' c
@@ -416,7 +418,7 @@ distributeRewardEqually :: Ord (PublicKey c) => ReceiveReward' c
 distributeRewardEqually bal _epoch p@Project{..} =
     let members     = Map.keysSet $ pContributors <> pMaintainers <> pSupporters
         (dist, rem) = distribute bal members
-     in (projectAddr p, rem) : dist
+     in (projectId p, rem) : dist
 
 -------------------------------------------------------------------------------
 -- Checkpoint
@@ -449,7 +451,7 @@ defaultUnregister = requireMaintainer
 -------------------------------------------------------------------------------
 
 type Authorize' c =
-       Address c                    -- ^ Key to be added
+       AccountId c                  -- ^ Key to be added
     -> Project c                    -- ^ Project data
     -> Account c                    -- ^ Transaction signer
     -> Either HandlerError ()
@@ -462,7 +464,7 @@ defaultAuthorize _ = requireMaintainer
 -------------------------------------------------------------------------------
 
 type Deauthorize' c =
-       Address c                  -- ^ Key to be removed
+       AccountId c                -- ^ Key to be removed
     -> Project c                  -- ^ Project data
     -> Account c                  -- ^ Transaction signer
     -> Either HandlerError ()
@@ -488,8 +490,8 @@ defaultUpdateContract _ _ = requireMaintainer
 -- Utility functions
 -------------------------------------------------------------------------------
 
--- | Distribute a balance equally to a set of address, returning the remainder.
-distribute :: Balance -> Set (Address c) -> ([(Address c, Balance)], Balance)
+-- | Distribute a balance equally to a set of accounts, returning the remainder.
+distribute :: Balance -> Set (AccountId c) -> ([(AccountId c, Balance)], Balance)
 distribute bal accs =
     ([(acc, share) | acc <- Set.toList accs], remainder)
   where
@@ -503,6 +505,6 @@ requireMaintainer
     -> Account c
     -> Either HandlerError ()
 requireMaintainer Project{..} Account{..} =
-    if Map.member accountAddr pMaintainers
+    if Map.member accountId pMaintainers
        then Right ()
        else Left  (HandlerError "Signer must be a project maintainer")

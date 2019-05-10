@@ -91,29 +91,29 @@ instance Crypto.HasHashing c => Condensed (Blockchain c tx s) where
 instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
     condensed = decodeUtf8 . Crypto.compactHash . Crypto.fromHashed
 
-instance Condensed (PublicKey Crypto) where
+instance Show (PublicKey c) => Condensed (PublicKey c) where
     condensed = show
 
 instance ( Serialise (PublicKey c)
          ) => Condensed (Address c) where
     condensed = renderAddress
 
-instance ( Serialise (PublicKey c)
+instance ( Show (PublicKey c)
          ) => Condensed (StateVal c) where
     condensed v =
         case v of
             AccountVal Account{..} ->
-                "Account@" <> condensed accountAddr <> " $" <> condensed accountBalance
-            ProjectVal project -> "Project@" <> condensed (projectAddr project)
+                "Account@" <> condensed accountId <> " $" <> condensed accountBalance
+            ProjectVal project -> "Project@" <> condensed (projectId project)
             NatVal     natural -> condensed $ (fromIntegral natural :: Integer)
 
 instance Condensed DeserializeError where
     condensed _ = "DeserializerError"
 
-instance Serialise (PublicKey c) => Condensed (Project c) where
-    condensed prj = "Project@" <> condensed (projectAddr prj)
+instance (Show (PublicKey c)) => Condensed (Project c) where
+    condensed prj = "Project@" <> condensed (projectId prj)
 
-instance ( Serialise (PublicKey c)
+instance ( Show (PublicKey c)
          , Crypto.HasHashing c
          ) => Condensed (TxMessage c)
   where
@@ -136,14 +136,14 @@ instance ( Serialise (PublicKey c)
             <> condensed bal
 
 instance
-    ( Serialise (PublicKey c)
+    ( Show (PublicKey c)
     ) => Condensed (Tree.Tree StateKey (StateVal c))
   where
     condensed ws =
         let xs = [(k, v) | (k, v) <- Tree.toList ws]
          in condensed [(k, v) | (k, v) <- xs]
 
-instance (Serialise (PublicKey c))
+instance (Show (PublicKey c))
     => Condensed (TxError c)
   where
     condensed (ErrKeyNotFound k)         = "ErrKeyNotFound " <> condensed k
@@ -161,7 +161,7 @@ instance (Serialise (PublicKey c))
 instance Condensed TxMessageOutput where
     condensed _ = "TxMessageOutput"
 
-instance ( Serialise (PublicKey c)
+instance ( Show (PublicKey c)
          , Crypto.HasHashing c
          ) => Condensed (Tx c)
   where
@@ -172,9 +172,6 @@ instance ( Serialise (PublicKey c)
 -- This is why we define (in the tests only) such 'Condensed' instance.
 instance Condensed (PrivateKey Crypto) where
     condensed (PrivateKey (SK k)) = show k
-
-instance Condensed (PublicKey MockCrypto) where
-    condensed = show
 
 instance Condensed (PrivateKey MockCrypto) where
     condensed (MockSK (SK k)) = show k
