@@ -105,11 +105,13 @@ instance ( Serialise (PublicKey c)
             AccountVal Account{..} ->
                 "Account@" <> condensed accountAddr <> " $" <> condensed accountBalance
             ProjectVal project -> "Project@" <> condensed (projectAddr project)
-            MemberVal  member  -> "Member@" <> condensed (memberAccount member)
             NatVal     natural -> condensed $ (fromIntegral natural :: Integer)
 
 instance Condensed DeserializeError where
     condensed _ = "DeserializerError"
+
+instance Serialise (PublicKey c) => Condensed (Project c) where
+    condensed prj = "Project@" <> condensed (projectAddr prj)
 
 instance ( Serialise (PublicKey c)
          , Crypto.HasHashing c

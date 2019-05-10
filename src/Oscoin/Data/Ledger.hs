@@ -62,7 +62,6 @@ type StateKey = ByteString
 data StateVal c =
       AccountVal (Account c)
     | ProjectVal (Project c)
-    | MemberVal  (Member c)
     | NatVal     Natural
 
 deriving instance (Eq (PublicKey c)) => Eq (StateVal c)
@@ -356,7 +355,7 @@ newtype HandlerError = HandlerError Text
 -------------------------------------------------------------------------------
 
 type SendTransfer' c =
-       Member c                 -- ^ Transaction signer
+       Account c                -- ^ Transaction signer
     -> Address c                -- ^ Sender
     -> Address c                -- ^ Receiver
     -> Balance                  -- ^ Balance to transfer
@@ -426,7 +425,7 @@ distributeRewardEqually bal _epoch p@Project{..} =
 type Checkpoint' c =
        Checkpoint c               -- ^ Checkpoint data
     -> Project c                  -- ^ Project data
-    -> Member  c                  -- ^ Transaction signer
+    -> Account  c                 -- ^ Transaction signer
     -> Either HandlerError ()
 
 -- | By default, authorize any checkpoint signed by a maintainer.
@@ -439,7 +438,7 @@ defaultCheckpoint _ = requireMaintainer
 
 type Unregister' c =
        Project c                  -- ^ Project data
-    -> Member c                   -- ^ Transaction signer
+    -> Account c                  -- ^ Transaction signer
     -> Either HandlerError ()
 
 defaultUnregister :: Ord (PublicKey c) => Unregister' c
@@ -452,7 +451,7 @@ defaultUnregister = requireMaintainer
 type Authorize' c =
        Address c                    -- ^ Key to be added
     -> Project c                    -- ^ Project data
-    -> Member c                     -- ^ Transaction signer
+    -> Account c                    -- ^ Transaction signer
     -> Either HandlerError ()
 
 defaultAuthorize :: Ord (PublicKey c) => Authorize' c
@@ -465,7 +464,7 @@ defaultAuthorize _ = requireMaintainer
 type Deauthorize' c =
        Address c                  -- ^ Key to be removed
     -> Project c                  -- ^ Project data
-    -> Member c                   -- ^ Transaction signer
+    -> Account c                  -- ^ Transaction signer
     -> Either HandlerError ()
 
 defaultDeauthorize :: Ord (PublicKey c) => Deauthorize' c
@@ -479,7 +478,7 @@ type UpdateContract' c =
        Handler                  -- ^ Handler to be updated
     -> HandlerParams            -- ^ New handler parameters
     -> Project c                -- ^ Project data
-    -> Member c                 -- ^ Transaction signer
+    -> Account c                -- ^ Transaction signer
     -> Either HandlerError ()
 
 defaultUpdateContract :: Ord (PublicKey c) => UpdateContract' c
@@ -497,13 +496,13 @@ distribute bal accs =
     share     = bal `div` fromIntegral (Set.size accs)
     remainder = bal `mod` share
 
--- | Return 'Right ()' if the member is a project maintainer and 'Left' otherwise.
+-- | Return 'Right ()' if the account is a project maintainer and 'Left' otherwise.
 requireMaintainer
     :: Ord (PublicKey c)
     => Project c
-    -> Member c
+    -> Account c
     -> Either HandlerError ()
-requireMaintainer Project{..} Member{..} =
-    if Map.member memberAccount pMaintainers
+requireMaintainer Project{..} Account{..} =
+    if Map.member accountAddr pMaintainers
        then Right ()
        else Left  (HandlerError "Signer must be a project maintainer")

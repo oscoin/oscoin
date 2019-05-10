@@ -153,15 +153,30 @@ applyTx tx@Tx'{..} author ws = do
         Left (ErrInsufficientBalance accountBalance)
 
     -- TODO(cloudhead): Transfer fee
-    -- TODO(cloudhead): Destroy burn
     -- TODO(cloudhead): Verify transaction size
-    -- TODO(cloudhead): Increment nonce
 
-    applyTxMessages txMessages author ws
+    applyTxMessages txMessages author
+        =<< debitAccount author txBurn
+            (adjustAccount incrementNonce author ws)
+
 
 -- FIXME(adn) This is currently a stub.
 verifyTx :: Tx c -> Bool
 verifyTx _ = True
+
+-- | Increment the account nonce.
+incrementNonce :: Account c -> Account c
+incrementNonce acc = acc { accountNonce = accountNonce acc + 1 }
+
+-- | Adjust an account. Does nothing if the account doesn't exist, or the value under the key
+-- is not an account.
+adjustAccount
+    :: CBOR.Serialise (PublicKey c)
+    => (Account c -> Account c) -> Address c -> WorldState c -> WorldState c
+adjustAccount f (addressKey -> k) ws =
+    case WorldState.lookup k ws of
+        Just (AccountVal v) -> WorldState.insert k (AccountVal (f v)) ws
+        _                   -> ws
 
 -- | Apply a 'TxMessage' list to a 'WorldState' and return the new state and outputs.
 applyTxMessages
@@ -187,17 +202,19 @@ applyTxMessage
     -> WorldState c
     -> Either (TxError c) (WorldState c, TxOutput)
 
-applyTxMessage (TxRegisterProject addr) _ ws =
+applyTxMessage (TxRegisterProject addr) author ws =
     if WorldState.member key ws
        then Left (ErrProjectExists addr)
-       else Right ( WorldState.insert key (ProjectVal (mkProject addr)) ws
+       else Right ( WorldState.insert key (ProjectVal prj) ws
                   , [] )
   where
     key = addressKey addr
+    prj = (mkProject addr) { pMaintainers = Map.singleton author mem }
+    mem = mkMember author 0
 
 applyTxMessage (TxUnregisterProject addr) author ws = do
     p@Project{..} <- lookupProject addr   ws
-    member        <- lookupMember  author ws
+    member        <- lookupAccount author ws
 
     mapHandlerError (pUnregister p member)
     pure (WorldState.delete projKey ws, [])
@@ -206,7 +223,7 @@ applyTxMessage (TxUnregisterProject addr) author ws = do
 
 applyTxMessage (TxAuthorize addr pk) author ws = do
     p@Project{..} <- lookupProject addr    ws
-    member        <- lookupMember  author  ws
+    member        <- lookupAccount author  ws
     epoch         <- lookupEpoch           ws
 
     mapHandlerError (pAuthorize pk p member)
@@ -221,7 +238,7 @@ applyTxMessage (TxAuthorize addr pk) author ws = do
 
 applyTxMessage (TxDeauthorize addr pk) author ws = do
     p@Project{..} <- lookupProject addr    ws
-    member        <- lookupMember  author  ws
+    member        <- lookupAccount author  ws
 
     mapHandlerError (pDeauthorize pk p member)
     pure (adjust removeKey projKey ws, [])
@@ -310,20 +327,6 @@ debitAccount addr bal ws =
 -- | Map a handler error into a transaction error.
 mapHandlerError :: Either HandlerError a -> Either (TxError c) a
 mapHandlerError = first ErrHandlerFailed
-
--- | Lookup a member in the state.
-lookupMember
-    :: CBOR.Serialise (PublicKey c)
-    => Address c
-    -> WorldState c
-    -> Either (TxError c) (Member c)
-lookupMember addr ws =
-    case WorldState.lookup key ws of
-        Just (MemberVal m) -> Right m
-        Nothing            -> Left (ErrKeyNotFound key)
-        _                  -> Left (ErrTypeMismatch key)
-  where
-    key = addressKey addr
 
 -- | Lookup a project in the state.
 lookupProject
