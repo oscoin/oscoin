@@ -113,6 +113,9 @@ instance Condensed DeserializeError where
 instance (Show (PublicKey c)) => Condensed (Project c) where
     condensed prj = "Project@" <> condensed (projectId prj)
 
+instance (Show (PublicKey c)) => Condensed (Account c) where
+    condensed acc = "Account@" <> condensed (accountId acc)
+
 instance ( Show (PublicKey c)
          , Crypto.HasHashing c
          ) => Condensed (TxMessage c)
@@ -165,7 +168,13 @@ instance ( Show (PublicKey c)
          , Crypto.HasHashing c
          ) => Condensed (Tx c)
   where
-    condensed Tx'{..} = condensed txMessages
+    condensed Tx'{..} = condensed txPayload
+
+instance ( Show (PublicKey c)
+         , Crypto.HasHashing c
+         ) => Condensed (TxPayload c)
+  where
+    condensed TxPayload{..} = condensed txMessages
 
 -- NOTE(adn) It's a bit of a security hazard to implement a 'Show' instance
 -- for a private key, as that might end up in public logs and other crazy things.

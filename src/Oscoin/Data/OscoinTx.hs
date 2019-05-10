@@ -8,7 +8,7 @@ module Oscoin.Data.OscoinTx where
 
 import           Oscoin.Prelude hiding (length)
 
-import           Oscoin.Configuration (Network(..))
+import           Oscoin.Configuration (Network)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
@@ -25,15 +25,27 @@ import qualified Data.Map as Map
 -- Tx
 -------------------------------------------------------------------------------
 
--- | A transaction on the ledger with the default version and flags.
-type Tx c = Tx' 1 0 c
+-- | A transaction on the ledger with the default version.
+type Tx c = Tx' 1 c
 
--- | A transaction with parametric version and flags.
-data Tx' (version :: Nat) (flags :: Nat) c = Tx'
+-- | A signed transaction with parametric version.
+data Tx' (version :: Nat) c = Tx'
+    { txPayload   :: TxPayload c
+    -- ^ The transaction payload.
+    , txNetwork   :: Network
+    -- ^ The network this transaction belongs to.
+    , txSignature :: Signature c
+    -- ^ The transaction signature.
+    }
+
+-- | Transaction version.
+txVersion :: forall version c. KnownNat version => Tx' version c -> Word16
+txVersion _ = fromIntegral (natVal (Proxy @version))
+
+-- | Transaction payload.
+data TxPayload c = TxPayload
     { txMessages :: [TxMessage c]
     -- ^ Transaction message.
-    , txNetwork  :: Network
-    -- ^ Network this transaction belongs to.
     , txNonce    :: Word64
     -- ^ Account nonce.
     , txFee      :: Balance
@@ -41,14 +53,6 @@ data Tx' (version :: Nat) (flags :: Nat) c = Tx'
     , txBurn     :: Balance
     -- ^ Transaction burn.
     } deriving (Generic)
-
--- | Transaction version.
-txVersion :: forall version flags c. KnownNat version => Tx' version flags c -> Word16
-txVersion _ = fromIntegral (natVal (Proxy @version))
-
--- | Transaction flags.
-txFlags :: forall version flags c. KnownNat flags => Tx' version flags c -> Word16
-txFlags _ = fromIntegral (natVal (Proxy @flags))
 
 -- | A transaction message.
 data TxMessage c =
@@ -116,30 +120,29 @@ deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (PublicKey c)) => Ord
 
 -------------------------------------------------------------------------------
 
--- | Make a transaction with the given messages.
-mkTx :: [TxMessage c] -> Tx c
-mkTx ms = Tx'
+-- | Make a transaction payload with the given messages.
+mkTxPayload :: [TxMessage c] -> TxPayload c
+mkTxPayload ms = TxPayload
     { txMessages = ms
-    , txNetwork  = Devnet
     , txNonce    = 0
     , txFee      = 0
     , txBurn     = 0
     }
 
--- | Apply a transaction to the world state, and return either an error,
+-- | Apply a transaction payload to the world state, and return either an error,
 -- or a new world state with the output of the transaction.
-applyTx
+applyTxPayload
     :: ( CBOR.Serialise (PublicKey c)
        , Ord (PublicKey c)
        )
-    => Tx c
+    => TxPayload c
     -- ^ The transaction to apply.
     -> AccountId c
     -- ^ The author or \"signer\" of the transaction.
     -> WorldState c
     -- ^ The input world state.
     -> Either (TxError c) (WorldState c, TxOutput)
-applyTx tx@Tx'{..} author ws = do
+applyTxPayload tx@TxPayload{..} author ws = do
     Account{..} <- lookupAccount author ws
 
     when (txNonce /= accountNonce) $
@@ -263,6 +266,17 @@ applyTxMessage (TxTransfer sender receiver bal) author ws = do
 
     pure (ws', [])
 
+-- | Add an account to the world state. If the account already exists, it is overwritten. The
+-- 'AccountId' of the account is used as key.
+insertAccount :: CBOR.Serialise (PublicKey c) => Account c -> WorldState c -> WorldState c
+insertAccount acc@Account{..} = WorldState.insert (accountKey accountId) (AccountVal acc)
+
+-- | Delete an account from the world state, if it exists.
+--
+-- Nb. The caller must ensure that the value under the account id is indeed an 'Account'.
+deleteAccount :: CBOR.Serialise (PublicKey c) => AccountId c -> WorldState c -> WorldState c
+deleteAccount id = WorldState.delete (accountKey id)
+
 -- | Credit an account with coins.
 --
 -- Increases the total coin supply and creates the account if it does not exist.
@@ -284,11 +298,9 @@ creditAccount id bal ws =
             | bal > maxBound - accountBalance acc ->
                 Left (ErrOverflow id)
             | otherwise ->
-                Right $ WorldState.insert (accountKey id)
-                    (AccountVal $ acc { accountBalance = accountBalance acc + bal }) ws
-        Left (ErrKeyNotFound key) -> -- Account doesn't exist, create it.
-            Right $ WorldState.insert key
-                (AccountVal $ (mkAccount id) { accountBalance = bal }) ws
+                Right $ insertAccount (acc { accountBalance = accountBalance acc + bal }) ws
+        Left (ErrKeyNotFound _) -> -- Account doesn't exist, create it.
+            Right $ insertAccount ((mkAccount id) { accountBalance = bal }) ws
         Left err ->
             Left err
 
@@ -314,14 +326,11 @@ debitAccount id bal ws =
             | bal > accountBalance acc ->
                 Left $ ErrInsufficientBalance (accountBalance acc)
             | bal == accountBalance acc ->
-                Right $ WorldState.delete key ws
+                Right $ deleteAccount id ws
             | otherwise ->
-                Right $ WorldState.insert key
-                    (AccountVal $ acc { accountBalance = accountBalance acc - bal }) ws
+                Right $ insertAccount (acc { accountBalance = accountBalance acc - bal }) ws
         Left err ->
             Left err
-  where
-    key = accountKey id
 
 -- | Map a handler error into a transaction error.
 mapHandlerError :: Either HandlerError a -> Either (TxError c) a
@@ -364,7 +373,7 @@ lookupEpoch ws =
         _               -> Left (ErrTypeMismatch "epoch")
 
 -- | The minimum transaction fee that is valid for the given transaction.
-minimumTxFee :: Tx c -> Balance
+minimumTxFee :: TxPayload c -> Balance
 minimumTxFee = const 1
 
 -------------------------------------------------------------------------------
@@ -398,17 +407,20 @@ deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
     , Show (PublicKey c)
+    , Show (TxPayload c)
     , Crypto.HasHashing c
-    ) => Show (Tx' version flags c)
+    ) => Show (Tx' version c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
     , Eq (PublicKey c)
-    ) => Eq (Tx' version flags c)
+    , Eq (TxPayload c)
+    ) => Eq (Tx' version c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
     , Ord (PublicKey c)
-    ) => Ord (Tx' version flags c)
+    , Ord (TxPayload c)
+    ) => Ord (Tx' version c)

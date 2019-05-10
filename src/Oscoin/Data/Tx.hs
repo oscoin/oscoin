@@ -40,7 +40,7 @@ type family TxState c tx where
 -- concrete way to representing transactions without the system, but it serves
 -- for now as a compat-shim to make the types unify.
 type family TxPayload c tx where
-    TxPayload c (OscoinTx.Tx c) = OscoinTx.Tx c
+    TxPayload c (OscoinTx.Tx c) = OscoinTx.TxPayload c
     TxPayload c (Tx c)          = DummyPayload
 
 newtype DummyEnv = DummyEnv (Map Text DummyPayload)

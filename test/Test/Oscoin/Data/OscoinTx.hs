@@ -27,44 +27,45 @@ import qualified Hedgehog.Range as Range
 tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     [ testProperty "Transfer balance"        (propTransferBalance @c Dict)
-    , testProperty "Apply transaction"       (propApplyTx         @c Dict)
+    , testProperty "Apply transaction"       (propApplyTxPayload  @c Dict)
     , testProperty "Multi-message"           (propMultiTransfer   @c Dict)
     , testProperty "Tx fee & burn"           (propTxFeeBurn       @c Dict)
     , testProperty "Register project"        (propRegisterProj    @c Dict)
+    , testProperty "Nonces"                  (propNonce           @c Dict)
     ]
 
-propApplyTx :: forall c. Dict (IsCrypto c) -> Property
-propApplyTx Dict = property $ do
+propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
+propApplyTxPayload Dict = property $ do
     alice <- publicKey @c
 
     -- We use an empty transaction message list, as this lets us test
     -- the "generic" part of the transaction processing without worrying about
     -- the messages.
-    tx    <- pure (mkTx [])
+    tx    <- pure (mkTxPayload [])
     ws    <- forAll genWorldState
     bal   <- forAll genBalancePositive
 
     -- Should fail because Alice doesn't have an account
-    applyTx tx alice ws ===  Left (ErrKeyNotFound (accountKey alice))
+    applyTxPayload tx alice ws ===  Left (ErrKeyNotFound (accountKey alice))
 
     -- Give Alice an account
     ws' <- evalEither $ creditAccount alice bal ws
 
     -- Should fail because the transaction nonce is incorrect (should be 0)
     forAll (genNonce 1 maxBound) >>= \nonce ->
-        applyTx (tx { txNonce = nonce }) alice ws' ===  Left (ErrInvalidNonce nonce)
+        applyTxPayload (tx { txNonce = nonce }) alice ws' ===  Left (ErrInvalidNonce nonce)
 
     -- Should fail because the transaction fee is too low
-    applyTx (tx { txFee = 0 }) alice ws' ===  Left (ErrInvalidFee 0)
+    applyTxPayload (tx { txFee = 0 }) alice ws' ===  Left (ErrInvalidFee 0)
 
     -- Should fail because Alice doesn't have enough balance
-    applyTx (tx { txFee = bal + 1 }) alice ws' ===  Left (ErrInsufficientBalance bal)
+    applyTxPayload (tx { txFee = bal + 1 }) alice ws' ===  Left (ErrInsufficientBalance bal)
 
     -- Generate a valid fee of at most the account balance
     fee <- forAll $ genFee tx bal
 
     -- Should succeed because Alice can pay the minimum fee
-    (ws'', _) <- evalEither $ applyTx (tx { txFee = fee }) alice ws'
+    (ws'', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) alice ws'
 
     -- Alice's nonce is now incremented to `1`.
     lookupNonce alice ws'' === Right 1
@@ -109,19 +110,19 @@ propMultiTransfer Dict = property $ do
     t2            <- pure (TxTransfer alice bob 2)
 
     -- A single invalid message (`t0`) fails the transaction
-    invalidTx <- pure (mkTx [t1, t0, t2])
-    applyTx (invalidTx { txFee = minimumTxFee invalidTx }) alice ws === Left (ErrInvalidTransfer 0)
+    invalidTx <- pure (mkTxPayload [t1, t0, t2])
+    applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) alice ws === Left (ErrInvalidTransfer 0)
 
     -- Multiple messages combine
-    tx <- pure (mkTx [t1, t1, t2])
-    (ws', _) <- evalEither $ applyTx (tx { txFee = minimumTxFee tx }) alice ws
+    tx <- pure (mkTxPayload [t1, t1, t2])
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) alice ws
 
     lookupBalance bob ws' === Right 4
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
     alice <- publicKey @c
-    tx    <- pure (mkTx [])
+    tx    <- pure (mkTxPayload [])
     bal   <- forAll genBalancePositive
     ws    <- evalEither $ creditAccount alice bal WorldState.empty
 
@@ -129,7 +130,7 @@ propTxFeeBurn Dict = property $ do
     fee  <- forAll $ genFee tx bal
     burn <- forAll $ genBalanceRange 0 (bal - fee)
 
-    (ws', _) <- evalEither $ applyTx (tx { txFee = fee, txBurn = burn }) alice ws
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee, txBurn = burn }) alice ws
 
     -- TODO(cloudhead): Test that the fee is deducted, once that is implemented.
     -- The burn is debited from Alice's account.
@@ -166,6 +167,21 @@ propRegisterProj Dict = property $ do
 
         -- And the project is no longer in the state.
         lookupProject proj ws'' === Left (ErrKeyNotFound (accountKey proj))
+
+propNonce :: forall c. Dict (IsCrypto c) -> Property
+propNonce Dict = property $ do
+    alice <- publicKey @c
+    acc   <- forAll (genAccount alice)
+
+    let tx = (mkTxPayload []) { txNonce = accountNonce acc }
+    let ws = insertAccount acc WorldState.empty
+
+    fee      <- forAll (genFee tx (accountBalance acc))
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) alice ws
+    nonce'   <- evalEither $ lookupNonce alice ws'
+
+    -- Alice's nonce is now incremented by `1`.
+    nonce' === (accountNonce acc + 1)
 
 -------------------------------------------------------------------------------
 -- Utility
@@ -217,7 +233,7 @@ assertRight = void . evalEither
 -- Generators
 -------------------------------------------------------------------------------
 
-genFee :: Tx c -> Balance -> Gen Balance
+genFee :: TxPayload c -> Balance -> Gen Balance
 genFee tx maxFee = Gen.integral (Range.constantFrom minFee minFee maxFee)
   where
     minFee = minimumTxFee tx
@@ -246,7 +262,7 @@ genDependencyUpdates :: Gen [DependencyUpdate c]
 genDependencyUpdates = pure []
 
 genAccount :: AccountId c -> Gen (Account c)
-genAccount id = Account id <$> genBalance <*> genNonce 0 maxBound
+genAccount id = Account id <$> genBalancePositive <*> genNonce 0 maxBound
 
 genWorldState :: Gen (WorldState c)
 genWorldState = pure WorldState.empty
