@@ -5,6 +5,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto
 import           Oscoin.Test.Crypto
 
+import           Oscoin.Crypto.Blockchain (tip, (|>))
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, emptyGenesisBlock, sealBlock)
 import           Oscoin.Protocol.Sync as Sync
@@ -16,11 +17,13 @@ import           Lens.Micro (over)
 
 import           Hedgehog
 import           Hedgehog.Gen.QuickCheck (quickcheck)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators (genBlockFrom)
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Test.Oscoin.P2P.Gen (genNodeInfo)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
+
 
 tests :: Dict (IsCrypto c) -> TestTree
 tests _d = testGroup "Test.Oscoin.Protocol.Sync"
@@ -33,25 +36,57 @@ props :: Dict (IsCrypto c) -> IO Bool
 props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     [("prop_withActivePeers_no_active_peers", prop_withActivePeers_no_active_peers)
     ,("prop_withActivePeers", prop_withActivePeers)
+    ,("prop_bestTip_sim_single", prop_bestTip_sim_single)
+    ,("prop_bestTip_sim_two_peers", prop_bestTip_sim_two_peers)
     ]
 
 prop_withActivePeers_no_active_peers :: Property
-prop_withActivePeers_no_active_peers = withTests 1 . property $ do
-    let res = Mock.runMockSync Mock.emptyWorldState Mock.mockLayer (Sync.withActivePeers (const (pure ())))
+prop_withActivePeers_no_active_peers = property $ do
+    let res = Mock.runMockSync (Mock.emptyWorldState defaultGenesis)
+                               Mock.mockContext
+                               (Sync.withActivePeers (const (pure ())))
     annotate "withActivePeers must fail with NoActivePeers" *> (res === Left NoActivePeers)
 
 prop_withActivePeers :: Property
-prop_withActivePeers = withTests 1 . property $ do
+prop_withActivePeers = property $ do
     testPeer <- forAll genActivePeer
-    let worldState = Mock.emptyWorldState
+    let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer)
-    let res = Mock.runMockSync worldState Mock.mockLayer (Sync.withActivePeers (const (pure ())))
+    let res = Mock.runMockSync worldState Mock.mockContext (Sync.withActivePeers (const (pure ())))
     annotate "withActivePeers must succeed" *> (res === Right ())
+
+prop_bestTip_sim_single :: Property
+prop_bestTip_sim_single = property $ do
+    testPeer@(_, peer1Chain) <- forAll genActivePeer
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer)
+    let res = Mock.runMockSync worldState Mock.mockContext Sync.bestTip
+    res === Right (tip peer1Chain)
+
+prop_bestTip_sim_two_peers :: Property
+prop_bestTip_sim_two_peers = property $ do
+    testPeer1@(_, chain1) <- forAll genActivePeer
+    (peer2, _) <- forAll genActivePeer
+    chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
+    let res = Mock.runMockSync worldState Mock.mockContext Sync.bestTip
+    res === Right (tip chain2)
+
+{------------------------------------------------------------------------------
+  Constant values
+------------------------------------------------------------------------------}
+
+defaultGenesis :: Block MockCrypto Mock.MockTx (Sealed MockCrypto Mock.MockSeal)
+defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
+
+{------------------------------------------------------------------------------
+  Generators
+------------------------------------------------------------------------------}
 
 genActivePeer :: Gen (Mock.MockPeer, Mock.PeerData)
 genActivePeer = do
   (pk, _) <- quickcheck arbitraryKeyPair
   (,) <$> genNodeInfo pk <*> quickcheck (genBlockchainFrom defaultGenesis)
   where
-      defaultGenesis :: Block MockCrypto [Word8] (Sealed MockCrypto Text)
-      defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
