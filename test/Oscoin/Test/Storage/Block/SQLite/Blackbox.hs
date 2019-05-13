@@ -31,7 +31,7 @@ tests Dict =
     [ testGroup "Storage.Block"
         [ testProperty "Store/lookup Block" (withMemStore genBlockFrom (testStoreLookupBlock @c))
         , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
-        , testProperty "Get Genesis Block"  (withMemStore (const arbitrary) (testGetGenesisBlock @c))
+        , testProperty "Get Genesis Block"  (withMemStore pure (testGetGenesisBlock @c))
         , testProperty "Get blocks"         (withMemStore genGetBlocks (testGetBlocks @c))
         ]
     ]
@@ -46,7 +46,7 @@ genNonEmptyBlock
     => Block c (Tx c) (Sealed c DummySeal)
     -> Gen (Block c (Tx c) (Sealed c DummySeal))
 genNonEmptyBlock genesisBlock =
-    genBlockFrom genesisBlock `suchThat` (not . null . blockData)
+    genBlockFrom genesisBlock `suchThat` (not . null . blockTxs)
 
 
 genGetBlocks
@@ -82,7 +82,7 @@ testStoreLookupTx blk (publicAPI, privateAPI) = do
     Abstract.insertBlock privateAPI blk
 
     let tx = headDef (panic "No transactions!")
-           $ toList $ blockData blk
+           $ toList $ blockTxs blk
 
     Just tx' <- Abstract.lookupTx publicAPI (Crypto.hash tx)
 
@@ -90,11 +90,11 @@ testStoreLookupTx blk (publicAPI, privateAPI) = do
 
 testGetGenesisBlock
     :: IsCrypto c
-    => ()
+    => Block c (Tx c) (Sealed c DummySeal)
     -> Abstract.BlockStore c (Tx c) DummySeal IO -> Assertion
-testGetGenesisBlock () (publicAPI, _privateAPI) = do
+testGetGenesisBlock genesis (publicAPI, _privateAPI) = do
     blk <- Abstract.getGenesisBlock publicAPI
-    defaultGenesis @?= blk
+    genesis @?= blk
 
 testGetBlocks
     :: IsCrypto c

@@ -12,13 +12,19 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block(..), BlockHash, BlockHeader(..), Sealed, mkBlock)
+                 ( Beneficiary
+                 , Block(..)
+                 , BlockHash
+                 , BlockHeader(..)
+                 , Sealed
+                 , mkBlock
+                 )
 import qualified Oscoin.Crypto.Hash as Crypto
 
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite.Internal
 
-import           Database.SQLite.Simple (Only(..))
+import           Database.SQLite.Simple ((:.)(..), Only(..))
 import qualified Database.SQLite.Simple as Sql
 import           Database.SQLite.Simple.FromField (FromField)
 import           Database.SQLite.Simple.QQ
@@ -36,7 +42,9 @@ withBlockStore
     :: ( ToField s
        , FromField s
        , FromField (Crypto.Hash c)
+       , Typeable c
        , Serialise s
+       , Serialise (Beneficiary c)
        , StorableTx c tx
        )
     => String
@@ -70,6 +78,8 @@ withBlockStore path genesisBlock action =
 lookupBlock
     :: forall c tx s.
        ( Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField (Sealed c s)
        , FromField (Crypto.Hash c)
        , StorableTx c tx
@@ -79,15 +89,15 @@ lookupBlock
     -> IO (Maybe (Block c tx (Sealed c s)))
 lookupBlock Handle{hConn} h = runTransaction hConn $ do
     conn <- ask
-    result :: Maybe (BlockHeader c (Sealed c s)) <- listToMaybe <$> liftIO (Sql.query conn
-        [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal
+    result :: Maybe (BlockHeader c (Sealed c s) :. Only (Beneficiary c)) <- listToMaybe <$> liftIO (Sql.query conn
+        [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                 FROM blocks
                WHERE hash = ? |] (Only h))
 
     txs :: [tx] <- liftIO $ getBlockTxs conn h
 
-    for result $ \bh ->
-        pure $ mkBlock bh txs
+    for result $ \(bh :. Only be) ->
+        pure $ mkBlock bh be txs
 
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.

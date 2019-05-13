@@ -34,6 +34,9 @@ testBlockchain d@Dict config = testGroup "Blockchain"
     , testProperty "Block: deserialise . serialise == id" $
         \(blk :: Block c ByteString ByteString) ->
             (Serialise.deserialise . Serialise.serialise) blk == blk
+    , testProperty "BlockData: deserialise . serialise == id" $
+        \(blkData :: BlockData c ByteString) ->
+            (Serialise.deserialise . Serialise.serialise) blkData == blkData
     , testProperty "Difficulty: parseDifficulty . prettyDifficulty == id" $
         forAll genDifficulty $ \(diffi :: Difficulty) ->
             (parseDifficulty. prettyDifficulty) diffi == Just diffi

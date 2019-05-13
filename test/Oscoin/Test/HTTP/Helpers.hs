@@ -52,6 +52,8 @@ import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network (DummyNodeId)
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary)
@@ -143,6 +145,7 @@ withNode NodeState{..} k = do
                 }
             , Node.cfgTelemetry       = metrics
             , Node.cfgConsensusConfig = config
+            , Node.cfgBeneficiary     = defaultBeneficiary
             }
 
     mph <- atomically $ do
@@ -189,7 +192,7 @@ createValidTx payload = liftIO $ do
 
 -- | Creates a new empty blockchain with a dummy seal.
 emptyBlockchain :: IsCrypto c => Blockchain c (Tx c) DummySeal
-emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch)
+emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch defaultBeneficiary)
 
 initEnv :: [(Text, DummyPayload)] -> TxState c (Tx c)
 initEnv bindings =
@@ -209,7 +212,7 @@ runSession nst (Session sess) =
 -- | Run a 'Session' so that the blockchain state is the given environment.
 runSessionEnv :: IsCrypto c => DummyEnv -> Session c () -> Assertion
 runSessionEnv env (Session sess) = do
-    let nst = nodeState [] (fromGenesis $ sealBlock "" $ emptyGenesisFromState epoch env) env
+    let nst = nodeState [] (fromGenesis $ sealBlock "" $ emptyGenesisFromState epoch defaultBeneficiary env) env
     withNode nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app

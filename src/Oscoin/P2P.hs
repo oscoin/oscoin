@@ -17,7 +17,9 @@ import           Oscoin.Prelude hiding (length, show)
 
 import           Oscoin.Clock (MonadClock)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block
+                 ( Beneficiary
+                 , Block
+                 , BlockData
                  , BlockHash
                  , Sealed
                  , blockHash
@@ -79,6 +81,7 @@ newtype GossipT c m a = GossipT (ReaderT (Gossip.Run.Env (NodeInfo c)) m a)
 instance ( Hashable (Crypto.PublicKey c)
          , Eq (Crypto.PublicKey c)
          , Serialise (Crypto.Hash c)
+         , Serialise (Beneficiary c)
          , MonadIO m
          ) => MonadBroadcast c (GossipT c m) where
     broadcast msg = do
@@ -111,6 +114,7 @@ withGossip
        , Serialise tx
        , Serialise o
        , Serialise (BlockHash c)
+       , Serialise (BlockData c tx)
        )
     => Telemetry.Handle
     -> SelfInfo c
@@ -191,6 +195,7 @@ wrapApply
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
+       , Serialise (BlockData c tx)
        )
     => Telemetry.Handle
     -> (BlockHash c             -> IO (Maybe (Block c tx (Sealed c s))))
@@ -241,6 +246,7 @@ wrapLookup
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
+       , Serialise (BlockData c tx)
        )
     => (BlockHash c -> IO (Maybe (Block c tx s)))
     -> (Crypto.Hashed c tx -> IO (Maybe tx))
@@ -257,6 +263,7 @@ fromGossip
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
+       , Serialise (BlockData c tx)
        )
     => Bcast.MessageId
     -> ByteString
@@ -283,6 +290,7 @@ deserialisePayload
        , Serialise tx
        , Serialise s
        , Serialise (BlockHash c)
+       , Serialise (BlockData c tx)
        )
     => ByteString
     -> Either CBOR.DeserialiseFailure (Msg c tx s)

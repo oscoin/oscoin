@@ -29,6 +29,9 @@ import qualified System.Random.SplitMix as SplitMix
 import           Test.QuickCheck
 
 
+instance (HasDigitalSignature c, HasHashing c) => Arbitrary (PublicKey c) where
+    arbitrary = fst <$> arbitraryKeyPair
+
 newtype FastRandomBytes a = FRB (StateT SplitMix.SMGen Identity a)
     deriving (Monad, Applicative, Functor, MonadState SplitMix.SMGen)
 

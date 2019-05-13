@@ -22,6 +22,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Time ()
 import           Test.QuickCheck
@@ -48,15 +50,16 @@ genStandaloneBlock = do
     stateHash <- arbitrary
     blockSeal <- arbitrary
 
+    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockPrevHash   = prevHash
-               , blockDataHash   = hashTxs txs
+               , blockDataHash   = hashData blockData
                , blockStateHash  = stateHash
                , blockTimestamp  = timestamp
                , blockSeal
                , blockTargetDifficulty = diffi
                }
-    pure $ mkBlock header txs
+    pure $ mkBlock header blockDataBeneficiary blockDataTxs
 
 
 -- | The difficulty is calculated with random swings with a factor of 4(**).
@@ -112,19 +115,20 @@ genBlockWith
     -> Gen (Block c tx s)
 genBlockWith parentBlock txs st = do
     let prevHeader = blockHeader parentBlock
+    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockSeal  <- arbitrary
     blockDiffi <- genDifficultyFrom (blockTargetDifficulty prevHeader)
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockHeight           = succ . blockHeight $ prevHeader
                , blockPrevHash         = headerHash prevHeader
-               , blockDataHash         = hashTxs txs
+               , blockDataHash         = hashData blockData
                , blockStateHash        = hashState st
                , blockSeal
                , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
                , blockTargetDifficulty = blockDiffi
                }
-    pure $ mkBlock header txs
+    pure $ mkBlock header blockDataBeneficiary blockDataTxs
 
 -- | Generates an arbitrary but valid block, linked against the input
 -- one. Uses 'genBlockWith' with an arbitrary set of transactions and
@@ -169,16 +173,17 @@ genNakamotoBlockWith prefix@(parent:|_) txs = do
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- genPoWSeal
     blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
+    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockHeight           = succ (blockHeight prevHeader)
                , blockPrevHash         = headerHash prevHeader
-               , blockDataHash         = hashTxs txs
+               , blockDataHash         = hashData blockData
                , blockStateHash        = hashState blockState
                , blockSeal
                , blockTimestamp        = blockTimestamp prevHeader `timeAdd` elapsed
                , blockTargetDifficulty = blockDiffi
                }
-    pure $ mkBlock header txs
+    pure $ mkBlock header blockDataBeneficiary blockDataTxs
 
 genNakamotoBlockFrom
     :: ( Arbitrary tx

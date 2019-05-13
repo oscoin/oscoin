@@ -32,13 +32,14 @@ import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, blocks, showBlockDigest, showChainDigest)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block
+                 ( Beneficiary
+                 , Block
                  , BlockHash
                  , Sealed
-                 , blockData
                  , blockHash
                  , blockHeader
                  , blockPrevHash
+                 , blockTxs
                  )
 import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
@@ -97,7 +98,7 @@ testableLongestChain =
 
 testableIncludedTxs :: TestableNode c s m a => a -> [DummyTx]
 testableIncludedTxs =
-      concatMap (toList . blockData)
+      concatMap (toList . blockTxs)
     . blocks
     . testableBestChain
 
@@ -116,7 +117,7 @@ data Msg c s =
     | ResBlockMsg DummyNodeId (Block c DummyTx (Sealed c s))
     -- ^ Message sent in response to 'ReqBlockMsg'. 'DummyNodeId' is the requesting node.
 
-deriving instance (Eq s, Eq (Hash c)) => Eq (Msg c s)
+deriving instance (Eq s, Eq (Hash c), Eq (Beneficiary c)) => Eq (Msg c s)
 
 instance HasHashing c => Show (Msg c s) where
     show (BlockMsg  blk)   = F.formatToString (F.stext % " " % F.stext) "BlockMsg" (showBlockDigest blk)

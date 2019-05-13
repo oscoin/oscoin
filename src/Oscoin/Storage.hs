@@ -56,6 +56,7 @@ applyBlock
     :: ( Serialise tx
        , Serialise s
        , Serialise (Crypto.Hash c)
+       , Serialise (BlockData c tx)
        , MonadMempool    c tx   m
        , Crypto.Hashable c tx
        , Crypto.Hashable c (BlockHeader c (Sealed c s))
@@ -75,7 +76,7 @@ applyBlock proto validateBasic config blk = do
         case validateBlockSize config blk >>= const (validateBasic blk) of
             Left err -> pure $ Error [BlockValidationFailedEvent blkHash err]
             Right () -> do
-                let txs = blockData blk
+                let txs = blockTxs blk
 
                 Protocol.dispatchBlockAsync proto blk
                 Mempool.delTxs txs

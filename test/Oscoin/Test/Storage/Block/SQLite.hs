@@ -16,6 +16,8 @@ import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 import qualified Oscoin.Time as Time
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck
@@ -25,7 +27,8 @@ type DummySeal = Text
 
 -- | Generates a genesis block with a slightly more realistic 'Difficulty'.
 defaultGenesis :: IsCrypto c => Block c tx (Sealed c DummySeal)
-defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
+defaultGenesis =
+    sealBlock mempty (emptyGenesisBlock Time.epoch defaultBeneficiary)
 
 {------------------------------------------------------------------------------
   Useful combinators & helpers

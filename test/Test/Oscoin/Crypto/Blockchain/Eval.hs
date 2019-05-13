@@ -13,6 +13,8 @@ import           Codec.Serialise
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -38,7 +40,7 @@ test_buildBlock d@Dict = testGroup "buildBlock"
     , testProperty "only valid transactions are included in block" $
         \txs -> let (blk, _, _) = buildTestBlock d mempty txs
                     validTxs = filter txIsOk txs
-                in validTxs === toList (blockData blk)
+                in validTxs === toList (blockTxs blk)
     , testProperty "transactions errors recorded in receipts" $
         \txs err -> let (_, _, receipts) = buildTestBlock d mempty txsWithError
                         txsWithError = TxErr err : txs
@@ -47,7 +49,7 @@ test_buildBlock d@Dict = testGroup "buildBlock"
         \txs -> let validTxs = [ TxOk out | TxOk out <- txs ]
                     (blkWithErrors, _, _) = buildTestBlock d mempty txs
                     (blkWithoutErrors, _, _) = buildTestBlock d mempty validTxs
-                in  blockData blkWithErrors === blockData blkWithoutErrors
+                in  blockTxs blkWithErrors === blockTxs blkWithoutErrors
     ]
 
 
@@ -55,13 +57,13 @@ test_evalBlock :: forall c. Dict (IsCrypto c) -> TestTree
 test_evalBlock Dict = testGroup "evalBlock"
     [ testProperty "produces the correct state" $ property $ do
         txs <- arbitrary
-        let blk = mkBlock emptyHeader txs :: Block c Tx Unsealed
+        let blk = mkBlock emptyHeader defaultBeneficiary txs :: Block c Tx Unsealed
         let expectedState = reverse [ output | TxOk output <- txs ]
         let (newSt, _) = evalBlock evalTx [] blk
         pure $ newSt === expectedState
     , testProperty "includes all receipts" $ property $ do
         txs <- arbitrary
-        let blk = mkBlock emptyHeader txs :: Block c Tx Unsealed
+        let blk = mkBlock emptyHeader defaultBeneficiary txs :: Block c Tx Unsealed
         let (_, receipts) = evalBlock evalTx [] blk
         pure $ conjoin
             [ map receiptTx receipts === map Crypto.hash txs
@@ -119,4 +121,4 @@ buildTestBlock
     -> [Tx]
     -> (Block c Tx Unsealed, St, [Receipt c Tx Output])
 buildTestBlock Dict st txs =
-    buildBlock evalTx epoch st txs (emptyGenesisBlock epoch)
+    buildBlock evalTx epoch defaultBeneficiary st txs (emptyGenesisBlock epoch defaultBeneficiary)

@@ -59,7 +59,7 @@ module Oscoin.P2P.Types
 import           Oscoin.Prelude
 
 import qualified Oscoin.Configuration as Logical (Network(..))
-import           Oscoin.Crypto.Blockchain.Block (Block, BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (Beneficiary, Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hash, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Telemetry.Logging as Log
@@ -402,8 +402,8 @@ data Msg c tx s =
       BlockMsg (Block c tx s)
     | TxMsg    tx
 
-deriving instance (Show (Hash c), Show tx, Show s) => Show (Msg c tx s)
-deriving instance (Eq   (Hash c), Eq   tx, Eq   s) => Eq   (Msg c tx s)
+deriving instance (Show (Beneficiary c), Show (Hash c), Show tx, Show s) => Show (Msg c tx s)
+deriving instance (Eq   (Beneficiary c), Eq   (Hash c), Eq   tx, Eq   s) => Eq   (Msg c tx s)
 
 instance
     ( Serialise (Block c tx s)

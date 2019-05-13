@@ -43,7 +43,7 @@ newtype Blockchain c tx s =
     Blockchain { fromBlockchain :: NonEmpty (Block c tx (Sealed c s)) }
     deriving (Generic)
 
-deriving instance (Show (Crypto.Hash c), Show tx, Show s) => Show (Blockchain c tx s)
+deriving instance (Show (Beneficiary c), Show (Crypto.Hash c), Show tx, Show s) => Show (Blockchain c tx s)
 
 instance Semigroup (Blockchain c tx s) where
     (<>) (Blockchain a) (Blockchain b) = Blockchain (a <> b)
@@ -111,7 +111,7 @@ lookupTx
     -> Maybe (TxLookup c tx)
 lookupTx h (toNewestFirst . blocks -> chain) = listToMaybe $ do
     (i, block) <- zip [1..] chain
-    tx <- toList $ blockData block
+    tx <- toList $ blockTxs block
     guard (Crypto.hash tx == h)
     pure $ TxLookup tx (blockHash block) i
 

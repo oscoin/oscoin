@@ -181,6 +181,7 @@ lookupState Ledger{ledgerStateStore} stateHash = lookupHashContent ledgerStateSt
 buildNextBlock
     :: ( Monad m
        , Serialise tx
+       , Serialise (Beneficiary crypto)
        , Crypto.Hashable crypto tx
        , Crypto.Hashable crypto state
        , Crypto.Hashable crypto (BlockHeader crypto Unsealed)
@@ -188,12 +189,13 @@ buildNextBlock
        )
     => Ledger crypto seal tx output state m
     -> Timestamp
+    -> Beneficiary crypto
     -> [tx]
     -> m (Either (LedgerError crypto) (Block crypto tx Unsealed))
-buildNextBlock ledger time txs = runExceptT $ do
+buildNextBlock ledger time benef txs = runExceptT $ do
     (currentTip, tipState) <- ExceptT $ getTipWithState ledger
     let (newBlock, newState, receipts) =
-            buildBlock (ledgerEvaluator ledger) time tipState txs currentTip
+            buildBlock (ledgerEvaluator ledger) time benef tipState txs currentTip
     lift $ do
         storeHashContent (ledgerStateStore ledger) newState
         forM_ receipts $ ReceiptStore.storeReceipt (ledgerReceiptStore ledger)

@@ -6,7 +6,7 @@ module Oscoin.API.HTTP
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (BlockData, BlockHash)
 import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
@@ -45,6 +45,7 @@ app :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
+       , Serialise (BlockData c (Tx c))
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Crypto.HasHashing c
@@ -68,6 +69,7 @@ api :: ( Typeable c
        , FromHttpApiData (BlockHash c)
        , Serialise s
        , Serialise (BlockHash c)
+       , Serialise (BlockData c (Tx c))
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        , Crypto.HasHashing c

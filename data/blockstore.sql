@@ -12,9 +12,8 @@ CREATE TABLE IF NOT EXISTS "blocks" (
   "difficulty"    integer       NOT NULL,
   "seal"          blob          NOT NULL,
 
-  -- NOTE: The "timestamp" and "parenthash" fields carry an invariant that is
-  -- not checked here: the timestamp of a row must always be greater than
-  -- the timestamp of the row referenced by the "parenthash" field.
+  -- NOTE: This field holds an Ed25519 public key.
+  "beneficiary"   blob          NOT NULL,
 
   FOREIGN KEY ("parenthash")
     REFERENCES blocks ("hash")

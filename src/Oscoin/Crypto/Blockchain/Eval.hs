@@ -71,6 +71,7 @@ instance (Serialise tx, Serialise (Hash c), Serialise o) => Serialise (Receipt c
 -- The block header is not sealed.
 buildBlock
     :: ( Serialise tx
+       , Serialise (Beneficiary c)
        , Crypto.Hashable c tx
        , Crypto.Hashable c st
        , Crypto.Hashable c (BlockHeader c Unsealed)
@@ -78,15 +79,16 @@ buildBlock
        )
     => Evaluator st tx o
     -> Timestamp
+    -> Beneficiary c
     -> st
     -> [tx]
     -> Block c tx s
     -> (Block c tx Unsealed, st, [Receipt c tx o])
-buildBlock eval tick st txs parentBlock =
+buildBlock eval tick benef st txs parentBlock =
     let initialState = st
         (txOutputs, newState) = evalTraverse eval txs initialState
         validTxs = [tx | (tx, Right _) <- txOutputs]
-        newBlock = mkUnsealedBlock (Just parentBlock) tick validTxs newState
+        newBlock = mkUnsealedBlock (Just parentBlock) tick benef validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
      in (newBlock, newState, receipts)
 
@@ -96,33 +98,37 @@ buildBlock eval tick st txs parentBlock =
 -- abort if one of the transactions produces an error.
 buildBlockStrict
     :: ( Serialise tx
+       , Serialise (Beneficiary c)
        , Crypto.Hashable c st
        , Crypto.Hashable c (BlockHeader c Unsealed)
        , AuthTree.MerkleHash (Hash c)
        )
     => Evaluator st tx o
     -> Timestamp
+    -> Beneficiary c
     -> st
     -> [tx]
     -> Block c tx s
     -> Either (tx, EvalError) (Block c tx Unsealed)
-buildBlockStrict eval tick st txs parent =
-    mkUnsealedBlock (Just parent) tick txs <$> evalEither txs eval st
+buildBlockStrict eval tick benef st txs parent =
+    mkUnsealedBlock (Just parent) tick benef txs <$> evalEither txs eval st
 
 -- | Try to build a genesis block. See 'buildBlockStrict' for more information.
 buildGenesis
     :: ( Crypto.Hashable c st
        , Serialise tx
+       , Serialise (Beneficiary c)
        , Crypto.Hashable c (BlockHeader c Unsealed)
        , AuthTree.MerkleHash (Hash c)
        )
     => Evaluator st tx o
     -> Timestamp
+    -> Beneficiary c
     -> [tx]
     -> st
     -> Either (tx, EvalError) (Block c tx Unsealed)
-buildGenesis eval tick txs st =
-    mkUnsealedBlock Nothing tick txs <$> evalEither txs eval st
+buildGenesis eval tick benef txs st =
+    mkUnsealedBlock Nothing tick benef txs <$> evalEither txs eval st
 
 -- | Evaluate the transactions contained in the block against the given
 -- state and return the new state and all the produced Receipts.
@@ -134,7 +140,7 @@ evalBlock
     -> Block c tx s
     -> (st, [Receipt c tx o])
 evalBlock eval initialState blk =
-    let (txOutputs, newState) = evalTraverse eval (blockData blk) initialState
+    let (txOutputs, newState) = evalTraverse eval (blockTxs blk) initialState
         receipts = map (uncurry $ mkReceipt blk) txOutputs
      in (newState, toList receipts)
 
@@ -171,22 +177,24 @@ evalToState eval tx = state go
 mkUnsealedBlock
     :: forall c tx s st.
        ( Serialise tx
+       , Serialise (Beneficiary c)
        , AuthTree.MerkleHash (Hash c)
        , Crypto.Hashable c (BlockHeader c Unsealed)
        , Crypto.Hashable c st
        )
     => Maybe (Block c tx s)
     -> Timestamp
+    -> Beneficiary c
     -> [tx]
     -> st
     -> Block c tx Unsealed
-mkUnsealedBlock parent blockTimestamp txs blockState =
+mkUnsealedBlock parent blockTimestamp benef txs blockState =
     let (hdr :: BlockHeader c Unsealed) = emptyHeader
-          { blockDataHash  = hashTxs txs
+          { blockDataHash  = hashData $ mkBlockData benef txs
           , blockStateHash = Crypto.fromHashed (Crypto.hash blockState)
           , blockTimestamp
           }
-    in mkBlock (header hdr) txs
+    in mkBlock (header hdr) benef txs
   where
     header hdr = case parent of
         Nothing -> hdr -- We are creating 'genesis'

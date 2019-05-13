@@ -6,7 +6,7 @@ import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (TxLookup(..))
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (BlockData, BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.Hash as Crypto
@@ -90,6 +90,7 @@ getBestChain
     :: ( Serialise s
        , Crypto.HasHashing c
        , Serialise (BlockHash c)
+       , Serialise (BlockData c (Tx c))
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        )
@@ -115,6 +116,7 @@ getBlock
     :: ( Serialise s
        , Crypto.HasHashing c
        , Serialise (BlockHash c)
+       , Serialise (BlockData c (Tx c))
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
        )

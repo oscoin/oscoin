@@ -82,4 +82,4 @@ lookupTx txHash blks =
     matchTxLookup (depth, blk) = do
         tx <- findTxInBlock blk
         Just $ TxLookup tx (blockHash blk) depth
-    findTxInBlock blk = find (\tx -> Crypto.hash tx == txHash) (blockData blk)
+    findTxInBlock blk = find (\tx -> Crypto.hash tx == txHash) (blockTxs blk)

@@ -60,7 +60,7 @@ import           Lens.Micro ((^.))
 
 withNode
     :: (Log.Buildable (Hash c))
-    => Config
+    => Config c
     -> i
     -> Mempool.Handle c tx
     -> Ledger.Ledger c s tx (TxOutput c tx) (TxState c tx) IO
@@ -103,6 +103,7 @@ miner
        , P2P.MonadBroadcast c m
        , MonadClock           m
        , Serialise   tx
+       , Serialise (Beneficiary c)
        , Hashable  c tx
        , Serialise s
        , Hashable  c (TxState c tx)
@@ -126,6 +127,7 @@ miner = do
         :: ( MonadIO              m
            , MonadMask            m
            , P2P.MonadBroadcast c m
+           , Serialise (Beneficiary c)
            , Serialise s
            , Serialise   tx
            , Hashable  c tx
@@ -148,6 +150,7 @@ mineBlock
     :: ( MonadIO m
        , MonadClock m
        , Serialise tx
+       , Serialise (Beneficiary c)
        , Hashable c tx
        , Hashable c (TxState c tx)
        , Serialise (Hash c)
@@ -155,13 +158,15 @@ mineBlock
        )
     => NodeT c tx s i m (Maybe (Block c tx (Sealed c s)))
 mineBlock = do
-    Handle{hConsensus, hProtocol} <- ask
+    Handle{hConsensus, hProtocol, hConfig} <- ask
     time <- currentTick
     ledger <- getLedger
     maybeBlock <- hoist liftIO $ Consensus.mineBlock
         ledger
         hConsensus
         time
+        (cfgBeneficiary hConfig)
+
     -- NOTE(adn) Here we should dispatch the block and wait for the
     -- result: if the block hasn't been inserted (for example due to
     -- a validation error) we shouldn't proceed with all these other
@@ -177,6 +182,7 @@ storage
        , Serialise tx
        , Serialise s
        , Serialise (Hash c)
+       , Serialise (BlockData c tx)
        , Log.Buildable (Hash c)
        )
     => (Block c tx (Sealed c s) -> Either (ValidationError c) ())

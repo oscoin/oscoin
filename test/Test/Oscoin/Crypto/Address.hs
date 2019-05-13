@@ -2,7 +2,6 @@
 module Test.Oscoin.Crypto.Address
     ( tests
     , props
-    , genAddress
     ) where
 
 import           Oscoin.Prelude
@@ -34,6 +33,7 @@ import           Hedgehog
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
+import           Test.Oscoin.Crypto.Address.Gen (genAddressFrom)
 import           Test.Oscoin.P2P.Handshake (genKeyPair)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog
@@ -70,7 +70,7 @@ props d = checkParallel $ Group "Address.Serialisation"
 propAddressSerdeRoundtrip :: forall c. Dict (IsCrypto c) -> Property
 propAddressSerdeRoundtrip Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- forAll $ genAddress pk
+    address <- forAll $ genAddressFrom pk
     (deserializeAddress . serializeAddress $ address) === Right address
 
 -- | This 'Property' tests that rendering & decoding a serialized address
@@ -78,7 +78,7 @@ propAddressSerdeRoundtrip Dict = property $ do
 propRenderDecodeRoundtrip :: forall c. Dict (IsCrypto c) -> Property
 propRenderDecodeRoundtrip Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- forAll $ genAddress pk
+    address <- forAll $ genAddressFrom pk
     let (b32 :: ByteString) = toS $ sformat fmtAddress address
     decodeAtBase Base32z b32 === Just (serializeAddress address)
     (decodeAddress . toS . sformat fmtAddress $ address) === Right address
@@ -88,7 +88,7 @@ propRenderDecodeRoundtrip Dict = property $ do
 propInvalidChecksum :: forall c. Dict (IsCrypto c) -> Property
 propInvalidChecksum Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- forAll $ genAddress pk
+    address <- forAll $ genAddressFrom pk
     let serialized = serializeAddress address
     idx <- forAll (Gen.int (Range.linear 0 (BS.length serialized - 1)))
     w8  <- forAll (Gen.word8 Range.linearBounded)
@@ -125,7 +125,7 @@ propInjectivity :: forall c. Dict (IsCrypto c) -> Property
 propInjectivity Dict = property $ do
     (seed, addresses) <- evalIO (readIORef addressesRef)
     (pk :: PublicKey Crypto, _) <- forAllWith (toS . condensed) (quickcheck (arbitraryKeyPairFrom seed))
-    address <- renderAddress <$> forAll (genAddress pk)
+    address <- renderAddress <$> forAll (genAddressFrom pk)
     if Set.member address addresses
        then annotate ("Generated address not unique: " <> toS address) *> failure
        else do
@@ -227,7 +227,7 @@ instance Serialise (PublicKey c) => Serialise (FutureAddressPayload c) where
 propMigration :: forall c. Dict (IsCrypto c) -> Property
 propMigration Dict = property $ do
     (pk, _) <- genKeyPair @c
-    oldAddress <- forAll $ genAddress pk
+    oldAddress <- forAll $ genAddressFrom pk
     let futureAddress = FutureAddress
           { futureAddressPrefix = FutureAddressPrefix (addressPrefix oldAddress) 0 0
           , futureAddressPayload = FutureAddressPayload_V0 pk
@@ -239,14 +239,7 @@ propMigration Dict = property $ do
 propLengthCheck :: forall c. Dict (IsCrypto c) -> Property
 propLengthCheck Dict = property $ do
     (pk, _) <- genKeyPair @c
-    address <- forAll $ genAddress pk
+    address <- forAll $ genAddressFrom pk
     let len = BS.length $ serializeAddress address
     annotateShow len
     assert (len > 0 && len <= upperBoundBytes (Proxy @(Address c)))
-
-{------------------------------------------------------------------------------
-  Generators and other mythological creatures
-------------------------------------------------------------------------------}
-
-genAddress :: PublicKey c -> Gen (Address c)
-genAddress pk = (`fromPublicKey` pk) <$> Gen.enumBounded

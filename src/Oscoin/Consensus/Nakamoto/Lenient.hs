@@ -43,6 +43,7 @@ nakamotoConsensusLenient
        ( MonadIO m
        , MonadMempool c tx m
        , Serialise tx
+       , Serialise (Beneficiary c)
        , AuthTree.MerkleHash (Hash c)
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
@@ -63,6 +64,7 @@ validateLenient
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)
        , Serialise tx
+       , Serialise (Beneficiary c)
        )
     => Validate c tx PoW
 validateLenient [] blk =

@@ -11,7 +11,8 @@ import qualified Oscoin.API.Client as API
 import           Oscoin.CLI.KeyStore
 import           Oscoin.Consensus.Mining (mineGenesis)
 import           Oscoin.Consensus.Nakamoto (mineNakamoto)
-import           Oscoin.Crypto.Blockchain.Block (BlockHash, Difficulty)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Beneficiary, BlockData, BlockHash, Difficulty)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError(..), buildGenesis)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -43,33 +44,33 @@ data Result
     = ResultOk
     | ResultError Text
 
-data Command =
+data Command c =
       GenerateKeyPair
-    | GenesisCreate [FilePath] Difficulty
-    deriving (Show)
+    | GenesisCreate [FilePath] Difficulty (Beneficiary c)
 
 dispatchCommand
     :: ( MonadCLI c m
-       , Yaml.ToJSON (Crypto.PublicKey c)
+       , Yaml.ToJSON (Beneficiary c)
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PublicKey c)
+       , Serialise (Beneficiary c)
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Crypto.HasDigitalSignature c
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.Signature c)
+       , Yaml.ToJSON (BlockData c (Tx c))
        )
-    => Command
+    => Command c
     -> m Result
 dispatchCommand GenerateKeyPair = do
     kp <- Crypto.generateKeyPair
     writeKeyPair kp
     pure $ ResultOk
 
-dispatchCommand (GenesisCreate [] d) =
-    printGenesisYaml [] d
-dispatchCommand (GenesisCreate files d) = do
+dispatchCommand (GenesisCreate [] d benef) =
+    printGenesisYaml benef [] d
+dispatchCommand (GenesisCreate files d benef) = do
     results <-
         for files $
             readTxFile >=> traverse signTransaction
@@ -77,7 +78,7 @@ dispatchCommand (GenesisCreate files d) = do
     case partitionEithers results of
         (errs, signed)
             | null errs ->
-                printGenesisYaml signed d
+                printGenesisYaml benef signed d
             | otherwise ->
                 pure $ ResultError (mconcat errs)
 
@@ -87,23 +88,25 @@ printGenesisYaml
     :: forall c m.
        ( MonadCLI c m
        , Serialise (BlockHash c)
-       , Serialise (Crypto.PublicKey c)
+       , Serialise (Beneficiary c)
        , Serialise (Crypto.Signature c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
-       , Yaml.ToJSON (Crypto.PublicKey c)
+       , Yaml.ToJSON (Beneficiary c)
        , Yaml.ToJSON (Crypto.Signature c)
+       , Yaml.ToJSON (BlockData c (Tx c))
        )
-    => [Tx c]
+    => Beneficiary c
+    -> [Tx c]
     -> Difficulty
     -> m Result
-printGenesisYaml txs diffi = do
+printGenesisYaml benef txs diffi = do
     time <- getTime
 
     -- FIXME(adn) Pass a real evaluator and a real state.
     let dummyEval _ s = Right ([], s)
-    case buildGenesis @c dummyEval time txs (mempty :: DummyEnv) of
+    case buildGenesis @c dummyEval time benef txs (mempty :: DummyEnv) of
         Left (_, err) ->
             pure $ ResultError (fromEvalError err)
         Right blk -> do

@@ -16,6 +16,7 @@ import           Oscoin.Clock (MonadClock(..))
 import           Oscoin.Configuration (Environment, Network)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
+import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import qualified Oscoin.Data.Tx as Tx
 import qualified Oscoin.Node.Mempool as Mempool
@@ -45,10 +46,11 @@ runNodeT :: Handle c tx s i -> NodeT c tx s i m a -> m a
 runNodeT env (NodeT ma) = runReaderT ma env
 
 -- | Node static config.
-data Config = Config
+data Config c = Config
     { cfgGlobalConfig    :: GlobalConfig
     , cfgTelemetry       :: Telemetry.Handle
     , cfgConsensusConfig :: Consensus.Config
+    , cfgBeneficiary     :: Beneficiary c
     }
 
 data GlobalConfig = GlobalConfig
@@ -59,7 +61,7 @@ data GlobalConfig = GlobalConfig
 
 -- | Node handle.
 data Handle c tx s i = Handle
-    { hConfig    :: Config
+    { hConfig    :: Config c
     , hNodeId    :: i
     , hProtocol  :: Protocol.Handle c tx s IO
     , hMempool   :: Mempool.Handle c tx

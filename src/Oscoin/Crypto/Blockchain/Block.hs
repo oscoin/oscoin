@@ -7,6 +7,7 @@ module Oscoin.Crypto.Blockchain.Block
       Block -- opaque to disallow construction of sealed blocks.
     , BlockHash
     , BlockHeader(..)
+    , BlockData(..)
     , Unsealed
     , Sealed(..)
     , StateHash
@@ -15,12 +16,16 @@ module Oscoin.Crypto.Blockchain.Block
     , Score
     , ScoreFn
     , Timestamp
+    , Beneficiary
 
     -- * Smart constructors and data getters
     , mkBlock
+    , mkBlockData
     , blockHeader
     , blockHash
     , blockData
+    , blockTxs
+    , blockBeneficiary
     , emptyGenesisBlock
     , emptyGenesisFromState
     , isGenesisBlock
@@ -30,7 +35,7 @@ module Oscoin.Crypto.Blockchain.Block
     , linkParent
     , emptyHeader
     , hashState
-    , hashTxs
+    , hashData
 
     , module Oscoin.Crypto.Blockchain.Block.Difficulty
     ) where
@@ -40,6 +45,7 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain.Block.Difficulty
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
+import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise(..))
@@ -217,6 +223,9 @@ type BlockHash crypto = Crypto.Hash crypto
 -- | The hash of a state tree.
 type StateHash crypto = Crypto.Hash crypto
 
+-- | The beneficiary of the block reward.
+type Beneficiary crypto = Crypto.PublicKey crypto
+
 -- | Block. @tx@ is the type of transaction stored in this block.
 --
 -- Nb. There is no instance for 'Functor' on 'Block' because updating the @s@
@@ -225,15 +234,67 @@ type StateHash crypto = Crypto.Hash crypto
 data Block c tx s = Block
     { blockHeader :: BlockHeader c s
     , blockHash   :: BlockHash c
-    , blockData   :: Seq tx
+    , blockData   :: BlockData c tx
     } deriving Generic
 
-deriving instance (Show (BlockHeader c s), Show (BlockHash c), Show tx) => Show (Block c tx s)
-deriving instance (Eq (Hash c), Eq tx, Eq s) => Eq (Block c tx s)
-deriving instance (Ord (Hash c), Ord tx, Ord s) => Ord (Block c tx s)
+data BlockData c tx = BlockData
+    { blockDataBeneficiary :: Beneficiary c
+    , blockDataTxs         :: Seq tx
+    } deriving Generic
+
+blockTxs :: Block c tx s -> Seq tx
+blockTxs = blockDataTxs . blockData
+
+blockBeneficiary :: Block c tx s -> Beneficiary c
+blockBeneficiary = blockDataBeneficiary . blockData
+
+instance (Serialise tx, Serialise (Beneficiary c)) => Serialise (BlockData c tx) where
+    encode BlockData{..} =
+           Serialise.encodeListLen 2
+        <> Serialise.encodeWord 0
+        <> Serialise.encode blockDataBeneficiary
+        <> Serialise.encode blockDataTxs
+
+    decode = do
+        Serialise.decodeListLenOf 2
+        tag <- Serialise.decodeWord
+        case tag of
+            0 -> do
+                !blockDataBeneficiary <- Serialise.decode
+                !blockDataTxs         <- Serialise.decode
+
+                pure BlockData{..}
+            _ ->
+                fail "Error decoding block data: unknown tag"
+
+instance ( FromJSON tx
+         , FromJSON (BlockData c tx)
+         , FromJSON (Beneficiary c)
+         ) => FromJSON (BlockData c tx) where
+  parseJSON = withObject "BlockData" $ \o -> do
+      blockDataBeneficiary <- o .: "beneficiary"
+      blockDataTxs         <- o .: "txs"
+
+      pure BlockData{..}
+
+instance (ToJSON tx, ToJSON (Beneficiary c)) => ToJSON (BlockData c tx) where
+    toJSON BlockData{..} = object
+        [ "beneficiary"   .= blockDataBeneficiary
+        , "txs"           .= blockDataTxs
+        ]
+
+deriving instance (Show (Beneficiary c), Show s) => Show (BlockData c s)
+deriving instance (Ord (Beneficiary c), Ord s) => Ord (BlockData c s)
+deriving instance (Eq (Beneficiary c), Eq s) => Eq (BlockData c s)
+
+deriving instance (Show (BlockData c tx), Show (BlockHeader c s), Show (BlockHash c), Show tx)
+    => Show (Block c tx s)
+deriving instance (Eq (BlockData c tx), Eq (Hash c), Eq tx, Eq s) => Eq (Block c tx s)
+deriving instance (Ord (BlockData c tx), Ord (Hash c), Ord tx, Ord s) => Ord (Block c tx s)
 
 instance ( Serialise tx
          , Serialise s
+         , Serialise (BlockData c tx)
          , HasBlockHeader c s
          , Serialise (Hash c)
          ) => Serialise (Block c tx s) where
@@ -259,7 +320,7 @@ instance ( Serialise tx
             _ ->
                 fail "Error decoding block: unknown tag"
 
-instance (ToJSON s, ToJSON (Hash c), ToJSON tx) => ToJSON (Block c tx s) where
+instance (ToJSON s, ToJSON (Hash c), ToJSON tx, ToJSON (BlockData c tx)) => ToJSON (Block c tx s) where
     toJSON Block{..} = object
         [ "hash"   .= blockHash
         , "header" .= blockHeader
@@ -269,6 +330,7 @@ instance (ToJSON s, ToJSON (Hash c), ToJSON tx) => ToJSON (Block c tx s) where
 instance ( FromJSON s
          , FromJSON (Hash c)
          , FromJSON tx
+         , FromJSON (BlockData c tx)
          , HasBlockHeader c s
          ) => FromJSON (Block c tx s) where
   parseJSON = withObject "Block" $ \o -> do
@@ -283,24 +345,33 @@ instance ( FromJSON s
 blockHeaderL
     :: (HasBlockHeader c s')
     => Lens (Block c tx s) (Block c tx s') (BlockHeader c s) (BlockHeader c s')
-blockHeaderL = lens blockHeader (\b h -> mkBlock h (blockData b))
+blockHeaderL = lens blockHeader (\b h -> mkBlock h (blockBeneficiary b) (blockTxs b))
 
 mkBlock
     :: ( Foldable t
        , HasBlockHeader c s
        )
     => BlockHeader c s
+    -> Beneficiary c
     -> t tx
     -> Block c tx s
-mkBlock header txs =
-    Block header (headerHash header) (Seq.fromList (toList txs))
+mkBlock header benef txs =
+    Block header (headerHash header) (mkBlockData benef txs)
+
+mkBlockData :: Foldable t => Beneficiary c -> t tx -> BlockData c tx
+mkBlockData benef txs =
+    BlockData
+        { blockDataBeneficiary = benef
+        , blockDataTxs         = Seq.fromList (toList txs)
+        }
 
 emptyGenesisBlock
     :: (HasBlockHeader c Unsealed)
     => Timestamp
+    -> Beneficiary c
     -> Block c tx Unsealed
-emptyGenesisBlock blockTimestamp =
-    mkBlock header []
+emptyGenesisBlock blockTimestamp benef =
+    mkBlock header benef []
   where
     header = emptyHeader { blockTimestamp }
 
@@ -309,10 +380,11 @@ emptyGenesisFromState
        , Crypto.Hashable c st
        )
     => Timestamp
+    -> Beneficiary c
     -> st
     -> Block c tx Unsealed
-emptyGenesisFromState blockTimestamp st =
-    mkBlock header []
+emptyGenesisFromState blockTimestamp benef st =
+    mkBlock header benef []
   where
     header = emptyHeader { blockTimestamp, blockStateHash = stHash }
     stHash = Crypto.fromHashed . Crypto.hash $ st
@@ -337,20 +409,19 @@ sealBlock seal blk =
 hashState :: Crypto.Hashable c st => st -> StateHash c
 hashState = Crypto.fromHashed . Crypto.hash
 
-hashTxs
-    :: ( Foldable t
-       , Serialise tx
-       , Crypto.HasHashing c
+hashData
+    :: ( Serialise tx
+       , Serialise (Beneficiary c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        )
-    => t tx
-    -> Crypto.Hash c
-hashTxs (toList -> txs)
-    | null txs = Crypto.zeroHash
-    | otherwise = AuthTree.merkleHash
-                . AuthTree.fromList
-                $ [(tx, mempty :: ByteString) | tx <-
-                    map (LBS.toStrict . Serialise.serialise) txs]
-                -- Nb. Since our Merkle tree works with key-value pairs, but we're only
-                -- really interested in the keys being present or absent for this use-case,
-                -- we use the empty byte string as the value component.
+    => BlockData c tx -> Crypto.Hash c
+hashData BlockData{..} =
+    AuthTree.merkleHash . AuthTree.fromList $ bs
+  where
+    bs :: [(ByteString, ByteString)]
+    bs = map (first LBS.toStrict)
+       $ (Serialise.serialise blockDataBeneficiary, mempty)
+       : [(Serialise.serialise tx, mempty) | tx <- toList blockDataTxs]
+    -- Nb. Since our Merkle tree works with key-value pairs, but we're only
+    -- really interested in the keys being present or absent for this use-case,
+    -- we use the empty byte string as the value component.

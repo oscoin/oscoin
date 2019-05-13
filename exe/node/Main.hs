@@ -9,6 +9,7 @@ import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
+import           Oscoin.Crypto.Address (toPublicKey)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
@@ -60,6 +61,7 @@ main = do
         , optEkgHost
         , optEkgPort
         , optAllowEphemeralKeys
+        , optBeneficiary
         } <-
         execParser $
             info (helper <*> Node.nodeOptionsParser cfgPaths)
@@ -133,6 +135,7 @@ main = do
                                      (P2P.Disco.optNetwork optDiscovery')
                                      telemetry
                                      consensusConfig
+                                     (toPublicKey optBeneficiary)
                  in
                     withNode config
                              nid
@@ -181,7 +184,7 @@ main = do
 
     either (const exitFailure) (const exitSuccess) res
   where
-    mkNodeConfig env net metrics consensusConfig
+    mkNodeConfig env net metrics consensusConfig beneficiary
         = Node.Config
             { Node.cfgGlobalConfig    = Node.GlobalConfig
                 { Node.globalEnv             = env
@@ -190,6 +193,7 @@ main = do
                 }
             , Node.cfgTelemetry       = metrics
             , Node.cfgConsensusConfig = consensusConfig
+            , Node.cfgBeneficiary     = beneficiary
             }
 
     miner nod gos = runGossipT gos . runNodeT nod $ Node.miner

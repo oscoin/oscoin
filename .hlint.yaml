@@ -16,7 +16,7 @@
   - {name: [Data.ByteString.Lazy.Char8], as: L8}
 
 - functions:
-  - {name: unsafePerformIO, within: []}
+  - {name: unsafePerformIO, within: [Oscoin.Test.Crypto.Blockchain.Block.Helpers]}
 
 - warn: {lhs: fmap, rhs: map}
 - warn: {lhs: foldl, rhs: foldl'}

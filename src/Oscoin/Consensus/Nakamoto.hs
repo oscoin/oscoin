@@ -21,7 +21,7 @@ import           Oscoin.Prelude
 import           Oscoin.Consensus.Types
 import           Oscoin.Consensus.Validation
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block (Difficulty(..))
+import           Oscoin.Crypto.Blockchain.Block (Beneficiary, Difficulty(..))
 import           Oscoin.Crypto.Hash (Hash, Hashable)
 import           Oscoin.Telemetry (NotableEvent(..))
 import qualified Oscoin.Telemetry as Telemetry
@@ -65,6 +65,7 @@ nakamotoConsensus
        , ByteArrayAccess (BlockHash c)
        , Monad m
        , Serialise tx
+       , Serialise (Beneficiary c)
        )
     => Telemetry.Tracer m
     -> Consensus c tx PoW m
@@ -80,6 +81,7 @@ validateFull
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)
        , Serialise tx
+       , Serialise (Beneficiary c)
        )
     => Validate c tx PoW
 validateFull [] blk =
@@ -104,6 +106,7 @@ validateFull prefix@(parent:_) blk = runExcept $ do
 -- | Validate a 'Block' using only intrinsic block data.
 validateBasic
     :: ( Serialise tx
+       , Serialise (Beneficiary c)
        , ByteArrayAccess (BlockHash c)
        , Hashable c (BlockHeader c (Sealed c PoW))
        , AuthTree.MerkleHash (Hash c)
@@ -112,7 +115,7 @@ validateBasic
     -> Either (ValidationError c) () -- ^ Either a validation error, or success.
 validateBasic b
     | h <- blockDataHash bHeader
-    , h /= hashTxs (blockData b) =
+    , h /= hashData (blockData b) =
         Left $ InvalidDataHash h
     | not (hasPoW bHeader) =
         Left $ InvalidBlockDifficulty (difficulty bHeader)
@@ -134,15 +137,10 @@ mineNakamoto
     -> (forall tx. [Block c tx (Sealed c PoW)] -> Difficulty)
     -> Miner c PoW m
 mineNakamoto probed difiFn getBlocks unsealedBlock = do
-    blks  <- getBlocks difficultyBlocks
-    let currentDifficulty = blockTargetDifficulty
-                          . blockHeader
-                          . NonEmpty.head
-                          . NonEmpty.fromList
-                          $ blks
+    blks <- getBlocks difficultyBlocks
     let diffy = difiFn blks
-    when (currentDifficulty /= diffy) $
-         probed $ Telemetry.traced (DifficultyAdjustedEvent diffy currentDifficulty) ()
+    when (currentDifficulty blks /= diffy) $
+         probed $ Telemetry.traced (DifficultyAdjustedEvent diffy (currentDifficulty blks)) ()
 
     let bh = (blockHeader unsealedBlock) { blockTargetDifficulty = diffy }
         candidateBlock = unsealedBlock { blockHeader = bh }
@@ -150,6 +148,9 @@ mineNakamoto probed difiFn getBlocks unsealedBlock = do
     pure $ (`sealBlock` candidateBlock) <$> mine bh (PoW 0)
 
   where
+    currentDifficulty []      = blockTargetDifficulty . blockHeader $ unsealedBlock
+    currentDifficulty (blk:_) = blockTargetDifficulty . blockHeader $ blk
+
     mine :: BlockHeader c Unsealed -> PoW -> Maybe PoW
     mine hdr pow@(PoW nonce)
         | hasPoW (sealHeader pow hdr) = Just pow

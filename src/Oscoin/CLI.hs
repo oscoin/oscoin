@@ -23,7 +23,7 @@ import qualified Data.ByteString.Lazy as LBS
 
 type CommandRunner a = CommandRunnerT IO a
 
-runCommand :: Maybe FilePath -> Command -> IO Result
+runCommand :: Maybe FilePath -> Command Crypto -> IO Result
 runCommand mbKeysPath cmd = flip runReaderT mbKeysPath $
     runHttpClientT "http://127.0.0.1:8477" $ runCommandRunnerT $ dispatchCommand cmd
 

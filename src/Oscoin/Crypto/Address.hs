@@ -60,7 +60,7 @@ fromPublicKey network pk =
 
 -- | Parses a base32z-encoded binary block back into an 'Address'.
 decodeAddress
-    :: CBOR.Serialise  (PublicKey c)
+    :: CBOR.Serialise (PublicKey c)
     => ByteString
     -> Either Serialisation.DeserializeError (Address c)
 decodeAddress base32zBlob =

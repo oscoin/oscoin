@@ -41,6 +41,7 @@ validateBlockSize
        , Hashable c (BlockHeader c s)
        , Serialise s
        , Serialise (Hash c)
+       , Serialise (BlockData c tx)
        )
     => Consensus.Config
     -> Block c tx s

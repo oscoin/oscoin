@@ -32,6 +32,8 @@ import           Web.HttpApiData (FromHttpApiData(..))
 
 import           Data.ByteArray.Hash
 
+import           Test.QuickCheck (Arbitrary)
+
 -- Ad-hoc instances for testing purposes
 
 instance Semigroup (Hash MockCrypto) where
@@ -75,6 +77,7 @@ instance Sized (Address MockCrypto) where
 type IsCrypto c = ( HasDigitalSignature c
                   , HasHashing c
 
+                  , Arbitrary (Beneficiary c)
                   , ToJSON (Hash c)
                   , ToJSON (PublicKey c)
                   , ToJSON (Signature c)

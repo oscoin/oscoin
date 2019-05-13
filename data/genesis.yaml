@@ -1,11 +1,13 @@
-hash: 2DrjgbCd1rxCgmw24kS8YxJeR9esBPCQdDZ3i29gWRwUt7Vkbw
-data: []
+hash: 2Drjgb6o8nc1NuHCNR9zVWTuGcDrddkcSeNRRF3agp38t5JoCt
+data:
+  txs: []
+  beneficiary: WCD8kuOSoxH2fvzZkCnzcHWwiizxcqFoHzTpsIDR9Aaojw==
 header:
   height: 0
-  dataHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
+  dataHash: 2DrjgbASgUrHFg56Hi21UkE4NLormyo99p8sPBaeSY7E2nbhXa
   targetDifficulty: ffff0021
   stateHash: 2DrjgbJVAd2Q9WQVZT1Vtam2hCNGZSefi5DwPJNbSaxWmuUypo
   seal: 0
-  timestamp: 1556090695611683221
+  timestamp: 1557860913534977983
   parentHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
 

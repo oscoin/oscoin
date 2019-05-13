@@ -30,12 +30,15 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Depth)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block(..)
+                 ( Beneficiary
+                 , Block(..)
                  , BlockHash
                  , BlockHeader(..)
                  , Height
                  , Sealed
+                 , blockBeneficiary
                  , blockHash
+                 , blockTxs
                  , isGenesisBlock
                  , mkBlock
                  , parentHash
@@ -113,6 +116,7 @@ close Handle{..} = runTransactionWith (const identity) hConn $ do
 initialize
     :: ( StorableTx c tx
        , ToField (Sealed c s)
+       , Serialise (Beneficiary c)
        )
     => Block c tx (Sealed c s)
     -> Handle c tx s
@@ -153,7 +157,9 @@ storeBlock
     :: forall c tx s.
         ( ToField (Sealed c s)
         , StorableTx c tx
+        , Serialise (Beneficiary c)
         , Serialise s
+        , Typeable c
         , FromField (Sealed c s)
         , FromField (Hash c)
         ) => Handle c tx s
@@ -178,6 +184,8 @@ storeBlock Handle{..} blk = runTransaction hConn $ do
 getGenesisBlock
     :: forall c s tx.
        ( Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField s
        , StorableTx c tx
        , FromField (Hash c)
@@ -189,6 +197,8 @@ getGenesisBlock Handle{hConn} = runTransaction hConn $ getGenesisBlockInternal
 getGenesisBlockInternal
     :: forall c s tx.
        ( Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField s
        , StorableTx c tx
        , FromField (Hash c)
@@ -196,18 +206,20 @@ getGenesisBlockInternal
     => Transaction IO (Block c tx s)
 getGenesisBlockInternal = do
     conn <- ask
-    Only bHash :. bHeader <-
+    Only bHash :. bHeader :. Only bBeneficiary <-
         headDef (panic "No genesis block!") <$> liftIO (Sql.query_ conn
-            [sql|   SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
+            [sql|   SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                       FROM blocks
                      WHERE parenthash IS NULL |])
     bTxs <- liftIO (getBlockTxs @c conn bHash)
-    pure $ mkBlock bHeader bTxs
+    pure $ mkBlock bHeader bBeneficiary bTxs
 
 -- | Get the chain starting from a given hash up to the tip
 getChainSuffix
     :: ( StorableTx c tx
        , Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField s
        , FromField (Hash c)
        )
@@ -220,6 +232,8 @@ getChainSuffix Handle{hConn} hsh =
 getChainSuffixInternal
     :: ( StorableTx c tx
        , Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField s
        , FromField (Hash c)
        )
@@ -232,13 +246,13 @@ getChainSuffixInternal hsh = do
         Just height -> do
             conn <- ask
             liftIO $ do
-                rows :: [Only (BlockHash c) :. BlockHeader c s] <- Sql.query conn
-                    [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
+                rows :: [Only (BlockHash c) :. BlockHeader c s :. Only (Beneficiary c)] <- Sql.query conn
+                    [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                              FROM blocks WHERE height > ?
                          ORDER BY height DESC
                             |] (Only height)
-                map NewestFirst <$> for rows $ \(Only h :. bh) ->
-                    mkBlock bh <$> getBlockTxs conn h
+                map NewestFirst <$> for rows $ \(Only h :. bh :. Only be) ->
+                    mkBlock bh be <$> getBlockTxs conn h
 
 getChainHashes
     :: FromField (Hash c)
@@ -266,6 +280,7 @@ rollbackBlocks blockCache (fromIntegral -> depth :: Integer) = do
 switchToFork
     :: ( StorableTx c tx
        , ToField s
+       , Serialise (Beneficiary c)
        )
     => Handle c tx s
     -> Depth
@@ -292,6 +307,7 @@ lookupBlockHeight hsh = do
 storeBlock'
     :: ( StorableTx c tx
        , ToField (Sealed c s)
+       , Serialise (Beneficiary c)
        )
     => BlockCache c tx (Sealed c s)
     -> Block c tx (Sealed c s)
@@ -310,10 +326,10 @@ storeBlock' hBlockCache blk = do
     -- for each row in the transactions table.
     liftIO $ do
         Sql.execute hConn
-            [sql| INSERT INTO blocks  (hash, timestamp, height, parenthash, datahash, statehash, difficulty, seal)
-                  VALUES              (?, ?, ?, ?, ?, ?, ?, ?) |] row
+            [sql| INSERT INTO blocks  (hash, timestamp, height, parenthash, datahash, statehash, difficulty, seal, beneficiary)
+                  VALUES              (?, ?, ?, ?, ?, ?, ?, ?, ?) |] row
 
-        storeTxs hConn (blockHash blk) (toList $ blockData blk)
+        storeTxs hConn (blockHash blk) (toList $ blockTxs blk)
 
         -- Cache the block
         BlockCache.consBlock hBlockCache blk
@@ -327,6 +343,7 @@ storeBlock' hBlockCache blk = do
           , blockStateHash bh
           , blockTargetDifficulty bh
           , blockSeal bh
+          , blockBeneficiary blk
           )
 
     bh = blockHeader blk
@@ -340,6 +357,8 @@ storeBlock' hBlockCache blk = do
 getBlocks
     :: ( Serialise s
        , StorableTx c tx
+       , Serialise (Beneficiary c)
+       , Typeable c
        , FromField (Hash c)
        , FromField (Sealed c s)
        )
@@ -351,7 +370,9 @@ getBlocks Handle{..} depth = runTransaction hConn $
 
 getBlocksInternal
     :: ( Serialise s
+       , Serialise (Beneficiary c)
        , StorableTx c tx
+       , Typeable c
        , FromField (Hash c)
        , FromField (Sealed c s)
        )
@@ -362,18 +383,20 @@ getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
     conn <- ask
     -- Hit the cache first
     liftIO $ BlockCache.cached hBlockCache depth (\backFillSize -> do
-        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s)] <- Sql.query conn
-            [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal
+        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s) :. Only (Beneficiary c)] <- Sql.query conn
+            [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                      FROM blocks
                  ORDER BY height DESC
                     LIMIT ? |] (Only (fromIntegral backFillSize :: Integer))
 
         Chrono.NewestFirst <$>
-            for rows (\(Only h :. bh) -> mkBlock bh <$> getBlockTxs conn h))
+            for rows (\(Only h :. bh :. Only be) -> mkBlock bh be <$> getBlockTxs conn h))
 
 getTip
     :: ( Serialise s
+       , Serialise (Beneficiary c)
        , StorableTx c tx
+       , Typeable c
        , FromField (Hash c)
        , FromField (Sealed c s)
        )
@@ -383,7 +406,9 @@ getTip h = runTransaction (hConn h) $ getTipInternal (hBlockCache h)
 
 getTipInternal
     :: ( Serialise s
+       , Serialise (Beneficiary c)
        , StorableTx c tx
+       , Typeable c
        , FromField (Hash c)
        , FromField (Sealed c s)
        )

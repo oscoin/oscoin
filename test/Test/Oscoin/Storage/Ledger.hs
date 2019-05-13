@@ -22,6 +22,8 @@ import qualified Hedgehog.Range as Range
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Test.Oscoin.DummyLedger
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty
@@ -56,7 +58,7 @@ prop_lookupReceipt Dict = property $ do
     (parentBlock, parentState) <- evalEither =<< Ledger.getTipWithState ledger
     (blk, _) <- forAll $ genEvaledBlock parentBlock parentState dummyEval
     BlockStore.insertBlock blockStoreWriter blk
-    tx <- forAll $ Gen.element (toList $ blockData blk)
+    tx <- forAll $ Gen.element (toList $ blockTxs blk)
     maybeReceipt <- Ledger.lookupReceipt ledger (Crypto.hash tx)
     receipt <- case maybeReceipt of
         Nothing      -> failure
@@ -80,10 +82,10 @@ prop_buildNextBlock Dict = property $ do
     (parentBlock, parentState) <- evalEither =<< Ledger.getTipWithState ledger
     txs <- forAll $ Gen.list (Range.linear 1 6) Gen.arbitrary
     timestamp <- forAll $ Gen.arbitrary
-    nextBlock <- evalEither =<< Ledger.buildNextBlock ledger timestamp txs
+    nextBlock <- evalEither =<< Ledger.buildNextBlock ledger timestamp defaultBeneficiary txs
 
     let (_, expectedState) = evalTraverse dummyEval txs parentState
-    toList (blockData nextBlock) === txs
+    toList (blockTxs nextBlock) === txs
     blockStateHash (blockHeader nextBlock) === Crypto.fromHashed (Crypto.hash expectedState)
     parentHash nextBlock === blockHash parentBlock
 
@@ -102,7 +104,7 @@ newDummyLedger = do
     pure (ledger, BlockStore.hoistBlockStoreWriter liftIO blockStoreWriter)
   where
     genesisState = [] :: [DummyTx]
-    genesisBlk = sealBlock () $ emptyGenesisFromState Time.epoch genesisState
+    genesisBlk = sealBlock () $ emptyGenesisFromState Time.epoch defaultBeneficiary genesisState
 
 
 -- | Generate an arbitrary child block with arbitrary transactions and
