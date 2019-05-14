@@ -241,7 +241,7 @@ data Project c = Project
 
     , pCheckpoints     :: Set (Checkpoint c)
 
-    -- * Contract
+    -- | Contract
     , pSendTransfer    :: SendTransfer' c
     , pReceiveTransfer :: ReceiveTransfer' c
     , pReceiveReward   :: ReceiveReward' c
