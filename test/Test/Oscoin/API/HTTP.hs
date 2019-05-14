@@ -1,4 +1,4 @@
-module Oscoin.Test.API.HTTP
+module Test.Oscoin.API.HTTP
     ( tests
     ) where
 
@@ -24,8 +24,8 @@ import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-tests :: forall c. Dict (IsCrypto c) -> [TestTree]
-tests Dict =
+tests :: forall c. Dict (IsCrypto c) -> TestTree
+tests Dict = testGroup "Test.Oscoin.API.HTTP"
     [ test "Smoke test" (smokeTestOscoinAPI @c)
     , testGroup "POST /transactions"
         [ testGroup "400 Bad Request"

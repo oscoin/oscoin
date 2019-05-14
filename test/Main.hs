@@ -17,6 +17,7 @@ import qualified Test.Control.Concurrent.RateLimit
 import qualified Test.Data.Conduit.Serialise
 import qualified Test.Data.Sequence.Circular
 import qualified Test.Oscoin.API
+import qualified Test.Oscoin.API.HTTP
 import qualified Test.Oscoin.Configuration
 import qualified Test.Oscoin.Crypto.Blockchain.Eval
 import qualified Test.Oscoin.Crypto.Blockchain.GeneratorsTest
@@ -74,6 +75,7 @@ main = do
                 , Test.Data.Conduit.Serialise.tests
                 , Test.Data.Sequence.Circular.tests
                 , Test.Oscoin.API.tests crypto
+                , Test.Oscoin.API.HTTP.tests crypto
                 , Test.Oscoin.Configuration.tests
                 , Test.Oscoin.Crypto.Blockchain.Eval.tests crypto
                 , Test.Oscoin.Crypto.Blockchain.GeneratorsTest.tests crypto
