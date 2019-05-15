@@ -14,6 +14,28 @@ steps:
     entrypoint: "bash"
     args: ["./scripts/shellcheck.sh"]
 
+  - id: "Build haskell-scratch rootfs"
+    waitFor: ["-"]
+    name: "eu.gcr.io/opensourcecoin/docker-haskell:8.6.4"
+    args:
+    - make
+    - "-C"
+    - /workspace/scripts/docker/haskell-scratch
+    - "integer-gmp"
+
+  - id: "Build haskell-scratch image"
+    waitFor:
+    - "Build haskell-scratch rootfs"
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+    - '-c'
+    - |
+      set -euox pipefail
+
+      tar -cC /workspace/scripts/docker/haskell-scratch/root . | \
+        docker import - eu.gcr.io/$PROJECT_ID/haskell-scratch:integer-gmp
+
   - id: "Load cache"
     name: gcr.io/cloud-builders/gsutil
     entrypoint: "bash"
@@ -103,7 +125,7 @@ steps:
     - STACK_ROOT=/workspace/.stack # weeder uses stack under the hood
     args: ["stack", "exec", "--", "weeder", "."]
 
-  - id: "Publish images"
+  - id: "Build images"
     waitFor:
     - Lint (weeder)
     name: gcr.io/cloud-builders/docker
@@ -122,7 +144,7 @@ steps:
         /workspace/bin/oscoin-cli
       )
 
-      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/publish-image.sh
+      echo "$${bins[*]}" | xargs -P8 -n1 ./scripts/docker/build-image.sh
 
   - id: "Publish Haddocks"
     waitFor:
@@ -138,3 +160,7 @@ steps:
       set -euxo pipefail
 
       gsutil -m rsync -d -r api-docs gs://oscoin-apidocs/${COMMIT_SHA}
+images:
+- "eu.gcr.io/$PROJECT_ID/oscoin"
+- "eu.gcr.io/$PROJECT_ID/oscoin-cli"
+- "eu.gcr.io/$PROJECT_ID/haskell-scratch:integer-gmp"

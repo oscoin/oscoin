@@ -9,7 +9,7 @@ cp "$1" "$dir"
 pushd "$dir"
 
 cat > Dockerfile << EOF
-FROM fpco/haskell-scratch:integer-gmp
+FROM eu.gcr.io/$PROJECT_ID/haskell-scratch:integer-gmp
 COPY $bin /bin/$bin
 ENTRYPOINT ["/bin/$bin"]
 EOF
@@ -23,7 +23,5 @@ docker build --label "version=$COMMIT_SHA" \
 if [[ $BRANCH_NAME == "master" ]]; then
   docker tag "$img:$BRANCH_NAME" "$img:latest"
 fi
-
-docker push "$img"
 
 popd
