@@ -1,9 +1,9 @@
 module Oscoin.API.HTTP.Internal
     ( ApiAction
     , Api
-    , MonadApi
+    , ApiTx
     , runApi
-    , withHandle
+    , liftNode
 
     , trailingSlashPolicy
     , indexPolicy
@@ -22,6 +22,8 @@ module Oscoin.API.HTTP.Internal
 import           Oscoin.Prelude hiding (State, state)
 
 import           Oscoin.API.Types
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Data.Query
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
 
@@ -51,38 +53,44 @@ data State = State ()
     deriving (Show)
 
 -- | The type of all actions (effects) in our HTTP handlers.
-type ApiAction c s i =
-    SpockAction (Node.Handle c (Tx c) s i) () State
+type ApiAction c tx s i =
+    SpockAction (Node.Handle c tx s i) () State
 
 -- | The type of our api.
-type Api c s i =
-    SpockM (Node.Handle c (Tx c) s i) () State
+type Api c tx s i =
+    SpockM (Node.Handle c tx s i) () State
 
--- | Represents any monad which can act like an ApiAction.
-type MonadApi c s i m =
-    (HasSpock m, SpockConn m ~ Node.Handle c (Tx c) s i)
+-- | Contraints on the transaction parameter of the API that need to be
+-- satisfied to run the API.
+type ApiTx c tx =
+    ( Serialise tx
+    , Crypto.Hashable c tx
+    , Query (TxState c tx)
+    , Serialise (QueryVal (TxState c tx))
+    , Serialise (TxOutput c tx)
+    )
 
 -- | Create an empty state.
 mkState :: State
 mkState = State ()
 
-getHeader :: HeaderName -> ApiAction c s i BS.ByteString
+getHeader :: HeaderName -> ApiAction c tx s i BS.ByteString
 getHeader name = do
     header <- Spock.rawHeader name
     case header of
         Just v  -> pure v
         Nothing -> respondText HTTP.badRequest400 $ "Header " <> show name <> " is missing"
 
-getRawBody :: ApiAction c s i LBS.ByteString
+getRawBody :: ApiAction c tx s i LBS.ByteString
 getRawBody = LBS.fromStrict <$> Spock.body
 
-param' :: (FromHttpApiData p) => Text -> ApiAction c s i p
+param' :: (FromHttpApiData p) => Text -> ApiAction c tx s i p
 param' = Spock.param'
 
-param :: (FromHttpApiData p) => Text -> ApiAction c s i (Maybe p)
+param :: (FromHttpApiData p) => Text -> ApiAction c tx s i (Maybe p)
 param = Spock.param
 
-listParam :: (FromHttpApiData p) => Text -> ApiAction c s i [p]
+listParam :: (FromHttpApiData p) => Text -> ApiAction c tx s i [p]
 listParam key = do
     p <- param' key
     case decodeList p of
@@ -93,9 +101,13 @@ listParam key = do
     inner = T.dropWhile (== '[') . T.dropWhileEnd (== ']')
     split = T.splitOn ","
 
--- | Runs an action by passing it a handle.
-withHandle :: HasSpock m => (SpockConn m -> IO a) -> m a
-withHandle = Spock.runQuery
+-- | Runs a NodeT action in a MonadApi monad.
+liftNode
+    :: (HasSpock m, SpockConn m ~ Node.Handle c tx s i)
+    => Node.NodeT c tx s i IO a
+    -> m a
+liftNode s = Spock.runQuery $ \h ->
+    Node.runNodeT h s
 
 noBody :: Maybe ()
 noBody = Nothing
@@ -103,20 +115,20 @@ noBody = Nothing
 errBody :: Text -> Result ()
 errBody = Err
 
-respond :: (Serialise a) => HTTP.Status -> a -> ApiAction c s i b
+respond :: (Serialise a) => HTTP.Status -> a -> ApiAction c tx s i b
 respond status value = do
     Spock.setStatus status
     Spock.setHeader "Content-Type" $ "application/cbor"
     Spock.lazyBytes $ Serialise.serialise value
 
-respondText :: HTTP.Status -> Text -> ApiAction c s i b
+respondText :: HTTP.Status -> Text -> ApiAction c tx s i b
 respondText status bdy = do
     Spock.setStatus status
     Spock.setHeader "Content-Type" $ "text/plain"
     Spock.bytes $ encodeUtf8 bdy
 
 
-getBody :: (Serialise a) => ApiAction c s i a
+getBody :: (Serialise a) => ApiAction c tx s i a
 getBody = do
     rawCtHeader <- getHeader "Content-Type"
     when (rawCtHeader /= "application/cbor") $
@@ -127,16 +139,16 @@ getBody = do
         Right a -> pure a
 
 
-runApi :: Api c s i ()
+runApi :: Api c tx s i ()
     -> Int
-    -> Node.Handle c (Tx c) s i
+    -> Node.Handle c tx s i
     -> IO ()
 runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
 
 mkMiddleware
-    :: Api c s i ()
-    -> Node.Handle c (Tx c) s i
+    :: Api c tx s i ()
+    -> Node.Handle c tx s i
     -> IO Wai.Middleware
 mkMiddleware app hdl = do
     spockCfg <- defaultSpockCfg () (PCConn connBuilder) state

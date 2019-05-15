@@ -6,11 +6,10 @@ module Oscoin.API.HTTP
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Blockchain.Block (BlockData, BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (BlockHash, SealedBlock)
 import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Crypto.PubKey.RealWorld ()
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
@@ -43,15 +42,12 @@ run port hdl =
 
 app :: ( Typeable c
        , FromHttpApiData (BlockHash c)
-       , Serialise s
        , Serialise (BlockHash c)
-       , Serialise (BlockData c (Tx c))
-       , Serialise (Crypto.PublicKey c)
-       , Serialise (Crypto.Signature c)
-       , Crypto.HasHashing c
+       , Serialise (SealedBlock c tx s)
        , Buildable (Crypto.Hash c)
+       , ApiTx c tx
        )
-    => Node.Handle c (Tx c) s i
+    => Node.Handle c tx s i
     -> IO Wai.Application
 app hdl =
     withLogging hdl $ \logging ->
@@ -67,16 +63,13 @@ staticFilePolicy =
 -- | Entry point for API.
 api :: ( Typeable c
        , FromHttpApiData (BlockHash c)
-       , Serialise s
        , Serialise (BlockHash c)
-       , Serialise (BlockData c (Tx c))
-       , Serialise (Crypto.PublicKey c)
-       , Serialise (Crypto.Signature c)
-       , Crypto.HasHashing c
+       , Serialise (SealedBlock c tx s)
        , Buildable (Crypto.Hash c)
+       , ApiTx c tx
        )
     => Wai.Middleware
-    -> Api c s i ()
+    -> Api c tx s i ()
 api mdlware = do
     middleware $ mdlware
                . Wai.staticPolicy staticFilePolicy
@@ -99,7 +92,6 @@ api mdlware = do
 
     -- /transactions ----------------------------------------------------------
 
-    get  "transactions" Handlers.getAllTransactions
     post "transactions" Handlers.submitTransaction
 
     -- /transactions/:id ------------------------------------------------------
