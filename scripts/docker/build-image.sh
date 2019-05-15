@@ -6,11 +6,14 @@ bin=$(basename "$1")
 img="eu.gcr.io/$PROJECT_ID/$bin"
 dir=$(mktemp -d "/tmp/oscoin.XXXXXX")
 cp "$1" "$dir"
+cp -r data "$dir"
 pushd "$dir"
 
 cat > Dockerfile << EOF
 FROM eu.gcr.io/$PROJECT_ID/haskell-scratch:integer-gmp
 COPY $bin /bin/$bin
+COPY data /data/data/
+ENV oscoin_datadir=/data
 ENTRYPOINT ["/bin/$bin"]
 EOF
 
