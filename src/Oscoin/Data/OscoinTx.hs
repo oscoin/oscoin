@@ -42,6 +42,11 @@ data Tx' (version :: Nat) c = Tx'
 txVersion :: forall version c. KnownNat version => Tx' version c -> Word16
 txVersion _ = fromIntegral (natVal (Proxy @version))
 
+data TxValidationError = TxInvalidSignature
+
+txValidate :: Tx c -> Either TxValidationError ()
+txValidate _ = Right ()
+
 -- | Transaction payload.
 data TxPayload c = TxPayload
     { txMessages :: [TxMessage c]

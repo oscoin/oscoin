@@ -70,7 +70,10 @@ nakReceiptStoreL = lens nakReceiptStore (\s a -> s { nakReceiptStore = a })
 type NakamotoNode c = State (NakamotoNodeState c)
 
 instance (IsCrypto c) => MonadMempool c DummyTx (NakamotoNode c) where
-    addTxs txs = nakMempoolL %= Mempool.insertMany txs
+    addTx tx = do
+        nakMempoolL %= Mempool.insert tx
+        -- NOTE(ts) we don't validate transactions
+        pure $ Right ()
     getTxs     = Mempool.toList <$> use nakMempoolL
     delTxs txs = nakMempoolL %= Mempool.removeTxs txs
     numTxs     = Mempool.size <$> use nakMempoolL

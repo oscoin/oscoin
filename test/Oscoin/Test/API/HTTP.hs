@@ -65,7 +65,7 @@ postTransactionWithInvalidSignature = do
         otherPubKey <- fst <$> Crypto.generateKeyPair
         let tx' = tx { txPubKey = otherPubKey }
         post "/transactions" tx' >>=
-            assertResultErr "Invalid transaction signature" <>
+            assertResultErr "Invalid transaction" <>
             assertStatus badRequest400
 
 smokeTestOscoinAPI

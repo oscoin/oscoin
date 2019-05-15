@@ -8,13 +8,15 @@ module Oscoin.Node.Mempool.Class
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed)
+import           Oscoin.Data.Tx (TxValidationError)
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 
 -- MonadMempool ---------------------------------------------------------------
 
 class Monad m => MonadMempool c tx m | m -> tx, m -> c where
-    -- | Add transactions to the mempool, notifying all subscribers.
-    addTxs :: Foldable t => t tx -> m ()
+    -- | Add a transaction to the mempool if it is valid.
+    -- If valid, notifies all subscribers.
+    addTx :: tx -> m (Either (TxValidationError c tx) ())
 
     -- | Get all the transactions in the mempool.
     getTxs :: m [(Hashed c tx, tx)]
@@ -31,11 +33,11 @@ class Monad m => MonadMempool c tx m | m -> tx, m -> c where
     -- | Subscribe to mempool events.
     subscribe :: m (Channel tx)
 
-    default addTxs
-        :: (MonadMempool c tx m', MonadTrans t, m ~ t m', Foldable f)
-        => f tx -> m ()
-    addTxs = lift . addTxs
-    {-# INLINE addTxs #-}
+    default addTx
+        :: (MonadMempool c tx m', MonadTrans t, m ~ t m')
+        => tx -> m (Either (TxValidationError c tx) ())
+    addTx = lift . addTx
+    {-# INLINE addTx #-}
 
     default getTxs
         :: (MonadMempool c tx m', MonadTrans t, m ~ t m')

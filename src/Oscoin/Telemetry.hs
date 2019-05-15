@@ -143,6 +143,10 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             Log.withNamespace "http-api" $
                 Log.infoM "tx submitted"
                           (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
+        TxSubmittedInvalidEvent txHash ->
+            Log.withNamespace "http-api" $
+                Log.infoM "invalid tx submitted"
+                          (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxReceivedEvent txHash ->
             Log.withNamespace "p2p" $
                 Log.debugM "tx received "
@@ -154,6 +158,10 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
         TxAppliedEvent txHash ->
             Log.withNamespace "storage" $
                 Log.debugM "tx was correctly applied"
+                           (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
+        TxApplyInvalidEvent txHash ->
+            Log.withNamespace "storage" $
+                Log.debugM "invalid transaction"
                            (ftag "tx_hash" % formatHash) (Crypto.fromHashed txHash)
         TxsAddedToMempoolEvent hashes ->
             Log.debugM "txs added to the mempool"
@@ -378,11 +386,17 @@ toActions = \case
     TxSubmittedEvent _ -> [
         CounterIncrease "oscoin.api.http_requests.total" noLabels
      ]
+    TxSubmittedInvalidEvent _ -> [
+        CounterIncrease "oscoin.api.http_requests.total" noLabels
+     ]
     TxReceivedEvent _ -> [
         CounterIncrease "oscoin.storage.txs_received.total" noLabels
      ]
     TxAppliedEvent _ -> [
         CounterIncrease "oscoin.storage.txs_applied.total" noLabels
+     ]
+    TxApplyInvalidEvent _ -> [
+        CounterIncrease "oscoin.storage.txs_apply_invalid.total" noLabels
      ]
     TxStaleEvent _ -> [
         CounterIncrease "oscoin.storage.txs_stale.total" noLabels

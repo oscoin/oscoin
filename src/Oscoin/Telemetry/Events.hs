@@ -76,6 +76,11 @@ data NotableEvent where
     TxSubmittedEvent :: forall c tx. Buildable (Hash c)
                      => Hashed c tx
                      -> NotableEvent
+    -- | Triggered every time an invalid transaction is submitted via
+    -- the HTTP API.
+    TxSubmittedInvalidEvent :: forall c tx. Buildable (Hash c)
+                            => Hashed c tx
+                            -> NotableEvent
     -- | Triggered every time a new tx is received at the network level.
     TxReceivedEvent :: forall c tx. Buildable (Hash c)
                     => Hashed c tx
@@ -88,6 +93,10 @@ data NotableEvent where
     TxAppliedEvent :: forall c tx. Buildable (Hash c)
                    => Hashed c tx
                    -> NotableEvent
+    -- | Triggered every time 'applyTx' receives an invalid transaction
+    TxApplyInvalidEvent :: forall c tx. Buildable (Hash c)
+                        => Hashed c tx
+                        -> NotableEvent
     -- | Triggered every time a new rad transaction was added to the mempool.
     TxsAddedToMempoolEvent :: forall c. Buildable (Hash c)
                            => [Hash c]

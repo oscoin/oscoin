@@ -75,7 +75,7 @@ main = do
                 ]
 
     nid <- pure (mkNodeId $ fst keys)
-    mem <- Mempool.newIO
+    mem <- Mempool.newIO validateTx
     gen <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
 
     metricsStore <-

@@ -11,7 +11,7 @@ import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (Tx, verifyTx)
+import           Oscoin.Data.Tx (Tx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Telemetry (telemetryStoreL)
@@ -69,26 +69,22 @@ submitTransaction
        , Serialise (Crypto.Signature c)
        , Crypto.HasHashing c
        , Buildable (Crypto.Hash c)
-       , Crypto.HasDigitalSignature c
        )
     => ApiAction c s i a
 submitTransaction = do
-    tx <- getVerifiedTxBody
-    receipt <- node $ do
-        store <- view telemetryStoreL
-        Mempool.addTxs [tx]
-        forM_ [ TxsAddedToMempoolEvent [Crypto.fromHashed $ Crypto.hash @c tx]
-              , TxSubmittedEvent (Crypto.hash @c tx)] $
-            liftIO . Telemetry.emit store
-        pure $ TxSubmitResponse (hash @c tx)
-
-    respond accepted202 $ Ok receipt
-  where
-    getVerifiedTxBody = do
-        tx <- getBody
-        if verifyTx tx
-        then pure tx
-        else respond badRequest400 $ errBody "Invalid transaction signature"
+    tx <- getBody
+    let txHash = hash @c tx
+    addResult <- node $ Mempool.addTx tx
+    telemetryStore <- node $ view telemetryStoreL
+    case addResult of
+        Left _ -> do
+            liftIO $ Telemetry.emit telemetryStore $ TxSubmittedInvalidEvent txHash
+            respond badRequest400 $ errBody "Invalid transaction"
+        Right _ -> do
+            forM_ [ TxsAddedToMempoolEvent [Crypto.fromHashed txHash]
+                  , TxSubmittedEvent txHash] $
+                liftIO . Telemetry.emit telemetryStore
+            respond accepted202 $ Ok $ TxSubmitResponse txHash
 
 getBestChain
     :: ( Serialise s

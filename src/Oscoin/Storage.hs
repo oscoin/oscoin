@@ -94,7 +94,11 @@ applyTx
 applyTx bs tx = do
     let txHash = Crypto.hash tx
     novel <- isNovelTx bs txHash
-    if | novel     -> Mempool.addTxs [tx] $> Applied [TxAppliedEvent txHash]
+    if | novel     -> do
+            addResult <- Mempool.addTx tx
+            case addResult of
+                Left _   -> pure $ Error [TxApplyInvalidEvent txHash]
+                Right () -> pure $ Applied [TxAppliedEvent txHash]
        | otherwise -> pure $ Stale [TxStaleEvent txHash]
 
 lookupTx

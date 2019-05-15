@@ -64,7 +64,7 @@ tests Dict = testGroup "Test.Oscoin.API"
         , testCase "unconfirmed transaction" $ runEmptySession $ do
             let txValue = DummyPayload "yo"
             (txHash, tx) <- createValidTx @c txValue
-            liftNode $ Mempool.addTxs [tx]
+            _ <- liftNode $ Mempool.addTx tx
             response <- Client.run (Client.getTransaction txHash)
             let expected = API.TxLookupResponse
                     { txHash = Crypto.hash tx
@@ -79,7 +79,7 @@ tests Dict = testGroup "Test.Oscoin.API"
             let txValue = DummyPayload "yo"
             (txHash, tx) <- createValidTx txValue
             Just blk <- liftNode $ do
-                Mempool.addTxs [tx]
+                _ <- Mempool.addTx tx
                 blk <- Node.mineBlock
                 replicateM_ 5 Node.mineBlock
                 pure $ blk

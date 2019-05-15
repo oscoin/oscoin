@@ -47,7 +47,6 @@ app :: ( Typeable c
        , Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
        , Buildable (Crypto.Hash c)
        )
@@ -71,7 +70,6 @@ api :: ( Typeable c
        , Serialise (BlockHash c)
        , Serialise (Crypto.PublicKey c)
        , Serialise (Crypto.Signature c)
-       , Crypto.HasDigitalSignature c
        , Crypto.HasHashing c
        , Buildable (Crypto.Hash c)
        )

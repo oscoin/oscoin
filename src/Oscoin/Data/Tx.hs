@@ -43,6 +43,10 @@ type family TxPayload c tx where
     TxPayload c (OscoinTx.Tx c) = OscoinTx.TxPayload c
     TxPayload c (Tx c)          = DummyPayload
 
+type family TxValidationError c tx
+
+type TxValidator c tx = tx -> Either (TxValidationError c tx) ()
+
 newtype DummyEnv = DummyEnv (Map Text DummyPayload)
     deriving (Show, Eq, Semigroup, Monoid)
 
@@ -167,8 +171,15 @@ mkTx sm pk = Tx
 txMessageContent :: Tx' c a -> a
 txMessageContent = sigMessage . txMessage
 
-verifyTx
+data TxValidationError' = TxInvalidSignature
+
+type instance TxValidationError c (Tx' c msg) = TxValidationError'
+
+validateTx
     :: ( HasDigitalSignature c
        , ByteArrayAccess msg
-       ) => Tx' c msg -> Bool
-verifyTx Tx{..} = verify txPubKey txMessage
+       ) => Tx' c msg -> Either TxValidationError' ()
+validateTx Tx{..} =
+    if verify txPubKey txMessage
+    then Right ()
+    else Left TxInvalidSignature

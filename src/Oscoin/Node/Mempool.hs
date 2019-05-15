@@ -6,7 +6,6 @@ module Oscoin.Node.Mempool
     , new
     , newIO
     , insert
-    , insertMany
     , remove
     , removeMany
     , member
@@ -21,6 +20,7 @@ import           Oscoin.Prelude hiding (toList)
 
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Data.Tx (TxValidationError, TxValidator)
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 import           Oscoin.Node.Mempool.Internal (Mempool)
 import qualified Oscoin.Node.Mempool.Internal as Internal
@@ -31,39 +31,39 @@ import qualified Data.Foldable as Fold
 
 -- | Handle to a mutable 'Mempool'.
 data Handle c tx = Handle
-    { hMempool   :: TVar (Mempool c tx)
-    , hBroadcast :: Channel tx
+    { hMempool    :: TVar (Mempool c tx)
+    , hBroadcast  :: Channel tx
+    , hTxValidate :: tx -> Either (TxValidationError c tx) ()
     }
 
 -- | Create a new 'Handle' with an underlying empty mempool.
-new :: Ord (Hash c) => STM (Handle c tx)
-new = do
+new :: Ord (Hash c) => TxValidator c tx -> STM (Handle c tx)
+new hTxValidate = do
     hMempool   <- STM.newTVar mempty
     hBroadcast <- STM.newBroadcastTChan
     pure Handle{..}
 
 -- | Like 'new', but without running a transaction.
-newIO :: Ord (Hash c) => IO (Handle c tx)
-newIO = do
+newIO :: Ord (Hash c) => TxValidator c tx -> IO (Handle c tx)
+newIO hTxValidate = do
     hMempool   <- STM.newTVarIO mempty
     hBroadcast <- STM.newBroadcastTChanIO
     pure Handle{..}
 
-insert :: (Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
-insert Handle{hMempool, hBroadcast} tx = do
-    STM.modifyTVar' hMempool (Internal.insert tx)
-    STM.writeTChan hBroadcast (Insert [tx])
-
-insertMany
+insert
     :: ( Crypto.Hashable c tx
-       , Foldable t
        )
     => Handle c tx
-    -> t tx
-    -> STM ()
-insertMany Handle{hMempool, hBroadcast} txs = do
-    STM.modifyTVar' hMempool (Internal.insertMany txs)
-    STM.writeTChan hBroadcast (Insert (Fold.toList txs))
+    -> tx
+    -> STM (Either (TxValidationError c tx) ())
+insert Handle{hMempool, hBroadcast, hTxValidate} tx =
+    case hTxValidate tx of
+        Left err -> pure $ Left err
+        Right () -> do
+            STM.modifyTVar' hMempool (Internal.insert tx)
+            STM.writeTChan hBroadcast (Insert [tx])
+            pure $ Right ()
+
 
 remove :: (Crypto.Hashable c tx) => Handle c tx -> tx -> STM ()
 remove Handle{hMempool, hBroadcast} tx = do

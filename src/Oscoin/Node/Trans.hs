@@ -77,14 +77,14 @@ instance ( Ord (Hash c)
          , Monad m
          , MonadIO m
          ) => MonadMempool c tx (NodeT c tx s i m) where
-    addTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.insertMany` txs)
+    addTx tx   = asks hMempool >>= liftIO . atomically . (`Mempool.insert` tx)
     getTxs     = asks hMempool >>= liftIO . atomically . Mempool.toList
     delTxs txs = asks hMempool >>= liftIO . atomically . (`Mempool.removeMany` txs)
     numTxs     = asks hMempool >>= liftIO . atomically . Mempool.size
     lookupTx h = asks hMempool >>= liftIO . atomically . (`Mempool.lookup` h)
     subscribe  = asks hMempool >>= liftIO . atomically . Mempool.subscribe
 
-    {-# INLINE addTxs    #-}
+    {-# INLINE addTx     #-}
     {-# INLINE getTxs    #-}
     {-# INLINE delTxs    #-}
     {-# INLINE numTxs    #-}

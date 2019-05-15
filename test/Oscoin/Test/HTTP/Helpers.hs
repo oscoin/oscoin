@@ -146,8 +146,8 @@ withNode NodeState{..} k = do
             }
 
     mph <- atomically $ do
-        mp <- Mempool.new
-        Mempool.insertMany mp mempoolState
+        mp <- Mempool.new validateTx
+        forM_ mempoolState $ Mempool.insert mp
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
