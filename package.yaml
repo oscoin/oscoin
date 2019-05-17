@@ -48,8 +48,6 @@ library:
     - filepath
     - formatting
     - generics-sop
-    - gogol
-    - gogol-compute
     - gossip
     - hashable
     - hostname
@@ -81,7 +79,6 @@ library:
     - stm >=2.4.5.0
     - text
     - transformers
-    - unliftio-core
     - unordered-containers
     - vector
     - wai

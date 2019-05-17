@@ -31,7 +31,6 @@ genOptions = Options
     <*> Gen.list (Range.constant 0 1)
             (toS . renderHostname <$> genHostname)
     <*> Gen.bool
-    <*> Gen.bool
     <*> pure Nothing
 
 genOptNetwork :: MonadGen m => m OptNetwork

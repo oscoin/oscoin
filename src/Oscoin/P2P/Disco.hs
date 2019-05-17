@@ -25,10 +25,6 @@
 --
 -- DNSSEC is not currently supported.
 --
--- When running on Google Compute Engine (GCE), and 'optEnableGCE' is 'True', it
--- is attempted to find similar instances in the same VPC (see
--- "Oscoin.P2P.Disco.GCE").
---
 module Oscoin.P2P.Disco
     ( DiscoEvent(..)
 
@@ -40,7 +36,6 @@ module Oscoin.P2P.Disco
 
 import           Oscoin.Prelude hiding (option)
 
-import qualified Oscoin.P2P.Disco.GCE as GCE
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import           Oscoin.P2P.Disco.Options
 import           Oscoin.P2P.Types
@@ -56,15 +51,10 @@ import           Oscoin.P2P.Types
                  , renderNetwork
                  )
 
-import qualified Data.HashMap.Strict as Map
 import           Data.IP
 import qualified Data.Set as Set
-import           Lens.Micro (set)
 import           Lens.Micro.Extras (view)
 import qualified Network.DNS as DNS
-import qualified Network.Google as Goog
-import qualified Network.Google.Compute as Goog (computeReadOnlyScope)
-import qualified Network.Google.Compute.Metadata as Goog (getProjectId)
 import           Network.Socket
                  ( AddrInfo(..)
                  , AddrInfoFlag(AI_ADDRCONFIG, AI_ALL, AI_NUMERICHOST)
@@ -95,11 +85,10 @@ data DiscoEvent =
 withDisco
     :: (HasCallStack => DiscoEvent -> IO ())
     -> Options crypto Network
-    -> PortNumber
     -> Set MDns.Service
     -> (IO (Set SockAddr) -> IO a)
     -> IO a
-withDisco tracer opt defaultGossipPort !advertise k = do
+withDisco tracer opt !advertise k = do
     rslv <-
         DNS.makeResolvSeed
             . maybe identity
@@ -114,20 +103,11 @@ withDisco tracer opt defaultGossipPort !advertise k = do
         else
             pure Nothing
 
-    goog <-
-        if optEnableGCE opt then
-                Just
-             .  set Goog.envScopes Goog.computeReadOnlyScope
-             .  set Goog.envLogger (\_ _ -> pure ())
-            <$> Goog.newEnv
-        else
-            pure Nothing
-
-    run $ k (resolve rslv mrslv goog)
+    run $ k (resolve rslv mrslv)
   where
     run = if optEnableMDns opt then withResponder else identity
 
-    resolve rslv mrslv goog = runConcurrently $ (\a b c d -> a <> b <> c <> d)
+    resolve rslv mrslv = runConcurrently $ (\a b c -> a <> b <> c)
         <$> (Concurrently
                 . map Set.fromList
                 . flip concatMapM (optSDDomains opt)
@@ -141,26 +121,6 @@ withDisco tracer opt defaultGossipPort !advertise k = do
                 map (fromMaybe mempty) . for mrslv $ \r ->
                     Set.fromList <$>
                         resolveMDns tracer rslv r (optNetwork opt))
-        <*> (Concurrently $
-                map (fromMaybe mempty) . for goog $ \g -> do
-                    -- TODO(kim): we may want to allow passing in the project
-                    -- id, so we're not limited to running GCE disco on GCE only
-                    -- (although the utility of that is debatable)
-                    proj <- Goog.getProjectId (view Goog.envManager g)
-                    rs   <-
-                        Set.toList
-                            <$> GCE.lookup proj
-                                           gceLabels
-                                           gcePortLabel
-                                           (optNetwork opt)
-                                           g
-                    map Set.fromList . flip concatMapM rs $ \(ip, port) ->
-                        getSockAddrs tracer
-                                     ip
-                                     (fromMaybe defaultGossipPort port))
-
-    gceLabels    = Map.fromList [("app", "oscoin-node")]
-    gcePortLabel = "gossipPort"
 
     withResponder io =
         withAsync runResponder $ \r ->

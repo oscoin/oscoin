@@ -46,7 +46,6 @@ data Options crypto network = Options
     , optSeeds      :: [SeedInfo crypto]
     , optSDDomains  :: [HostName]
     , optEnableMDns :: Bool
-    , optEnableGCE  :: Bool
     , optNameserver :: Maybe (HostName, PortNumber) -- only for testing currently
     } deriving (Generic)
 
@@ -168,10 +167,6 @@ discoParser = Options
         ( long "enable-mdns"
        <> help "Enable mDNS discovery"
         )
-    <*> switch
-        ( long "enable-gce-sd"
-       <> help "Enable instance discovery on Google Compute Engine"
-        )
     <*> pure Nothing
 
 class CanRenderNetwork a where
@@ -193,13 +188,11 @@ discoOpts
         optSeeds
         optSDDomains
         optEnableMDns
-        optEnableGCE
         _optNameserver) = concat
     [ fromMaybe [] . map (pure . Opt "network") . renderNetwork' $ optNetwork
     , map (Opt "seed" . toS . showBootstrapInfo) optSeeds
     , map (Opt "sd-domain" . toS) optSDDomains
     , bool [] (pure (Flag "enable-mdns"))   optEnableMDns
-    , bool [] (pure (Flag "enable-gce-sd")) optEnableGCE
     ]
 
 renderDiscoOpts :: Options c OptNetwork -> [Text]
