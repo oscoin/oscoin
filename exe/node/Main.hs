@@ -155,7 +155,6 @@ main = do
                             , MDns.Service "http"   MDns.TCP optHost optApiPort
                             ]
 
-            seeds  <- liftIO disco
             let myHost     = P2P.numericHost optHost
             let myApiInfo  = P2P.mkAddr myHost optApiPort
             let myNodeInfo = P2P.mkNodeInfo myApiInfo nid
@@ -167,7 +166,7 @@ main = do
                                , P2P.bootHttpApiAddr = pure myApiInfo
                                , P2P.bootGossipAddr  = P2P.mkAddr myHost optGossipPort
                                }
-                           (Set.map (Nothing,) seeds)
+                           (Set.map (Nothing,) <$> disco)
                            (storage node)
                            (Handshake.secureHandshake
                                mySK

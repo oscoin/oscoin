@@ -1,5 +1,8 @@
+{-# LANGUAGE NumericUnderscores   #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Oscoin.P2P
     (-- * Gossip
       GossipT
@@ -48,10 +51,13 @@ import qualified Network.Gossip.Plumtree as Bcast
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
+import           Control.Retry
+                 (capDelay, fullJitterBackoff, recoverAll, retrying)
 import           Data.ByteArray (ByteArrayAccess(..))
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 import           Data.Hashable (Hashable)
 import           Data.HashSet (HashSet)
+import qualified Data.Set as Set
 import           Formatting.Buildable (Buildable)
 import           Network.Socket (SockAddr, Socket)
 
@@ -118,31 +124,48 @@ withGossip
        )
     => Telemetry.Handle
     -> SelfInfo c
-    -> Set (Maybe (NodeInfo c), SockAddr)
+    -> IO (Set (Maybe (NodeInfo c), SockAddr))
     -> Storage c tx s IO
     -> Handshake e (NodeInfo c) (Wire c) o
     -> (Gossip.Run.Env (NodeInfo c) -> IO a)
     -> IO a
-withGossip telemetryStore selfAddr peers Storage{..} handshake run = do
+withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
     self  <-
         Gossip.knownPeer
             (runIdentity . bootNodeId $ selfAddr)
             (hostToHostName . addrHost . bootGossipAddr $ selfAddr)
             (addrPort . bootGossipAddr $ selfAddr)
-
-    Gossip.Run.withGossip
-        self
-        Membership.defaultConfig
-        Periodic.defaultConfig
-        scheduleInterval
-        (wrapHandshake @c telemetryStore handshake)
-        (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
-        (wrapLookup storageLookupBlock storageLookupTx)
-        (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
-        (toList peers) -- TODO(kim): make this a 'Set' in gossip, too
-        run
+    peers <- disco
+    runGossip self peers $ \env ->
+        snd <$> concurrently
+            (when (Set.null peers) . void $ keepDiscovering env)
+            (run env)
   where
     scheduleInterval = 10
+
+    runGossip self peers =
+        Gossip.Run.withGossip
+            self
+            Membership.defaultConfig
+            Periodic.defaultConfig
+            scheduleInterval
+            (wrapHandshake @c telemetryStore handshake)
+            (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
+            (wrapLookup storageLookupBlock storageLookupTx)
+            (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
+            (toList peers) -- TODO(kim): make this a 'Set' in gossip, too
+
+    keepDiscovering env =
+        retrying policy (const $ pure . Set.null)
+            . const
+            . recoverAll policy
+            . const $ do
+                peers <- disco
+                unless (Set.null peers) $
+                    Gossip.Run.joinAny env (toList peers)
+                pure peers
+
+    policy = capDelay (60 * 1_000_000) $ fullJitterBackoff 500_000
 
 --------------------------------------------------------------------------------
 
