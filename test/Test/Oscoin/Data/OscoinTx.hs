@@ -36,7 +36,7 @@ tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
 propApplyTxPayload Dict = property $ do
-    alice <- publicKey @c
+    (alice, charlie) <- publicKeyPair @c
 
     -- We use an empty transaction message list, as this lets us test
     -- the "generic" part of the transaction processing without worrying about
@@ -46,26 +46,26 @@ propApplyTxPayload Dict = property $ do
     bal   <- forAll genBalancePositive
 
     -- Should fail because Alice doesn't have an account
-    applyTxPayload tx ws ===  Left (ErrKeyNotFound (accountKey alice))
+    applyTxPayload tx charlie ws ===  Left (ErrKeyNotFound (accountKey alice))
 
     -- Give Alice an account
     ws' <- evalEither $ creditAccount alice bal ws
 
     -- Should fail because the transaction nonce is incorrect (should be 0)
     forAll (genNonce 1 maxBound) >>= \nonce ->
-        applyTxPayload (tx { txNonce = nonce }) ws' ===  Left (ErrInvalidNonce nonce)
+        applyTxPayload (tx { txNonce = nonce }) charlie ws' ===  Left (ErrInvalidNonce nonce)
 
     -- Should fail because the transaction fee is too low
-    applyTxPayload (tx { txFee = 0 }) ws' ===  Left (ErrInvalidFee 0)
+    applyTxPayload (tx { txFee = 0 }) charlie ws' ===  Left (ErrInvalidFee 0)
 
     -- Should fail because Alice doesn't have enough balance
-    applyTxPayload (tx { txFee = bal + 1 }) ws' ===  Left (ErrInsufficientBalance bal)
+    applyTxPayload (tx { txFee = bal + 1 }) charlie ws' ===  Left (ErrInsufficientBalance bal)
 
     -- Generate a valid fee of at most the account balance
     fee <- forAll $ genFee tx bal
 
     -- Should succeed because Alice can pay the minimum fee
-    (ws'', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) ws'
+    (ws'', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) charlie ws'
 
     -- Alice's nonce is now incremented to `1`.
     lookupNonce alice ws'' === Right 1
@@ -103,7 +103,8 @@ propTransferBalance Dict = property $ do
 
 propMultiTransfer :: forall c. Dict (IsCrypto c) -> Property
 propMultiTransfer Dict = property $ do
-    (alice, bob)  <- publicKeyPair @c
+    (alice, bob, charlie) <- publicKeyTriple @c
+
     bal           <- forAll genBalancePositive
     ws            <- evalEither $ creditAccount alice bal WorldState.empty
 
@@ -113,30 +114,37 @@ propMultiTransfer Dict = property $ do
 
     -- A single invalid message (`t0`) fails the transaction
     invalidTx <- pure (mkTxPayload [t1, t0, t2] alice)
-    applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) ws === Left (ErrInvalidTransfer 0)
+    applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) charlie ws
+        === Left (ErrInvalidTransfer 0)
 
     -- Multiple messages combine
     tx <- pure (mkTxPayload [t1, t1, t2] alice)
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) ws
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) charlie ws
 
     lookupBalance bob ws' === Right 4
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
-    alice <- publicKey @c
-    tx    <- pure (mkTxPayload [] alice)
-    bal   <- forAll genBalancePositive
-    ws    <- evalEither $ creditAccount alice bal WorldState.empty
+    (alice, charlie)
+          <- publicKeyPair @c
+
+    annotate . condensedS $ (accountKey alice, accountKey charlie)
+
+    tx   <- pure (mkTxPayload [] alice)
 
     -- Generate a valid fee and burn.
-    fee  <- forAll $ genFee tx bal
-    burn <- forAll $ genBalanceRange 0 (bal - fee)
+    fee  <- forAll $ genBalanceRange (minimumTxFee tx) (minimumTxFee tx * 2)
+    burn <- forAll $ genBalanceRange 0 3
+    bal  <- forAll $ genBalanceRange (fee + burn + 1) maxBound
+    ws   <- evalEither $ creditAccount alice bal WorldState.empty
 
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee, txBurn = burn }) ws
+    annotate . condensedS $ ws
 
-    -- TODO(cloudhead): Test that the fee is deducted, once that is implemented.
-    -- The burn is debited from Alice's account.
-    lookupBalance alice ws' === Right (bal - burn)
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee, txBurn = burn }) charlie ws
+
+    -- The burn and fee is debited from Alice's account, and the fee is credited to Charlie's.
+    lookupBalance alice   ws' === Right (bal - burn - fee)
+    lookupBalance charlie ws' === Right fee
 
 propRegisterProj :: forall c. Dict (IsCrypto c) -> Property
 propRegisterProj Dict = property $ do
@@ -172,14 +180,15 @@ propRegisterProj Dict = property $ do
 
 propNonce :: forall c. Dict (IsCrypto c) -> Property
 propNonce Dict = property $ do
-    alice <- publicKey @c
-    acc   <- forAll (genAccount alice)
+    (alice, charlie) <- publicKeyPair @c
+
+    acc <- forAll (genAccount alice)
 
     let tx = (mkTxPayload [] alice) { txNonce = accountNonce acc }
     let ws = insertAccount acc WorldState.empty
 
     fee      <- forAll (genFee tx (accountBalance acc))
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) ws
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) charlie ws
     nonce'   <- evalEither $ lookupNonce alice ws'
 
     -- Alice's nonce is now incremented by `1`.

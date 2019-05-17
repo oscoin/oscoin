@@ -145,10 +145,12 @@ applyTxPayload
        )
     => TxPayload c
     -- ^ The transaction to apply.
+    -> AccountId c
+    -- ^ The account of the beneficiary, where fees should be sent.
     -> WorldState c
     -- ^ The input world state.
     -> Either (TxError c) (WorldState c, TxOutput)
-applyTxPayload tx@TxPayload{..} ws = do
+applyTxPayload tx@TxPayload{..} beneficiary ws = do
     Account{..} <- lookupAccount txAuthor ws
 
     when (txNonce /= accountNonce) $
@@ -160,13 +162,13 @@ applyTxPayload tx@TxPayload{..} ws = do
     when (txFee + txBurn > accountBalance) $
         Left (ErrInsufficientBalance accountBalance)
 
-    -- TODO(cloudhead): Transfer fee
+    ws' <- transferBalance txAuthor beneficiary txFee ws
+
     -- TODO(cloudhead): Verify transaction size
 
     applyTxMessages txMessages txAuthor
         =<< debitAccount txAuthor txBurn
-            (adjustAccount incrementNonce txAuthor ws)
-
+            (adjustAccount incrementNonce txAuthor ws')
 
 -- FIXME(adn) This is currently a stub.
 verifyTx :: Tx c -> Bool
@@ -267,8 +269,7 @@ applyTxMessage (TxTransfer receiver _) sender _
     | sender == receiver =
         Left (ErrNotAuthorized sender)
 applyTxMessage (TxTransfer receiver bal) sender ws = do
-    ws'  <- debitAccount  sender   bal ws
-        >>= creditAccount receiver bal
+    ws' <- transferBalance sender receiver bal ws
 
     pure (ws', [])
 
@@ -282,6 +283,21 @@ insertAccount acc@Account{..} = WorldState.insert (accountKey accountId) (Accoun
 -- Nb. The caller must ensure that the value under the account id is indeed an 'Account'.
 deleteAccount :: CBOR.Serialise (PublicKey c) => AccountId c -> WorldState c -> WorldState c
 deleteAccount id = WorldState.delete (accountKey id)
+
+-- | Transfer balance between two accounts. Uses 'creditAccount' and 'debitAccount'.
+transferBalance
+    :: (CBOR.Serialise (PublicKey c))
+    => AccountId c
+    -- ^ Transfer sender ("from").
+    -> AccountId c
+    -- ^ Transfer receiver ("to").
+    -> Balance
+    -- ^ Transfer amount.
+    -> WorldState c
+    -- ^ Input state.
+    -> Either (TxError c) (WorldState c)
+transferBalance a b bal ws =
+    debitAccount a bal ws >>= creditAccount b bal
 
 -- | Credit an account with coins.
 --
