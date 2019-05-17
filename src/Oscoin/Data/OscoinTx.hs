@@ -57,6 +57,8 @@ data TxPayload c = TxPayload
     -- ^ Transaction fee to miner.
     , txBurn     :: Balance
     -- ^ Transaction burn.
+    , txAuthor   :: AccountId c
+    -- ^ The transaction author.
     } deriving (Generic)
 
 -- | A transaction message.
@@ -73,7 +75,7 @@ data TxMessage c =
     -- ^ Checkpoint a project's state.
     | TxUpdateContract    (AccountId c)
     -- ^ Update a project's contract.
-    | TxTransfer          (AccountId c) (AccountId c) Balance
+    | TxTransfer          (AccountId c) Balance
     -- ^ Transfer balance between two accounts.
     deriving (Generic)
 
@@ -125,13 +127,14 @@ deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (PublicKey c)) => Ord
 
 -------------------------------------------------------------------------------
 
--- | Make a transaction payload with the given messages.
-mkTxPayload :: [TxMessage c] -> TxPayload c
-mkTxPayload ms = TxPayload
+-- | Make a transaction payload with the given messages and author.
+mkTxPayload :: [TxMessage c] -> AccountId c -> TxPayload c
+mkTxPayload ms acc = TxPayload
     { txMessages = ms
     , txNonce    = 0
     , txFee      = 0
     , txBurn     = 0
+    , txAuthor   = acc
     }
 
 -- | Apply a transaction payload to the world state, and return either an error,
@@ -142,13 +145,11 @@ applyTxPayload
        )
     => TxPayload c
     -- ^ The transaction to apply.
-    -> AccountId c
-    -- ^ The author or \"signer\" of the transaction.
     -> WorldState c
     -- ^ The input world state.
     -> Either (TxError c) (WorldState c, TxOutput)
-applyTxPayload tx@TxPayload{..} author ws = do
-    Account{..} <- lookupAccount author ws
+applyTxPayload tx@TxPayload{..} ws = do
+    Account{..} <- lookupAccount txAuthor ws
 
     when (txNonce /= accountNonce) $
         Left (ErrInvalidNonce txNonce)
@@ -162,9 +163,9 @@ applyTxPayload tx@TxPayload{..} author ws = do
     -- TODO(cloudhead): Transfer fee
     -- TODO(cloudhead): Verify transaction size
 
-    applyTxMessages txMessages author
-        =<< debitAccount author txBurn
-            (adjustAccount incrementNonce author ws)
+    applyTxMessages txMessages txAuthor
+        =<< debitAccount txAuthor txBurn
+            (adjustAccount incrementNonce txAuthor ws)
 
 
 -- FIXME(adn) This is currently a stub.
@@ -260,12 +261,12 @@ applyTxMessage (TxDeauthorize acc pk) author ws = do
 applyTxMessage TxCheckpoint{} _ _ws = notImplemented
 applyTxMessage TxUpdateContract{} _ _ws = notImplemented
 
-applyTxMessage (TxTransfer _ _ bal) _ _ | bal == 0 =
+applyTxMessage (TxTransfer _ bal) _ _ | bal == 0 =
     Left (ErrInvalidTransfer bal)
-applyTxMessage (TxTransfer sender receiver bal) author ws = do
-    when (author /= sender) $
-        Left (ErrNotAuthorized author)
-
+applyTxMessage (TxTransfer receiver _) sender _
+    | sender == receiver =
+        Left (ErrNotAuthorized sender)
+applyTxMessage (TxTransfer receiver bal) sender ws = do
     ws'  <- debitAccount  sender   bal ws
         >>= creditAccount receiver bal
 

@@ -132,10 +132,9 @@ instance ( Show (PublicKey c)
         "TxCheckpoint " <> condensed addr <> " " <> condensed hsh
     condensed (TxUpdateContract addr) =
         "TxUpdateContract " <> condensed addr
-    condensed (TxTransfer addr1 addr2 bal) =
+    condensed (TxTransfer addr bal) =
         "TxTransfer "
-            <> condensed addr1 <> " "
-            <> condensed addr2 <> " "
+            <> condensed addr <> " "
             <> condensed bal
 
 instance

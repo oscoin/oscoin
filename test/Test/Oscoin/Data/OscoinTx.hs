@@ -41,31 +41,31 @@ propApplyTxPayload Dict = property $ do
     -- We use an empty transaction message list, as this lets us test
     -- the "generic" part of the transaction processing without worrying about
     -- the messages.
-    tx    <- pure (mkTxPayload [])
+    tx    <- pure (mkTxPayload [] alice)
     ws    <- forAll genWorldState
     bal   <- forAll genBalancePositive
 
     -- Should fail because Alice doesn't have an account
-    applyTxPayload tx alice ws ===  Left (ErrKeyNotFound (accountKey alice))
+    applyTxPayload tx ws ===  Left (ErrKeyNotFound (accountKey alice))
 
     -- Give Alice an account
     ws' <- evalEither $ creditAccount alice bal ws
 
     -- Should fail because the transaction nonce is incorrect (should be 0)
     forAll (genNonce 1 maxBound) >>= \nonce ->
-        applyTxPayload (tx { txNonce = nonce }) alice ws' ===  Left (ErrInvalidNonce nonce)
+        applyTxPayload (tx { txNonce = nonce }) ws' ===  Left (ErrInvalidNonce nonce)
 
     -- Should fail because the transaction fee is too low
-    applyTxPayload (tx { txFee = 0 }) alice ws' ===  Left (ErrInvalidFee 0)
+    applyTxPayload (tx { txFee = 0 }) ws' ===  Left (ErrInvalidFee 0)
 
     -- Should fail because Alice doesn't have enough balance
-    applyTxPayload (tx { txFee = bal + 1 }) alice ws' ===  Left (ErrInsufficientBalance bal)
+    applyTxPayload (tx { txFee = bal + 1 }) ws' ===  Left (ErrInsufficientBalance bal)
 
     -- Generate a valid fee of at most the account balance
     fee <- forAll $ genFee tx bal
 
     -- Should succeed because Alice can pay the minimum fee
-    (ws'', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) alice ws'
+    (ws'', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) ws'
 
     -- Alice's nonce is now incremented to `1`.
     lookupNonce alice ws'' === Right 1
@@ -77,16 +77,18 @@ propTransferBalance Dict = property $ do
     ws           <- evalEither $   creditAccount alice bal WorldState.empty
                                >>= creditAccount bob maxBound
 
+    -- TODO(cloudhead): Test sending to self
+
     -- A transfer that would overflow the account should fail
-    forAll (pure $ TxTransfer alice bob 1) >>= \msg ->
+    forAll (pure $ TxTransfer bob 1) >>= \msg ->
         applyTxMessage msg alice ws === Left (ErrOverflow bob)
 
     -- A transfer of zero balance should always fail
-    forAll (pure $ TxTransfer alice bob 0) >>= \msg ->
+    forAll (pure $ TxTransfer bob 0) >>= \msg ->
         applyTxMessage msg alice ws === Left (ErrInvalidTransfer 0)
 
-    -- A transfer from bob to alice
-    forAll (genTransfer bob alice (Range.constantFrom 1 1 100)) >>= \msg -> do
+    -- A transfer to alice
+    forAll (genTransfer alice (Range.constantFrom 1 1 100)) >>= \msg -> do
         -- Should fail if alice is the author of the transaction
         applyTxMessage msg alice ws === Left (ErrNotAuthorized alice)
         -- Should succeed if bob is the author of this transaction
@@ -94,8 +96,8 @@ propTransferBalance Dict = property $ do
         -- Shouldn't create or destroy coins
         balanceTotal ws' === balanceTotal ws
 
-    -- A transfer from alice to bob of an amount greater than her balance
-    forAll (genTransfer alice bob (Range.singleton (bal + 1))) >>= \msg ->
+    -- A transfer to bob of an amount greater than her balance
+    forAll (genTransfer bob (Range.singleton (bal + 1))) >>= \msg ->
         -- Should fail since alice doesn't have the required balance
         applyTxMessage msg alice ws === Left (ErrInsufficientBalance bal)
 
@@ -105,24 +107,24 @@ propMultiTransfer Dict = property $ do
     bal           <- forAll genBalancePositive
     ws            <- evalEither $ creditAccount alice bal WorldState.empty
 
-    t0            <- pure (TxTransfer alice bob 0)
-    t1            <- pure (TxTransfer alice bob 1)
-    t2            <- pure (TxTransfer alice bob 2)
+    t0            <- pure (TxTransfer bob 0)
+    t1            <- pure (TxTransfer bob 1)
+    t2            <- pure (TxTransfer bob 2)
 
     -- A single invalid message (`t0`) fails the transaction
-    invalidTx <- pure (mkTxPayload [t1, t0, t2])
-    applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) alice ws === Left (ErrInvalidTransfer 0)
+    invalidTx <- pure (mkTxPayload [t1, t0, t2] alice)
+    applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) ws === Left (ErrInvalidTransfer 0)
 
     -- Multiple messages combine
-    tx <- pure (mkTxPayload [t1, t1, t2])
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) alice ws
+    tx <- pure (mkTxPayload [t1, t1, t2] alice)
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) ws
 
     lookupBalance bob ws' === Right 4
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
     alice <- publicKey @c
-    tx    <- pure (mkTxPayload [])
+    tx    <- pure (mkTxPayload [] alice)
     bal   <- forAll genBalancePositive
     ws    <- evalEither $ creditAccount alice bal WorldState.empty
 
@@ -130,7 +132,7 @@ propTxFeeBurn Dict = property $ do
     fee  <- forAll $ genFee tx bal
     burn <- forAll $ genBalanceRange 0 (bal - fee)
 
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee, txBurn = burn }) alice ws
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee, txBurn = burn }) ws
 
     -- TODO(cloudhead): Test that the fee is deducted, once that is implemented.
     -- The burn is debited from Alice's account.
@@ -173,11 +175,11 @@ propNonce Dict = property $ do
     alice <- publicKey @c
     acc   <- forAll (genAccount alice)
 
-    let tx = (mkTxPayload []) { txNonce = accountNonce acc }
+    let tx = (mkTxPayload [] alice) { txNonce = accountNonce acc }
     let ws = insertAccount acc WorldState.empty
 
     fee      <- forAll (genFee tx (accountBalance acc))
-    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) alice ws
+    (ws', _) <- evalEither $ applyTxPayload (tx { txFee = fee }) ws
     nonce'   <- evalEither $ lookupNonce alice ws'
 
     -- Alice's nonce is now incremented by `1`.
@@ -289,7 +291,7 @@ genCheckpoint pk =
 genUpdateContract :: PublicKey c -> Gen (TxMessage c)
 genUpdateContract = pure . TxUpdateContract
 
-genTransfer :: AccountId c -> AccountId c -> Range Balance -> Gen (TxMessage c)
-genTransfer a b range =
-    TxTransfer a b <$> Gen.integral range
+genTransfer :: AccountId c -> Range Balance -> Gen (TxMessage c)
+genTransfer receiver range =
+    TxTransfer receiver <$> Gen.integral range
 
