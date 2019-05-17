@@ -28,7 +28,7 @@ import           Data.ByteArray.Orphans ()
 import qualified Data.Yaml as Yaml
 
 
-class (MonadRandom m, API.MonadClient c m, MonadKeyStore c m) => MonadCLI c m where
+class (MonadRandom m, MonadKeyStore c m) => MonadCLI c m where
     -- | Sleep for given number of milliseconds
     sleep :: Int -> m ()
     -- | Print text to stdout
@@ -39,6 +39,8 @@ class (MonadRandom m, API.MonadClient c m, MonadKeyStore c m) => MonadCLI c m wh
     readTxFile :: FilePath -> m (Either Text (TxPayload c (Tx c)))
     -- | Get the current time
     getTime :: m Timestamp
+
+    getClient :: m (API.Client c m)
 
 data Result
     = ResultOk

@@ -1,34 +1,33 @@
--- | Provide an instance of 'MonadClient' that can be run in a WAI Test
--- 'Session'.
+-- | Provide a 'Client' object for a WAI Test 'Session'.
+--
+-- Re-exports "Oscoin.API.Client".
 --
 -- @
 -- import qualified Oscoin.Test.API.HTTP.TestClient as Client
 --
 -- flip runSession app $ do
---     result <- Client.run $ Client.submitTransaction tx
+--     result <- Client.submitTransaction Client.session tx
 -- @
 --
 module Oscoin.Test.API.HTTP.TestClient
     ( module Oscoin.API.Client
-    , TestClient
-    , run
+    , session
     ) where
 
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
-import           Oscoin.API.HTTP.Client
+import           Oscoin.API.Client.HTTP
 
+import           Oscoin.Test.Crypto
 import           Oscoin.Test.HTTP.Helpers (DummySeal, Session, liftWaiSession)
 
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 
 
-type TestClient c = HttpClientT (Session c DummySeal)
-
-run :: TestClient c a -> Session c DummySeal a
-run = runHttpClientT' makeWaiRequest
+session :: (IsCrypto c) => Client c (Session c DummySeal)
+session = httpClientFromRequest makeWaiRequest
 
 makeWaiRequest :: Request -> Session c DummySeal Response
 makeWaiRequest Request{..} = liftWaiSession $ fromSresp <$> Wai.srequest sreq
