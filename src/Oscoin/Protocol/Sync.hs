@@ -18,17 +18,19 @@ module Oscoin.Protocol.Sync
     , Range(..)
 
     -- * Pure functions
-    , isMutable
-    , isDone
-    , immutableRange
+    , range
+
+    -- * Syncing functions
+    , syncBlocks
 
     -- * Testing internals
     , withActivePeers
-    , bestTip
-    , bestHeight
+    , getRemoteTip
+    , getRemoteHeight
     ) where
 
 import           Oscoin.Crypto.Hash (Hash)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Nakamoto (PoW)
@@ -56,9 +58,20 @@ import           GHC.Natural
 type ActivePeer c  = NodeInfo c
 type ActivePeers c = HashSet (ActivePeer c)
 
-data SyncEvent c tx s=
+data SyncEvent c tx s =
       SyncBlock (Block c tx (Sealed c s))
     | SyncBlockHeader (BlockHeader c s)
+
+deriving instance ( Eq (Hash c)
+                  , Eq tx
+                  , Eq s
+                  , Eq (PublicKey c)
+                  ) => Eq (SyncEvent c tx s)
+deriving instance ( Show (Hash c)
+                  , Show tx
+                  , Show s
+                  , Show (PublicKey c)
+                  ) => Show (SyncEvent c tx s)
 
 data SyncError c =
       RequestTimeout ProtocolRequest (NodeInfo c) Timeout
@@ -66,7 +79,7 @@ data SyncError c =
       -- 'SyncProtocolRequest'.
     | NoActivePeers
       -- ^ There are not active peers to talk to.
-    | NoBestTipFound
+    | NoRemoteTipFound
       -- ^ It was not possible to fetch a valid tip from our peers.
     | AllPeersTimeoutError
       -- ^ All the queried peers didn't respond in the allocated timeout.
@@ -138,11 +151,12 @@ data SyncContext c tx s m = SyncContext
     -- ^ The number of maximum allowed rollbacks. It corresponds to /nu/ from
     -- the spec and it's known as the 'mutableChainSuffix' in the rest of the
     -- codebase.
-    , scActivePeers      :: m (ActivePeers c)
-    , scDataFetcher      :: DataFetcher c tx s m
-    , scEventTracer      :: Tracer m
-    , scConcurrently     :: forall a b t.  Traversable t => t a -> (a -> m b) -> m (t b)
-    , scLocalChainReader :: BlockStoreReader c tx s m
+    , scActivePeers       :: m (ActivePeers c)
+    , scDataFetcher       :: DataFetcher c tx s m
+    , scEventTracer       :: Tracer m
+    , scConcurrently      :: forall a b t.  Traversable t => t a -> (a -> m b) -> m (t b)
+    , scLocalChainReader  :: BlockStoreReader c tx s m
+    , scUpstreamConsumers :: [SyncEvent c tx s -> m ()]
     }
 
 -- | A sync monad over @m@, that can throw 'SyncError's.
@@ -176,35 +190,35 @@ withActivePeers f = do
   Monadic operations
 ------------------------------------------------------------------------------}
 
--- The 'bestTip' operation from the spec. It tries to fetch the tips
+-- The 'remoteTip' operation from the spec. It tries to fetch the tips
 -- concurrently, and picks the highest one.
 -- TODO(adn) /Optimisation/: Build a frequency map and pick the one
 -- returned by most peers. In case of draws, pick the highest one.
-bestTip
+getRemoteTip
     :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
        ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
-bestTip = withActivePeers $ \active -> do
+getRemoteTip = withActivePeers $ \active -> do
     dataFetcher     <- scDataFetcher  <$> ask
     forConcurrently <- scConcurrently <$> ask
     results  <- lift $
         forConcurrently (HS.toList active) (\a -> fetch dataFetcher a SGetTip ())
     case partitionEithers results of
       (_t:_, [])           -> throwError AllPeersTimeoutError
-      ([], [])             -> throwError NoBestTipFound
+      ([], [])             -> throwError NoRemoteTipFound
       (_timeouts, allTips) -> pure $ maximumBy highest allTips
   where
       highest b1 b2 = height b1 `compare` height b2
 
-bestHeight
+-- | The 'bestHeight' operation from the spec.
+getRemoteHeight
     :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
        )
     => Sync c tx s m Height
-bestHeight = map height bestTip
+getRemoteHeight = map height getRemoteTip
 
-
-syncImmutable
+syncBlocks
     :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
        , Hashable (Block c tx (Sealed c s))
@@ -212,21 +226,19 @@ syncImmutable
        , Eq tx
        , Eq s
        , Eq (Hash c)
+       , Eq (PublicKey c)
        )
     => Sync c tx s m ()
-syncImmutable = do
+syncBlocks = do
     ctx <- ask
     let nu      = scNu ctx
     let fetcher = scDataFetcher ctx
 
-    bestRemoteTip <- bestTip
+    remoteTip <- getRemoteTip
     localTip      <- lift (BlockStore.getTip (scLocalChainReader ctx))
-    unless (isDone localTip bestRemoteTip) $ do
-        case immutableRange nu localTip bestRemoteTip of
-          Nothing | isMutable nu localTip bestRemoteTip ->
-              syncMutable
-          Nothing  -> pure ()
-          Just rng -> withActivePeers $ \ activePeers -> do
+    unless (isDone nu localTip remoteTip) $ do
+        for_ (range localTip remoteTip) $ \rng ->
+            withActivePeers $ \ activePeers -> do
               -- FIXME(adn) Extremely naive and wrong implementation
               -- for now, we basically request the /full range/ to everybody,
               -- filtering out dupes, which is not feasible for production and
@@ -243,17 +255,15 @@ syncImmutable = do
                         )
                         HS.empty
                         activePeers
-              forM (HS.toList requestedBlocks) $ \_ -> pure ()
+
+              -- FIXME(adn) streaming?
+              forM_ (HS.toList requestedBlocks) $ \b ->
+                  forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+                      lift $ dispatch (SyncBlock b)
 
               -- Chase the best tip, which might have moved in the meantime
-              syncImmutable
-
-syncMutable
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
-       , Monad m
-       )
-    => Sync c tx s m ()
-syncMutable = notImplemented
+              -- FIXME(adn) Exponential backoff.
+              syncBlocks
 
 {------------------------------------------------------------------------------
   Pure functions
@@ -262,37 +272,35 @@ syncMutable = notImplemented
 height :: Block c tx s -> Height
 height = blockHeight . blockHeader
 
--- | The mutable chain suffix, from the spec.
+-- | The nu parameter, from the spec.
 type Nu = Natural
 
--- | Returns 'True' if the difference between the height of the best tip and
--- the tip of the node falls within the \"mutable range\" of the blockchain.
-isMutable :: Nu -> Block c tx s -> Block c tx s -> Bool
-isMutable nu myTip bestRemoteTip =
-    height bestRemoteTip - height myTip <= toInteger nu
-
 -- | Returns 'True' if the node finished syncing all the blocks.
+-- This is the 'isDone' state transition function from the spec.
 isDone
     :: ( Eq tx
        , Eq s
        , Eq (Hash c)
+       , Eq (PublicKey c)
        )
-    => Block c tx s -> Block c tx s -> Bool
-isDone myTip bestRemoteTip = bestRemoteTip == myTip
-
--- | Returns the immutable range of blocks that can be safely fetched without
--- worrying about rollbacks.
-immutableRange
-    :: Nu
+    => Nu
     -> Block c tx s
+    -> Block c tx s
+    -> Bool
+isDone (fromIntegral -> nu) localTip remoteTip =
+    remoteTip == localTip || height remoteTip - height localTip < nu
+
+-- | Returns the range between two blocks.
+range
+    :: Block c tx s
     -> Block c tx s
     -> Maybe Range
-immutableRange nu localTip remoteBestTip
+range localTip remoteTip
   | outOfRange = Nothing
   | otherwise  = Just (Range start end)
   where
     start      = succ (height localTip)
-    end        = height remoteBestTip - toInteger nu
+    end        = height remoteTip
     outOfRange = end < start
 
 {------------------------------------------------------------------------------
@@ -300,5 +308,15 @@ immutableRange nu localTip remoteBestTip
 ------------------------------------------------------------------------------}
 
 -- | The syncing algorithm proper.
-syncNode :: SyncContext c tx s m -> m ()
-syncNode = notImplemented
+syncNode
+    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+       , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
+       , Hashable (Block c tx (Sealed c s))
+       , Monad m
+       , Eq tx
+       , Eq s
+       , Eq (Hash c)
+       , Eq (PublicKey c)
+       )
+    => Sync c tx s m ()
+syncNode = forever syncBlocks

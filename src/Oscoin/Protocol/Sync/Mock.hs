@@ -15,6 +15,7 @@ import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time.Chrono as Chrono
 
+import           Control.Monad.RWS.Strict hiding (get, gets)
 import           Data.Hashable (Hashable)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -52,7 +53,7 @@ data WorldState = WorldState
 
     }
 
-type Sim = StateT WorldState Identity
+type Sim = RWS () [SyncEvent MockCrypto MockTx MockSeal] WorldState
 
 {------------------------------------------------------------------------------
   Smart constructors / helper functions / combinators
@@ -98,6 +99,9 @@ mockContext =
         , scEventTracer      = probed noProbe
         , scConcurrently     = forM
         , scLocalChainReader = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
+        , scUpstreamConsumers = [
+          \se -> tell [se]
+                                ]
         }
 
 
@@ -148,8 +152,6 @@ runMockSync
     :: WorldState
     -> SyncContext MockCrypto MockTx MockSeal Sim
     -> Sync MockCrypto MockTx MockSeal Sim a
-    -> Either (SyncError MockCrypto) a
+    -> (Either (SyncError MockCrypto) a, [SyncEvent MockCrypto MockTx MockSeal])
 runMockSync ws syncContext (Sync s) =
-    runIdentity . flip evalStateT ws
-                . runReaderT (runExceptT s)
-                $ syncContext
+    evalRWS (runReaderT (runExceptT s) $ syncContext) () ws

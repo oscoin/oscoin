@@ -2,35 +2,21 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Protocol.Sync.RealWorld where
 
-import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Prelude
 
-import           Oscoin.Consensus.Nakamoto (PoW)
-
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Crypto.Blockchain.Block
-                 ( Block
-                 , BlockHash
-                 , BlockHeader
-                 , Height
-                 , Sealed
-                 , blockHeader
-                 , blockHeight
-                 )
+import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (HasHashing)
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx
 import           Oscoin.P2P as P2P
 import           Oscoin.Protocol.Sync
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time (Duration, microseconds, seconds)
-import           Oscoin.Time.Chrono
 
 import           Codec.Serialise as CBOR
 import qualified Control.Concurrent.Async as Async
 import           Data.Hashable (Hashable)
-import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import qualified Network.Gossip.HyParView as Gossip
 import           Network.Gossip.IO.Peer (Peer(..))
@@ -100,9 +86,10 @@ newSyncContextIO
        )
     => Consensus.Config
     -> BlockStoreReader c tx s IO
+    -> [SyncEvent c tx s -> IO ()]
     -> Probe IO
     -> GossipT c IO (SyncContext c tx s IO)
-newSyncContextIO config chainReader probe = do
+newSyncContextIO config chainReader upstreamConsumers probe = do
     env <- ask
     mgr <- liftIO (HTTP.newManager HTTP.defaultManagerSettings)
     pure $ SyncContext
@@ -116,5 +103,6 @@ newSyncContextIO config chainReader probe = do
         -- hardly what we want here, as we do want other peers to carry on
         -- undisturbed if one of the HTTP requests / CBOR deserialisation fails.
         , scLocalChainReader = chainReader
+        , scUpstreamConsumers = upstreamConsumers
         }
 

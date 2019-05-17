@@ -36,8 +36,8 @@ props :: Dict (IsCrypto c) -> IO Bool
 props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     [("prop_withActivePeers_no_active_peers", prop_withActivePeers_no_active_peers)
     ,("prop_withActivePeers", prop_withActivePeers)
-    ,("prop_bestTip_sim_single", prop_bestTip_sim_single)
-    ,("prop_bestTip_sim_two_peers", prop_bestTip_sim_two_peers)
+    ,("prop_getRemoteTip_sim_single", prop_getRemoteTip_sim_single)
+    ,("prop_getRemoteTip_sim_two_peers", prop_getRemoteTip_sim_two_peers)
     ]
 
 prop_withActivePeers_no_active_peers :: Property
@@ -45,7 +45,7 @@ prop_withActivePeers_no_active_peers = property $ do
     let res = Mock.runMockSync (Mock.emptyWorldState defaultGenesis)
                                Mock.mockContext
                                (Sync.withActivePeers (const (pure ())))
-    annotate "withActivePeers must fail with NoActivePeers" *> (res === Left NoActivePeers)
+    annotate "withActivePeers must fail with NoActivePeers" *> (res === (Left NoActivePeers, []))
 
 prop_withActivePeers :: Property
 prop_withActivePeers = property $ do
@@ -53,26 +53,26 @@ prop_withActivePeers = property $ do
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer)
     let res = Mock.runMockSync worldState Mock.mockContext (Sync.withActivePeers (const (pure ())))
-    annotate "withActivePeers must succeed" *> (res === Right ())
+    annotate "withActivePeers must succeed" *> (res === (Right (), []))
 
-prop_bestTip_sim_single :: Property
-prop_bestTip_sim_single = property $ do
+prop_getRemoteTip_sim_single :: Property
+prop_getRemoteTip_sim_single = property $ do
     testPeer@(_, peer1Chain) <- forAll genActivePeer
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer)
-    let res = Mock.runMockSync worldState Mock.mockContext Sync.bestTip
-    res === Right (tip peer1Chain)
+    let res = Mock.runMockSync worldState Mock.mockContext Sync.getRemoteTip
+    res === (Right (tip peer1Chain), [])
 
-prop_bestTip_sim_two_peers :: Property
-prop_bestTip_sim_two_peers = property $ do
+prop_getRemoteTip_sim_two_peers :: Property
+prop_getRemoteTip_sim_two_peers = property $ do
     testPeer1@(_, chain1) <- forAll genActivePeer
     (peer2, _) <- forAll genActivePeer
     chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer1)
                    & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
-    let res = Mock.runMockSync worldState Mock.mockContext Sync.bestTip
-    res === Right (tip chain2)
+    let res = Mock.runMockSync worldState Mock.mockContext Sync.getRemoteTip
+    res === (Right (tip chain2), [])
 
 {------------------------------------------------------------------------------
   Constant values
