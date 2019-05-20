@@ -28,36 +28,23 @@ tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.API"
     [ testGroup "getState"
         [ testProperty "existing value" $ monadicIO $ do
-            -- #341: We need 'listOf1' here as generating an
-            -- empty list will make the test fail as the path would be
-            -- empty.
-            path <- pick (listOf1 arbitraryIdent)
-            txValue <- pick arbitrary
-            let bindings = [(T.intercalate "/" path, txValue)]
-            liftIO $ runSessionBindings @c bindings $ do
-                result <- Client.run (Client.getState (Proxy @c) path)
-                result @?= API.Ok txValue
+            key <- pick genAlphaText
+            value <- pick arbitrary
+            runSessionWithState @c [(key, value)] $ do
+                result <- Client.run (Client.getState (Proxy @c) [key])
+                result @?= API.Ok value
 
         , testProperty "non-existing value" $ monadicIO $ do
-            path <- pick (listOf arbitraryIdent)
-            liftIO $ runEmptySession @c $ do
-              result <- Client.run (Client.getState (Proxy @c) path)
+            key <- pick genAlphaText
+            runSessionWithState @c [] $ do
+              result <- Client.run (Client.getState (Proxy @c) [key])
               result @?= API.Err "Value not found"
-
-        , testProperty "existing reference" $ monadicIO $ do
-            refName <- pick arbitraryIdent
-            txValue <- pick arbitrary
-            let env = initEnv []
-                      & addRef refName txValue
-            liftIO $ runSessionEnv @c env $ do
-                result <- Client.run (Client.getState (Proxy @c) [refName])
-                result @?= API.Ok txValue
         ]
     , testGroup "getTransaction" $
 
         [ testProperty "missing transaction" $ monadicIO $ do
             txHash <- pick (arbitraryHash @c)
-            liftIO $ runEmptySession @c $ do
+            runEmptySession @c $ do
                 response <- Client.run (Client.getTransaction txHash)
                 response @?= API.Err "Transaction not found"
 
@@ -98,5 +85,5 @@ tests Dict = testGroup "Test.Oscoin.API"
 arbitraryHash :: IsCrypto c => Gen (Crypto.Hashed c a)
 arbitraryHash = Crypto.toHashed . Crypto.fromHashed . Crypto.hash <$> (arbitrary :: Gen ByteString)
 
-arbitraryIdent :: Gen Text
-arbitraryIdent = T.pack <$> listOf1 (elements ['a'..'z'])
+genAlphaText :: Gen Text
+genAlphaText = T.pack <$> listOf1 (elements ['a'..'z'])
