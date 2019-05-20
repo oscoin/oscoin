@@ -1,10 +1,9 @@
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Protocol.Sync
-    ( syncNode
-
+    (
     -- * Types
-    , Sync(..)
+      Sync(..)
     , SyncError(..)
     , Timeout(..)
     , ActivePeer
@@ -19,6 +18,7 @@ module Oscoin.Protocol.Sync
 
     -- * Pure functions
     , range
+    , isDone
 
     -- * Syncing functions
     , syncBlocks
@@ -37,11 +37,9 @@ import           Oscoin.Consensus.Nakamoto (PoW)
 
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, BlockHeader, Height, Sealed, blockHeader, blockHeight)
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
 import           Oscoin.P2P as P2P
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
-import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time (Duration)
 import           Oscoin.Time.Chrono
@@ -73,8 +71,8 @@ deriving instance ( Show (Hash c)
                   , Show (PublicKey c)
                   ) => Show (SyncEvent c tx s)
 
-data SyncError c =
-      RequestTimeout ProtocolRequest (NodeInfo c) Timeout
+data SyncError =
+      RequestTimeout ProtocolRequest Addr Timeout
       -- ^ The given peer exceeded the request timeout when serving this
       -- 'SyncProtocolRequest'.
     | NoActivePeers
@@ -83,14 +81,14 @@ data SyncError c =
       -- ^ It was not possible to fetch a valid tip from our peers.
     | AllPeersTimeoutError
       -- ^ All the queried peers didn't respond in the allocated timeout.
+    deriving (Show, Eq)
+
+instance Exception SyncError
 
 data Timeout =
     MaxTimeoutExceeded (Expected Duration)
     -- ^ The operation exceeded the expected timeout, in nanoseconds.
     deriving (Show, Eq)
-
-deriving instance (Show (Crypto.PublicKey c)) => Show (SyncError c)
-deriving instance (Eq (Crypto.PublicKey c)) => Eq (SyncError c)
 
 -- | A closed range [lo,hi].
 data Range = Range
@@ -161,16 +159,19 @@ data SyncContext c tx s m = SyncContext
 
 -- | A sync monad over @m@, that can throw 'SyncError's.
 newtype Sync c tx s m a =
-    Sync { runSync :: ExceptT (SyncError c) (ReaderT (SyncContext c tx s m) m) a }
+    Sync { runSync :: ExceptT SyncError (ReaderT (SyncContext c tx s m) m) a }
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadError (SyncError c)
+             , MonadError SyncError
              , MonadReader (SyncContext c tx s m)
              )
 
 instance MonadTrans (Sync c tx s) where
     lift = Sync . lift . lift
+
+instance MonadIO m => MonadIO (Sync c tx s m) where
+    liftIO = Sync . liftIO
 
 {------------------------------------------------------------------------------
   Convenience functions over Sync
@@ -185,85 +186,6 @@ withActivePeers f = do
     activePeers <- lift (scActivePeers ctx)
     when (HS.null activePeers) $ throwError NoActivePeers
     f activePeers
-
-{------------------------------------------------------------------------------
-  Monadic operations
-------------------------------------------------------------------------------}
-
--- The 'remoteTip' operation from the spec. It tries to fetch the tips
--- concurrently, and picks the highest one.
--- TODO(adn) /Optimisation/: Build a frequency map and pick the one
--- returned by most peers. In case of draws, pick the highest one.
-getRemoteTip
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
-       , Monad m
-       ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
-getRemoteTip = withActivePeers $ \active -> do
-    dataFetcher     <- scDataFetcher  <$> ask
-    forConcurrently <- scConcurrently <$> ask
-    results  <- lift $
-        forConcurrently (HS.toList active) (\a -> fetch dataFetcher a SGetTip ())
-    case partitionEithers results of
-      (_t:_, [])           -> throwError AllPeersTimeoutError
-      ([], [])             -> throwError NoRemoteTipFound
-      (_timeouts, allTips) -> pure $ maximumBy highest allTips
-  where
-      highest b1 b2 = height b1 `compare` height b2
-
--- | The 'bestHeight' operation from the spec.
-getRemoteHeight
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
-       , Monad m
-       )
-    => Sync c tx s m Height
-getRemoteHeight = map height getRemoteTip
-
-syncBlocks
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
-       , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
-       , Hashable (Block c tx (Sealed c s))
-       , Monad m
-       , Eq tx
-       , Eq s
-       , Eq (Hash c)
-       , Eq (PublicKey c)
-       )
-    => Sync c tx s m ()
-syncBlocks = do
-    ctx <- ask
-    let nu      = scNu ctx
-    let fetcher = scDataFetcher ctx
-
-    remoteTip <- getRemoteTip
-    localTip      <- lift (BlockStore.getTip (scLocalChainReader ctx))
-    unless (isDone nu localTip remoteTip) $ do
-        for_ (range localTip remoteTip) $ \rng ->
-            withActivePeers $ \ activePeers -> do
-              -- FIXME(adn) Extremely naive and wrong implementation
-              -- for now, we basically request the /full range/ to everybody,
-              -- filtering out dupes, which is not feasible for production and
-              -- is terribly wasteful, obviously. A better strategy might be
-              -- to split the work equally into multiple (capped) ranges
-              -- (say, 500 blocks at the time) and then try to fetch each of
-              -- those from all the peers.
-              requestedBlocks <- lift $
-                  foldM (\blocks activePeer -> do
-                           res <- fetch fetcher activePeer SGetBlocks rng
-                           case res of
-                             Left _timeout -> pure blocks -- TODO(adn) Telemetry
-                             Right blks    -> pure $ foldl' (flip HS.insert) blocks (toOldestFirst blks)
-                        )
-                        HS.empty
-                        activePeers
-
-              -- FIXME(adn) streaming?
-              forM_ (HS.toList requestedBlocks) $ \b ->
-                  forM_ (scUpstreamConsumers ctx) $ \dispatch ->
-                      lift $ dispatch (SyncBlock b)
-
-              -- Chase the best tip, which might have moved in the meantime
-              -- FIXME(adn) Exponential backoff.
-              syncBlocks
 
 {------------------------------------------------------------------------------
   Pure functions
@@ -304,13 +226,39 @@ range localTip remoteTip
     outOfRange = end < start
 
 {------------------------------------------------------------------------------
-  Monad-agnostic algorithm
+  Monadic operations
 ------------------------------------------------------------------------------}
 
--- | The syncing algorithm proper.
-syncNode
+-- The 'remoteTip' operation from the spec. It tries to fetch the tips
+-- concurrently, and picks the highest one.
+-- TODO(adn) /Optimisation/: Build a frequency map and pick the one
+-- returned by most peers. In case of draws, pick the highest one.
+getRemoteTip
     :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
-       , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
+       , Monad m
+       ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
+getRemoteTip = withActivePeers $ \active -> do
+    dataFetcher     <- scDataFetcher  <$> ask
+    forConcurrently <- scConcurrently <$> ask
+    results  <- lift $
+        forConcurrently (HS.toList active) (\a -> fetch dataFetcher a SGetTip ())
+    case partitionEithers results of
+      (_t:_, [])           -> throwError AllPeersTimeoutError
+      ([], [])             -> throwError NoRemoteTipFound
+      (_timeouts, allTips) -> pure $ maximumBy highest allTips
+  where
+      highest b1 b2 = height b1 `compare` height b2
+
+-- | The 'bestHeight' operation from the spec.
+getRemoteHeight
+    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+       , Monad m
+       )
+    => Sync c tx s m Height
+getRemoteHeight = map height getRemoteTip
+
+syncBlocks
+    :: ( ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
        , Hashable (Block c tx (Sealed c s))
        , Monad m
        , Eq tx
@@ -318,5 +266,31 @@ syncNode
        , Eq (Hash c)
        , Eq (PublicKey c)
        )
-    => Sync c tx s m ()
-syncNode = forever syncBlocks
+    => Range
+    -> Sync c tx s m ()
+syncBlocks rng = do
+    ctx <- ask
+    let fetcher = scDataFetcher ctx
+    withActivePeers $ \ activePeers -> do
+      -- FIXME(adn) Extremely naive and wrong implementation
+      -- for now, we basically request the /full range/ to everybody,
+      -- filtering out dupes, which is not feasible for production and
+      -- is terribly wasteful, obviously. A better strategy might be
+      -- to split the work equally into multiple (capped) ranges
+      -- (say, 500 blocks at the time) and then try to fetch each of
+      -- those from all the peers.
+      requestedBlocks <- lift $
+          foldM (\blocks activePeer -> do
+                   res <- fetch fetcher activePeer SGetBlocks rng
+                   case res of
+                     Left _timeout -> pure blocks -- TODO(adn) Telemetry
+                     Right blks    -> pure $ foldl' (flip HS.insert) blocks (toOldestFirst blks)
+                )
+                HS.empty
+                activePeers
+
+      -- FIXME(adn) streaming?
+      forM_ (HS.toList requestedBlocks) $ \b ->
+          forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+              lift $ dispatch (SyncBlock b)
+

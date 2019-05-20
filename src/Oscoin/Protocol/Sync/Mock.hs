@@ -152,6 +152,6 @@ runMockSync
     :: WorldState
     -> SyncContext MockCrypto MockTx MockSeal Sim
     -> Sync MockCrypto MockTx MockSeal Sim a
-    -> (Either (SyncError MockCrypto) a, [SyncEvent MockCrypto MockTx MockSeal])
+    -> (Either SyncError a, [SyncEvent MockCrypto MockTx MockSeal])
 runMockSync ws syncContext (Sync s) =
     evalRWS (runReaderT (runExceptT s) $ syncContext) () ws

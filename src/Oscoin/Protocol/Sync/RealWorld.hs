@@ -1,21 +1,33 @@
 {-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE NumericUnderscores   #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Oscoin.Protocol.Sync.RealWorld where
+module Oscoin.Protocol.Sync.RealWorld (
+      syncNode
+    , newSyncContextIO
+    , runSyncIO
+    ) where
 
 import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
+import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Crypto.Hash (HasHashing)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P as P2P
 import           Oscoin.Protocol.Sync
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
+import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time (Duration, microseconds, seconds)
+import           Oscoin.Time.Chrono
 
 import           Codec.Serialise as CBOR
 import qualified Control.Concurrent.Async as Async
+import           Control.Retry
+                 (RetryPolicyM, RetryStatus, exponentialBackoff, retrying)
 import           Data.Hashable (Hashable)
 import qualified Data.HashSet as HS
 import qualified Network.Gossip.HyParView as Gossip
@@ -106,3 +118,53 @@ newSyncContextIO config chainReader upstreamConsumers probe = do
         , scUpstreamConsumers = upstreamConsumers
         }
 
+{------------------------------------------------------------------------------
+  Syncing a node in IO
+------------------------------------------------------------------------------}
+
+-- | Runs the 'Sync' action and returns its result. Any error arising is
+-- rethrown as an 'Exception'.
+runSyncIO
+    :: SyncContext c tx s IO
+    -> Sync c tx s IO a
+    -> IO a
+runSyncIO syncContext (Sync s) = do
+    lower <- runReaderT (runExceptT s) syncContext
+    case lower of
+      Left err -> throwIO err
+      Right r  -> pure r
+
+-- | Syncs a node, in a monad which can do @IO@.
+syncNode
+    :: forall c tx s m.
+       ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+       , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
+       , Hashable (Block c tx (Sealed c s))
+       , MonadIO m
+       , Eq tx
+       , Eq s
+       , Eq (Hash c)
+       , Eq (PublicKey c)
+       )
+    => Sync c tx s m ()
+syncNode = do
+    ctx <- ask
+    retrying policy (checkSynced ctx) $ \ _retryStatus -> do
+        remoteTip <- getRemoteTip
+        localTip  <- lift (BlockStore.getTip (scLocalChainReader ctx))
+        for_ (range localTip remoteTip) syncBlocks
+  where
+      policy :: RetryPolicyM (Sync c tx s m)
+      policy = exponentialBackoff 100_000
+
+      -- Retry syncing if 'isDone' returns False.
+      checkSynced
+          :: SyncContext c tx s m
+          -> RetryStatus
+          -> ()
+          -> Sync c tx s m Bool
+      checkSynced ctx _retryStatus () = do
+          -- We need to refetch the tips.
+          remoteTip <- getRemoteTip
+          localTip  <- lift (BlockStore.getTip (scLocalChainReader ctx))
+          pure $ not (isDone (scNu ctx) localTip remoteTip)

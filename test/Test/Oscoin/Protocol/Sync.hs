@@ -18,6 +18,8 @@ import           Lens.Micro (over)
 import           Hedgehog
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators (genBlockFrom)
+import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
+                 (defaultBeneficiary)
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Test.Oscoin.P2P.Gen (genNodeInfo)
@@ -79,7 +81,7 @@ prop_getRemoteTip_sim_two_peers = property $ do
 ------------------------------------------------------------------------------}
 
 defaultGenesis :: Block MockCrypto Mock.MockTx (Sealed MockCrypto Mock.MockSeal)
-defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch)
+defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch defaultBeneficiary)
 
 {------------------------------------------------------------------------------
   Generators
