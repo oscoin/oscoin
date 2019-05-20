@@ -47,6 +47,7 @@ import           Oscoin.Time.Chrono
 import           Data.Hashable (Hashable)
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
+import qualified Data.Map.Strict as M
 import           GHC.Natural
 
 {------------------------------------------------------------------------------
@@ -229,13 +230,16 @@ range localTip remoteTip
   Monadic operations
 ------------------------------------------------------------------------------}
 
--- The 'remoteTip' operation from the spec. It tries to fetch the tips
--- concurrently, and picks the highest one.
--- TODO(adn) /Optimisation/: Build a frequency map and pick the one
--- returned by most peers. In case of draws, pick the highest one.
+-- | The 'remoteTip' operation from the spec. It tries to fetch the tips
+-- concurrently, picking the tip returned by /most/ of the peers.
 getRemoteTip
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+    :: forall c tx s m.
+       ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (PublicKey c)
        ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
 getRemoteTip = withActivePeers $ \active -> do
     dataFetcher     <- scDataFetcher  <$> ask
@@ -245,14 +249,34 @@ getRemoteTip = withActivePeers $ \active -> do
     case partitionEithers results of
       (_t:_, [])           -> throwError AllPeersTimeoutError
       ([], [])             -> throwError NoRemoteTipFound
-      (_timeouts, allTips) -> pure $ maximumBy highest allTips
+      (_timeouts, allTips) -> do
+          -- Compare the result on the frequency, and pick the highest block
+          -- in case of \"draws\".
+          case sortBy comparingTips (M.toList . freqtable $ allTips) of
+            []          -> throwError NoRemoteTipFound
+            (t,_freq):_ -> pure t
   where
-      highest b1 b2 = height b1 `compare` height b2
+      -- Very simple frequency table implementation. Given a list of blocks,
+      -- it builds a frequency map <block,frequency>.
+      freqtable
+          :: [Block c tx (Sealed c s)]
+          -> M.Map (Block c tx (Sealed c s)) Int
+      freqtable = foldl' (\acc h -> M.insertWith (+) h 1 acc) M.empty
+
+      -- Compare tips, most frequent and highest first.
+      comparingTips (b1,f1) (b2,f2) =
+          case f2 `compare` f1 of
+            EQ -> height b2 `compare` height b1
+            x  -> x
 
 -- | The 'bestHeight' operation from the spec.
 getRemoteHeight
     :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (PublicKey c)
        )
     => Sync c tx s m Height
 getRemoteHeight = map height getRemoteTip

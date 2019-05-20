@@ -31,6 +31,8 @@ tests :: Dict (IsCrypto c) -> TestTree
 tests _d = testGroup "Test.Oscoin.Protocol.Sync"
     [ testProperty "prop_withActivePeers_no_active_peers"  prop_withActivePeers_no_active_peers
     , testProperty "prop_withActivePeers" prop_withActivePeers
+    , testProperty "prop_getRemoteTip_sim_single"  prop_getRemoteTip_sim_single
+    , testProperty "prop_getRemoteTip_sim_two_peers_draw" prop_getRemoteTip_sim_two_peers_draw
     ]
 
 -- | For GHCi use.
@@ -39,7 +41,8 @@ props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     [("prop_withActivePeers_no_active_peers", prop_withActivePeers_no_active_peers)
     ,("prop_withActivePeers", prop_withActivePeers)
     ,("prop_getRemoteTip_sim_single", prop_getRemoteTip_sim_single)
-    ,("prop_getRemoteTip_sim_two_peers", prop_getRemoteTip_sim_two_peers)
+    ,("prop_getRemoteTip_sim_two_peers_draw", prop_getRemoteTip_sim_two_peers_draw)
+    ,("prop_getRemoteTip_sim_three_peers_majority", prop_getRemoteTip_sim_three_peers_majority)
     ]
 
 prop_withActivePeers_no_active_peers :: Property
@@ -65,16 +68,37 @@ prop_getRemoteTip_sim_single = property $ do
     let res = Mock.runMockSync worldState Mock.mockContext Sync.getRemoteTip
     res === (Right (tip peer1Chain), [])
 
-prop_getRemoteTip_sim_two_peers :: Property
-prop_getRemoteTip_sim_two_peers = property $ do
+-- Test that in case there is no clear winner (by frequency) the highest
+-- is picked.
+prop_getRemoteTip_sim_two_peers_draw :: Property
+prop_getRemoteTip_sim_two_peers_draw = property $ do
     testPeer1@(_, chain1) <- forAll genActivePeer
     (peer2, _) <- forAll genActivePeer
     chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
+
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer1)
                    & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
     let res = Mock.runMockSync worldState Mock.mockContext Sync.getRemoteTip
+
     res === (Right (tip chain2), [])
+
+prop_getRemoteTip_sim_three_peers_majority :: Property
+prop_getRemoteTip_sim_three_peers_majority = property $ do
+    testPeer1@(_, chain1) <- forAll genActivePeer
+    (peer2, _) <- forAll genActivePeer
+    (peer3, _) <- forAll genActivePeer
+    chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
+
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
+                   & over Mock.mockPeers (uncurry HM.insert (peer3, chain1))
+    let res = Mock.runMockSync worldState Mock.mockContext Sync.getRemoteTip
+
+    -- Chain1 is picked, as both peer1 and peer3 are in agreement.
+
+    res === (Right (tip chain1), [])
 
 {------------------------------------------------------------------------------
   Constant values

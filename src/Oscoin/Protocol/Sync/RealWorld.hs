@@ -141,10 +141,10 @@ syncNode
        , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
        , Hashable (Block c tx (Sealed c s))
        , MonadIO m
-       , Eq tx
-       , Eq s
-       , Eq (Hash c)
-       , Eq (PublicKey c)
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (PublicKey c)
        )
     => Sync c tx s m ()
 syncNode = do
