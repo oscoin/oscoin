@@ -139,7 +139,6 @@ syncNode
     :: forall c tx s m.
        ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
        , ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
-       , Hashable (Block c tx (Sealed c s))
        , MonadIO m
        , Ord tx
        , Ord s

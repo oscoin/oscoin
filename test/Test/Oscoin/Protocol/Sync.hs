@@ -6,7 +6,8 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto
 import           Oscoin.Test.Crypto
 
-import           Oscoin.Crypto.Blockchain (blocks, tip, (|>))
+import           Oscoin.Crypto.Blockchain
+                 (blocks, tip, unsafeToBlockchain, (|>))
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, emptyGenesisBlock, sealBlock)
 import           Oscoin.Protocol.Sync as Sync
@@ -36,6 +37,10 @@ tests _d = testGroup "Test.Oscoin.Protocol.Sync"
     , testProperty "prop_withActivePeers" prop_withActivePeers
     , testProperty "prop_getRemoteTip_sim_single"  prop_getRemoteTip_sim_single
     , testProperty "prop_getRemoteTip_sim_two_peers_draw" prop_getRemoteTip_sim_two_peers_draw
+    , testProperty "prop_getRemoteTip_sim_three_peers_majority" prop_getRemoteTip_sim_three_peers_majority
+    , testProperty "prop_getBlocks_sim"  prop_getBlocks_sim
+    , testProperty "prop_syncBlocks_sim_full" prop_syncBlocks_sim_full
+    , testProperty "prop_syncBlocks_sim_missing" prop_syncBlocks_sim_missing
     ]
 
 -- | For GHCi use.
@@ -48,6 +53,7 @@ props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     ,("prop_getRemoteTip_sim_three_peers_majority", prop_getRemoteTip_sim_three_peers_majority)
     ,("prop_getBlocks_sim", prop_getBlocks_sim)
     ,("prop_syncBlocks_sim_full", prop_syncBlocks_sim_full)
+    ,("prop_syncBlocks_sim_missing", prop_syncBlocks_sim_missing)
     ]
 
 prop_withActivePeers_no_active_peers :: Property
@@ -135,16 +141,45 @@ prop_getBlocks_sim = property $ do
 prop_syncBlocks_sim_full :: Property
 prop_syncBlocks_sim_full = property $ do
     testPeer1@(_, chain1) <- forAll genActivePeer
+    (peer2, _) <- forAll genActivePeer
+    (peer3, _) <- forAll genActivePeer
     let allBlocksNoGenesis = drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
 
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain1))
+                   & over Mock.mockPeers (uncurry HM.insert (peer3, chain1))
 
     let fullRange = fromJust $ range defaultGenesis (tip chain1)
 
     let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks fullRange)
 
     res === (Right (), map SyncBlock allBlocksNoGenesis)
+
+-- We setup 3 peers, where the 2nd peer is asked to fetch some blocks in the
+-- middle but he has a stale view of the chain. Nevertheless, syncBlocks
+-- should be able to download the missing blocks.
+prop_syncBlocks_sim_missing :: Property
+prop_syncBlocks_sim_missing = property $ do
+    (peer1, chain1) <- forAll genActivePeer
+    (peer2, _) <- forAll genActivePeer
+    (peer3, _) <- forAll genActivePeer
+
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert (peer1, chain1))
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, unsafeToBlockchain [defaultGenesis]))
+                   & over Mock.mockPeers (uncurry HM.insert (peer3, chain1))
+
+    let allBlocksNoGenesis =
+            drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
+
+    let fullRange = fromJust $ range defaultGenesis (tip chain1)
+
+    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks fullRange)
+
+    -- The event might arrive in any order, so we need to sort in order to
+    -- compare.
+    second sort res === (Right (), sort $ map SyncBlock allBlocksNoGenesis)
 
 {------------------------------------------------------------------------------
   Constant values

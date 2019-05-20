@@ -48,6 +48,7 @@ import           Oscoin.Time.Chrono
 
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
+import           Data.List ((\\))
 import           Data.List.Split (chunksOf)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
@@ -69,6 +70,11 @@ deriving instance ( Eq (Hash c)
                   , Eq s
                   , Eq (PublicKey c)
                   ) => Eq (SyncEvent c tx s)
+deriving instance ( Ord (Hash c)
+                  , Ord tx
+                  , Ord s
+                  , Ord (PublicKey c)
+                  ) => Ord (SyncEvent c tx s)
 deriving instance ( Show (Hash c)
                   , Show tx
                   , Show s
@@ -301,6 +307,7 @@ getRemoteHeight
     => Sync c tx s m Height
 getRemoteHeight = map height getRemoteTip
 
+-- | Given a valid 'Range', syncs the blocks within the range.
 syncBlocks
     :: ( ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
        , Monad m
@@ -316,27 +323,61 @@ syncBlocks rng = do
     let fetcher = scDataFetcher ctx
     withActivePeers $ \ activePeers -> do
 
-      let workDistribution =
-              zip (cycle (HS.toList activePeers))
-                  (chunksOf maxBlocksPerPeer [start rng .. end rng])
+        let blocksPerPeer =
+                min maxBlocksPerPeer
+                    (ceiling @Double @Int (fromIntegral (end rng - start rng) / fromIntegral (length activePeers)))
 
-      -- FIXME(adn) Deal with missing blocks.
-      (requestedBlocks, _missingBlocks) <- lift $
-          foldM (\(requested, missing) (activePeer, heightRange) -> do
-                   let mbRange = Range <$> head heightRange <*> pure (last heightRange)
-                   case mbRange of
-                     Nothing -> pure (requested, missing)
-                     Just subRange -> do
-                         res <- fetch fetcher activePeer SGetBlocks subRange
-                         case res of
-                           Left _timeout -> pure (requested, missing) -- TODO(adn) Telemetry
-                           Right blks    -> pure $ (foldl' (flip Set.insert) requested (toOldestFirst blks), missing)
-                )
-                (mempty, [])
-                workDistribution
+        -- Distribute work across peers, which is equally split, where
+        -- each peer can be given @at most@ 'maxBlocksPerPeer' at the time,
+        -- in order to limit the amount of blocks in transit each time.
+        let workDistribution =
+                zip (cycle (HS.toList activePeers))
+                    (chunksOf blocksPerPeer [start rng .. end rng])
 
-      -- FIXME(adn) streaming?
-      forM_ requestedBlocks $ \b ->
-          forM_ (scUpstreamConsumers ctx) $ \dispatch ->
-              lift $ dispatch (SyncBlock b)
+        -- FIXME(adn) streaming?
+        (requestedBlocks, !missingBlocks) <- lift $
+            foldM (\(requested, missing) (activePeer, !heightRange) -> do
+                     case Range <$> head heightRange <*> pure (last heightRange) of
+                         Nothing -> pure (requested, missing)
+                         Just subRange -> do
+                             res <- fetch fetcher activePeer SGetBlocks subRange
+                             case res of
+                               Left _timeout ->
+                                   pure (requested, missing <> heightRange) -- TODO(adn) Telemetry
+                               Right blks    -> do
+                                   -- If the peer didn't have the requested range,
+                                   -- the list of missing blocks increases.
+                                   -- FIXME(adn) not even trying to be efficient
+                                   -- in this first version.
+                                   let missingHeights = heightRange \\ map height (toOldestFirst blks)
+                                   pure $ ( foldl' (flip Set.insert) requested (toOldestFirst blks)
+                                          , missing <> missingHeights
+                                          )
+                  )
+                  (mempty, [])
+                  workDistribution
 
+        forM_ requestedBlocks $ \b ->
+            forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+                lift $ dispatch (SyncBlock b)
+
+        -- Handle missing blocks
+        -- NOTE(adn) Not terribly convinced about this optimization.
+        case sort missingBlocks of
+          [] -> pure ()
+          stillMissing -> forM_ stillMissing $ \missing -> do
+              -- Tries to download each individual block from each and every
+              -- peer. We don't fail in case the block cannot be downloaded,
+              -- as we hope that eventually the peers will be able to catch up.
+              results <- forM (HS.toList activePeers) $ \peer -> do
+                           res <- lift $ fetch fetcher peer SGetBlocks (Range missing missing)
+                           case res of
+                             Left _err -> pure Nothing
+                             Right oldest -> case toOldestFirst oldest of
+                                               [b] -> pure (Just b)
+                                               _   -> pure Nothing
+              case catMaybes results of
+                []  -> pure () -- TODO(adn) telemetry?
+                b:_ ->
+                    forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+                        lift $ dispatch (SyncBlock b)
