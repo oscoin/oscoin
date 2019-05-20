@@ -9,7 +9,7 @@ import           Oscoin.Prelude
 import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain.Block (blockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.Tx (DummyPayload(..))
+import           Oscoin.Data.Tx (DummyPayload(..), txPubKey)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
@@ -17,6 +17,7 @@ import qualified Data.Text as T
 
 import qualified Oscoin.Test.API.HTTP.TestClient as Client
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
@@ -80,6 +81,17 @@ tests Dict = testGroup "Test.Oscoin.API"
                     }
             response @?= API.Ok expected
         ]
+
+    , testGroup "submitTransaction" $
+        [ testProperty "invalid transaction" $ monadicIO $ do
+            (_, validTx) <- genDummyTx @c
+            otherPubKey <- pick (fst <$> arbitraryKeyPair)
+            let invalidTx = validTx { txPubKey = otherPubKey }
+            runEmptySession @c $ do
+                response <- Client.run (Client.submitTransaction invalidTx)
+                response @?= API.Err "Invalid transaction"
+        ]
+
     ]
 
 arbitraryHash :: IsCrypto c => Gen (Crypto.Hashed c a)
