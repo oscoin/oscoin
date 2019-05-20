@@ -13,8 +13,7 @@ module Oscoin.Node
     , storage
 
     , getMempool
-    , getPath
-    , getPathLatest
+    , getStateValue
     , getBlocks
     , getTip
     , lookupTx
@@ -209,34 +208,20 @@ storage validateBasic = Storage
 getMempool :: MonadIO m => NodeT c tx s i m (Mempool c tx)
 getMempool = asks hMempool >>= liftIO . atomically . Mempool.snapshot
 
--- | Get a value from the given state hash.
-getPath
-    :: ( Query st
-       , st ~ TxState c tx
-       , MonadIO m
-       )
-    => StateHash c
-    -> [Text]
-    -> NodeT c tx s i m (Maybe (QueryVal st))
-getPath stateHash p = do
-    ledger <- getLedger
-    result <- Ledger.lookupState ledger (Crypto.toHashed stateHash)
-    pure $ query p =<< result
-
 -- | Get a value from the latest state.
-getPathLatest
+getStateValue
     :: ( MonadIO m
        , Query st
        , st ~ TxState c tx
        , Crypto.Hashable c tx
        )
-    => [Text]
-    -> NodeT c tx s i m (Maybe (QueryVal st))
-getPathLatest path = do
+    => ByteString
+    -> NodeT c tx s i m (Maybe ByteString)
+getStateValue key = do
     ledger <- getLedger
     Ledger.getTipWithState ledger >>= \case
         Left _err -> pure Nothing
-        Right (_, st) -> pure $ query path st
+        Right (_, st) -> pure $ query key st
 
 getBlocks
     :: MonadIO m

@@ -13,12 +13,11 @@ import           Oscoin.Data.Tx (DummyPayload(..), txPubKey)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 
-import qualified Data.Text as T
-
 import qualified Oscoin.Test.API.HTTP.TestClient as Client
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers
+import           Test.QuickCheck.Instances ()
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
@@ -29,17 +28,17 @@ tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.API"
     [ testGroup "getState"
         [ testProperty "existing value" $ monadicIO $ do
-            key <- pick genAlphaText
+            key <- pick arbitrary
             value <- pick arbitrary
             runSessionWithState' @c [(key, value)] $ do
-                result <- Client.getState Client.session [key]
-                result @?= API.Ok value
+                result <- Client.getState Client.session key
+                result @?= Just value
 
         , testProperty "non-existing value" $ monadicIO $ do
-            key <- pick genAlphaText
+            key <- pick arbitrary
             runSessionWithState' @c [] $ do
-              result <- Client.getState Client.session [key]
-              result @?= API.Err "Value not found"
+              result <- Client.getState Client.session key
+              result @?= Nothing
         ]
     , testGroup "getTransaction" $
 
@@ -96,6 +95,3 @@ tests Dict = testGroup "Test.Oscoin.API"
 
 arbitraryHash :: IsCrypto c => Gen (Crypto.Hashed c a)
 arbitraryHash = Crypto.toHashed . Crypto.fromHashed . Crypto.hash <$> (arbitrary :: Gen ByteString)
-
-genAlphaText :: Gen Text
-genAlphaText = T.pack <$> listOf1 (elements ['a'..'z'])

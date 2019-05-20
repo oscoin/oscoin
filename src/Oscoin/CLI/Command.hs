@@ -82,7 +82,7 @@ genesisCreate
     -> m Result
 genesisCreate benef diffi = do
     time <- getTime
-    let unsealedGen :: Block c (Tx c) Unsealed = emptyGenesisFromState time benef (mempty :: DummyEnv)
+    let unsealedGen :: Block c (Tx c) Unsealed = emptyGenesisFromState time benef (mempty :: LegacyTxState)
     result <- mineGenesis
         (mineNakamoto (Telemetry.probed Telemetry.noProbe) (const diffi)) unsealedGen
     case result of
