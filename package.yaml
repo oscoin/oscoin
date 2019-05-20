@@ -76,6 +76,7 @@ library:
     - safe-exceptions
     - semigroups
     - serialise
+    - split
     - splitmix
     - sqlite-simple
     - stm >=2.4.5.0
@@ -188,6 +189,7 @@ tests:
       - safe-exceptions
       - serialise
       - sqlite-simple
+      - split
       - splitmix
       - stm-conduit
       - streaming-commons

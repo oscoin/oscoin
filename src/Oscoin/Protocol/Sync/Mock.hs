@@ -31,9 +31,9 @@ import           Lens.Micro (Lens', lens)
 type instance ProtocolResponse c MockTx MockSeal 'GetTip =
         Block c MockTx (Sealed c MockSeal)
 type instance ProtocolResponse c MockTx MockSeal 'GetBlocks =
-        NewestFirst [] (Block c MockTx (Sealed c MockSeal))
+        OldestFirst [] (Block c MockTx (Sealed c MockSeal))
 type instance ProtocolResponse c MockTx MockSeal 'GetBlockHeaders =
-        NewestFirst [] (BlockHeader c (Sealed c MockSeal))
+        OldestFirst [] (BlockHeader c (Sealed c MockSeal))
 
 {------------------------------------------------------------------------------
   Types
@@ -81,6 +81,17 @@ emptyWorldState
 emptyWorldState genesisBlock =
     WorldState mempty (BlockStore.Pure.genesisBlockStore genesisBlock mockScore)
 
+worldStateFrom
+    :: ( Eq (Crypto.PublicKey MockCrypto)
+       , Ord (Hash MockCrypto)
+       , Hashable (Crypto.PublicKey MockCrypto)
+       )
+    => Blockchain MockCrypto MockTx MockSeal
+    -- ^ The genesis block.
+    -> WorldState
+worldStateFrom chain =
+    WorldState mempty (BlockStore.Pure.initWithChain chain mockScore)
+
 toMockPeers :: WorldState -> HashSet MockPeer
 toMockPeers (WorldState m _) = HS.fromMap (() <$ m)
 
@@ -93,15 +104,13 @@ mockContext
     => SyncContext MockCrypto MockTx MockSeal Sim
 mockContext =
     SyncContext
-        { scNu               = 0  -- can be adjusted later.
-        , scActivePeers      = gets toMockPeers
-        , scDataFetcher      = mkDataFetcherSim
-        , scEventTracer      = probed noProbe
-        , scConcurrently     = forM
-        , scLocalChainReader = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
-        , scUpstreamConsumers = [
-          \se -> tell [se]
-                                ]
+        { scNu                = 0  -- can be adjusted later.
+        , scActivePeers       = gets toMockPeers
+        , scDataFetcher       = mkDataFetcherSim
+        , scEventTracer       = probed noProbe
+        , scConcurrently      = forM
+        , scLocalChainReader  = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
+        , scUpstreamConsumers = [ \se -> tell [se] ]
         }
 
 
@@ -121,27 +130,28 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
     -- 'BlockStoreReader' interface, but this is an interim measure while we
     -- wait for oscoin#550.
     SGetBlocks -> \Range{..} ->   Right
-                                . NewestFirst
-                                . take (fromIntegral $ end - start)
+                                . OldestFirst
+                                . take ((fromIntegral $ end - start) + 1) -- inclusive
                                 . drop (fromIntegral start)
-                              <$> getAllBlocks
+                              <$> getAllBlocks peer
     -- NOTE(adn) We are leaking our abstractions here and bypassing the
     -- 'BlockStoreReader' interface, but this is an interim measure while we
     -- wait for oscoin#550.
     SGetBlockHeaders -> \Range{..} ->   Right
-                                      . NewestFirst
-                                      . take (fromIntegral $ end - start)
+                                      . OldestFirst
+                                      . take ((fromIntegral $ end - start) + 1) -- inclusive
                                       . drop (fromIntegral start)
                                       . map blockHeader
-                                    <$> getAllBlocks
+                                    <$> getAllBlocks peer
   where
-      getAllBlocks :: Sim [Block MockCrypto MockTx (Sealed MockCrypto MockSeal)]
-      getAllBlocks = gets ( Chrono.toOldestFirst
-                          . Chrono.reverse
-                          . blocks
-                          . BlockStore.Pure.getBestChain
-                          . _mockLocalChain
-                          )
+      getAllBlocks
+          :: MockPeer
+          -> Sim [Block MockCrypto MockTx (Sealed MockCrypto MockSeal)]
+      getAllBlocks peer = do
+          WorldState{..} <- get
+          case HM.lookup peer _mockPeerState of
+            Nothing -> pure []
+            Just bc -> pure (Chrono.toOldestFirst . Chrono.reverse . blocks $ bc)
 
 {------------------------------------------------------------------------------
   Running a Sync operation

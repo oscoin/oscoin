@@ -2,17 +2,20 @@ module Test.Oscoin.Protocol.Sync (tests, props) where
 
 import           Oscoin.Prelude
 
+
 import           Oscoin.Crypto
 import           Oscoin.Test.Crypto
 
-import           Oscoin.Crypto.Blockchain (tip, (|>))
+import           Oscoin.Crypto.Blockchain (blocks, tip, (|>))
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, emptyGenesisBlock, sealBlock)
 import           Oscoin.Protocol.Sync as Sync
 import qualified Oscoin.Protocol.Sync.Mock as Mock
 import qualified Oscoin.Time as Time
+import           Oscoin.Time.Chrono
 
 import qualified Data.HashMap.Strict as HM
+import           Data.Maybe (fromJust)
 import           Lens.Micro (over)
 
 import           Hedgehog
@@ -43,6 +46,8 @@ props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     ,("prop_getRemoteTip_sim_single", prop_getRemoteTip_sim_single)
     ,("prop_getRemoteTip_sim_two_peers_draw", prop_getRemoteTip_sim_two_peers_draw)
     ,("prop_getRemoteTip_sim_three_peers_majority", prop_getRemoteTip_sim_three_peers_majority)
+    ,("prop_getBlocks_sim", prop_getBlocks_sim)
+    ,("prop_syncBlocks_sim_full", prop_syncBlocks_sim_full)
     ]
 
 prop_withActivePeers_no_active_peers :: Property
@@ -99,6 +104,47 @@ prop_getRemoteTip_sim_three_peers_majority = property $ do
     -- Chain1 is picked, as both peer1 and peer3 are in agreement.
 
     res === (Right (tip chain1), [])
+
+-- This property tests the data fetcher of the simulator, as a preliminary
+-- step for 'prop_syncBlocks_sim_full'.
+prop_getBlocks_sim :: Property
+prop_getBlocks_sim = property $ do
+    testPeer1@(_, chain1) <- forAll genActivePeer
+    let allBlocksNoGenesis = drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
+
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+
+    let fullRange = fromJust $ range defaultGenesis (tip chain1)
+
+    let fetchSubset = do
+          fetcher <- asks scDataFetcher
+          withActivePeer $ \activePeer -> do
+              res <- lift (fetch fetcher activePeer SGetBlocks fullRange)
+              case res of
+                Left _  -> throwError AllPeersTimeoutError
+                Right x -> pure x
+
+    let actual = Mock.runMockSync worldState Mock.mockContext fetchSubset
+    let expected = OldestFirst allBlocksNoGenesis
+
+    annotate (show fullRange) >> actual === (Right expected, [])
+
+-- | This property tests the 'syncBlocks' function using the simulated
+-- environment.
+prop_syncBlocks_sim_full :: Property
+prop_syncBlocks_sim_full = property $ do
+    testPeer1@(_, chain1) <- forAll genActivePeer
+    let allBlocksNoGenesis = drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
+
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+
+    let fullRange = fromJust $ range defaultGenesis (tip chain1)
+
+    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks fullRange)
+
+    res === (Right (), map SyncBlock allBlocksNoGenesis)
 
 {------------------------------------------------------------------------------
   Constant values

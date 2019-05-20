@@ -25,6 +25,7 @@ module Oscoin.Protocol.Sync
 
     -- * Testing internals
     , withActivePeers
+    , withActivePeer
     , getRemoteTip
     , getRemoteHeight
     ) where
@@ -32,6 +33,7 @@ module Oscoin.Protocol.Sync
 import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Prelude
+import           Prelude (last)
 
 import           Oscoin.Consensus.Nakamoto (PoW)
 
@@ -44,10 +46,11 @@ import           Oscoin.Telemetry.Trace
 import           Oscoin.Time (Duration)
 import           Oscoin.Time.Chrono
 
-import           Data.Hashable (Hashable)
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
+import           Data.List.Split (chunksOf)
 import qualified Data.Map.Strict as M
+import qualified Data.Set as Set
 import           GHC.Natural
 
 {------------------------------------------------------------------------------
@@ -95,7 +98,7 @@ data Timeout =
 data Range = Range
     { start :: Height
     , end   :: Height
-    }
+    } deriving Show
 
 data ProtocolRequest =
       GetTip
@@ -188,8 +191,22 @@ withActivePeers f = do
     when (HS.null activePeers) $ throwError NoActivePeers
     f activePeers
 
+-- | Like 'withActivePeers', but it passes to the callback only a (single)
+-- active peer. This might be useful in tests which it's not necessary to have
+-- all the active peers available.
+withActivePeer
+    :: Monad m
+    => (ActivePeer c -> Sync c tx s m a)
+    -> Sync c tx s m a
+withActivePeer f = do
+    ctx <- ask
+    activePeers <- lift (scActivePeers ctx)
+    case HS.toList activePeers of
+      []           -> throwError NoActivePeers
+      activePeer:_ -> f activePeer
+
 {------------------------------------------------------------------------------
-  Pure functions
+  Pure functions & constants
 ------------------------------------------------------------------------------}
 
 height :: Block c tx s -> Height
@@ -197,6 +214,9 @@ height = blockHeight . blockHeader
 
 -- | The nu parameter, from the spec.
 type Nu = Natural
+
+maxBlocksPerPeer :: Int
+maxBlocksPerPeer = 50
 
 -- | Returns 'True' if the node finished syncing all the blocks.
 -- This is the 'isDone' state transition function from the spec.
@@ -283,12 +303,11 @@ getRemoteHeight = map height getRemoteTip
 
 syncBlocks
     :: ( ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
-       , Hashable (Block c tx (Sealed c s))
        , Monad m
-       , Eq tx
-       , Eq s
-       , Eq (Hash c)
-       , Eq (PublicKey c)
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (PublicKey c)
        )
     => Range
     -> Sync c tx s m ()
@@ -296,25 +315,28 @@ syncBlocks rng = do
     ctx <- ask
     let fetcher = scDataFetcher ctx
     withActivePeers $ \ activePeers -> do
-      -- FIXME(adn) Extremely naive and wrong implementation
-      -- for now, we basically request the /full range/ to everybody,
-      -- filtering out dupes, which is not feasible for production and
-      -- is terribly wasteful, obviously. A better strategy might be
-      -- to split the work equally into multiple (capped) ranges
-      -- (say, 500 blocks at the time) and then try to fetch each of
-      -- those from all the peers.
-      requestedBlocks <- lift $
-          foldM (\blocks activePeer -> do
-                   res <- fetch fetcher activePeer SGetBlocks rng
-                   case res of
-                     Left _timeout -> pure blocks -- TODO(adn) Telemetry
-                     Right blks    -> pure $ foldl' (flip HS.insert) blocks (toOldestFirst blks)
+
+      let workDistribution =
+              zip (cycle (HS.toList activePeers))
+                  (chunksOf maxBlocksPerPeer [start rng .. end rng])
+
+      -- FIXME(adn) Deal with missing blocks.
+      (requestedBlocks, _missingBlocks) <- lift $
+          foldM (\(requested, missing) (activePeer, heightRange) -> do
+                   let mbRange = Range <$> head heightRange <*> pure (last heightRange)
+                   case mbRange of
+                     Nothing -> pure (requested, missing)
+                     Just subRange -> do
+                         res <- fetch fetcher activePeer SGetBlocks subRange
+                         case res of
+                           Left _timeout -> pure (requested, missing) -- TODO(adn) Telemetry
+                           Right blks    -> pure $ (foldl' (flip Set.insert) requested (toOldestFirst blks), missing)
                 )
-                HS.empty
-                activePeers
+                (mempty, [])
+                workDistribution
 
       -- FIXME(adn) streaming?
-      forM_ (HS.toList requestedBlocks) $ \b ->
+      forM_ requestedBlocks $ \b ->
           forM_ (scUpstreamConsumers ctx) $ \dispatch ->
               lift $ dispatch (SyncBlock b)
 
