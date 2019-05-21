@@ -31,14 +31,20 @@ module Oscoin.Protocol.Sync
     ) where
 
 import           Oscoin.Crypto.Hash (Hash)
-import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Prelude
 import           Prelude (last)
 
 import           Oscoin.Consensus.Nakamoto (PoW)
 
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHeader, Height, Sealed, blockHeader, blockHeight)
+                 ( Beneficiary
+                 , Block
+                 , BlockHeader
+                 , Height
+                 , Sealed
+                 , blockHeader
+                 , blockHeight
+                 )
 import           Oscoin.Data.Tx
 import           Oscoin.P2P as P2P
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
@@ -68,17 +74,17 @@ data SyncEvent c tx s =
 deriving instance ( Eq (Hash c)
                   , Eq tx
                   , Eq s
-                  , Eq (PublicKey c)
+                  , Eq (Beneficiary c)
                   ) => Eq (SyncEvent c tx s)
 deriving instance ( Ord (Hash c)
                   , Ord tx
                   , Ord s
-                  , Ord (PublicKey c)
+                  , Ord (Beneficiary c)
                   ) => Ord (SyncEvent c tx s)
 deriving instance ( Show (Hash c)
                   , Show tx
                   , Show s
-                  , Show (PublicKey c)
+                  , Show (Beneficiary c)
                   ) => Show (SyncEvent c tx s)
 
 data SyncError =
@@ -100,7 +106,7 @@ data Timeout =
     -- ^ The operation exceeded the expected timeout, in nanoseconds.
     deriving (Show, Eq)
 
--- | A closed range [lo,hi].
+-- | A closed (inclusive) range [lo,hi].
 data Range = Range
     { start :: Height
     , end   :: Height
@@ -156,15 +162,25 @@ newtype DataFetcher c tx s m =
 -- the network and the other parts of the system for information.
 data SyncContext c tx s m = SyncContext
     { scNu               :: Nu
-    -- ^ The number of maximum allowed rollbacks. It corresponds to /nu/ from
-    -- the spec and it's known as the 'mutableChainSuffix' in the rest of the
-    -- codebase.
+    -- ^ Used to determine the block tolerance to consider
+    -- ourselves synced. It correspond to /nu/ from the spec, and is used
+    -- in the calculation of 'isDone'.
     , scActivePeers       :: m (ActivePeers c)
+    -- ^ An effectful action that can be used to get the set of active peers
+    -- for this node.
     , scDataFetcher       :: DataFetcher c tx s m
+    -- ^ A 'DataFetcher'.
     , scEventTracer       :: Tracer m
+    -- ^ A tracer for interesting events that happens during syncing.
     , scConcurrently      :: forall a b t.  Traversable t => t a -> (a -> m b) -> m (t b)
+    -- ^ An action that can be used to fetch some resources in parallel.
+    -- 'IO'-based implementations will probably use 'forConcurrently' or some
+    -- variation of it.
     , scLocalChainReader  :: BlockStoreReader c tx s m
+    -- ^ A read-only handle to the local blockchain.
     , scUpstreamConsumers :: [SyncEvent c tx s -> m ()]
+    -- ^ A list of \"upstream consumers\", represented as effectful actions from
+    -- a 'SyncEvent' to 'm ()'.
     }
 
 -- | A sync monad over @m@, that can throw 'SyncError's.
@@ -230,7 +246,7 @@ isDone
     :: ( Eq tx
        , Eq s
        , Eq (Hash c)
-       , Eq (PublicKey c)
+       , Eq (Beneficiary c)
        )
     => Nu
     -> Block c tx s
@@ -265,7 +281,7 @@ getRemoteTip
        , Ord tx
        , Ord s
        , Ord (Hash c)
-       , Ord (PublicKey c)
+       , Ord (Beneficiary c)
        ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
 getRemoteTip = withActivePeers $ \active -> do
     dataFetcher     <- scDataFetcher  <$> ask
@@ -275,7 +291,7 @@ getRemoteTip = withActivePeers $ \active -> do
     case partitionEithers results of
       (_t:_, [])           -> throwError AllPeersTimeoutError
       ([], [])             -> throwError NoRemoteTipFound
-      (_timeouts, allTips) -> do
+      (_timeouts, allTips) ->
           -- Compare the result on the frequency, and pick the highest block
           -- in case of \"draws\".
           case sortBy comparingTips (M.toList . freqtable $ allTips) of
@@ -302,7 +318,7 @@ getRemoteHeight
        , Ord tx
        , Ord s
        , Ord (Hash c)
-       , Ord (PublicKey c)
+       , Ord (Beneficiary c)
        )
     => Sync c tx s m Height
 getRemoteHeight = map height getRemoteTip
@@ -314,7 +330,7 @@ syncBlocks
        , Ord tx
        , Ord s
        , Ord (Hash c)
-       , Ord (PublicKey c)
+       , Ord (Beneficiary c)
        )
     => Range
     -> Sync c tx s m ()
@@ -336,7 +352,7 @@ syncBlocks rng = do
 
         -- FIXME(adn) streaming?
         (requestedBlocks, !missingBlocks) <- lift $
-            foldM (\(requested, missing) (activePeer, !heightRange) -> do
+            foldM (\(requested, missing) (activePeer, !heightRange) ->
                      case Range <$> head heightRange <*> pure (last heightRange) of
                          Nothing -> pure (requested, missing)
                          Just subRange -> do

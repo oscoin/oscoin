@@ -189,7 +189,6 @@ tests:
       - safe-exceptions
       - serialise
       - sqlite-simple
-      - split
       - splitmix
       - stm-conduit
       - streaming-commons

@@ -48,3 +48,6 @@
 - ignore:
     name: Avoid restricted qualification
     within: [System.Console.Option]
+- ignore:
+    name: Avoid restricted qualification
+    within: [Oscoin.Protocol.Sync]

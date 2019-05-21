@@ -20,7 +20,7 @@ import           Data.Hashable (Hashable)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import           Data.HashSet (HashSet)
-import qualified Data.HashSet as HS
+import qualified Data.HashSet as Set
 import           Lens.Micro (Lens', lens)
 
 
@@ -81,19 +81,8 @@ emptyWorldState
 emptyWorldState genesisBlock =
     WorldState mempty (BlockStore.Pure.genesisBlockStore genesisBlock mockScore)
 
-worldStateFrom
-    :: ( Eq (Crypto.PublicKey MockCrypto)
-       , Ord (Hash MockCrypto)
-       , Hashable (Crypto.PublicKey MockCrypto)
-       )
-    => Blockchain MockCrypto MockTx MockSeal
-    -- ^ The genesis block.
-    -> WorldState
-worldStateFrom chain =
-    WorldState mempty (BlockStore.Pure.initWithChain chain mockScore)
-
 toMockPeers :: WorldState -> HashSet MockPeer
-toMockPeers (WorldState m _) = HS.fromMap (() <$ m)
+toMockPeers (WorldState m _) = Set.fromMap (() <$ m)
 
 -- | A mock 'SyncContext' operating in a mock/simulated environment.
 mockContext
@@ -113,7 +102,6 @@ mockContext =
         , scUpstreamConsumers = [ \se -> tell [se] ]
         }
 
-
 -- | Creates a new simulation 'DataFetcher'.
 mkDataFetcherSim
     :: ( Eq (Crypto.PublicKey MockCrypto)
@@ -125,13 +113,13 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
         WorldState{..} <- get
         case HM.lookup peer _mockPeerState of
             Nothing -> panic "newDataFetcherSim - precondition violation, empty blockchain."
-            Just bc -> pure $ Right $ (tip bc)
+            Just bc -> pure . Right $ tip bc
     -- NOTE(adn) We are leaking our abstractions here and bypassing the
     -- 'BlockStoreReader' interface, but this is an interim measure while we
     -- wait for oscoin#550.
     SGetBlocks -> \Range{..} ->   Right
                                 . OldestFirst
-                                . take ((fromIntegral $ end - start) + 1) -- inclusive
+                                . take (fromIntegral (end - start) + 1) -- inclusive
                                 . drop (fromIntegral start)
                               <$> getAllBlocks peer
     -- NOTE(adn) We are leaking our abstractions here and bypassing the
@@ -139,7 +127,7 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
     -- wait for oscoin#550.
     SGetBlockHeaders -> \Range{..} ->   Right
                                       . OldestFirst
-                                      . take ((fromIntegral $ end - start) + 1) -- inclusive
+                                      . take (fromIntegral (end - start) + 1) -- inclusive
                                       . drop (fromIntegral start)
                                       . map blockHeader
                                     <$> getAllBlocks peer

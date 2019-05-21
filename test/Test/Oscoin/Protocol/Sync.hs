@@ -9,7 +9,7 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Crypto.Blockchain
                  (blocks, tip, unsafeToBlockchain, (|>))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, Sealed, emptyGenesisBlock, sealBlock)
+                 (Block, Sealed, blockHeader, emptyGenesisBlock, sealBlock)
 import           Oscoin.Protocol.Sync as Sync
 import qualified Oscoin.Protocol.Sync.Mock as Mock
 import qualified Oscoin.Time as Time
@@ -39,6 +39,7 @@ tests _d = testGroup "Test.Oscoin.Protocol.Sync"
     , testProperty "prop_getRemoteTip_sim_two_peers_draw" prop_getRemoteTip_sim_two_peers_draw
     , testProperty "prop_getRemoteTip_sim_three_peers_majority" prop_getRemoteTip_sim_three_peers_majority
     , testProperty "prop_getBlocks_sim"  prop_getBlocks_sim
+    , testProperty "prop_getBlockHeaders_sim"  prop_getBlockHeaders_sim
     , testProperty "prop_syncBlocks_sim_full" prop_syncBlocks_sim_full
     , testProperty "prop_syncBlocks_sim_missing" prop_syncBlocks_sim_missing
     ]
@@ -52,6 +53,7 @@ props _d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     ,("prop_getRemoteTip_sim_two_peers_draw", prop_getRemoteTip_sim_two_peers_draw)
     ,("prop_getRemoteTip_sim_three_peers_majority", prop_getRemoteTip_sim_three_peers_majority)
     ,("prop_getBlocks_sim", prop_getBlocks_sim)
+    ,("prop_getBlockHeaders_sim", prop_getBlockHeaders_sim)
     ,("prop_syncBlocks_sim_full", prop_syncBlocks_sim_full)
     ,("prop_syncBlocks_sim_missing", prop_syncBlocks_sim_missing)
     ]
@@ -85,7 +87,7 @@ prop_getRemoteTip_sim_two_peers_draw :: Property
 prop_getRemoteTip_sim_two_peers_draw = property $ do
     testPeer1@(_, chain1) <- forAll genActivePeer
     (peer2, _) <- forAll genActivePeer
-    chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
+    chain2 <- flip (|>) chain1 <$> forAll (quickcheck (genBlockFrom (tip chain1)))
 
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer1)
@@ -99,7 +101,7 @@ prop_getRemoteTip_sim_three_peers_majority = property $ do
     testPeer1@(_, chain1) <- forAll genActivePeer
     (peer2, _) <- forAll genActivePeer
     (peer3, _) <- forAll genActivePeer
-    chain2 <- (flip (|>) chain1) <$> forAll (quickcheck (genBlockFrom (tip chain1)))
+    chain2 <- flip (|>) chain1 <$> forAll (quickcheck (genBlockFrom (tip chain1)))
 
     let worldState = Mock.emptyWorldState defaultGenesis
                    & over Mock.mockPeers (uncurry HM.insert testPeer1)
@@ -135,6 +137,35 @@ prop_getBlocks_sim = property $ do
     let expected = OldestFirst allBlocksNoGenesis
 
     annotate (show fullRange) >> actual === (Right expected, [])
+
+prop_getBlockHeaders_sim :: Property
+prop_getBlockHeaders_sim = property $ do
+    testPeer1@(_, chain1) <- forAll genActivePeer
+    let allBlockHeadersNoGenesis =
+              map blockHeader
+            . drop 1
+            . Oscoin.Prelude.reverse
+            . toNewestFirst
+            . blocks
+            $ chain1
+
+    let worldState = Mock.emptyWorldState defaultGenesis
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+
+    let fullRange = fromJust $ range defaultGenesis (tip chain1)
+
+    let fetchSubset = do
+          fetcher <- asks scDataFetcher
+          withActivePeer $ \activePeer -> do
+              res <- lift (fetch fetcher activePeer SGetBlockHeaders fullRange)
+              case res of
+                Left _  -> throwError AllPeersTimeoutError
+                Right x -> pure x
+
+    let actual = Mock.runMockSync worldState Mock.mockContext fetchSubset
+    let expected = OldestFirst allBlockHeadersNoGenesis
+
+    actual === (Right expected, [])
 
 -- | This property tests the 'syncBlocks' function using the simulated
 -- environment.
@@ -196,4 +227,3 @@ genActivePeer :: Gen (Mock.MockPeer, Mock.PeerData)
 genActivePeer = do
   (pk, _) <- quickcheck arbitraryKeyPair
   (,) <$> genNodeInfo pk <*> quickcheck (genBlockchainFrom defaultGenesis)
-  where

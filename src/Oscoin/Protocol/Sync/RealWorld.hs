@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE NumericUnderscores   #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-deprecations #-} -- Temporary
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-} -- Temporary
 module Oscoin.Protocol.Sync.RealWorld (
       syncNode
     , newSyncContextIO
@@ -10,11 +12,9 @@ module Oscoin.Protocol.Sync.RealWorld (
 import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Config as Consensus
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
-import           Oscoin.Crypto.Hash (Hash)
-import           Oscoin.Crypto.Hash (HasHashing)
-import           Oscoin.Crypto.PubKey (PublicKey)
+import           Oscoin.Crypto.Blockchain.Block
+                 (Beneficiary, Block, BlockHash, Sealed)
+import           Oscoin.Crypto.Hash (HasHashing, Hash)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P as P2P
 import           Oscoin.Protocol.Sync
@@ -29,7 +29,7 @@ import qualified Control.Concurrent.Async as Async
 import           Control.Retry
                  (RetryPolicyM, RetryStatus, exponentialBackoff, retrying)
 import           Data.Hashable (Hashable)
-import qualified Data.HashSet as HS
+import qualified Data.HashSet as Set
 import qualified Network.Gossip.HyParView as Gossip
 import           Network.Gossip.IO.Peer (Peer(..))
 import qualified Network.HTTP.Client as HTTP
@@ -49,7 +49,7 @@ newDataFetcherIO
 newDataFetcherIO httpManager = DataFetcher $ \peer -> \case
     -- This implementation is basically 'fetchTip' function from the spec.
     SGetTip -> \() -> timed maxAllowedNetworkLatency $ do
-        let hn = (addrHost . nodeHttpApiAddr $ peer)
+        let hn = addrHost . nodeHttpApiAddr $ peer
         -- FIXME(adn) Support for https if needed.
         rq0 <- HTTP.parseUrlThrow ("http://" <> toS (renderHost hn) <> "/blockchain/tip")
         let rq = rq0 { HTTP.port = fromIntegral (addrPort . nodeHttpApiAddr $ peer) }
@@ -106,7 +106,7 @@ newSyncContextIO config chainReader upstreamConsumers probe = do
     mgr <- liftIO (HTTP.newManager HTTP.defaultManagerSettings)
     pure $ SyncContext
         { scNu          = Consensus.mutableChainDepth config
-        , scActivePeers = HS.map peerNodeId . Gossip.active <$> P2P.getPeers' env
+        , scActivePeers = Set.map peerNodeId . Gossip.active <$> P2P.getPeers' env
         , scDataFetcher = newDataFetcherIO mgr
         , scEventTracer = newEventTracerIO probe
         , scConcurrently = Async.forConcurrently
@@ -143,7 +143,7 @@ syncNode
        , Ord tx
        , Ord s
        , Ord (Hash c)
-       , Ord (PublicKey c)
+       , Ord (Beneficiary c)
        )
     => Sync c tx s m ()
 syncNode = do
