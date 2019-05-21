@@ -13,7 +13,7 @@ class Monad m => MonadClient c m where
 
     -- | Returns an error result if a transaction with the given hash
     -- was not found.
-    getTransaction :: Hashed c (Tx c) -> m (Result (TxLookupResponse c))
+    getTransaction :: Hashed c (Tx c) -> m (Result (TxLookupResponse c (Tx c)))
 
     -- | Returns an error result if a value with the given key was not
     -- found.

@@ -18,7 +18,6 @@ import qualified Oscoin.Prelude as Prelude
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 
-import           Codec.Serialise (Serialise(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
@@ -32,10 +31,6 @@ deriving instance (Show (Hash c), Show tx) => Show (Mempool c tx)
 deriving instance (Eq (Hash c), Eq tx)  => Eq (Mempool c tx)
 deriving instance Ord (Hash c) => Semigroup (Mempool c tx)
 deriving instance Ord (Hash c) => Monoid (Mempool c tx)
-
-instance (Ord (Hash c), Serialise tx, Serialise (Hash c)) => Serialise (Mempool c tx) where
-    encode (Mempool txs) = encode (Map.elems txs)
-    decode               = Mempool <$> decode
 
 -- | Lookup a transaction in a mempool.
 lookup :: Ord (Hash c) => Crypto.Hashed c tx -> Mempool c tx -> Maybe tx

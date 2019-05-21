@@ -1,4 +1,4 @@
-module Oscoin.Test.API.HTTP
+module Test.Oscoin.API.HTTP
     ( tests
     ) where
 
@@ -24,8 +24,8 @@ import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
-tests :: forall c. Dict (IsCrypto c) -> [TestTree]
-tests Dict =
+tests :: forall c. Dict (IsCrypto c) -> TestTree
+tests Dict = testGroup "Test.Oscoin.API.HTTP"
     [ test "Smoke test" (smokeTestOscoinAPI @c)
     , testGroup "POST /transactions"
         [ testGroup "400 Bad Request"
@@ -76,27 +76,17 @@ smokeTestOscoinAPI = do
     liftIO $ httpTest emptyNodeState $ do
         get "/" >>= assertStatus ok200
 
-        -- The mempool is empty.
-        get "/transactions" >>=
-            assertStatus ok200 <>
-            assertResultOK ([] @(Tx c))
-
         -- Submit the transaction to the mempool.
         post "/transactions" tx >>=
             assertStatus accepted202 <>
             assertResultOK (API.TxSubmitResponse $ Crypto.hash @c tx)
-
-        -- Get the mempool once again, make sure the transaction is in there.
-        get "/transactions" >>=
-            assertStatus ok200 <>
-            assertResultOK [tx]
 
         getTransactionReturns txHash $ unconfirmedTx tx
 
 unconfirmedTx
     :: IsCrypto c
     => Tx c
-    -> API.TxLookupResponse c
+    -> API.TxLookupResponse c (Tx c)
 unconfirmedTx tx = API.TxLookupResponse
     { txHash = Crypto.hash tx
     , txBlockHash = Nothing
@@ -108,7 +98,7 @@ unconfirmedTx tx = API.TxLookupResponse
 getTransactionReturns
     :: IsCrypto c
     => Hashed c (Tx c)
-    -> API.TxLookupResponse c
+    -> API.TxLookupResponse c (Tx c)
     -> Session c ()
 getTransactionReturns txHash expected =
     get ("/transactions/" <> toUrlPiece (Crypto.fromHashed txHash)) >>=

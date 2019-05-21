@@ -5,6 +5,7 @@
 module Oscoin.Crypto.Blockchain.Block
     ( -- * Types
       Block -- opaque to disallow construction of sealed blocks.
+    , SealedBlock
     , BlockHash
     , BlockHeader(..)
     , BlockData(..)
@@ -236,6 +237,8 @@ data Block c tx s = Block
     , blockHash   :: BlockHash c
     , blockData   :: BlockData c tx
     } deriving Generic
+
+type SealedBlock c tx s = Block c tx (Sealed c s)
 
 data BlockData c tx = BlockData
     { blockDataBeneficiary :: Beneficiary c

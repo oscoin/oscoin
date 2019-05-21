@@ -4,7 +4,6 @@ module Oscoin.Tests
 
 import qualified Oscoin.Consensus.Config as Consensus
 
-import qualified Oscoin.Test.API.HTTP as HTTP
 import qualified Oscoin.Test.CLI as CLI
 import qualified Oscoin.Test.Consensus as Consensus
 import           Oscoin.Test.Crypto
@@ -25,9 +24,7 @@ import           Data.ByteArray.Orphans ()
 
 tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
 tests d@Dict config = testGroup "Oscoin"
-    [ testGroup      "API.HTTP"                       (HTTP.tests d)
-    -- ^ Testing HTTP API constructing HTTP requests manually
-    , testGroup      "CLI"                            CLI.tests
+    [ testGroup      "CLI"                            CLI.tests
     , Consensus.tests d config
     , testGroup      "Address"                        (Address.tests d)
     , testGroup      "P2P"                            (P2P.tests d)
