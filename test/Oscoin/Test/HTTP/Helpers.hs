@@ -8,8 +8,7 @@ module Oscoin.Test.HTTP.Helpers
     , Session
     , runSession
     , runEmptySession
-    , runSessionBindings
-    , runSessionEnv
+    , runSessionWithState
     , liftWaiSession
     , liftNode
 
@@ -20,8 +19,6 @@ module Oscoin.Test.HTTP.Helpers
     , get
     , post
 
-    , addRef
-    , initEnv
     , genDummyTx
     , createValidTx
     ) where
@@ -194,14 +191,6 @@ createValidTx payload = liftIO $ do
 emptyBlockchain :: IsCrypto c => Blockchain c (Tx c) DummySeal
 emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch defaultBeneficiary)
 
-initEnv :: [(Text, DummyPayload)] -> TxState c (Tx c)
-initEnv bindings =
-    DummyEnv $ foldl' (\acc (k,v) -> Map.insert k v acc) mempty bindings
-
--- | Adds a reference holding @value@ and binds @name@ to the reference
-addRef :: Text -> DummyPayload -> DummyEnv -> DummyEnv
-addRef name value (DummyEnv env) = DummyEnv $ Map.insert name value env
-
 -- | Run a 'Session' with the given initial node state
 runSession :: IsCrypto c => NodeState c -> Session c () -> Assertion
 runSession nst (Session sess) =
@@ -209,25 +198,22 @@ runSession nst (Session sess) =
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
--- | Run a 'Session' so that the blockchain state is the given environment.
-runSessionEnv :: IsCrypto c => DummyEnv -> Session c () -> Assertion
-runSessionEnv env (Session sess) = do
-    let nst = nodeState [] (fromGenesis $ sealBlock "" $ emptyGenesisFromState epoch defaultBeneficiary env) env
-    withNode nst $ \nh -> do
+-- | Run a 'Session' so that the blockchain state has the given
+-- Radicle bindings.
+runSessionWithState :: (IsCrypto c, MonadIO m) => [(Text, DummyPayload)] -> Session c () -> m ()
+runSessionWithState bindings (Session sess)= do
+    let initialState = DummyEnv $ Map.fromList bindings
+    let genBlock = sealBlock "" $ emptyGenesisFromState epoch defaultBeneficiary initialState
+    let nst = nodeState [] (fromGenesis genBlock) initialState
+    liftIO $ withNode nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
-
--- | Run a 'Session' so that the blockchain state has the given
--- Radicle bindings.
-runSessionBindings :: IsCrypto c => [(Text, DummyPayload)] -> Session c () -> Assertion
-runSessionBindings bindings = runSessionEnv (initEnv bindings)
-
 -- | Run a 'Session' with an empty node state. That is the node mempool
--- is empty and the blockchain has only the genesis block with a pure
--- Radicle environment.
-runEmptySession :: IsCrypto c => Session c () -> Assertion
-runEmptySession = runSessionEnv mempty
+-- is empty and the blockchain has only the genesis block with an empty
+-- dummy environment.
+runEmptySession :: (IsCrypto c, MonadIO m) => Session c () -> m ()
+runEmptySession = runSessionWithState []
 
 
 assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session c ()
