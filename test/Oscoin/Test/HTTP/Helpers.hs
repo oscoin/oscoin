@@ -13,7 +13,6 @@ module Oscoin.Test.HTTP.Helpers
     , liftNode
 
     , assertResultOK
-    , assertResultErr
     , assertStatus
 
     , get
@@ -229,17 +228,6 @@ assertResultOK expected response = do
     case result of
         API.Err err -> assertFailure $ "Received API error: " <> T.unpack err
         API.Ok v    -> expected @=? v
-
--- | Assert that the response can be deserialised to @API.Err actual@
--- and @actual@ equals @expected@.
-assertResultErr
-    :: (HasCallStack)
-    => Text -> Wai.SResponse -> Session c ()
-assertResultErr expected response = do
-    result <- assertResponseBody @(API.Result ()) response
-    case result of
-        API.Err err -> expected @=? err
-        API.Ok _    -> assertFailure $ "Received unexpected API OK result"
 
 assertResponseBody
     :: (HasCallStack, Serialise a)

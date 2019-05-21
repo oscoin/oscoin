@@ -4,13 +4,9 @@ module Test.Oscoin.API.HTTP
 
 import           Oscoin.Prelude hiding (get, state)
 
-import qualified Oscoin.API.Types as API
 import           Oscoin.Crypto.Blockchain (blocks, genesis, tip)
 import           Oscoin.Crypto.Blockchain.Block
-import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx (Tx, txPubKey)
 import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
@@ -26,12 +22,7 @@ import           Test.Tasty.QuickCheck
 
 tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.API.HTTP"
-    [ test "Smoke test" (smokeTestOscoinAPI @c)
-    , testGroup "POST /transactions"
-        [ testGroup "400 Bad Request"
-            [ test "Invalid signature" (postTransactionWithInvalidSignature @c)]
-        ]
-    , testGroup "GET /blocks/:hash"
+    [ testGroup "GET /blocks/:hash"
         [ test "Missing block" (getMissingBlock @c)
         , test "Existing block" (getExistingBlock @c)
         ]
@@ -55,55 +46,6 @@ data HTTPTest c = HTTPTest
 
 httpTest :: NodeState c -> Session c () -> IO (HTTPTest c)
 httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
-
-postTransactionWithInvalidSignature
-    :: forall c. IsCrypto c
-    => PropertyM IO (HTTPTest c)
-postTransactionWithInvalidSignature = do
-    (_, tx) <- genDummyTx @c
-    liftIO $ httpTest emptyNodeState $ do
-        otherPubKey <- fst <$> Crypto.generateKeyPair
-        let tx' = tx { txPubKey = otherPubKey }
-        post "/transactions" tx' >>=
-            assertResultErr "Invalid transaction" <>
-            assertStatus badRequest400
-
-smokeTestOscoinAPI
-    :: forall c. IsCrypto c
-    => PropertyM IO (HTTPTest c)
-smokeTestOscoinAPI = do
-    (txHash, tx) <- genDummyTx
-    liftIO $ httpTest emptyNodeState $ do
-        get "/" >>= assertStatus ok200
-
-        -- Submit the transaction to the mempool.
-        post "/transactions" tx >>=
-            assertStatus accepted202 <>
-            assertResultOK (API.TxSubmitResponse $ Crypto.hash @c tx)
-
-        getTransactionReturns txHash $ unconfirmedTx tx
-
-unconfirmedTx
-    :: IsCrypto c
-    => Tx c
-    -> API.TxLookupResponse c (Tx c)
-unconfirmedTx tx = API.TxLookupResponse
-    { txHash = Crypto.hash tx
-    , txBlockHash = Nothing
-    , txOutput = Nothing
-    , txConfirmations = 0
-    , txPayload = tx
-    }
-
-getTransactionReturns
-    :: IsCrypto c
-    => Hashed c (Tx c)
-    -> API.TxLookupResponse c (Tx c)
-    -> Session c ()
-getTransactionReturns txHash expected =
-    get ("/transactions/" <> toUrlPiece (Crypto.fromHashed txHash)) >>=
-    assertStatus ok200 <>
-    assertResultOK expected
 
 getMissingBlock :: forall c. IsCrypto c => PropertyM IO (HTTPTest c)
 getMissingBlock = liftIO $ httpTest emptyNodeState $ do
