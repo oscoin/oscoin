@@ -6,7 +6,7 @@ module Oscoin.Test.Storage.Block.SQLite.Blackbox
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain(..), blocks, chainLength, txPayload)
+                 (Blockchain(..), blocks, chainLength, height, tip, txPayload)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Tx
@@ -21,6 +21,7 @@ import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.Storage.Block.SQLite
 
 import           Data.ByteArray.Orphans ()
+import           Data.List ((!!))
 
 import           Test.Tasty
 import           Test.Tasty.HUnit.Extended
@@ -29,10 +30,12 @@ import           Test.Tasty.QuickCheck
 tests :: forall c. Dict (IsCrypto c) -> [TestTree]
 tests Dict =
     [ testGroup "Storage.Block"
-        [ testProperty "Store/lookup Block" (withMemStore genBlockFrom (testStoreLookupBlock @c))
-        , testProperty "Store/lookup Tx"    (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
-        , testProperty "Get Genesis Block"  (withMemStore pure (testGetGenesisBlock @c))
-        , testProperty "Get blocks"         (withMemStore genGetBlocks (testGetBlocks @c))
+        [ testProperty "Store/lookup Block"   (withMemStore genBlockFrom (testStoreLookupBlock @c))
+        , testProperty "lookupBlockByHeight"  (withMemStore genBlockchainFrom (testLookupBlockByHeight @c))
+        , testProperty "lookupBlocksByHeight" (withMemStore genBlockchainFrom (testLookupBlocksByHeight @c))
+        , testProperty "Store/lookup Tx"      (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
+        , testProperty "Get Genesis Block"    (withMemStore pure (testGetGenesisBlock @c))
+        , testProperty "Get blocks"           (withMemStore genGetBlocks (testGetBlocks @c))
         ]
     ]
 
@@ -72,6 +75,50 @@ testStoreLookupBlock blk (publicAPI, privateAPI) = do
     Just blk' <- Abstract.lookupBlock publicAPI (blockHash blk)
 
     blk' @?= blk
+
+testLookupBlockByHeight
+    :: IsCrypto c
+    => Blockchain c (Tx c) DummySeal
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
+    -> Assertion
+testLookupBlockByHeight chain (publicAPI, privateAPI) = do
+    let allBlocks    = Chrono.reverse $ blocks chain
+    let targetHeight = pred . blockHeight . blockHeader . tip $ chain
+    Abstract.insertBlocksNaive privateAPI allBlocks
+    blk' <- Abstract.lookupBlockByHeight publicAPI targetHeight
+
+    blk' @?= Just (Chrono.toOldestFirst allBlocks !! (fromIntegral targetHeight))
+
+testLookupBlocksByHeight
+    :: IsCrypto c
+    => Blockchain c (Tx c) DummySeal
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
+    -> Assertion
+testLookupBlocksByHeight chain (publicAPI, privateAPI) = do
+    let allBlocks  = Chrono.reverse $ blocks chain
+    let rangeEnd   = pred . height $ chain
+    let tipless    = Chrono.OldestFirst
+                   . reverse
+                   . drop 1
+                   . Chrono.toNewestFirst
+                   . blocks $ chain
+    Abstract.insertBlocksNaive privateAPI allBlocks
+
+    -- We test the happy path scenario first, i.e. that all the requested
+    -- blocks are there.
+    blks <- Abstract.lookupBlocksByHeight publicAPI (0, rangeEnd)
+    blks @?= tipless
+
+    -- We now test that if the /end/ of the range is beyond the max height in
+    -- the chain, the system returns only the available blocks (basically, the
+    -- whole chain)
+    fullRange <- Abstract.lookupBlocksByHeight publicAPI (0, rangeEnd + 100)
+    fullRange @?= Chrono.reverse (blocks chain)
+
+    -- Finally we test that if we request an invalid range (i.e. start > end)
+    -- nothing is returned.
+    none <- Abstract.lookupBlocksByHeight publicAPI (rangeEnd + 100, 0)
+    none @?= mempty
 
 testStoreLookupTx
     :: IsCrypto c

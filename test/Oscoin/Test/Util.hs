@@ -15,6 +15,7 @@ import           Oscoin.Crypto.PubKey.Mock
 import           Oscoin.Crypto.PubKey.RealWorld
 import           Oscoin.Data.Ledger
 import           Oscoin.Data.OscoinTx
+import           Oscoin.Time.Chrono
 
 import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree as Tree
@@ -186,6 +187,9 @@ instance Condensed (PrivateKey MockCrypto) where
 
 instance Show (Signature c) => Condensed (Signed c Text) where
     condensed = show
+
+instance Condensed (f a) => Condensed (OldestFirst f a) where
+    condensed = condensed . toOldestFirst
 
 -------------------------------------------------------------------------------
 -- Utility functions

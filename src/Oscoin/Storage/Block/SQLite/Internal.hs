@@ -433,12 +433,12 @@ lookupBlockByHeight
     -> IO (Maybe (Block c tx (Sealed c s)))
 lookupBlockByHeight Handle{hConn} h = runTransaction hConn $ do
     conn <- ask
-    result :: Maybe (BlockHeader c (Sealed c s) :. Only (Beneficiary c) :. Only (BlockHash c)) <- listToMaybe <$> liftIO (Sql.query conn
-        [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
+    result :: Maybe (Only (BlockHash c) :. BlockHeader c (Sealed c s) :. Only (Beneficiary c)) <- listToMaybe <$> liftIO (Sql.query conn
+        [sql| SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                 FROM blocks
-               WHERE hash = ? |] (Only h))
+               WHERE height = ? |] (Only h))
 
-    for result $ \(bh :. Only be :. Only blockHash) -> do
+    for result $ \(Only blockHash :. bh :. Only be) -> do
         txs :: [tx] <- liftIO $ getBlockTxs conn blockHash
         pure $ mkBlock bh be txs
 
