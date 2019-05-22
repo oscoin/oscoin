@@ -6,9 +6,8 @@ module Oscoin.CLI.Parser
 
 import           Oscoin.Prelude hiding (option)
 
-import           Oscoin.Crypto.Address (decodeAddress, toPublicKey)
-import           Oscoin.Crypto.Blockchain.Block
-                 (Beneficiary, minDifficulty, parseDifficulty)
+import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
+import           Oscoin.Crypto.Hash (HasHashing(parseShortHash))
 
 import           Oscoin.CLI.Command
 import           Oscoin.Configuration
@@ -19,8 +18,6 @@ import           Oscoin.Configuration
                  , pathsParser
                  )
 
-import           Codec.Serialise (Serialise)
-import           Data.Bifunctor (first)
 import qualified Data.Text as T
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
@@ -31,19 +28,19 @@ data CLI c = CLI
     , cliCommand     :: Command c
     }
 
-execParser :: Serialise (Beneficiary c) => ConfigPaths -> IO (CLI c)
+execParser :: HasHashing c => ConfigPaths -> IO (CLI c)
 execParser cps = Options.execParser (mainParserInfo cps)
 
-execParserPure :: Serialise (Beneficiary c) => ConfigPaths -> [String] -> ParserResult (CLI c)
+execParserPure :: HasHashing c => ConfigPaths -> [String] -> ParserResult (CLI c)
 execParserPure cps = Options.execParserPure defaultPrefs (mainParserInfo cps)
 
-mainParserInfo :: Serialise (Beneficiary c) => ConfigPaths -> ParserInfo (CLI c)
+mainParserInfo :: HasHashing c => ConfigPaths -> ParserInfo (CLI c)
 mainParserInfo cps =
     info (helper <*> mainParser cps)
     $ progDesc "Oscoin CLI"
 
 
-mainParser :: Serialise (Beneficiary c) => ConfigPaths -> Parser (CLI c)
+mainParser :: HasHashing c => ConfigPaths -> Parser (CLI c)
 mainParser cps = CLI
     <$> pathsParser cps
     <*> environmentParser
@@ -59,7 +56,7 @@ keyPairParser = subparser
     where
         keyPairGenerate = pure GenerateKeyPair
 
-genesisParser :: Serialise (Beneficiary c) => Parser (Command c)
+genesisParser :: HasHashing c => Parser (Command c)
 genesisParser =
     GenesisCreate <$> genesisFrom <*> genesisDifficulty <*> genesisBeneficiary
   where
@@ -74,13 +71,11 @@ genesisParser =
         <> metavar "TARGET"
         <> value minDifficulty
         )
-    genesisBeneficiary = option (eitherReader addrToPubKey)
+    genesisBeneficiary = option (maybeReader (parseShortHash . T.pack))
         (  long "beneficiary"
         <> help "block reward beneficiary"
-        <> metavar "ADDRESS"
+        <> metavar "ACCOUNT"
         )
-    addrToPubKey s =
-        toPublicKey <$> first show ((decodeAddress . encodeUtf8 . T.pack) s)
 
 withInfo :: Parser a -> String -> ParserInfo a
 withInfo opts desc = info (helper <*> opts) $ progDesc desc

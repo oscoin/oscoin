@@ -9,6 +9,7 @@ import           Database.SQLite.Simple.Orphans ()
 import           Oscoin.CLI.KeyStore
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Test.CLI.Helpers
+import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Crypto.PubKey.Arbitrary ()
 import           Oscoin.Test.Util (Condensed(..))
 

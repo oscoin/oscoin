@@ -9,7 +9,6 @@ import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Address (toPublicKey)
 import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
@@ -135,7 +134,7 @@ main = do
                                      (P2P.Disco.optNetwork optDiscovery')
                                      telemetry
                                      consensusConfig
-                                     (toPublicKey optBeneficiary)
+                                     optBeneficiary
                  in
                     withNode config
                              nid

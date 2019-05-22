@@ -8,8 +8,12 @@ module Oscoin.Crypto.Hash
     , HasHashing(..)
     , toHashed
     , fromHashed
+    , fromShortHashed
+
     , formatHash
     , formatHashed
+    , formatShortHash
+
     , hashBinary
     , hashSerial
 
@@ -108,9 +112,15 @@ class
     -- | The zero hash. Also the minimum hash value.
     zeroHash  :: Hash crypto
 
+    -- | The zero short hash. Also the minimum short hash value.
+    zeroShortHash  :: ShortHash crypto
+
     -- | A short hash, in the similar spirit of the BTC one.
     -- eg. ripemd160(blake2b(x))
     toShortHash :: Hash crypto -> ShortHash crypto
+
+    -- | Parse a 'ShortHash' from 'Text'.
+    parseShortHash :: Text -> Maybe (ShortHash crypto)
 
     -- | A compact representation of the hash.
     compactHash :: Hash crypto -> ByteString
@@ -122,22 +132,30 @@ instance Sql.ToField (Hash crypto) => Sql.ToField (Hashed crypto a) where
 instance Fmt.Buildable (Hash crypto) => ToHttpApiData (Hash crypto) where
     toQueryParam = Fmt.sformat formatHash
 
--- | Tag a 'Hash'' with the type it is a hash of.
+-- | Tag a 'Hash' with the type it is a hash of.
 toHashed :: Hash crypto -> Hashed crypto a
 toHashed = Hashed
 
--- | Un-tag a 'Hashed'' value.
+-- | Un-tag a 'Hashed' value.
 fromHashed :: Hashed crypto a -> Hash crypto
 fromHashed (Hashed h) = h
 
--- | Format a 'Hash'' value.
+-- | Un-tag a 'ShortHashed' value.
+fromShortHashed :: ShortHashed crypto a -> ShortHash crypto
+fromShortHashed (ShortHashed h) = h
+
+-- | Format a 'Hash' value.
 --
 -- This base-58 encodes the digest bytes, but does __NOT__ encode it as a
 -- 'Multihash.Multihash'.
 formatHash :: Fmt.Buildable (Hash crypto) => Format r (Hash crypto -> r)
 formatHash = fmtB58
 
--- | Format a 'Hashed'' value.
+-- | Format a 'ShortHash' value.
+formatShortHash :: Fmt.Buildable (ShortHash crypto) => Format r (ShortHash crypto -> r)
+formatShortHash = "0x" Fmt.% Fmt.build
+
+-- | Format a 'Hashed' value.
 --
 -- This base-58 encodes the digest bytes, but does __NOT__ encode it as a
 -- 'Multihash.Multihash'.

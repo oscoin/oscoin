@@ -59,15 +59,22 @@ instance HasHashing MockCrypto where
 
     zeroHash = FnvHash (FnvHash64 minBound)
 
+    zeroShortHash = ShortHash zeroHash
+
     toShortHash = ShortHash
 
+    parseShortHash t =
+        case readMaybe . T.unpack $ t of
+          Just w64 -> pure $ ShortHash $ FnvHash (FnvHash64 w64)
+          Nothing  -> Nothing
+
     compactHash (FnvHash (FnvHash64 w64)) = BS.take 7
-                                        . BaseN.encodedBytes
-                                        . BaseN.encodeBase58btc
-                                        . toS
-                                        . BL.toLazyByteString
-                                        . BL.word64LE
-                                        $ w64
+                                          . BaseN.encodedBytes
+                                          . BaseN.encodeBase58btc
+                                          . toS
+                                          . BL.toLazyByteString
+                                          . BL.word64LE
+                                          $ w64
 
 {------------------------------------------------------------------------------
   More-or-less-dubious instances
@@ -75,6 +82,9 @@ instance HasHashing MockCrypto where
 
 instance Show.Show (Hash MockCrypto) where
     show = show . compactHash
+
+instance Show.Show (ShortHash MockCrypto) where
+    show (ShortHash (FnvHash (FnvHash64 w64))) = show w64
 
 instance Serialise (Hash MockCrypto) where
     encode (FnvHash (FnvHash64 w64)) = encode w64
@@ -122,6 +132,16 @@ instance FromJSON (Hash MockCrypto) where
           Just w64 -> pure $ FnvHash (FnvHash64 w64)
           Nothing  -> typeMismatch "parseJSON for (Hash MockCrypto) failed" (toJSON t)
 
+instance ToJSON (ShortHash MockCrypto) where
+    toJSON (ShortHash h) = toJSON h
+    toEncoding (ShortHash h) = toEncoding h
+
+instance FromJSON (ShortHash MockCrypto) where
+    parseJSON = withText "ShortHash" $ \t ->
+        case readMaybe . T.unpack $ t of
+          Just w64 -> pure $ ShortHash $ FnvHash (FnvHash64 w64)
+          Nothing  -> typeMismatch "parseJSON for (ShortHash MockCrypto) failed" (toJSON t)
+
 instance FromHttpApiData (Hash MockCrypto) where
     parseQueryParam t =
         case readMaybe . T.unpack $ t of
@@ -138,6 +158,9 @@ instance MerkleHash (Hash MockCrypto) where
 
 instance Buildable (Hash MockCrypto) where
     build (FnvHash (FnvHash64 w64)) = F.bprint F.build w64
+
+instance Buildable (ShortHash MockCrypto) where
+    build (ShortHash h) = build h
 
 instance Sql.ToField (Hash MockCrypto) where
     toField (FnvHash (FnvHash64 w64)) = Sql.SQLText . T.pack . show $ w64

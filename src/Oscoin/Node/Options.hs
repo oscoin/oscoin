@@ -20,13 +20,13 @@ import           Oscoin.Configuration
                  , pathsOpts
                  , pathsParser
                  )
-import           Oscoin.Crypto.Address (Address, decodeAddress, renderAddress)
 import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
+import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P.Disco (discoOpts, discoParser)
 import qualified Oscoin.P2P.Disco as P2P.Disco
 import           Oscoin.Time (Duration, seconds)
 
-import           Codec.Serialise (Serialise)
 import           Data.IP (IP)
 import qualified Data.Text as T
 import qualified Formatting as F
@@ -47,13 +47,15 @@ data Options crypto network = Options
     , optEkgHost            :: Maybe HostName
     , optEkgPort            :: Maybe PortNumber
     , optAllowEphemeralKeys :: Bool
-    , optBeneficiary        :: Address crypto
+    , optBeneficiary        :: Beneficiary crypto
     } deriving (Generic)
 
-deriving instance (Eq   (Beneficiary c), Eq   n) => Eq   (Options c n)
-deriving instance (Show (Beneficiary c), Show n) => Show (Options c n)
+deriving instance (Eq (Crypto.PublicKey c),   Eq   (Beneficiary c), Eq   n) => Eq   (Options c n)
+deriving instance (Show (Crypto.PublicKey c), Show (Beneficiary c), Show n) => Show (Options c n)
 
-nodeOptionsParser :: Serialise (Beneficiary c) => ConfigPaths -> Parser (Options c P2P.Disco.OptNetwork)
+nodeOptionsParser
+    :: (Crypto.HasHashing c)
+    => ConfigPaths -> Parser (Options c P2P.Disco.OptNetwork)
 nodeOptionsParser cps = Options
     <$> option auto
         ( short 'h'
@@ -114,16 +116,15 @@ nodeOptionsParser cps = Options
         ( long "allow-ephemeral-keys"
        <> help "Create a fresh keypair if none could be found"
         )
-    <*> option (eitherReader readAddr)
+    <*> option (maybeReader readBeneficiary)
         ( long "beneficiary"
-       <> help "Beneficiary address for block rewards"
+       <> help "Beneficiary id for block rewards"
         )
   where
-    readAddr s =
-        first show ((decodeAddress . encodeUtf8 . T.pack) s)
+    readBeneficiary = Crypto.parseShortHash . T.pack
 
 nodeOptionsOpts
-    :: Serialise (Beneficiary c)
+    :: Show (Crypto.ShortHash c)
     => P2P.Disco.CanRenderNetwork n
     => Options c n -> [Opt Text]
 nodeOptionsOpts
@@ -153,9 +154,11 @@ nodeOptionsOpts
     , maybe [] (pure . Opt "ekg-host"     . toS)  optEkgHost
     , maybe [] (pure . Opt "ekg-port"     . show) optEkgPort
     , bool  [] [Flag "allow-ephemeral-keys"] optAllowEphemeralKeys
-    , pure . Opt "beneficiary"  $ renderAddress optBeneficiary
+    , pure . Opt "beneficiary"  $ show optBeneficiary
     ]
 
 renderNodeOptionsOpts
-    :: Serialise (Beneficiary c) => P2P.Disco.CanRenderNetwork n => Options c n -> [Text]
+    :: Show (Crypto.ShortHash c)
+    => P2P.Disco.CanRenderNetwork n
+    => Options c n -> [Text]
 renderNodeOptionsOpts = map (F.sformat F.build) . nodeOptionsOpts

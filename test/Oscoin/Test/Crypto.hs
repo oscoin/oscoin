@@ -79,10 +79,12 @@ type IsCrypto c = ( HasDigitalSignature c
 
                   , Arbitrary (Beneficiary c)
                   , ToJSON (Hash c)
+                  , ToJSON (ShortHash c)
                   , ToJSON (PublicKey c)
                   , ToJSON (Signature c)
                   , FromJSON (PublicKey c)
                   , FromJSON (Signature c)
+                  , FromJSON (ShortHash c)
                   , FromJSON (BlockHash c)
                   , FromHttpApiData (BlockHash c)
                   , Typeable c
@@ -92,12 +94,15 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Serialise (ShortHash c)
                   , Ord (PublicKey c)
                   , Ord (Signature c)
+                  , Ord (ShortHash c)
+                  , Show (ShortHash c)
                   , Show (PublicKey c)
                   , Show (Signature c)
                   , Show (Hash c)
                   , Semigroup (Hash c)
                   , Condensed (PublicKey c)
                   , Condensed (PrivateKey c)
+                  , Condensed (ShortHash c)
                   , Hashable c (Signed c Text)
                   , Hashable c [Word8]
                   , Hashable c Word8
@@ -112,6 +117,7 @@ type IsCrypto c = ( HasDigitalSignature c
                   , ByteArrayAccess (ShortHash c)
                   , ByteArrayAccess (PublicKey c)
                   , Buildable (Hash c)
+                  , Buildable (ShortHash c)
                   , ToField (BlockHash c)
                   , ToField (Hashed c (Tx c))
                   , ToField (Sealed c Text)  -- DummySeal ~ Text

@@ -5,7 +5,7 @@ module Oscoin.Crypto.Address.Internal where
 import           Oscoin.Prelude
 
 import           Oscoin.Configuration
-import           Oscoin.Crypto.PubKey
+import           Oscoin.Crypto.Hash
 
 {------------------------------------------------------------------------------
   Types
@@ -32,9 +32,9 @@ data Address c = Address
     , addressPayload :: AddressPayload c
     }
 
-deriving instance Eq (PublicKey c)   => Eq (Address c)
-deriving instance Ord (PublicKey c)  => Ord (Address c)
-deriving instance Show (PublicKey c) => Show (Address c)
+deriving instance Eq (ShortHash c)   => Eq (Address c)
+deriving instance Ord (ShortHash c)  => Ord (Address c)
+deriving instance Show (ShortHash c) => Show (Address c)
 
 data AddressPrefix = AddressPrefix
     { protocolVersion :: ProtocolVersion
@@ -80,14 +80,14 @@ data AddressFormatTag =
     AddressFormatTag_CBOR
     deriving (Eq, Ord, Show)
 
--- | The 'AddressPayload' is (currently) simply a 'PublicKey'.
+-- | The 'AddressPayload' is a 'ShortHash' of a 'PublicKey'.
 --
 data AddressPayload c where
-    AddressPayload_V0 :: PublicKey c -> AddressPayload c
+    AddressPayload_V0 :: ShortHash c -> AddressPayload c
 
-deriving instance Eq (PublicKey c)   => Eq (AddressPayload c)
-deriving instance Ord (PublicKey c)  => Ord (AddressPayload c)
-deriving instance Show (PublicKey c) => Show (AddressPayload c)
+deriving instance Eq (ShortHash c)   => Eq (AddressPayload c)
+deriving instance Ord (ShortHash c)  => Ord (AddressPayload c)
+deriving instance Show (ShortHash c) => Show (AddressPayload c)
 
 newtype Checksum = Checksum { fromChecksum :: ByteString }
     deriving (Show, Eq)

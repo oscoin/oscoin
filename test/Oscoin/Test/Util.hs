@@ -92,14 +92,17 @@ instance Crypto.HasHashing c => Condensed (Blockchain c tx s) where
 instance Crypto.HasHashing c => Condensed (Crypto.Hashed c ByteString) where
     condensed = decodeUtf8 . Crypto.compactHash . Crypto.fromHashed
 
+instance Show (Crypto.ShortHash c) => Condensed (Crypto.ShortHash c) where
+    condensed = show
+
 instance Show (PublicKey c) => Condensed (PublicKey c) where
     condensed = show
 
-instance ( Serialise (PublicKey c)
+instance ( Serialise (Crypto.ShortHash c)
          ) => Condensed (Address c) where
     condensed = renderAddress
 
-instance ( Show (PublicKey c)
+instance ( Show (AccountId c)
          ) => Condensed (StateVal c) where
     condensed v =
         case v of
@@ -111,13 +114,13 @@ instance ( Show (PublicKey c)
 instance Condensed DeserializeError where
     condensed _ = "DeserializerError"
 
-instance (Show (PublicKey c)) => Condensed (Project c) where
+instance (Show (AccountId c)) => Condensed (Project c) where
     condensed prj = "Project@" <> condensed (projectId prj)
 
-instance (Show (PublicKey c)) => Condensed (Account c) where
+instance (Show (AccountId c)) => Condensed (Account c) where
     condensed acc = "Account@" <> condensed (accountId acc)
 
-instance ( Show (PublicKey c)
+instance ( Show (AccountId c)
          , Crypto.HasHashing c
          ) => Condensed (TxMessage c)
   where
@@ -139,14 +142,14 @@ instance ( Show (PublicKey c)
             <> condensed bal
 
 instance
-    ( Show (PublicKey c)
+    ( Show (AccountId c)
     ) => Condensed (Tree.Tree StateKey (StateVal c))
   where
     condensed ws =
         let xs = [(k, v) | (k, v) <- Tree.toList ws]
          in condensed [(k, v) | (k, v) <- xs]
 
-instance (Show (PublicKey c))
+instance (Show (AccountId c))
     => Condensed (TxError c)
   where
     condensed (ErrKeyNotFound k)         = "ErrKeyNotFound " <> condensed k
@@ -164,13 +167,13 @@ instance (Show (PublicKey c))
 instance Condensed TxMessageOutput where
     condensed _ = "TxMessageOutput"
 
-instance ( Show (PublicKey c)
+instance ( Show (AccountId c)
          , Crypto.HasHashing c
          ) => Condensed (Tx c)
   where
     condensed Tx'{..} = condensed txPayload
 
-instance ( Show (PublicKey c)
+instance ( Show (AccountId c)
          , Crypto.HasHashing c
          ) => Condensed (TxPayload c)
   where

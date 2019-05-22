@@ -70,6 +70,12 @@ instance (CBOR.Serialise (Crypto.PublicKey c), Typeable c) => FromField (Crypto.
 instance CBOR.Serialise (Crypto.PublicKey c) => ToField (Crypto.PublicKey c) where
     toField = toFieldSerial
 
+instance (CBOR.Serialise (Crypto.ShortHash c), Typeable c) => FromField (Crypto.ShortHash c) where
+    fromField = fromFieldSerial
+
+instance CBOR.Serialise (Crypto.ShortHash c) => ToField (Crypto.ShortHash c) where
+    toField = toFieldSerial
+
 instance ToField s => ToField (Sealed c s) where
     toField (SealedWith s) = toField s
 

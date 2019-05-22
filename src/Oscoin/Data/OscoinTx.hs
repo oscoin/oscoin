@@ -57,7 +57,7 @@ data TxPayload c = TxPayload
     -- ^ Transaction fee to miner.
     , txBurn     :: Balance
     -- ^ Transaction burn.
-    , txAuthor   :: AccountId c
+    , txAuthor   :: PublicKey c
     -- ^ The transaction author.
     } deriving (Generic)
 
@@ -121,27 +121,28 @@ data TxError c =
     -- ^ Executing the transaction would result in an overflow.
     deriving (Generic)
 
-deriving instance (Show (PublicKey c), Show (Crypto.Hash c)) => Show (TxError c)
-deriving instance (Eq (Signature c), Eq (BlockHash c), Eq (PublicKey c)) => Eq (TxError c)
-deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (PublicKey c)) => Ord (TxError c)
+deriving instance (Show (AccountId c), Show (Crypto.Hash c)) => Show (TxError c)
+deriving instance (Eq (Signature c), Eq (BlockHash c), Eq (AccountId c)) => Eq (TxError c)
+deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (AccountId c)) => Ord (TxError c)
 
 -------------------------------------------------------------------------------
 
 -- | Make a transaction payload with the given messages and author.
-mkTxPayload :: [TxMessage c] -> AccountId c -> TxPayload c
-mkTxPayload ms acc = TxPayload
+mkTxPayload :: [TxMessage c] -> PublicKey c -> TxPayload c
+mkTxPayload ms pk = TxPayload
     { txMessages = ms
     , txNonce    = 0
     , txFee      = 0
     , txBurn     = 0
-    , txAuthor   = acc
+    , txAuthor   = pk
     }
 
 -- | Apply a transaction payload to the world state, and return either an error,
 -- or a new world state with the output of the transaction.
 applyTxPayload
-    :: ( CBOR.Serialise (PublicKey c)
-       , Ord (PublicKey c)
+    :: ( CBOR.Serialise (AccountId c)
+       , Ord (AccountId c)
+       , Crypto.Hashable c (PublicKey c)
        )
     => TxPayload c
     -- ^ The transaction to apply.
@@ -151,7 +152,9 @@ applyTxPayload
     -- ^ The input world state.
     -> Either (TxError c) (WorldState c, TxOutput)
 applyTxPayload tx@TxPayload{..} beneficiary ws = do
-    Account{..} <- lookupAccount txAuthor ws
+    let author = toAccountId txAuthor
+
+    Account{..} <- lookupAccount author ws
 
     when (txNonce /= accountNonce) $
         Left (ErrInvalidNonce txNonce)
@@ -162,13 +165,13 @@ applyTxPayload tx@TxPayload{..} beneficiary ws = do
     when (txFee + txBurn > accountBalance) $
         Left (ErrInsufficientBalance accountBalance)
 
-    ws' <- transferBalance txAuthor beneficiary txFee ws
+    ws' <- transferBalance author beneficiary txFee ws
 
     -- TODO(cloudhead): Verify transaction size
 
-    applyTxMessages txMessages txAuthor
-        =<< debitAccount txAuthor txBurn
-            (adjustAccount incrementNonce txAuthor ws')
+    applyTxMessages txMessages author
+        =<< debitAccount author txBurn
+            (adjustAccount incrementNonce author ws')
 
 -- FIXME(adn) This is currently a stub.
 verifyTx :: Tx c -> Bool
@@ -181,7 +184,7 @@ incrementNonce acc = acc { accountNonce = accountNonce acc + 1 }
 -- | Adjust an account. Does nothing if the account doesn't exist, or the value under the key
 -- is not an account.
 adjustAccount
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => (Account c -> Account c) -> AccountId c -> WorldState c -> WorldState c
 adjustAccount f (accountKey -> k) ws =
     case WorldState.lookup k ws of
@@ -190,7 +193,7 @@ adjustAccount f (accountKey -> k) ws =
 
 -- | Apply a 'TxMessage' list to a 'WorldState' and return the new state and outputs.
 applyTxMessages
-    :: (CBOR.Serialise (PublicKey c), Ord (PublicKey c), Foldable t)
+    :: (CBOR.Serialise (AccountId c), Ord (AccountId c), Foldable t)
     => t (TxMessage c)
     -> AccountId c
     -> WorldState c
@@ -204,8 +207,8 @@ applyTxMessages msgs author ws =
 
 -- | Apply the transaction message to a world state.
 applyTxMessage
-    :: ( CBOR.Serialise (PublicKey c)
-       , Ord (PublicKey c)
+    :: ( CBOR.Serialise (AccountId c)
+       , Ord (AccountId c)
        )
     => TxMessage c
     -> AccountId c
@@ -275,18 +278,18 @@ applyTxMessage (TxTransfer receiver bal) sender ws = do
 
 -- | Add an account to the world state. If the account already exists, it is overwritten. The
 -- 'AccountId' of the account is used as key.
-insertAccount :: CBOR.Serialise (PublicKey c) => Account c -> WorldState c -> WorldState c
+insertAccount :: CBOR.Serialise (AccountId c) => Account c -> WorldState c -> WorldState c
 insertAccount acc@Account{..} = WorldState.insert (accountKey accountId) (AccountVal acc)
 
 -- | Delete an account from the world state, if it exists.
 --
 -- Nb. The caller must ensure that the value under the account id is indeed an 'Account'.
-deleteAccount :: CBOR.Serialise (PublicKey c) => AccountId c -> WorldState c -> WorldState c
+deleteAccount :: CBOR.Serialise (AccountId c) => AccountId c -> WorldState c -> WorldState c
 deleteAccount id = WorldState.delete (accountKey id)
 
 -- | Transfer balance between two accounts. Uses 'creditAccount' and 'debitAccount'.
 transferBalance
-    :: (CBOR.Serialise (PublicKey c))
+    :: (CBOR.Serialise (AccountId c))
     => AccountId c
     -- ^ Transfer sender ("from").
     -> AccountId c
@@ -309,7 +312,7 @@ transferBalance a b bal ws =
 -- Nb. using this function without a matching 'debitAccount' creates supply.
 --
 creditAccount
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => AccountId c
     -> Balance
     -> WorldState c
@@ -337,7 +340,7 @@ creditAccount id bal ws =
 -- Nb. using this function without a matching 'creditAccount' burns supply.
 --
 debitAccount
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => AccountId c
     -> Balance
     -> WorldState c
@@ -360,7 +363,7 @@ mapHandlerError = first ErrHandlerFailed
 
 -- | Lookup a project in the state.
 lookupProject
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => AccountId c
     -> WorldState c
     -> Either (TxError c) (Project c)
@@ -374,7 +377,7 @@ lookupProject acc ws =
 
 -- | Lookup an account in the state.
 lookupAccount
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => AccountId c
     -> WorldState c
     -> Either (TxError c) (Account c)
@@ -405,20 +408,20 @@ minimumTxFee = const 1
 deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
-    , Show (PublicKey c)
+    , Show (AccountId c)
     , Crypto.HasHashing c
     ) => Show (TxMessage c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
-    , Eq (PublicKey c)
+    , Eq (AccountId c)
     ) => Eq (TxMessage c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
-    , Ord (PublicKey c)
+    , Ord (AccountId c)
     ) => Ord (TxMessage c)
 
 -------------------------------------------------------------------------------

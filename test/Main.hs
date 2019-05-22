@@ -39,6 +39,10 @@ data CryptoUnderTest =
     | MockCryptoTest
     deriving (Show, Eq, Typeable)
 
+cryptoName :: CryptoUnderTest -> String
+cryptoName RealWorldCryptoTest = "RealWorld Crypto"
+cryptoName MockCryptoTest      = "Mock Crypto"
+
 readCryptoUnderTest :: String -> Maybe CryptoUnderTest
 readCryptoUnderTest "realworld" = Just RealWorldCryptoTest
 readCryptoUnderTest "mock"      = Just MockCryptoTest
@@ -57,9 +61,15 @@ selectCrypto (TestReporter opts f) = TestReporter (ffOpt:opts) f
   where ffOpt = Tasty.Option (Proxy :: Proxy CryptoUnderTest)
 selectCrypto i = i -- not applicable
 
+realCrypto :: Dict (IsCrypto Crypto)
+realCrypto = Dict
+
+mockCrypto :: Dict (IsCrypto MockCrypto)
+mockCrypto = Dict
+
 withCrypto :: CryptoUnderTest -> (forall c. Dict (IsCrypto c) -> a) -> a
-withCrypto RealWorldCryptoTest f = f (Dict :: Dict (IsCrypto Crypto))
-withCrypto MockCryptoTest      f = f (Dict :: Dict (IsCrypto MockCrypto))
+withCrypto RealWorldCryptoTest f = f realCrypto
+withCrypto MockCryptoTest      f = f mockCrypto
 
 main :: IO ()
 main = do
@@ -68,23 +78,35 @@ main = do
 
     defaultMainWithIngredients ingredients $
         askOption $ \selectedCrypto ->
+            -- Run tests with the selected crypto.
+            --
+            -- Some tests are run with both the mock and real crypto, since
+            -- they are testing the actual crypto implementations.
             withCrypto selectedCrypto $ \crypto@Dict -> testGroup "All"
-                [ Oscoin.tests crypto config
-                , Integration.tests
-                , Test.Control.Concurrent.RateLimit.tests
-                , Test.Data.Conduit.Serialise.tests
-                , Test.Data.Sequence.Circular.tests
-                , Test.Oscoin.API.tests crypto
-                , Test.Oscoin.API.HTTP.tests crypto
-                , Test.Oscoin.Configuration.tests
-                , Test.Oscoin.Crypto.Blockchain.Eval.tests crypto
-                , Test.Oscoin.Crypto.Blockchain.GeneratorsTest.tests crypto
-                , Test.Oscoin.Crypto.Hash.tests crypto
-                , Test.Oscoin.Crypto.PubKey.tests crypto
-                , Test.Oscoin.Data.OscoinTx.tests crypto
-                , Test.Oscoin.Node.Mempool.tests crypto
-                , Test.Oscoin.Node.Options.tests crypto
-                , Test.Oscoin.Protocol.tests crypto
-                , Test.Oscoin.Storage.Block.Orphanage.tests crypto
-                , Test.Oscoin.Storage.Ledger.tests crypto
+                [ testGroup (cryptoName selectedCrypto)
+                    [ Oscoin.tests crypto config
+                    , Integration.tests
+                    , Test.Control.Concurrent.RateLimit.tests
+                    , Test.Data.Conduit.Serialise.tests
+                    , Test.Data.Sequence.Circular.tests
+                    , Test.Oscoin.API.tests crypto
+                    , Test.Oscoin.API.HTTP.tests crypto
+                    , Test.Oscoin.Configuration.tests
+                    , Test.Oscoin.Crypto.Blockchain.Eval.tests crypto
+                    , Test.Oscoin.Crypto.Blockchain.GeneratorsTest.tests crypto
+                    , Test.Oscoin.Data.OscoinTx.tests crypto
+                    , Test.Oscoin.Node.Mempool.tests crypto
+                    , Test.Oscoin.Node.Options.tests crypto
+                    , Test.Oscoin.Protocol.tests crypto
+                    , Test.Oscoin.Storage.Block.Orphanage.tests crypto
+                    , Test.Oscoin.Storage.Ledger.tests crypto
+                    ]
+                , testGroup (cryptoName MockCryptoTest)
+                    [ Test.Oscoin.Crypto.Hash.tests mockCrypto
+                    , Test.Oscoin.Crypto.PubKey.tests mockCrypto
+                    ]
+                , testGroup (cryptoName RealWorldCryptoTest)
+                    [ Test.Oscoin.Crypto.Hash.tests realCrypto
+                    , Test.Oscoin.Crypto.PubKey.tests realCrypto
+                   ]
                 ]

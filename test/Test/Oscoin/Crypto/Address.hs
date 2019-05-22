@@ -11,6 +11,7 @@ import           Oscoin.Crypto.Address
 import qualified Oscoin.Crypto.Address.Bech32 as Bech32
 import           Oscoin.Crypto.Address.Internal
 import           Oscoin.Crypto.Address.Serialisation
+import           Oscoin.Crypto.Hash (ShortHash, fromShortHashed, shortHash)
 import           Oscoin.Crypto.PubKey
 
 import           Oscoin.Test.Crypto
@@ -153,9 +154,9 @@ data FutureAddress c = FutureAddress
     , futureAddressPayload :: FutureAddressPayload c
     }
 
-deriving instance Eq (PublicKey c)   => Eq (FutureAddress c)
-deriving instance Ord (PublicKey c)  => Ord (FutureAddress c)
-deriving instance Show (PublicKey c) => Show (FutureAddress c)
+deriving instance (Eq (ShortHash c),   Eq (PublicKey c))   => Eq (FutureAddress c)
+deriving instance (Ord (ShortHash c),  Ord (PublicKey c))  => Ord (FutureAddress c)
+deriving instance (Show (ShortHash c), Show (PublicKey c)) => Show (FutureAddress c)
 
 -- The world has evolved and we ended up consuming all our reserved bytes.
 data FutureAddressPrefix = FutureAddressPrefix
@@ -173,12 +174,12 @@ type AccountIndex = Word8
 type AddressIndex = Word8
 
 data FutureAddressPayload c where
-    FutureAddressPayload_V0 :: PublicKey c -> FutureAddressPayload c
+    FutureAddressPayload_V0 :: ShortHash c -> FutureAddressPayload c
     FutureAddressPayload_V1 :: AccountIndex -> AddressIndex -> PublicKey c -> FutureAddressPayload c
 
-deriving instance Eq (PublicKey c)   => Eq (FutureAddressPayload c)
-deriving instance Ord (PublicKey c)  => Ord (FutureAddressPayload c)
-deriving instance Show (PublicKey c) => Show (FutureAddressPayload c)
+deriving instance (Eq (ShortHash c),   Eq (PublicKey c))   => Eq (FutureAddressPayload c)
+deriving instance (Ord (ShortHash c),  Ord (PublicKey c))  => Ord (FutureAddressPayload c)
+deriving instance (Show (ShortHash c), Show (PublicKey c)) => Show (FutureAddressPayload c)
 
 -- Note how we don't write how to serialize the new future address, but
 -- rather we specify how to /deserialize/ it only. Then, in the tests, we will
@@ -187,7 +188,7 @@ deriving instance Show (PublicKey c) => Show (FutureAddressPayload c)
 -- schemes is possible).
 
 deserializeFutureAddress
-    :: Serialise (PublicKey c)
+    :: (Serialise (PublicKey c), Serialise (ShortHash c))
     => ByteString
     -> Either DeserializeError (FutureAddress c)
 deserializeFutureAddress blob = flip evalState blob . runExceptT $ do
@@ -214,7 +215,9 @@ deserializeFutureAddress blob = flip evalState blob . runExceptT $ do
 
 -- Simulates what we would write when migrating. In practice, this would
 -- supersede the 'Serialise' instance we current have for 'Address'.
-instance Serialise (PublicKey c) => Serialise (FutureAddressPayload c) where
+instance (Serialise (ShortHash c), Serialise (PublicKey c))
+    => Serialise (FutureAddressPayload c)
+  where
     encode _ = panic "out of scope for the current test"
     decode = do
         decodeListLenCanonicalOf 2
@@ -224,13 +227,13 @@ instance Serialise (PublicKey c) => Serialise (FutureAddressPayload c) where
           1 -> FutureAddressPayload_V1 0 0 <$> decode
           _ -> fail $ "Invalid tag when decoding an AddressPayload: " <> show tag
 
-propMigration :: forall c. Dict (IsCrypto c) -> Property
+propMigration :: forall c. Hashable c (PublicKey c) => Dict (IsCrypto c) -> Property
 propMigration Dict = property $ do
     (pk, _) <- genKeyPair @c
     oldAddress <- forAll $ genAddressFrom pk
     let futureAddress = FutureAddress
           { futureAddressPrefix = FutureAddressPrefix (addressPrefix oldAddress) 0 0
-          , futureAddressPayload = FutureAddressPayload_V0 pk
+          , futureAddressPayload = FutureAddressPayload_V0 (fromShortHashed $ shortHash @c pk)
           }
     (deserializeFutureAddress . serializeAddress $ oldAddress) === Right futureAddress
 

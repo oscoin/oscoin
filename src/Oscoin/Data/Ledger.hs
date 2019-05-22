@@ -63,7 +63,7 @@ data StateVal c =
     | ProjectVal (Project c)
     | NatVal     Natural
 
-deriving instance (Eq (PublicKey c)) => Eq (StateVal c)
+deriving instance (Eq (AccountId c), Eq (PublicKey c)) => Eq (StateVal c)
 
 -- | Like 'Map.adjust', but for 'WorldState'.
 adjust :: (StateVal c -> StateVal c) -> StateKey -> WorldState c -> WorldState c
@@ -101,7 +101,7 @@ type Balance = Word64
 type Nonce = Word64
 
 -- | An account identifier.
-type AccountId c = PublicKey c
+type AccountId c = Crypto.ShortHash c
 
 -- | An account which holds a balance.
 data Account c = Account
@@ -114,7 +114,7 @@ data Account c = Account
     -- made from this account.
     }
 
-deriving instance (Eq (PublicKey c)) => Eq (Account c)
+deriving instance (Eq (AccountId c)) => Eq (Account c)
 
 mkAccount :: AccountId c -> Account c
 mkAccount acc = Account
@@ -125,10 +125,14 @@ mkAccount acc = Account
 
 -- | Convert an 'AccountId' into a StateKey
 accountKey
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (AccountId c)
     => AccountId c
     -> StateKey
 accountKey = LBS.toStrict . CBOR.serialise
+
+-- | Convert a 'PublicKey' to an 'AccountId'.
+toAccountId :: Crypto.Hashable c (PublicKey c) => PublicKey c -> AccountId c
+toAccountId = Crypto.fromShortHashed . Crypto.shortHash
 
 -------------------------------------------------------------------------------
 
@@ -160,10 +164,10 @@ data Checkpoint c = Checkpoint
     }
 
 deriving instance
-    (Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Eq (Checkpoint c)
+    (Eq (AccountId c), Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Eq (Checkpoint c)
 
 instance
-    (Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Ord (Checkpoint c)
+    (Eq (AccountId c), Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Ord (Checkpoint c)
   where
     a <= b = checkpointNumber a <= checkpointNumber b
 
@@ -191,20 +195,20 @@ newtype Label = Label Word8
 deriving instance
     ( Show (Signature c)
     , Show (BlockHash c)
-    , Show (PublicKey c)
+    , Show (AccountId c)
     , Crypto.HasHashing c
     ) => Show (Contribution c)
 
 deriving instance
     ( Eq (Signature c)
     , Eq (BlockHash c)
-    , Eq (PublicKey c)
+    , Eq (AccountId c)
     ) => Eq (Contribution c)
 
 deriving instance
     ( Ord (Signature c)
     , Ord (BlockHash c)
-    , Ord (PublicKey c)
+    , Ord (AccountId c)
     ) => Ord (Contribution c)
 
 -------------------------------------------------------------------------------
@@ -217,9 +221,9 @@ data DependencyUpdate c =
     -- ^ Stop depending on a project.
     deriving (Generic)
 
-deriving instance (Eq (Crypto.Hash c), Eq (PublicKey c))     => Eq   (DependencyUpdate c)
-deriving instance (Ord (Crypto.Hash c), Ord (PublicKey c))   => Ord  (DependencyUpdate c)
-deriving instance (Show (Crypto.Hash c), Show (PublicKey c)) => Show (DependencyUpdate c)
+deriving instance (Eq (Crypto.Hash c), Eq (AccountId c))     => Eq   (DependencyUpdate c)
+deriving instance (Ord (Crypto.Hash c), Ord (AccountId c))   => Ord  (DependencyUpdate c)
+deriving instance (Show (Crypto.Hash c), Show (AccountId c)) => Show (DependencyUpdate c)
 
 -- | Additional signatures used to authorize a transaction in a
 -- /multi-sig/ scenario.
@@ -252,10 +256,10 @@ data Project c = Project
     , pUpdateContract  :: UpdateContract' c
     }
 
-instance (Eq (PublicKey c)) => Eq (Project c) where
+instance (Eq (AccountId c)) => Eq (Project c) where
     (==) a b = projectId a == projectId b
 
-mkProject :: Ord (PublicKey c) => AccountId c -> Project c
+mkProject :: (Ord (AccountId c)) => AccountId c -> Project c
 mkProject acc = Project
     { pAccount          = mkAccount acc
     , pMaintainers      = mempty
@@ -301,7 +305,7 @@ data Member c = Member
     , memberContributions :: Set (Contribution c)
     }
 
-instance (Eq (PublicKey c)) => Eq (Member c) where
+instance (Eq (AccountId c)) => Eq (Member c) where
     (==) a b = memberAccount a == memberAccount b
 
 mkMember
@@ -414,7 +418,7 @@ burnReward :: ReceiveReward' c
 burnReward _ _ _ = []
 
 -- | Distribute reward equally to all project members. Store any remainder in the project fund.
-distributeRewardEqually :: Ord (PublicKey c) => ReceiveReward' c
+distributeRewardEqually :: Ord (AccountId c) => ReceiveReward' c
 distributeRewardEqually bal _epoch p@Project{..} =
     let members     = Map.keysSet $ pContributors <> pMaintainers <> pSupporters
         (dist, rem) = distribute bal members
@@ -431,7 +435,7 @@ type Checkpoint' c =
     -> Either HandlerError ()
 
 -- | By default, authorize any checkpoint signed by a maintainer.
-defaultCheckpoint :: Ord (PublicKey c) => Checkpoint' c
+defaultCheckpoint :: Ord (AccountId c) => Checkpoint' c
 defaultCheckpoint _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -443,7 +447,7 @@ type Unregister' c =
     -> Account c                  -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultUnregister :: Ord (PublicKey c) => Unregister' c
+defaultUnregister :: Ord (AccountId c) => Unregister' c
 defaultUnregister = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -456,7 +460,7 @@ type Authorize' c =
     -> Account c                    -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultAuthorize :: Ord (PublicKey c) => Authorize' c
+defaultAuthorize :: Ord (AccountId c) => Authorize' c
 defaultAuthorize _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -469,7 +473,7 @@ type Deauthorize' c =
     -> Account c                  -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultDeauthorize :: Ord (PublicKey c) => Deauthorize' c
+defaultDeauthorize :: Ord (AccountId c) => Deauthorize' c
 defaultDeauthorize _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -483,7 +487,7 @@ type UpdateContract' c =
     -> Account c                -- ^ Transaction signer
     -> Either HandlerError ()
 
-defaultUpdateContract :: Ord (PublicKey c) => UpdateContract' c
+defaultUpdateContract :: Ord (AccountId c) => UpdateContract' c
 defaultUpdateContract _ _ = requireMaintainer
 
 -------------------------------------------------------------------------------
@@ -500,7 +504,7 @@ distribute bal accs =
 
 -- | Return 'Right ()' if the account is a project maintainer and 'Left' otherwise.
 requireMaintainer
-    :: Ord (PublicKey c)
+    :: Ord (AccountId c)
     => Project c
     -> Account c
     -> Either HandlerError ()

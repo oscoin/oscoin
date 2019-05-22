@@ -46,7 +46,6 @@ import           Oscoin.Prelude
 import           Oscoin.Crypto.Blockchain.Block.Difficulty
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Time
 
 import           Codec.Serialise (Serialise(..))
@@ -225,7 +224,7 @@ type BlockHash crypto = Crypto.Hash crypto
 type StateHash crypto = Crypto.Hash crypto
 
 -- | The beneficiary of the block reward.
-type Beneficiary crypto = Crypto.PublicKey crypto
+type Beneficiary crypto = Crypto.ShortHash crypto
 
 -- | Block. @tx@ is the type of transaction stored in this block.
 --

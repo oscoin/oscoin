@@ -16,7 +16,7 @@ import           Oscoin.Prelude
 import           Oscoin.Configuration (Network(..))
 import qualified Oscoin.Crypto.Address.Bech32 as Bech32
 import           Oscoin.Crypto.Address.Internal
-import           Oscoin.Crypto.PubKey (PublicKey)
+import           Oscoin.Crypto.Hash (ShortHash)
 
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.Serialise as CBOR
@@ -59,7 +59,7 @@ data DeserializeError =
 -- for <bech32 https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#bech32>
 -- addresses, which offers better performances and error-checking capabilities.
 checksum
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => Address c
     -> Checksum
 checksum Address{addressPrefix, addressPayload} =
@@ -80,7 +80,7 @@ type Decoder a = ExceptT DeserializeError (State ByteString) a
 
 -- | Deserializes an 'Address'.
 deserializeAddress
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => ByteString
     -> Either DeserializeError (Address c)
 deserializeAddress blob = flip evalState blob . runExceptT $ do
@@ -129,7 +129,7 @@ deserializeAddressFormat = do
 
 -- | Deserializes the 'AddressPayload' by piggybacking on CBOR.
 deserializeAddressPayload
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => AddressFormat
     -> Decoder (AddressPayload c)
 deserializeAddressPayload (AddressFormat tag) = do
@@ -145,11 +145,11 @@ deserializeAddressPayload (AddressFormat tag) = do
   Serialisation
 ------------------------------------------------------------------------------}
 
-instance CBOR.Serialise (PublicKey c) => CBOR.Serialise (AddressPayload c) where
-    encode (AddressPayload_V0 pk) =
+instance CBOR.Serialise (ShortHash c) => CBOR.Serialise (AddressPayload c) where
+    encode (AddressPayload_V0 sh) =
            CBOR.encodeListLen 2
         <> CBOR.encode (0 :: Word8)
-        <> CBOR.encode pk
+        <> CBOR.encode sh
     decode = do
         CBOR.decodeListLenCanonicalOf 2
         tag <- CBOR.decodeWordCanonical
@@ -163,7 +163,7 @@ instance CBOR.Serialise (PublicKey c) => CBOR.Serialise (AddressPayload c) where
 
 -- | Serializes an 'Address'.
 serializeAddress
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => Address c
     -> ByteString
 serializeAddress addr@Address{..} =

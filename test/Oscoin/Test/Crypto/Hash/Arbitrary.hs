@@ -11,3 +11,6 @@ instance HasHashing c => Arbitrary (Hash c) where
     arbitrary =
         fromHashed . hashBinary <$> (arbitrary :: Gen String)
 
+instance HasHashing c => Arbitrary (ShortHash c) where
+    arbitrary =
+        toShortHash <$> arbitrary

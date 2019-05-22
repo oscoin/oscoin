@@ -50,14 +50,15 @@ data Command c =
 
 dispatchCommand
     :: ( MonadCLI c m
-       , Yaml.ToJSON (Beneficiary c)
        , Serialise (BlockHash c)
        , Serialise (Beneficiary c)
        , Serialise (Crypto.Signature c)
+       , Serialise (Crypto.PublicKey c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Crypto.HasDigitalSignature c
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
+       , Yaml.ToJSON (Crypto.PublicKey c)
        , Yaml.ToJSON (Crypto.Signature c)
        , Yaml.ToJSON (BlockData c (Tx c))
        )
@@ -90,11 +91,12 @@ printGenesisYaml
        , Serialise (BlockHash c)
        , Serialise (Beneficiary c)
        , Serialise (Crypto.Signature c)
+       , Serialise (Crypto.PublicKey c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , ByteArrayAccess (BlockHash c)
        , Yaml.ToJSON (Crypto.Hash c)
-       , Yaml.ToJSON (Beneficiary c)
        , Yaml.ToJSON (Crypto.Signature c)
+       , Yaml.ToJSON (Crypto.PublicKey c)
        , Yaml.ToJSON (BlockData c (Tx c))
        )
     => Beneficiary c

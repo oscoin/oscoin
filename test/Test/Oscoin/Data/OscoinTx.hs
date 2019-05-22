@@ -13,6 +13,7 @@ import           Oscoin.Test.Util
 
 import qualified Crypto.Data.Auth.Tree as WorldState
 
+import           Test.Oscoin.Crypto.Hash.Gen (genHash, genShortHash)
 import           Test.Oscoin.P2P.Handshake (genKeyPair, genKeyPairPair)
 
 import           Test.Hedgehog.Extended
@@ -36,17 +37,20 @@ tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
 propApplyTxPayload Dict = property $ do
-    (alice, charlie) <- publicKeyPair @c
+    alicePk <- publicKey @c
+    charlie <- forAll (genAccountId @c)
+
+    let alice = toAccountId alicePk
 
     -- We use an empty transaction message list, as this lets us test
     -- the "generic" part of the transaction processing without worrying about
     -- the messages.
-    tx    <- pure (mkTxPayload [] alice)
+    tx    <- pure (mkTxPayload [] alicePk)
     ws    <- forAll genWorldState
     bal   <- forAll genBalancePositive
 
     -- Should fail because Alice doesn't have an account
-    applyTxPayload tx charlie ws ===  Left (ErrKeyNotFound (accountKey alice))
+    applyTxPayload tx charlie ws === Left (ErrKeyNotFound (accountKey alice))
 
     -- Give Alice an account
     ws' <- evalEither $ creditAccount alice bal ws
@@ -72,7 +76,7 @@ propApplyTxPayload Dict = property $ do
 
 propTransferBalance :: forall c. Dict (IsCrypto c) -> Property
 propTransferBalance Dict = property $ do
-    (alice, bob) <- publicKeyPair @c
+    (alice, bob) <- forAll (genAccountIdPair @c)
     bal          <- forAll $ genBalancePositive
     ws           <- evalEither $   creditAccount alice bal WorldState.empty
                                >>= creditAccount bob maxBound
@@ -103,7 +107,10 @@ propTransferBalance Dict = property $ do
 
 propMultiTransfer :: forall c. Dict (IsCrypto c) -> Property
 propMultiTransfer Dict = property $ do
-    (alice, bob, charlie) <- publicKeyTriple @c
+    (alicePk, bobPk) <- publicKeyPair @c
+    charlie          <- forAll (genAccountId @c)
+
+    let (alice, bob) = (toAccountId alicePk, toAccountId bobPk)
 
     bal           <- forAll genBalancePositive
     ws            <- evalEither $ creditAccount alice bal WorldState.empty
@@ -113,24 +120,26 @@ propMultiTransfer Dict = property $ do
     t2            <- pure (TxTransfer bob 2)
 
     -- A single invalid message (`t0`) fails the transaction
-    invalidTx <- pure (mkTxPayload [t1, t0, t2] alice)
+    invalidTx <- pure (mkTxPayload [t1, t0, t2] alicePk)
     applyTxPayload (invalidTx { txFee = minimumTxFee invalidTx }) charlie ws
         === Left (ErrInvalidTransfer 0)
 
     -- Multiple messages combine
-    tx <- pure (mkTxPayload [t1, t1, t2] alice)
+    tx <- pure (mkTxPayload [t1, t1, t2] alicePk)
     (ws', _) <- evalEither $ applyTxPayload (tx { txFee = minimumTxFee tx }) charlie ws
 
     lookupBalance bob ws' === Right 4
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
-    (alice, charlie)
-          <- publicKeyPair @c
+    alicePk <- publicKey @c
+    charlie <- forAll (genAccountId @c)
+
+    let alice = toAccountId alicePk
 
     annotate . condensedS $ (accountKey alice, accountKey charlie)
 
-    tx   <- pure (mkTxPayload [] alice)
+    tx   <- pure (mkTxPayload [] alicePk)
 
     -- Generate a valid fee and burn.
     fee  <- forAll $ genBalanceRange (minimumTxFee tx) (minimumTxFee tx * 2)
@@ -148,7 +157,11 @@ propTxFeeBurn Dict = property $ do
 
 propRegisterProj :: forall c. Dict (IsCrypto c) -> Property
 propRegisterProj Dict = property $ do
-    (alice, bob, proj) <- publicKeyTriple @c
+    (alicePk, bobPk) <- publicKeyPair @c
+
+    let (alice, bob) = (toAccountId alicePk, toAccountId bobPk)
+
+    proj               <- forAll (genAccountId @c)
     bal                <- forAll $ genBalancePositive
     ws                 <- evalEither $ (creditAccount alice bal >=> creditAccount bob 1)
                                        WorldState.empty
@@ -180,11 +193,14 @@ propRegisterProj Dict = property $ do
 
 propNonce :: forall c. Dict (IsCrypto c) -> Property
 propNonce Dict = property $ do
-    (alice, charlie) <- publicKeyPair @c
+    alicePk <- publicKey @c
+    charlie <- forAll (genAccountId @c)
+
+    let alice = toAccountId alicePk
 
     acc <- forAll (genAccount alice)
 
-    let tx = (mkTxPayload [] alice) { txNonce = accountNonce acc }
+    let tx = (mkTxPayload [] alicePk) { txNonce = accountNonce acc }
     let ws = insertAccount acc WorldState.empty
 
     fee      <- forAll (genFee tx (accountBalance acc))
@@ -212,13 +228,6 @@ publicKeyPair = do
     ((a, _), (b, _)) <- genKeyPairPair @c
     pure (a, b)
 
-publicKeyTriple :: forall c. (IsCrypto c) => PropertyT IO (AccountId c, AccountId c, AccountId c)
-publicKeyTriple = do
-    accs <- publicKeys @c 3
-    case accs of
-        [a, b, c] -> pure (a, b, c)
-        xs        -> annotate (toS . condensed $ xs) *> failure
-
 publicKeys
     :: ( HasHashing c, HasDigitalSignature c
        , Condensed (PublicKey c), Condensed (PrivateKey c)
@@ -244,6 +253,15 @@ assertRight = void . evalEither
 -- Generators
 -------------------------------------------------------------------------------
 
+genAccountIdPair :: HasHashing c => Gen (AccountId c, AccountId c)
+genAccountIdPair = do
+    a1 <- genAccountId
+    a2 <- genAccountId
+    pure (a1, a2)
+
+genAccountId :: HasHashing c => Gen (AccountId c)
+genAccountId = genShortHash
+
 genFee :: TxPayload c -> Balance -> Gen Balance
 genFee tx maxFee = Gen.integral (Range.constantFrom minFee minFee maxFee)
   where
@@ -260,11 +278,6 @@ genBalancePositive = Gen.integral (Range.constantFrom 1 1 maxBound)
 
 genBalanceRange :: Balance -> Balance -> Gen Balance
 genBalanceRange a b = Gen.integral (Range.constantFrom a a b)
-
-genHash :: forall c. IsCrypto c => Gen (Crypto.Hash c)
-genHash = do
-    g <- Gen.enumBounded :: Gen Word32
-    pure $ Crypto.fromHashed $ Crypto.hashBinary @c g
 
 genContributions :: Gen [Contribution c]
 genContributions = pure []
@@ -284,20 +297,20 @@ genRegisterProject = pure . TxRegisterProject
 genUnregisterProject :: AccountId c -> Gen (TxMessage c)
 genUnregisterProject = pure . TxUnregisterProject
 
-genAuthorize :: PublicKey c -> Gen (TxMessage c)
+genAuthorize :: AccountId c -> Gen (TxMessage c)
 genAuthorize pk = pure $ TxAuthorize pk pk
 
-genDeauthorize :: PublicKey c -> Gen (TxMessage c)
+genDeauthorize :: AccountId c -> Gen (TxMessage c)
 genDeauthorize pk = pure $ TxDeauthorize pk pk
 
-genCheckpoint :: IsCrypto c => PublicKey c -> Gen (TxMessage c)
+genCheckpoint :: IsCrypto c => AccountId c -> Gen (TxMessage c)
 genCheckpoint pk =
     TxCheckpoint pk
         <$> genHash
         <*> genContributions
         <*> genDependencyUpdates
 
-genUpdateContract :: PublicKey c -> Gen (TxMessage c)
+genUpdateContract :: AccountId c -> Gen (TxMessage c)
 genUpdateContract = pure . TxUpdateContract
 
 genTransfer :: AccountId c -> Range Balance -> Gen (TxMessage c)

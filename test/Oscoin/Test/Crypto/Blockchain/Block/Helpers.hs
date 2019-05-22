@@ -1,13 +1,8 @@
 module Oscoin.Test.Crypto.Blockchain.Block.Helpers where
 
-import           Oscoin.Prelude
-
 import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
-import           System.IO.Unsafe (unsafePerformIO)
-import           Test.QuickCheck
+import           Oscoin.Crypto.Hash (HasHashing, zeroShortHash)
 
--- | Generates an arbitrary beneficiary.
-defaultBeneficiary
-    :: Arbitrary (Beneficiary c) => Beneficiary c
-defaultBeneficiary = unsafePerformIO $ generate arbitrary
-{-# NOINLINE defaultBeneficiary #-}
+-- | The default beneficiary.
+defaultBeneficiary :: HasHashing c => Beneficiary c
+defaultBeneficiary = zeroShortHash

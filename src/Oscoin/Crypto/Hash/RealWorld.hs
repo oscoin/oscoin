@@ -66,6 +66,12 @@ instance HasHashing Crypto where
 
     hashAlgorithm = Blake2b_256
 
+    parseShortHash t = do
+        t' <- T.stripPrefix "0x" t
+        case BaseN.decodeAtBaseEither BaseN.Base16 (encodeUtf8 t') of
+            Left _  -> Nothing
+            Right h -> ShortHash <$> Crypto.digestFromByteString h
+
     toShortHash h = ShortHash
                   . Crypto.hash @ByteString @RIPEMD160
                   . ByteArray.convert @(Crypto.Digest (HashAlgorithm Crypto)) @ByteString
@@ -75,6 +81,10 @@ instance HasHashing Crypto where
     zeroHash = Hash . fromJust $
         Crypto.digestFromByteString @(HashAlgorithm Crypto) @ByteString
             (ByteArray.zero (hashDigestSize_ (Proxy @(HashAlgorithm Crypto))))
+
+    zeroShortHash = ShortHash . fromJust $
+        Crypto.digestFromByteString @RIPEMD160 @ByteString
+            (ByteArray.zero (hashDigestSize_ (Proxy @RIPEMD160)))
 
     compactHash = compactHashRealWorld
 
@@ -110,6 +120,17 @@ instance FromJSON (Hash Crypto) where
     parseJSON = withText "Hash" $
         either fail pure
             . second Hash . decodeAtBase BaseN.Base58btc . encodeUtf8
+
+instance ToJSON (ShortHash Crypto) where
+    toJSON     = toJSON . T.pack . show
+    toEncoding = toEncoding . T.pack . show
+
+instance FromJSON (ShortHash Crypto) where
+    parseJSON = withText "ShortHash" $ \t ->
+        case parseShortHash t of
+            Nothing -> fail . toS $
+                "failed to parse 'ShortHash Crypto' from input: '" <> t <> "'"
+            Just h  -> pure h
 
 instance Sql.ToField (Hash Crypto) where
     toField = Sql.SQLText . F.sformat formatHash
@@ -150,6 +171,9 @@ instance Show.Show (Hash Crypto) where
                   . convert
                   $ d
 
+instance Show.Show (ShortHash Crypto) where
+    show = T.unpack . F.sformat formatShortHash
+
 instance H.Hashable (Hash Crypto) where
     hashWithSalt salt (Hash d) =
         let (bs :: ByteString) = ByteArray.convert d
@@ -159,6 +183,11 @@ instance Buildable (Hash Crypto) where
     build (Hash digest) =
         BaseN.encodedTextBuilder $
             encodeAtBase BaseN.Base58btc . Multihash.fromDigest $ digest
+
+instance Buildable (ShortHash Crypto) where
+    build (ShortHash digest) =
+        BaseN.encodedTextBuilder $
+            BaseN.encodeAtBase BaseN.Base16 (ByteArray.convert digest)
 
 instance MerkleHash (Hash Crypto) where
     emptyHash    = Hash Cryptonite.emptyHash

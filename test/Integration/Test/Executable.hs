@@ -4,9 +4,8 @@ module Integration.Test.Executable
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Network(..))
 import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Address (Address, fromPublicKey, renderAddress)
+import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
 import           Oscoin.Crypto.PubKey.RealWorld ()
 
 import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
@@ -15,7 +14,6 @@ import           Oscoin.Test.Crypto.PubKey.Arbitrary ()
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
 
 import           Network.HTTP.Client
                  ( defaultManagerSettings
@@ -54,7 +52,7 @@ randomPorts = Ports
 withOscoinExe :: Ports -> (Handle -> Handle -> Assertion) -> Assertion
 withOscoinExe Ports{..} f = do
     randomNetwork <- take 63 . randomRs ('a', 'z') <$> getStdGen
-    let beneficiary :: Address Crypto = fromPublicKey Devnet defaultBeneficiary
+    let beneficiary :: Beneficiary Crypto = defaultBeneficiary
 
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
@@ -87,7 +85,7 @@ withOscoinExe Ports{..} f = do
                                  , "--genesis"
                                  , "data/genesis.yaml"
                                  , "--beneficiary"
-                                 , T.unpack $ renderAddress $ beneficiary
+                                 , show beneficiary
                                  ] defaultSandboxOptions $
                 \stdoutHandle stdErrHandle -> f stdoutHandle stdErrHandle
 

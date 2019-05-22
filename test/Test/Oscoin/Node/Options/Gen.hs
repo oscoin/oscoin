@@ -4,14 +4,13 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Hash (HasHashing)
-import           Oscoin.Crypto.PubKey (HasDigitalSignature)
 import           Oscoin.Node.Options
 import qualified Oscoin.P2P.Disco.Options as Disco
 import           Oscoin.P2P.Types (renderHostname)
 import           Oscoin.Time (seconds)
 
 import qualified Test.Oscoin.Configuration.Gen as Config.Gen
-import qualified Test.Oscoin.Crypto.Address.Gen as Address.Gen
+import qualified Test.Oscoin.Crypto.Hash.Gen as Hash.Gen
 import qualified Test.Oscoin.P2P.Disco.Options.Gen as Disco.Gen
 import qualified Test.Oscoin.P2P.Gen as P2P.Gen
 
@@ -20,7 +19,7 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
 genNodeOptions
-    :: (HasDigitalSignature c, HasHashing c, MonadGen m)
+    :: (HasHashing c, MonadGen m)
     => m (Options c Disco.OptNetwork)
 genNodeOptions = Options
     <$> P2P.Gen.genIP
@@ -36,4 +35,4 @@ genNodeOptions = Options
     <*> Gen.maybe (toS . renderHostname <$> P2P.Gen.genHostname)
     <*> Gen.maybe P2P.Gen.genPortNumber
     <*> Gen.bool
-    <*> Address.Gen.genAddress
+    <*> Hash.Gen.genShortHash

@@ -9,7 +9,6 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
-import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.Time ()
 
 import           Codec.Serialise (Serialise)
@@ -36,6 +35,6 @@ instance
     => Arbitrary (BlockData c tx)
   where
     arbitrary = do
-        (pk, _) <- arbitraryKeyPair
+        h       <- arbitrary
         txs     <- arbitrary :: Gen [tx]
-        pure $ mkBlockData pk txs
+        pure $ mkBlockData h txs

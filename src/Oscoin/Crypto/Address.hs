@@ -14,7 +14,7 @@ module Oscoin.Crypto.Address
 
     -- * Creating an Address
     , fromPublicKey
-    , toPublicKey
+    , toShortHash
 
     -- * Parsing binary blobs back into addresses
     , decodeAddress
@@ -29,6 +29,8 @@ import           Oscoin.Prelude
 import qualified Oscoin.Configuration as Config
 import           Oscoin.Crypto.Address.Internal
 import           Oscoin.Crypto.Address.Serialisation as Serialisation
+import           Oscoin.Crypto.Hash
+                 (Hashable, ShortHash, fromShortHashed, shortHash)
 import           Oscoin.Crypto.PubKey
 
 import qualified Codec.Serialise as CBOR
@@ -42,7 +44,8 @@ import qualified Formatting as F
 
 -- | Creates an 'Address' given a 'Network' configuration and a 'PublicKey'.
 fromPublicKey
-    :: Config.Network
+    :: (Hashable c (PublicKey c))
+    => Config.Network
     -- ^ The 'Network' the node is running on.
     -> PublicKey c
     -- ^ A 'PublicKey'.
@@ -54,13 +57,13 @@ fromPublicKey network pk =
             , addressType     = AddressType network
             , protocolVersion = ProtocolVersion ProtocolVersion_V1
             }
-        payload = AddressPayload_V0 pk
+        payload = AddressPayload_V0 . fromShortHashed $ shortHash pk
      in
         Address prefix payload
 
 -- | Parses a base32z-encoded binary block back into an 'Address'.
 decodeAddress
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => ByteString
     -> Either Serialisation.DeserializeError (Address c)
 decodeAddress base32zBlob =
@@ -75,7 +78,7 @@ decodeAddress base32zBlob =
 -- | Renders an 'Address' into its textual form (i.e. a z-base-32-encoded
 -- blob).
 renderAddress
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => Address c
     -> Text
 renderAddress = F.sformat fmtAddress
@@ -83,7 +86,7 @@ renderAddress = F.sformat fmtAddress
 -- | Formats an 'Address'.
 -- Nb. This might be quite heavy as it goes through serialisation.
 fmtAddress
-    :: CBOR.Serialise (PublicKey c)
+    :: CBOR.Serialise (ShortHash c)
     => F.Format r (Address c -> r)
 fmtAddress = F.mapf (encodedText . encodeAtBase Base32z . serializeAddress) F.stext
 
@@ -91,8 +94,8 @@ fmtAddress = F.mapf (encodedText . encodeAtBase Base32z . serializeAddress) F.st
     Recovering a 'PublicKey' from an Address
 ------------------------------------------------------------------------------}
 
--- | Recovers a 'PublicKey' from the input 'Address'.
-toPublicKey :: Address c -> PublicKey c
-toPublicKey address =
+-- | Recovers a 'ShortHash' from the input 'Address'.
+toShortHash :: Address c -> ShortHash c
+toShortHash address =
     case addressPayload address of
-        AddressPayload_V0 pk -> pk
+        AddressPayload_V0 h -> h
