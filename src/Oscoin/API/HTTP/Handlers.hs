@@ -5,7 +5,7 @@ import           Oscoin.Prelude
 import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
-import           Oscoin.Crypto.Blockchain (TxLookup(..))
+import           Oscoin.Crypto.Blockchain (Height, TxLookup(..))
 import           Oscoin.Crypto.Blockchain.Block (BlockHash, SealedBlock)
 import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
 import           Oscoin.Crypto.Hash (Hashed, hash)
@@ -96,6 +96,27 @@ getBlock h = do
             respond ok200 $ Ok blk
         Nothing ->
             respond notFound404 $ errBody "Block not found"
+
+lookupBlockByHeight
+    :: (Serialise (SealedBlock c tx s))
+    => Height
+    -> ApiAction c tx s i a
+lookupBlockByHeight h = do
+    result <- liftNode $ Node.lookupBlockByHeight h
+    case result of
+        Just blk ->
+            respond ok200 $ Ok blk
+        Nothing ->
+            respond notFound404 $ errBody "Block not found"
+
+lookupBlocksByHeight
+    :: (Serialise (SealedBlock c tx s))
+    => ApiAction c tx s i a
+lookupBlocksByHeight = do
+    start <- param' "start"
+    end   <- param' "end"
+    blocks <- liftNode $ Node.lookupBlocksByHeight (start, end)
+    respond ok200 $ Ok blocks
 
 getStatePath
     :: (ApiTx c tx)
