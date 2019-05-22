@@ -59,6 +59,8 @@ withBlockStore path genesisBlock action =
             ( (Abstract.BlockStoreReader {
                   Abstract.getGenesisBlock       = getGenesisBlock internalHandle
                 , Abstract.lookupBlock           = lookupBlock internalHandle
+                , Abstract.lookupBlockByHeight   = lookupBlockByHeight internalHandle
+                , Abstract.lookupBlocksByHeight  = lookupBlocksByHeight internalHandle
                 , Abstract.lookupTx              = lookupTx internalHandle
                 , Abstract.getBlocksByDepth      = getBlocks internalHandle
                 , Abstract.getBlocksByParentHash = getChainSuffix internalHandle

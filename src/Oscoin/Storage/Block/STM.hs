@@ -29,14 +29,21 @@ withBlockStore chain score action = do
     let modifyHandle = atomically . modifyTVar' hdl
         newBlockStore  =
             ( Abstract.BlockStoreReader
-                { Abstract.getGenesisBlock  = withHandle Pure.getGenesisBlock hdl
-                , Abstract.lookupBlock      = \h -> withHandle (Pure.lookupBlock h) hdl
-                , Abstract.lookupTx         = \h -> withHandle (Pure.lookupTx h) hdl
-                , Abstract.getBlocksByDepth = \depth ->
+                { Abstract.getGenesisBlock       =
+                    withHandle Pure.getGenesisBlock hdl
+                , Abstract.lookupBlock           = \h ->
+                    withHandle (Pure.lookupBlock h) hdl
+                , Abstract.lookupTx              = \h ->
+                    withHandle (Pure.lookupTx h) hdl
+                , Abstract.lookupBlockByHeight   = \h ->
+                    withHandle (Pure.lookupBlockByHeight h) hdl
+                , Abstract.lookupBlocksByHeight  = \h ->
+                    withHandle (Pure.lookupBlocksByHeight h) hdl
+                , Abstract.getBlocksByDepth      = \depth ->
                       withHandle (Chrono.NewestFirst <$> Pure.getBlocks depth) hdl
                 , Abstract.getBlocksByParentHash = \h ->
                       withHandle (Chrono.NewestFirst <$> Pure.getChainSuffix h) hdl
-                , Abstract.getTip          = withHandle Pure.getTip hdl
+                , Abstract.getTip                = withHandle Pure.getTip hdl
                 }
             , Abstract.BlockStoreWriter
                 { Abstract.insertBlock     = modifyHandle . Pure.insert

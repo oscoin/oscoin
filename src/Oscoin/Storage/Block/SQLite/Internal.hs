@@ -22,6 +22,8 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getTx
     , getChainSuffix
     , getChainHashes
+    , lookupBlockByHeight
+    , lookupBlocksByHeight
     , switchToFork
     , storeBlock
     ) where
@@ -416,3 +418,52 @@ getTipInternal
     -> Transaction IO (Block c tx (Sealed c s))
 getTipInternal cache =
     headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocksInternal cache 1
+
+lookupBlockByHeight
+    :: forall c tx s.
+       ( Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
+       , FromField (Sealed c s)
+       , FromField (Hash c)
+       , StorableTx c tx
+       )
+    => Handle c tx s
+    -> Height
+    -> IO (Maybe (Block c tx (Sealed c s)))
+lookupBlockByHeight Handle{hConn} h = runTransaction hConn $ do
+    conn <- ask
+    result :: Maybe (BlockHeader c (Sealed c s) :. Only (Beneficiary c) :. Only (BlockHash c)) <- listToMaybe <$> liftIO (Sql.query conn
+        [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
+                FROM blocks
+               WHERE hash = ? |] (Only h))
+
+    for result $ \(bh :. Only be :. Only blockHash) -> do
+        txs :: [tx] <- liftIO $ getBlockTxs conn blockHash
+        pure $ mkBlock bh be txs
+
+lookupBlocksByHeight
+    :: forall c tx s.
+       ( Serialise s
+       , Serialise (Beneficiary c)
+       , Typeable c
+       , FromField (Sealed c s)
+       , FromField (Hash c)
+       , StorableTx c tx
+       )
+    => Handle c tx s
+    -> (Height, Height)
+    -- ^ The /start/ and the /end/ of the range (inclusive).
+    -> IO (OldestFirst [] (Block c tx (Sealed c s)))
+lookupBlocksByHeight Handle{hConn} (start,end) = runTransaction hConn $ do
+    conn <- ask
+    liftIO $ do
+        rows :: [Only (BlockHash c) :. BlockHeader c (Sealed c s) :. Only (Beneficiary c)] <- Sql.query conn
+            [sql|  SELECT hash, height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
+                     FROM blocks
+                     WHERE height >= ? AND height <= ?
+                 ORDER BY height ASC
+                   |] (Only start :. Only end)
+
+        Chrono.OldestFirst <$>
+            for rows (\(Only h :. bh :. Only be) -> mkBlock bh be <$> getBlockTxs conn h)
