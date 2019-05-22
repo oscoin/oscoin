@@ -57,6 +57,16 @@ mkBlockStore getBlocks modifyBlocks = (blockStoreReader, blockStoreWriter)
                 _ Seq.:|> gen  -> pure gen
         , lookupBlock = \h ->
             find (\b -> blockHash b == h) <$> getBlocks
+        , lookupBlockByHeight = \h ->
+            find (\b -> (blockHeight . blockHeader $ b) == h) <$> getBlocks
+        , lookupBlocksByHeight = \(start,end) ->
+            -- As 'getBlocks' returns a 'Seq' and it's not guaranteed such
+            -- sequence is non-empty and ordered by newest-blocks-first, we
+            -- opt for a simple filter over the block height.
+            Chrono.OldestFirst .  reverse .
+            filter (\b -> (blockHeight . blockHeader $ b) >= start
+                       && (blockHeight . blockHeader $ b) <= end
+                   ) . toList <$> getBlocks
         , lookupTx = \txHash -> lookupTx txHash <$> getBlocks
         , getBlocksByDepth = \d ->
               Chrono.NewestFirst . take (fromIntegral d) . toList <$> getBlocks

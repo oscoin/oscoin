@@ -14,6 +14,8 @@ module Oscoin.Storage.Block.Pure
     , getGenesisBlock
     , insert
     , lookupBlock
+    , lookupBlockByHeight
+    , lookupBlocksByHeight
     , lookupTx
     ) where
 
@@ -58,6 +60,10 @@ mkStateBlockStore bsHandleL = (blockStoreReader, blockStoreWriter)
             getGenesisBlock <$> use bsHandleL
         , lookupBlock = \h ->
             lookupBlock h <$> use bsHandleL
+        , lookupBlockByHeight = \h ->
+            lookupBlockByHeight h <$> use bsHandleL
+        , lookupBlocksByHeight = \h ->
+            lookupBlocksByHeight h <$> use bsHandleL
         , lookupTx = \tx ->
             lookupTx tx <$> use bsHandleL
         -- The pure store doesn't guarantee block ordering as 'getBlocks'
@@ -162,6 +168,30 @@ lookupBlock
 lookupBlock h Handle{..} =
         Map.lookup h hOrphans
     <|> List.find ((== h) . blockHash) (foldMap blocks $ Map.elems hChains)
+
+-- | /O(n)/. Lookup a block in the best chain, given its 'Height'.
+lookupBlockByHeight
+    :: Height
+    -> Handle c tx s
+    -> Maybe (Block c tx (Sealed c s))
+lookupBlockByHeight h hdl =
+    List.find ((== h) . blockHeight . blockHeader) (blocks $ getBestChain hdl)
+
+-- | /O(n)/. Lookup the blocks on the best chain within the given 'Height' range.
+lookupBlocksByHeight
+    :: (Height, Height)
+    -- ^ The /start/ and the /end/ of the range (inclusive).
+    -> Handle c tx s
+    -> OldestFirst [] (Block c tx (Sealed c s))
+lookupBlocksByHeight (start,end) =
+    Chrono.OldestFirst . filter withinRange
+                       . Chrono.toOldestFirst
+                       . Chrono.reverse
+                       . blocks
+                       . getBestChain
+  where
+      bHeight       = blockHeight . blockHeader
+      withinRange b = bHeight b >= start && bHeight b <= end
 
 -- | Lookup a transaction in the 'Handle'. Only considers transactions in
 -- the best chain.

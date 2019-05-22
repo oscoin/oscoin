@@ -20,6 +20,8 @@ module Oscoin.Node
     , lookupTx
     , lookupReceipt
     , lookupBlock
+    , lookupBlockByHeight
+    , lookupBlocksByHeight
     ) where
 
 import           Oscoin.Prelude
@@ -269,3 +271,19 @@ lookupBlock
 lookupBlock h = do
     bs <- getBlockStoreReader
     BlockStore.lookupBlock bs h
+
+lookupBlockByHeight
+    :: (MonadIO m)
+    => Height
+    -> NodeT c tx s i m (Maybe (Block c tx (Sealed c s)))
+lookupBlockByHeight h = do
+    bs <- getBlockStoreReader
+    BlockStore.lookupBlockByHeight bs h
+
+lookupBlocksByHeight
+    :: (MonadIO m)
+    => (Height, Height)
+    -> NodeT c tx s i m (Chrono.OldestFirst [] (Block c tx (Sealed c s)))
+lookupBlocksByHeight range = do
+    bs <- getBlockStoreReader
+    BlockStore.lookupBlocksByHeight bs range

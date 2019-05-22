@@ -82,6 +82,14 @@ api mdlware = do
 
     get ("blocks" <//> var) Handlers.getBlock
 
+    -- /blocks/by-height ------------------------------------------------------
+
+    get ("blocks" <//> "by-height") Handlers.lookupBlocksByHeight
+
+    -- /blocks/by-height/:height ----------------------------------------------
+
+    get ("blocks" <//> "by-height" <//> var) Handlers.lookupBlockByHeight
+
     -- /blockchain/tip -------------------------------------------------------
 
     get ("blockchain" <//> "tip") Handlers.getTip

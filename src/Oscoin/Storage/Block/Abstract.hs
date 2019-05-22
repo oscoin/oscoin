@@ -55,6 +55,12 @@ data BlockStoreReader c tx s m = BlockStoreReader
     -- ^ Get the genesis block.
     , lookupBlock     :: BlockHash c -> m (Maybe (Block c tx (Sealed c s)))
     -- ^ Lookups a 'Block' from the store when given its hash.
+    , lookupBlockByHeight :: Height -> m (Maybe (Block c tx (Sealed c s)))
+    -- ^ Lookups a block, given its 'Height'.
+    , lookupBlocksByHeight :: (Height, Height) -> m (OldestFirst [] (Block c tx (Sealed c s)))
+    -- ^ When given the inclusive range (start,end), lookups the blocks between
+    -- the two heights. It returns fewer blocks than the requested number,
+    -- in case the range is too big.
     , lookupTx        :: Hashed c tx -> m (Maybe (TxLookup c tx))
     -- ^ Lookups a transaction by its hash.
     , getBlocksByDepth :: Depth -> m (NewestFirst [] (Block c tx (Sealed c s)))
@@ -78,6 +84,8 @@ hoistBlockStoreReader
 hoistBlockStoreReader natTrans bs = BlockStoreReader
     { getGenesisBlock       = natTrans (getGenesisBlock bs)
     , lookupBlock           = natTrans . lookupBlock bs
+    , lookupBlockByHeight   = natTrans . lookupBlockByHeight bs
+    , lookupBlocksByHeight  = natTrans . lookupBlocksByHeight bs
     , lookupTx              = natTrans . lookupTx bs
     , getBlocksByDepth      = natTrans . getBlocksByDepth bs
     , getBlocksByParentHash = natTrans . getBlocksByParentHash bs

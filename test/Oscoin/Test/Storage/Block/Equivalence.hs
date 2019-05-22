@@ -33,6 +33,8 @@ import           Test.Tasty.QuickCheck hiding ((===))
 tests :: Dict (IsCrypto c) -> [TestTree]
 tests d =
     [ testProperty "getTip . insertBlock equivalence"  (propInsertGetTipEquivalence d)
+    , testProperty "lookupBlockByHeight  equivalence" (propLookupBlockByHeightEquivalence d)
+    , testProperty "lookupBlocksByHeight equivalence" (propLookupBlocksByHeightEquivalence d)
     ]
 
 -- | Classify a 'Blockchain' based on its length.
@@ -57,6 +59,34 @@ propInsertGetTipEquivalence Dict =
                 p1 <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
                 p2 <- publicApiCheck stores Abstract.getTip
                 pure (p1 .&&. p2)
+
+propLookupBlockByHeightEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propLookupBlockByHeightEquivalence Dict =
+    let gen = do
+          chain  <- genBlockchainFrom (defaultGenesis @c)
+          -- Contemplates the possibility we request something not on chain.
+          h <- choose (0, height chain + 1)
+          pure (chain, h)
+
+    in forAll gen $ \(chain, hght) ->
+        classifyChain chain $
+            ioProperty $ withStores $ \stores -> do
+                _  <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
+                publicApiCheck stores (`Abstract.lookupBlockByHeight` hght)
+
+propLookupBlocksByHeightEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propLookupBlocksByHeightEquivalence Dict =
+    let gen = do
+          chain  <- genBlockchainFrom (defaultGenesis @c)
+          -- Contemplates the possibility we request something not on chain.
+          start <- choose (0, height chain + 1)
+          end   <- choose (0, start + 1)
+          pure (chain, (start, end))
+    in forAll gen $ \(chain, range) ->
+        classifyChain chain $
+            ioProperty $ withStores $ \stores -> do
+                _ <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
+                publicApiCheck stores (`Abstract.lookupBlocksByHeight` range)
 
 {------------------------------------------------------------------------------
   Useful combinators
