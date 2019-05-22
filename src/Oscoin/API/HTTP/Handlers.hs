@@ -14,6 +14,7 @@ import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
 import           Oscoin.Telemetry (telemetryStoreL)
 import           Oscoin.Telemetry as Telemetry
+import qualified Oscoin.Time.Chrono as Chrono
 
 import           Codec.Serialise (Serialise)
 import           Formatting.Buildable (Buildable)
@@ -116,7 +117,7 @@ lookupBlocksByHeight = do
     start <- param' "start"
     end   <- param' "end"
     blocks <- liftNode $ Node.lookupBlocksByHeight (start, end)
-    respond ok200 $ Ok blocks
+    respond ok200 $ Ok (Chrono.toOldestFirst blocks)
 
 getStatePath
     :: (ApiTx c tx)

@@ -117,4 +117,4 @@ lookupBlocksByHeight = do
     liftIO $ httpTest (nodeState mempty chain mempty) $
         get ("/blocks/by-height?start=0&end=" <> show (height chain)) >>=
             assertStatus ok200 <>
-            assertResultOK (Chrono.reverse $ blocks chain)
+            assertResultOK (Chrono.toOldestFirst $ Chrono.reverse $ blocks chain)
