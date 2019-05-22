@@ -58,13 +58,8 @@ keyPairParser = subparser
 
 genesisParser :: HasHashing c => Parser (Command c)
 genesisParser =
-    GenesisCreate <$> genesisFrom <*> genesisDifficulty <*> genesisBeneficiary
+    GenesisCreate <$> genesisDifficulty <*> genesisBeneficiary
   where
-    genesisFrom = many $ option str
-        (  long "from"
-        <> help ".rad input file"
-        <> metavar "FILE"
-        )
     genesisDifficulty = option (maybeReader (parseDifficulty . T.pack))
         (  long "difficulty"
         <> help "target difficulty"
