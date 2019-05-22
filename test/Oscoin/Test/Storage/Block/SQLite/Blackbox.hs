@@ -87,7 +87,7 @@ testLookupBlockByHeight chain (publicAPI, privateAPI) = do
     Abstract.insertBlocksNaive privateAPI allBlocks
     blk' <- Abstract.lookupBlockByHeight publicAPI targetHeight
 
-    blk' @?= Just (Chrono.toOldestFirst allBlocks !! (fromIntegral targetHeight))
+    blk' @?= Just (Chrono.toOldestFirst allBlocks !! fromIntegral targetHeight)
 
 testLookupBlocksByHeight
     :: IsCrypto c

@@ -98,7 +98,7 @@ lookupBlockByHeight_OK = do
     chain <- pick genBlockchain
 
     liftIO $ httpTest (nodeState mempty chain mempty) $
-        get ("/blocks/by-height/" <> (show $ height chain)) >>=
+        get ("/blocks/by-height/" <> show (height chain)) >>=
             assertStatus ok200 <>
             assertResultOK (tip chain)
 
@@ -107,7 +107,7 @@ lookupBlockByHeight_KO = do
     chain <- pick genBlockchain
 
     liftIO $ httpTest (nodeState mempty chain mempty) $
-        get ("/blocks/by-height/" <> (show $ succ (height chain))) >>=
+        get ("/blocks/by-height/" <> show (succ (height chain))) >>=
             assertStatus notFound404
 
 lookupBlocksByHeight :: IsCrypto c => PropertyM IO (HTTPTest c)
@@ -115,6 +115,6 @@ lookupBlocksByHeight = do
     chain <- pick genBlockchain
 
     liftIO $ httpTest (nodeState mempty chain mempty) $
-        get ("/blocks/by-height?start=0&end=" <> (show $ height chain)) >>=
+        get ("/blocks/by-height?start=0&end=" <> show (height chain)) >>=
             assertStatus ok200 <>
             assertResultOK (Chrono.reverse $ blocks chain)

@@ -72,8 +72,7 @@ propLookupBlockByHeightEquivalence Dict =
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
                 _  <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
-                p2 <- publicApiCheck stores (`Abstract.lookupBlockByHeight` hght)
-                pure p2
+                publicApiCheck stores (`Abstract.lookupBlockByHeight` hght)
 
 propLookupBlocksByHeightEquivalence :: forall c.  Dict (IsCrypto c) -> Property
 propLookupBlocksByHeightEquivalence Dict =
@@ -87,8 +86,7 @@ propLookupBlocksByHeightEquivalence Dict =
         classifyChain chain $
             ioProperty $ withStores $ \stores -> do
                 _ <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
-                p2 <- publicApiCheck stores (`Abstract.lookupBlocksByHeight` range)
-                pure p2
+                publicApiCheck stores (`Abstract.lookupBlocksByHeight` range)
 
 {------------------------------------------------------------------------------
   Useful combinators
