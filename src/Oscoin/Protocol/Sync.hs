@@ -34,8 +34,6 @@ import           Oscoin.Crypto.Hash (Hash)
 import           Oscoin.Prelude
 import           Prelude (last)
 
-import           Oscoin.Consensus.Nakamoto (PoW)
-
 import           Oscoin.Crypto.Blockchain.Block
                  ( Beneficiary
                  , Block
@@ -45,13 +43,13 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHeader
                  , blockHeight
                  )
-import           Oscoin.Data.Tx
 import           Oscoin.P2P as P2P
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time (Duration)
-import           Oscoin.Time.Chrono
 
+import           Data.Conduit
+import qualified Data.Conduit.Combinators as C
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
 import           Data.List ((\\))
@@ -138,14 +136,7 @@ type family ProtocolRequestArgs (c :: ProtocolRequest) :: * where
 
 -- | A protocol response, indexed by the corresponding 'ProtocolRequest, so
 -- that matching the wrong type will result in a type error.
-type family ProtocolResponse c tx s (r :: ProtocolRequest) :: *
-
-type instance ProtocolResponse c (Tx c) PoW 'GetTip =
-        Block c (Tx c) (Sealed c PoW)
-type instance ProtocolResponse c (Tx c) PoW 'GetBlocks =
-        OldestFirst [] (Block c (Tx c) (Sealed c PoW))
-type instance ProtocolResponse c tx PoW 'GetBlockHeaders =
-        OldestFirst [] (BlockHeader c (Sealed c PoW))
+type family ProtocolResponse c (m :: * -> *) tx s (r :: ProtocolRequest) :: *
 
 -- | A data fetcher is a wrapper around an action that given a (singleton)
 -- 'SProtocolRequest' and a set of arguments, returns a 'ProtocolResponse'
@@ -155,7 +146,7 @@ newtype DataFetcher c tx s m =
       fetch :: forall r. ActivePeer c
             -> SProtocolRequest r
             -> ProtocolRequestArgs r
-            -> m (Either Timeout (ProtocolResponse c tx s r))
+            -> m (Either Timeout (ProtocolResponse c m tx s r))
                 }
 
 -- | An opaque reference to a record of functions which can be used to query
@@ -276,13 +267,13 @@ range localTip remoteTip
 -- concurrently, picking the tip returned by /most/ of the peers.
 getRemoteTip
     :: forall c tx s m.
-       ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+       ( ProtocolResponse c m tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
        , Ord tx
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
-       ) => Sync c tx s m (ProtocolResponse c tx s 'GetTip)
+       ) => Sync c tx s m (ProtocolResponse c m tx s 'GetTip)
 getRemoteTip = withActivePeers $ \active -> do
     dataFetcher     <- scDataFetcher  <$> ask
     forConcurrently <- scConcurrently <$> ask
@@ -313,7 +304,7 @@ getRemoteTip = withActivePeers $ \active -> do
 
 -- | The 'bestHeight' operation from the spec.
 getRemoteHeight
-    :: ( ProtocolResponse c tx s 'GetTip ~ Block c tx (Sealed c s)
+    :: ( ProtocolResponse c m tx s 'GetTip ~ Block c tx (Sealed c s)
        , Monad m
        , Ord tx
        , Ord s
@@ -323,9 +314,10 @@ getRemoteHeight
     => Sync c tx s m Height
 getRemoteHeight = map height getRemoteTip
 
--- | Given a valid 'Range', syncs the blocks within the range.
+-- | Given a valid 'Range', syncs the blocks within that range.
 syncBlocks
-    :: ( ProtocolResponse c tx s 'GetBlocks ~ OldestFirst [] (Block c tx (Sealed c s))
+    :: forall c tx s m.
+       ( ProtocolResponse c m tx s 'GetBlocks ~ ConduitT () (Block c tx (Sealed c s)) m ()
        , Monad m
        , Ord tx
        , Ord s
@@ -337,63 +329,87 @@ syncBlocks
 syncBlocks rng = do
     ctx <- ask
     let fetcher = scDataFetcher ctx
-    withActivePeers $ \ activePeers -> do
+    withActivePeers $ \ activePeers ->
 
-        let blocksPerPeer =
-                min maxBlocksPerPeer
-                    (ceiling @Double @Int (fromIntegral (end rng - start rng) / fromIntegral (length activePeers)))
+        lift $ runConduit $
+               C.yieldMany (workDistribution activePeers)
+            .| C.mapM (fetchBlocks fetcher >=> notifyUpstreamConsumers ctx)
+            .| C.concat
+            .| C.iterM (fetchMissing fetcher activePeers ctx)
+            .| C.sinkNull
 
-        -- Distribute work across peers, which is equally split, where
-        -- each peer can be given @at most@ 'maxBlocksPerPeer' at the time,
-        -- in order to limit the amount of blocks in transit each time.
-        let workDistribution =
-                zip (cycle (HS.toList activePeers))
-                    (chunksOf blocksPerPeer [start rng .. end rng])
+  where
 
-        -- FIXME(adn) streaming?
-        (requestedBlocks, !missingBlocks) <- lift $
-            foldM (\(requested, missing) (activePeer, !heightRange) ->
-                     case Range <$> head heightRange <*> pure (last heightRange) of
-                         Nothing -> pure (requested, missing)
-                         Just subRange -> do
-                             res <- fetch fetcher activePeer SGetBlocks subRange
-                             case res of
-                               Left _timeout ->
-                                   pure (requested, missing <> heightRange) -- TODO(adn) Telemetry
-                               Right blks    -> do
-                                   -- If the peer didn't have the requested range,
-                                   -- the list of missing blocks increases.
-                                   -- FIXME(adn) not even trying to be efficient
-                                   -- in this first version.
-                                   let missingHeights = heightRange \\ map height (toOldestFirst blks)
-                                   pure $ ( foldl' (flip Set.insert) requested (toOldestFirst blks)
-                                          , missing <> missingHeights
-                                          )
-                  )
-                  (mempty, [])
-                  workDistribution
+    -- How many blocks a peer can have in-transit at any given time, to
+    -- avoid network congestion.
+    blocksPerPeer :: ActivePeers c -> Int
+    blocksPerPeer peers =
+        min maxBlocksPerPeer
+            (ceiling @Double @Int (fromIntegral (end rng - start rng) / fromIntegral (length peers)))
 
-        forM_ requestedBlocks $ \b ->
+    -- Distribute work across peers, which is equally split, where
+    -- each peer can be given @at most@ 'maxBlocksPerPeer' at the time,
+    -- in order to limit the amount of blocks in transit each time.
+    workDistribution :: ActivePeers c -> [(ActivePeer c, [Height])]
+    workDistribution peers =
+        zip (cycle (HS.toList peers))
+            (chunksOf (blocksPerPeer peers) [start rng .. end rng])
+
+    -- Fetch some blocks from an active peer, and returns any fetched block
+    -- plus any missing block, identified by the height.
+    fetchBlocks
+        :: DataFetcher c tx s m
+        -> (ActivePeer c, [Height])
+        -> m (Set (Block c tx (Sealed c s)), [Height])
+    fetchBlocks fetcher (activePeer, !heightRange) =
+      case Range <$> head heightRange <*> pure (last heightRange) of
+          Nothing -> pure (mempty, mempty)
+          Just subRange -> do
+              res <- fetch fetcher activePeer SGetBlocks subRange
+              case res of
+                Left _timeout ->
+                    pure (mempty, heightRange) -- TODO(adn) Telemetry?
+                Right blks    ->
+                    runConduit $ blks
+                              .| C.foldl (\(requested, missing) blk ->
+                                  ( Set.insert blk requested
+                                  , missing \\ [height blk])
+                                  ) (mempty, heightRange)
+
+    -- Notifies the upstream consumers about the downloaded blocks, and
+    -- forward the missing blocks downstream.
+    notifyUpstreamConsumers
+        :: SyncContext c tx s m
+        -> (Set (Block c tx (Sealed c s)), [Height])
+        -> m [Height]
+    notifyUpstreamConsumers ctx (requested, missing) = do
+        forM_ requested $ \b ->
             forM_ (scUpstreamConsumers ctx) $ \dispatch ->
-                lift $ dispatch (SyncBlock b)
+                dispatch (SyncBlock b)
+        pure missing
 
-        -- Handle missing blocks
-        -- NOTE(adn) Not terribly convinced about this optimization.
-        case sort missingBlocks of
-          [] -> pure ()
-          stillMissing -> forM_ stillMissing $ \missing -> do
-              -- Tries to download each individual block from each and every
-              -- peer. We don't fail in case the block cannot be downloaded,
-              -- as we hope that eventually the peers will be able to catch up.
-              results <- forM (HS.toList activePeers) $ \peer -> do
-                           res <- lift $ fetch fetcher peer SGetBlocks (Range missing missing)
-                           case res of
-                             Left _err -> pure Nothing
-                             Right oldest -> case toOldestFirst oldest of
-                                               [b] -> pure (Just b)
-                                               _   -> pure Nothing
-              case catMaybes results of
-                []  -> pure () -- TODO(adn) telemetry?
-                b:_ ->
-                    forM_ (scUpstreamConsumers ctx) $ \dispatch ->
-                        lift $ dispatch (SyncBlock b)
+    -- Tries to fetch a missing block (as identified by its 'Height') from
+    -- any of the active peers.
+    fetchMissing
+        :: DataFetcher c tx s m
+        -> ActivePeers c
+        -> SyncContext c tx s m
+        -> Height
+        -> m ()
+    fetchMissing fetcher peers ctx missing = do
+       -- Tries to download each individual block from each and every
+       -- peer. We don't fail in case the block cannot be downloaded,
+       -- as we hope that eventually the peers will be able to catch up.
+       mbBlock <- foldM (\mbBlock peer ->
+                    case mbBlock of
+                      Just b  -> pure (Just b)
+                      Nothing -> do
+                          res <- fetch fetcher peer SGetBlocks (Range missing missing)
+                          case res of
+                            Left _err -> pure Nothing
+                            Right c   -> runConduit (c .| C.head)
+                        ) Nothing (HS.toList peers)
+       case mbBlock of
+         Nothing -> pure () -- TODO(adn) telemetry?
+         Just b -> forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+                       dispatch (SyncBlock b)

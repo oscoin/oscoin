@@ -16,6 +16,7 @@ import           Oscoin.Telemetry.Trace
 import           Oscoin.Time.Chrono as Chrono
 
 import           Control.Monad.RWS.Strict hiding (get, gets)
+import           Data.Conduit
 import           Data.Hashable (Hashable)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -28,11 +29,11 @@ import           Lens.Micro (Lens', lens)
   Instances
 ------------------------------------------------------------------------------}
 
-type instance ProtocolResponse c MockTx MockSeal 'GetTip =
+type instance ProtocolResponse c m MockTx MockSeal 'GetTip =
         Block c MockTx (Sealed c MockSeal)
-type instance ProtocolResponse c MockTx MockSeal 'GetBlocks =
-        OldestFirst [] (Block c MockTx (Sealed c MockSeal))
-type instance ProtocolResponse c MockTx MockSeal 'GetBlockHeaders =
+type instance ProtocolResponse c m MockTx MockSeal 'GetBlocks =
+        ConduitT () (Block c MockTx (Sealed c MockSeal)) m ()
+type instance ProtocolResponse c m MockTx MockSeal 'GetBlockHeaders =
         OldestFirst [] (BlockHeader c (Sealed c MockSeal))
 
 {------------------------------------------------------------------------------
@@ -117,11 +118,13 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
     -- NOTE(adn) We are leaking our abstractions here and bypassing the
     -- 'BlockStoreReader' interface, but this is an interim measure while we
     -- wait for oscoin#550.
-    SGetBlocks -> \Range{..} ->   Right
-                                . OldestFirst
-                                . take (fromIntegral (end - start) + 1) -- inclusive
-                                . drop (fromIntegral start)
-                              <$> getAllBlocks peer
+    SGetBlocks -> \Range{..} -> do
+        allBlocks <- OldestFirst
+                   . take (fromIntegral (end - start) + 1) -- inclusive
+                   . drop (fromIntegral start)
+                 <$> getAllBlocks peer
+        pure $ Right (forM_ allBlocks yield)
+
     -- NOTE(adn) We are leaking our abstractions here and bypassing the
     -- 'BlockStoreReader' interface, but this is an interim measure while we
     -- wait for oscoin#550.

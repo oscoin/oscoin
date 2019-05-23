@@ -54,6 +54,7 @@ library:
     - hostname
     - http-api-data
     - http-client
+    - http-conduit
     - http-types
     - iproute
     - memory
@@ -72,6 +73,7 @@ library:
     - profunctors
     - protolude
     - random
+    - resourcet
     - retry
     - safe-exceptions
     - semigroups
@@ -83,6 +85,7 @@ library:
     - text
     - transformers
     - unix
+    - unliftio
     - unordered-containers
     - vector
     - wai

@@ -20,6 +20,7 @@ module Oscoin.Time.Chrono
     , reverse
     ) where
 
+import           Codec.Serialise
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import           Oscoin.Prelude hiding (reverse)
@@ -41,13 +42,13 @@ class ChronogicallyOrdered a where
 -- one, where the API contract stats that elements are ordered from the newest
 -- to the oldest.
 newtype NewestFirst f a = NewestFirst { toNewestFirst :: f a }
-  deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid)
+  deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid, Serialise)
 
 -- | A wrapper over a 'Foldable' functor 'f', typically a list or a non-empty
 -- one, where the API contract stats that elements are ordered from the oldest
 -- to the newest.
 newtype OldestFirst f a = OldestFirst { toOldestFirst :: f a }
-  deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid)
+  deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid, Serialise)
 
 instance ChronogicallyOrdered (NewestFirst [] a) where
     type ReverseOf (NewestFirst [] a) = OldestFirst [] a

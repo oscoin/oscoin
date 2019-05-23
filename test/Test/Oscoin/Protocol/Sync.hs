@@ -15,6 +15,8 @@ import qualified Oscoin.Protocol.Sync.Mock as Mock
 import qualified Oscoin.Time as Time
 import           Oscoin.Time.Chrono
 
+import           Data.Conduit
+import           Data.Conduit.Combinators (sinkList)
 import qualified Data.HashMap.Strict as HM
 import           Data.Maybe (fromJust)
 import           Lens.Micro (over)
@@ -131,7 +133,7 @@ prop_getBlocks_sim = property $ do
               res <- lift (fetch fetcher activePeer SGetBlocks fullRange)
               case res of
                 Left _  -> throwError AllPeersTimeoutError
-                Right x -> pure x
+                Right x -> OldestFirst <$> lift (runConduit (x .| sinkList))
 
     let actual = Mock.runMockSync worldState Mock.mockContext fetchSubset
     let expected = OldestFirst allBlocksNoGenesis
