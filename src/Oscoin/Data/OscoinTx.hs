@@ -14,7 +14,11 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Data.Ledger
 
+import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
+import qualified Codec.Serialise.Decoding as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
+import           Control.Monad.Fail (fail)
 import qualified Crypto.Data.Auth.Tree as WorldState
 import qualified Data.Aeson as JSON
 import           Data.ByteArray (ByteArrayAccess(..))
@@ -61,6 +65,38 @@ data TxPayload c = TxPayload
     -- ^ The transaction author.
     } deriving (Generic)
 
+deriving instance
+    ( Eq (AccountId c)
+    , Eq (Crypto.Hash c)
+    , Eq (Signature c)
+    , Eq (PublicKey c)
+    ) => Eq (TxPayload c)
+
+instance
+    ( Serialise (TxMessage c)
+    , Serialise (PublicKey c)
+    ) => Serialise (TxPayload c)
+  where
+    encode TxPayload{..} =
+           CBOR.encodeListLen 6
+        <> CBOR.encodeWord 0
+        <> CBOR.encode txMessages
+        <> CBOR.encode txNonce
+        <> CBOR.encode txFee
+        <> CBOR.encode txBurn
+        <> CBOR.encode txAuthor
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (6, 0) ->
+                TxPayload
+                    <$> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+            e -> fail $ "Failed decoding TxPayload from CBOR: " ++ show e
+
 -- | A transaction message.
 data TxMessage c =
       TxRegisterProject   (AccountId c)
@@ -78,6 +114,61 @@ data TxMessage c =
     | TxTransfer          (AccountId c) Balance
     -- ^ Transfer balance between two accounts.
     deriving (Generic)
+
+instance
+    ( Serialise (AccountId c)
+    , Serialise (Crypto.Hash c)
+    , Serialise (Contribution c)
+    , Serialise (DependencyUpdate c)
+    ) => Serialise (TxMessage c)
+  where
+    encode (TxRegisterProject acc) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord    0
+        <> CBOR.encode        acc
+    encode (TxUnregisterProject acc) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord    1
+        <> CBOR.encode        acc
+    encode (TxAuthorize proj acc) =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord    2
+        <> CBOR.encode        proj
+        <> CBOR.encode        acc
+    encode (TxDeauthorize proj acc) =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord    3
+        <> CBOR.encode        proj
+        <> CBOR.encode        acc
+    encode (TxCheckpoint proj hsh cs ds) =
+           CBOR.encodeListLen 5
+        <> CBOR.encodeWord    4
+        <> CBOR.encode        proj
+        <> CBOR.encode        hsh
+        <> CBOR.encode        cs
+        <> CBOR.encode        ds
+    encode (TxUpdateContract proj) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord    5
+        <> CBOR.encode        proj
+    encode (TxTransfer acc bal) =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord    6
+        <> CBOR.encode        acc
+        <> CBOR.encode        bal
+
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (2, 0) -> TxRegisterProject   <$> CBOR.decode
+            (2, 1) -> TxUnregisterProject <$> CBOR.decode
+            (3, 2) -> TxAuthorize         <$> CBOR.decode <*> CBOR.decode
+            (3, 3) -> TxDeauthorize       <$> CBOR.decode <*> CBOR.decode
+            (5, 4) -> TxCheckpoint        <$> CBOR.decode <*> CBOR.decode <*> CBOR.decode <*> CBOR.decode
+            (2, 5) -> TxUpdateContract    <$> CBOR.decode
+            (3, 6) -> TxTransfer          <$> CBOR.decode <*> CBOR.decode
+            e      -> fail $ "Failed decoding TxMessage from CBOR: " ++ show e
+
 
 -- | Transaction output, included in the receipts tree. (Placeholder)
 type TxOutput = [TxMessageOutput]
@@ -235,7 +326,7 @@ applyTxMessage (TxUnregisterProject acc) author ws = do
     projKey = accountKey acc
 
 applyTxMessage (TxAuthorize acc pk) author ws = do
-    p@Project{..} <- lookupProject acc    ws
+    p@Project{..} <- lookupProject acc     ws
     member        <- lookupAccount author  ws
     epoch         <- lookupEpoch           ws
 

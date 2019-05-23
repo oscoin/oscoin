@@ -11,6 +11,7 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
 import           Oscoin.Test.Util
 
+import qualified Codec.Serialise as CBOR
 import qualified Crypto.Data.Auth.Tree as WorldState
 
 import           Test.Oscoin.Crypto.Hash.Gen (genHash, genShortHash)
@@ -25,7 +26,10 @@ import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
 
 
-tests :: forall c. Dict (IsCrypto c) -> TestTree
+tests
+    :: forall c. CBOR.Serialise (Contribution c)
+    => CBOR.Serialise (DependencyUpdate c)
+    => Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     [ testProperty "Transfer balance"        (propTransferBalance @c Dict)
     , testProperty "Apply transaction"       (propApplyTxPayload  @c Dict)
@@ -33,6 +37,7 @@ tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     , testProperty "Tx fee & burn"           (propTxFeeBurn       @c Dict)
     , testProperty "Register project"        (propRegisterProj    @c Dict)
     , testProperty "Nonces"                  (propNonce           @c Dict)
+    , testProperty "Roundtrip CBOR"          (propRoundtripCBOR   @c Dict)
     ]
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
@@ -210,6 +215,18 @@ propNonce Dict = property $ do
     -- Alice's nonce is now incremented by `1`.
     nonce' === (accountNonce acc + 1)
 
+propRoundtripCBOR
+    :: forall c. CBOR.Serialise (Contribution c)
+    => CBOR.Serialise (DependencyUpdate c)
+    => Dict (IsCrypto c) -> Property
+propRoundtripCBOR Dict = property $ do
+    msg <- forAll (genTxMessage @c)
+    (CBOR.deserialise . CBOR.serialise) msg === msg
+
+    author <- publicKey @c
+    pay    <- forAll (genTxPayload @c author)
+    (CBOR.deserialise . CBOR.serialise) pay === pay
+
 -------------------------------------------------------------------------------
 -- Utility
 -------------------------------------------------------------------------------
@@ -317,3 +334,24 @@ genTransfer :: AccountId c -> Range Balance -> Gen (TxMessage c)
 genTransfer receiver range =
     TxTransfer receiver <$> Gen.integral range
 
+genTxMessage :: IsCrypto c => Gen (TxMessage c)
+genTxMessage = do
+    acc <- genAccountId
+    Gen.choice
+        [ genRegisterProject acc
+        , genUnregisterProject acc
+        , genAuthorize acc
+        , genDeauthorize acc
+        , genCheckpoint acc
+        , genUpdateContract acc
+        , genTransfer acc Range.constantBounded
+        ]
+
+genTxPayload :: IsCrypto c => PublicKey c -> Gen (TxPayload c)
+genTxPayload txAuthor = do
+    txMessages <- Gen.list (Range.constant 0 3) genTxMessage
+    txNonce    <- genNonce 0 maxBound
+    txFee      <- genBalance
+    txBurn     <- genBalance
+
+    pure TxPayload{..}

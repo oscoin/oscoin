@@ -24,12 +24,17 @@ import           Oscoin.Prelude
                  , Word8
                  , div
                  , fromIntegral
+                 , liftA2
                  , map
                  , maxBound
                  , mod
+                 , show
                  , sum
                  , ($)
+                 , (++)
                  , (.)
+                 , (<$>)
+                 , (<*>)
                  , (<>)
                  )
 
@@ -38,7 +43,11 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey (PublicKey, Signature, Signed)
 
+import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
+import qualified Codec.Serialise.Decoding as CBOR
+import qualified Codec.Serialise.Encoding as CBOR
+import           Control.Monad.Fail (fail)
 import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as WorldState
 import           Data.ByteString (ByteString)
@@ -186,9 +195,34 @@ data Contribution c = Contribution
     -- ^ A set of labels used to categorize the contribution.
     } deriving (Generic)
 
+instance ( Serialise (Crypto.Hash c)
+         , Serialise (AccountId c)
+         , Serialise (Signature c)
+         ) => Serialise (Contribution c)
+  where
+    encode Contribution{..} =
+           CBOR.encodeListLen 6
+        <> CBOR.encodeWord 0
+        <> CBOR.encode contribHash
+        <> CBOR.encode contribParentHash
+        <> CBOR.encode contribAccount
+        <> CBOR.encode contribSignoff
+        <> CBOR.encode contribLabels
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (6, 0) ->
+                Contribution
+                    <$> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+            e -> fail $ "Failed decoding Contribution from CBOR: " ++ show e
+
 -- | A label used to tag a contribution.
 newtype Label = Label Word8
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Serialise)
 
 -------------------------------------------------------------------------------
 
@@ -224,6 +258,28 @@ data DependencyUpdate c =
 deriving instance (Eq (Crypto.Hash c), Eq (AccountId c))     => Eq   (DependencyUpdate c)
 deriving instance (Ord (Crypto.Hash c), Ord (AccountId c))   => Ord  (DependencyUpdate c)
 deriving instance (Show (Crypto.Hash c), Show (AccountId c)) => Show (DependencyUpdate c)
+
+instance ( Serialise (Crypto.Hash c)
+         , Serialise (AccountId c)
+         , Serialise (Signature c)
+         ) => Serialise (DependencyUpdate c)
+  where
+    encode (Depend proj hsh) =
+           CBOR.encodeListLen 3
+        <> CBOR.encodeWord 0
+        <> CBOR.encode proj
+        <> CBOR.encode hsh
+    encode (Undepend proj) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 1
+        <> CBOR.encode proj
+
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        case pre of
+            (3, 0) -> Depend   <$> CBOR.decode <*> CBOR.decode
+            (2, 1) -> Undepend <$> CBOR.decode
+            e      -> fail $ "Failed decoding DependencyUpdate from CBOR: " ++ show e
 
 -- | Additional signatures used to authorize a transaction in a
 -- /multi-sig/ scenario.
