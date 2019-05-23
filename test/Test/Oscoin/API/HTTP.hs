@@ -46,11 +46,11 @@ tests Dict = testGroup "Test.Oscoin.API.HTTP"
             liftIO $ runSession testState testSession
 
 data HTTPTest c = HTTPTest
-    { testState   :: NodeState c
-    , testSession :: Session c ()
+    { testState   :: NodeState c DummySeal
+    , testSession :: Session c DummySeal ()
     }
 
-httpTest :: NodeState c -> Session c () -> IO (HTTPTest c)
+httpTest :: NodeState c DummySeal -> Session c DummySeal () -> IO (HTTPTest c)
 httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
 
 getMissingBlock :: forall c. IsCrypto c => PropertyM IO (HTTPTest c)

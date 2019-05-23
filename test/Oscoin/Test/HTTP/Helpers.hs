@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Oscoin.Test.HTTP.Helpers
-    ( NodeState(..)
+    ( DummySeal
+    , NodeState(..)
     , nodeState
     , emptyNodeState
 
@@ -9,6 +10,7 @@ module Oscoin.Test.HTTP.Helpers
     , runSession
     , runEmptySession
     , runSessionWithState
+    , runSessionWithState'
     , liftWaiSession
     , liftNode
 
@@ -76,10 +78,10 @@ import qualified Network.Wai.Test as Wai
 -- node directly.
 --
 -- See also 'liftWaiSession' and 'liftNode'.
-newtype Session c a = Session (ReaderT (NodeHandle c) Wai.Session a)
+newtype Session c s a = Session (ReaderT (NodeHandle c s) Wai.Session a)
     deriving (Functor, Applicative, Monad, MonadIO)
 
-instance MonadFail (Session c) where
+instance MonadFail (Session c s) where
     fail = assertFailure
 
 type DummySeal = Text
@@ -88,29 +90,29 @@ type DummySeal = Text
 type Node c = Node.NodeT c (Tx c) DummySeal DummyNodeId IO
 
 -- | Node handle for API tests.
-type NodeHandle c = Node.Handle c (Tx c) DummySeal DummyNodeId
+type NodeHandle c s = Node.Handle c (Tx c) s DummyNodeId
 
 -- | Node state to instantiate a NodeHandle with.
-data NodeState c = NodeState
+data NodeState c s = NodeState
     { mempoolState    :: [Tx c]
-    , blockstoreState :: Blockchain c (Tx c) DummySeal
+    , blockstoreState :: Blockchain c (Tx c) s
     , statestoreState :: TxState c (Tx c)
     }
 
-instance Semigroup a => Semigroup (Session c a) where
+instance Semigroup a => Semigroup (Session c s a) where
     (<>) = liftA2 (<>)
 
-instance (Monoid a, Semigroup a) => Monoid (Session c a) where
+instance (Monoid a, Semigroup a) => Monoid (Session c s a) where
     mempty = pure mempty
     mappend = (<>)
 
-instance MonadRandom (Session c) where
+instance MonadRandom (Session c s) where
     getRandomBytes = liftIO . getRandomBytes
 
-liftWaiSession :: Wai.Session a -> Session c a
+liftWaiSession :: Wai.Session a -> Session c s a
 liftWaiSession s = Session $ lift s
 
-emptyNodeState :: IsCrypto c => NodeState c
+emptyNodeState :: IsCrypto c => NodeState c DummySeal
 emptyNodeState = NodeState
     { mempoolState = mempty
     , blockstoreState = emptyBlockchain
@@ -119,13 +121,22 @@ emptyNodeState = NodeState
 
 nodeState
     :: [Tx c]
-    -> Blockchain c (Tx c) DummySeal
+    -> Blockchain c (Tx c) s
     -> TxState c (Tx c)
-    -> NodeState c
+    -> NodeState c s
 nodeState mp bs st = NodeState { mempoolState = mp, blockstoreState = bs, statestoreState = st }
 
-withNode :: IsCrypto c => NodeState c -> (NodeHandle c -> IO a) -> IO a
-withNode NodeState{..} k = do
+withNode
+    :: ( IsCrypto c
+       , Serialise s
+       , Ord s
+       )
+    => s
+    -- ^ The seal
+    -> NodeState c s
+    -> (NodeHandle c s -> IO a)
+    -> IO a
+withNode seal NodeState{..} k = do
     let env    = Development
     let logger = Log.noLogger
     metrics   <-
@@ -159,10 +170,10 @@ withNode NodeState{..} k = do
             mph
             ledger
             dispatchBlock
-            (trivialConsensus "")
+            (trivialConsensus seal)
             k
 
-liftNode :: Node c a -> Session c a
+liftNode :: Node c a -> Session c DummySeal a
 liftNode na = Session $ ReaderT $ \h -> liftIO (Node.runNodeT h na)
 
 genDummyTx
@@ -191,38 +202,58 @@ emptyBlockchain :: IsCrypto c => Blockchain c (Tx c) DummySeal
 emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch defaultBeneficiary)
 
 -- | Run a 'Session' with the given initial node state
-runSession :: IsCrypto c => NodeState c -> Session c () -> Assertion
+runSession :: IsCrypto c => NodeState c DummySeal -> Session c DummySeal () -> Assertion
 runSession nst (Session sess) =
-    withNode nst $ \nh -> do
+    withNode mempty nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
 -- | Run a 'Session' so that the blockchain state has the given
 -- Radicle bindings.
-runSessionWithState :: (IsCrypto c, MonadIO m) => [(Text, DummyPayload)] -> Session c () -> m ()
-runSessionWithState bindings (Session sess)= do
+runSessionWithState
+    :: ( IsCrypto c
+       , MonadIO m
+       , Serialise s
+       , Ord s
+       )
+    => s
+    -- ^ A seal for the genesis block.
+    -> [(Text, DummyPayload)]
+    -> Session c s ()
+    -> m ()
+runSessionWithState seal bindings (Session sess)= do
     let initialState = DummyEnv $ Map.fromList bindings
-    let genBlock = sealBlock "" $ emptyGenesisFromState epoch defaultBeneficiary initialState
+    let genBlock = sealBlock seal $ emptyGenesisFromState epoch defaultBeneficiary initialState
     let nst = nodeState [] (fromGenesis genBlock) initialState
-    liftIO $ withNode nst $ \nh -> do
+    liftIO $ withNode seal nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
+
+-- | Like 'runSessionWithState', but monomorphic in the seal.
+runSessionWithState'
+    :: ( IsCrypto c
+       , MonadIO m
+       )
+    => [(Text, DummyPayload)]
+    -> Session c DummySeal ()
+    -> m ()
+runSessionWithState' = runSessionWithState mempty
 
 -- | Run a 'Session' with an empty node state. That is the node mempool
 -- is empty and the blockchain has only the genesis block with an empty
 -- dummy environment.
-runEmptySession :: (IsCrypto c, MonadIO m) => Session c () -> m ()
-runEmptySession = runSessionWithState []
+runEmptySession :: forall c m. (IsCrypto c, MonadIO m) => Session c DummySeal () -> m ()
+runEmptySession = runSessionWithState' @c @m []
 
 
-assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session c ()
+assertStatus :: HasCallStack => HTTP.Status -> Wai.SResponse -> Session c s ()
 assertStatus want (Wai.simpleStatus -> have) = have @?= want
 
 -- | Assert that the response can be deserialised to @API.Ok actual@
 -- and @actual@ equals @expected@.
 assertResultOK
     :: (HasCallStack, Serialise a, Eq a, Show a)
-    => a -> Wai.SResponse -> Session c ()
+    => a -> Wai.SResponse -> Session c s ()
 assertResultOK expected response = do
     result <- assertResponseBody response
     case result of
@@ -231,7 +262,7 @@ assertResultOK expected response = do
 
 assertResponseBody
     :: (HasCallStack, Serialise a)
-    => Wai.SResponse -> Session c a
+    => Wai.SResponse -> Session c s a
 assertResponseBody response =
     case responseBody response of
         Left err -> assertFailure $ show err
@@ -248,7 +279,7 @@ request
     => HTTP.StdMethod                    -- ^ Request method
     -> Text                              -- ^ Request path
     -> Maybe a                           -- ^ Request body
-    -> Session c Wai.SResponse
+    -> Session c s Wai.SResponse
 request method path maybeBody =
     liftWaiSession $ Wai.srequest $ Wai.SRequest req bodyData
   where
@@ -268,8 +299,8 @@ request method path maybeBody =
             (encodeUtf8 path)
 
 
-get :: Text -> Session c Wai.SResponse
+get :: Text -> Session c s Wai.SResponse
 get path = request GET path (Nothing @())
 
-post :: (Serialise a) => Text -> a -> Session c Wai.SResponse
+post :: (Serialise a) => Text -> a -> Session c s Wai.SResponse
 post path body = request POST path (Just body)

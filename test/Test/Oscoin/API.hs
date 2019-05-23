@@ -31,13 +31,13 @@ tests Dict = testGroup "Test.Oscoin.API"
         [ testProperty "existing value" $ monadicIO $ do
             key <- pick genAlphaText
             value <- pick arbitrary
-            runSessionWithState @c [(key, value)] $ do
+            runSessionWithState' @c [(key, value)] $ do
                 result <- Client.run (Client.getState (Proxy @c) [key])
                 result @?= API.Ok value
 
         , testProperty "non-existing value" $ monadicIO $ do
             key <- pick genAlphaText
-            runSessionWithState @c [] $ do
+            runSessionWithState' @c [] $ do
               result <- Client.run (Client.getState (Proxy @c) [key])
               result @?= API.Err "Value not found"
         ]
