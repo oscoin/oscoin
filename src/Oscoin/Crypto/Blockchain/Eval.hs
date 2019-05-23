@@ -5,7 +5,6 @@ module Oscoin.Crypto.Blockchain.Eval
     , EvalResult
     , Receipt(..)
     , buildBlock
-    , buildBlockStrict
     , evalBlock
     , evalTraverse
     ) where
@@ -87,27 +86,6 @@ buildBlock eval tick benef st txs parentBlock =
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
      in (newBlock, newState, receipts)
 
-
--- | Try to build a block like 'buildBlock' by applying @txs@ to the
--- state of a previous block. Unlinke 'buildBlock' evaluation will
--- abort if one of the transactions produces an error.
-buildBlockStrict
-    :: ( Serialise tx
-       , Serialise (Beneficiary c)
-       , Crypto.Hashable c st
-       , Crypto.Hashable c (BlockHeader c Unsealed)
-       , AuthTree.MerkleHash (Hash c)
-       )
-    => Evaluator st tx o
-    -> Timestamp
-    -> Beneficiary c
-    -> st
-    -> [tx]
-    -> Block c tx s
-    -> Either (tx, EvalError) (Block c tx Unsealed)
-buildBlockStrict eval tick benef st txs parent =
-    mkUnsealedBlock (Just parent) tick benef txs <$> evalEither txs eval st
-
 -- | Evaluate the transactions contained in the block against the given
 -- state and return the new state and all the produced Receipts.
 evalBlock
@@ -179,15 +157,3 @@ mkUnsealedBlock parent blockTimestamp benef txs blockState =
         Just p  -> hdr { blockHeight    = succ . blockHeight . blockHeader $ p
                        , blockPrevHash  = blockHash p
                        }
-
-evalEither
-    :: [tx]
-    -> Evaluator st tx o
-    -> st
-    -> Either (tx, EvalError) st
-evalEither txs eval initState = foldlM step initState txs
-  where
-    step s tx =
-        case eval tx s of
-            Left err                  -> Left (tx, err)
-            Right (_output, newState) -> Right newState
