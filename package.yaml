@@ -76,6 +76,7 @@ library:
     - safe-exceptions
     - semigroups
     - serialise
+    - split
     - splitmix
     - sqlite-simple
     - stm >=2.4.5.0
@@ -199,6 +200,7 @@ tests:
       - temporary
       - text
       - transformers
+      - unordered-containers
       - wai
       - wai-extra
 

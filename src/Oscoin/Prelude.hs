@@ -44,6 +44,8 @@ module Oscoin.Prelude
     , module X
     , module Control.Exception.Safe
 
+    , Actual
+    , Expected
     , String
     , LText
     , LByteString
@@ -461,3 +463,8 @@ notImplemented = withFrozenCallStack (error "Not implemented")
 {-# WARNING undefined "'undefined' remains in code" #-}
 undefined :: (HasCallStack) => a
 undefined = withFrozenCallStack (error "Prelude.undefined")
+
+-- Simple type aliases that makes easier for the reader to distinguish, in
+-- a type signature, which is the expected vs actual value.
+type Expected a = a
+type Actual   a = a

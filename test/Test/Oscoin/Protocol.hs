@@ -24,6 +24,7 @@ import           Control.Monad.State (modify')
 import           Data.ByteArray.Orphans ()
 
 import           Test.Oscoin.DummyLedger
+import qualified Test.Oscoin.Protocol.Sync as Sync
 import           Test.QuickCheck.Extended
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
@@ -32,6 +33,7 @@ import           Test.Tasty.QuickCheck hiding ((===))
 tests :: Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.Protocol"
     [ testProperty "prop_forkInsertGetTipEquivalence"  (prop_forkInsertGetTipEquivalence d)
+    , Sync.tests d
     ]
 
 

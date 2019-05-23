@@ -17,6 +17,9 @@ module Oscoin.Storage.Block.Pure
     , lookupBlockByHeight
     , lookupBlocksByHeight
     , lookupTx
+
+    -- * Internals, use carefully
+    , getBestChain
     ) where
 
 import           Oscoin.Prelude

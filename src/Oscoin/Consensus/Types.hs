@@ -31,9 +31,6 @@ type Validate c tx s =
     -> Block c tx (Sealed c s)       -- ^ Block to be validated.
     -> Either (ValidationError c) () -- ^ Either an error or @()@.
 
-type Expected a = a
-type Actual   a = a
-
 -- | A block validation error.
 data ValidationError c =
       InvalidHeight           (Expected Height) (Actual Height)
