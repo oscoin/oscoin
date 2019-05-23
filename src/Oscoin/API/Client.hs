@@ -1,5 +1,7 @@
+-- | Defines abstract interface for a Node API client.
 module Oscoin.API.Client
-    ( MonadClient(..)
+    ( Client(..)
+    , hoistClient
     ) where
 
 import           Oscoin.Prelude
@@ -8,13 +10,22 @@ import           Oscoin.API.Types
 import           Oscoin.Crypto.Hash (Hashed)
 import           Oscoin.Data.Tx (Tx, TxPayload)
 
-class Monad m => MonadClient c m where
-    submitTransaction :: Tx c -> m (Result (TxSubmitResponse c (Tx c)))
+data Client c m = Client
+    { submitTransaction :: Tx c -> m (Result (TxSubmitResponse c (Tx c)))
 
     -- | Returns an error result if a transaction with the given hash
     -- was not found.
-    getTransaction :: Hashed c (Tx c) -> m (Result (TxLookupResponse c (Tx c)))
+    , getTransaction :: Hashed c (Tx c) -> m (Result (TxLookupResponse c (Tx c)))
 
     -- | Returns an error result if a value with the given key was not
     -- found.
-    getState :: Proxy c -> [Text] -> m (Result (TxPayload c (Tx c)))
+    , getState :: [Text] -> m (Result (TxPayload c (Tx c)))
+    }
+
+
+hoistClient :: (forall a. m a -> n a) -> Client c m -> Client c n
+hoistClient natTrsf client = Client
+    { submitTransaction = natTrsf . submitTransaction client
+    , getTransaction = natTrsf . getTransaction client
+    , getState = natTrsf . getState client
+    }

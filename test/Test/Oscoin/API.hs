@@ -32,13 +32,13 @@ tests Dict = testGroup "Test.Oscoin.API"
             key <- pick genAlphaText
             value <- pick arbitrary
             runSessionWithState' @c [(key, value)] $ do
-                result <- Client.run (Client.getState (Proxy @c) [key])
+                result <- Client.getState Client.session [key]
                 result @?= API.Ok value
 
         , testProperty "non-existing value" $ monadicIO $ do
             key <- pick genAlphaText
             runSessionWithState' @c [] $ do
-              result <- Client.run (Client.getState (Proxy @c) [key])
+              result <- Client.getState Client.session [key]
               result @?= API.Err "Value not found"
         ]
     , testGroup "getTransaction" $
@@ -46,14 +46,14 @@ tests Dict = testGroup "Test.Oscoin.API"
         [ testProperty "missing transaction" $ monadicIO $ do
             txHash <- pick (arbitraryHash @c)
             runEmptySession @c $ do
-                response <- Client.run (Client.getTransaction txHash)
+                response <- Client.getTransaction Client.session txHash
                 response @?= API.Err "Transaction not found"
 
         , testCase "unconfirmed transaction" $ runEmptySession $ do
             let txValue = DummyPayload "yo"
             (txHash, tx) <- createValidTx @c txValue
             _ <- liftNode $ Mempool.addTx tx
-            response <- Client.run (Client.getTransaction txHash)
+            response <- Client.getTransaction Client.session txHash
             let expected = API.TxLookupResponse
                     { txHash = Crypto.hash tx
                     , txBlockHash = Nothing
@@ -71,7 +71,7 @@ tests Dict = testGroup "Test.Oscoin.API"
                 blk <- Node.mineBlock
                 replicateM_ 5 Node.mineBlock
                 pure $ blk
-            response <- Client.run (Client.getTransaction txHash)
+            response <- Client.getTransaction Client.session txHash
             let expected = API.TxLookupResponse
                     { txHash = Crypto.hash tx
                     , txBlockHash = Just (blockHash blk)
@@ -88,7 +88,7 @@ tests Dict = testGroup "Test.Oscoin.API"
             otherPubKey <- pick (fst <$> arbitraryKeyPair)
             let invalidTx = validTx { txPubKey = otherPubKey }
             runEmptySession @c $ do
-                response <- Client.run (Client.submitTransaction invalidTx)
+                response <- Client.submitTransaction Client.session invalidTx
                 response @?= API.Err "Invalid transaction"
         ]
 

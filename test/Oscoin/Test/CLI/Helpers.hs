@@ -20,12 +20,10 @@ module Oscoin.Test.CLI.Helpers
 
 import           Oscoin.Prelude
 
-import           Oscoin.API.Client
-import           Oscoin.API.Types hiding (Result)
 import           Oscoin.CLI
 import           Oscoin.CLI.KeyStore
 import qualified Oscoin.Configuration as Config
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
 import qualified Oscoin.Time as Time
@@ -94,6 +92,7 @@ instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
     putString t   = modify $ \s -> s { commandOutput = commandOutput s <> t }
     readTxFile _  = pure $ Left "can't read file in tests"
     getTime       = pure Time.epoch
+    getClient     = panic "Test client not implemented"
 
 
 instance MonadRandom (TestCommandRunner c) where
@@ -107,24 +106,6 @@ instance IsCrypto c => MonadKeyStore c (TestCommandRunner c) where
         case storedKeyPair of
             Just kp -> pure $ kp
             Nothing -> panic "No keypair stored"
-
-instance IsCrypto c => MonadClient c (TestCommandRunner c) where
-    submitTransaction tx = do
-        modify (\s -> s { transactions = Map.insert (hash tx) tx (transactions s) })
-        pure $ Ok $ TxSubmitResponse $ hash tx
-
-    getTransaction _txHash = Map.lookup _txHash <$> gets transactions >>= \case
-        Nothing -> pure $ Err "not found"
-        Just tx -> pure $ Ok TxLookupResponse
-            { txHash = _txHash
-            , txBlockHash = Nothing
-            , txOutput = Nothing
-            , txConfirmations = 1
-            , txPayload = tx
-            }
-
-    getState Proxy _key =
-        pure $ Err "state not found"
 
 ----------------------------------------------------
 
