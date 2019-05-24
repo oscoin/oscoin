@@ -204,10 +204,10 @@ prop_getBlockHeaders_sim = property $ do
               res <- lift (fetch fetcher activePeer SGetBlockHeaders fullRange)
               case res of
                 Left err -> throwError $ AllPeersSyncError [err]
-                Right x  -> pure x
+                Right x  -> lift $ runConduit (x .| sinkList)
 
-    let actual = Mock.runMockSync worldState Mock.mockContext fetchSubset
-    let expected = OldestFirst allBlockHeadersNoGenesis
+    let actual   = Mock.runMockSync worldState Mock.mockContext fetchSubset
+    let expected = allBlockHeadersNoGenesis
 
     actual === (Right expected, [])
 

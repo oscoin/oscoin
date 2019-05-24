@@ -1,9 +1,14 @@
+-- | Syncing nodes in oscoin
+--
+-- Based on the spec available at https://hackmd.io/2cPkrWTjTIWo2EmHZpPIQw
+--
+
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Protocol.Sync
     (
     -- * Types
-      Sync(..)
+      SyncT(..)
     , SyncError(..)
     , Timeout(..)
     , ActivePeer
@@ -12,6 +17,7 @@ module Oscoin.Protocol.Sync
     , SyncContext(..)
     , DataFetcher(..)
     , ProtocolRequest(..)
+    , ProtocolRequestArgs
     , SProtocolRequest(..)
     , ProtocolResponse
     , Range(..)
@@ -62,9 +68,15 @@ import           GHC.Natural
   Types
 ------------------------------------------------------------------------------}
 
+-- | An active peer, i.e. one of the nodes we are connected to and to which we
+-- can ask for information.
 type ActivePeer c  = NodeInfo c
+
+-- | The set of our active peers.
 type ActivePeers c = HashSet (ActivePeer c)
 
+-- | A 'SyncEvent' is generated every time we successfully download a block
+-- or a block header from one of our peers.
 data SyncEvent c tx s =
       SyncBlock (Block c tx (Sealed c s))
     | SyncBlockHeader (BlockHeader c s)
@@ -85,6 +97,9 @@ deriving instance ( Show (Hash c)
                   , Show (Beneficiary c)
                   ) => Show (SyncEvent c tx s)
 
+-- | A 'SyncError' is returned upon exceptional conditions when syncing; this
+-- can happen (for example) if none of the active peers replies in a timely
+-- fashion or if the requested information can't be retrieved.
 data SyncError =
       RequestTimeout ProtocolRequest Addr Timeout
       -- ^ The given peer exceeded the request timeout when serving this
@@ -97,7 +112,7 @@ data SyncError =
     -- to the callers. We cannot recover from a network failure anyway, so the
     -- 'String' here is merely used to inform upstream users of what went wrong.
     | NoActivePeers
-      -- ^ There are not active peers to talk to.
+      -- ^ There are no active peers to talk to.
     | NoRemoteTipFound
       -- ^ It was not possible to fetch a valid tip from our peers.
     | AllPeersSyncError [SyncError]
@@ -106,6 +121,8 @@ data SyncError =
 
 instance Exception SyncError
 
+-- | Used by the 'timed' function to enforce a particular action doesn't
+-- exceed the timeout.
 data Timeout =
     MaxTimeoutExceeded (Expected Duration)
     -- ^ The operation exceeded the expected timeout, in nanoseconds.
@@ -113,13 +130,15 @@ data Timeout =
 
 -- | A closed (inclusive) range [lo,hi].
 data Range = Range
-    { start :: Height
-    , end   :: Height
+    { rangeStart :: Height
+    , rangeEnd   :: Height
     } deriving Show
 
+-- | An enumeration of all the requests a node can submit to its peers.
 data ProtocolRequest =
       GetTip
-    -- ^ Get the tip of the best chain.
+    -- ^ Get the tip of the remote chain, i.e. the tip of the chain the
+    -- active peers are following.
     | GetBlocks
     -- ^ Get some blocks.
     | GetBlockHeaders
@@ -136,14 +155,20 @@ data SProtocolRequest r where
 -- | A closed type family mapping each 'ProtocolRequest' to its list of
 -- arguments, so that we can use the 'ProtocolRequest' (where all constructors
 -- have kind /*/) as a constraint.
-type family ProtocolRequestArgs (c :: ProtocolRequest) :: * where
+type family ProtocolRequestArgs (r :: ProtocolRequest) :: * where
     ProtocolRequestArgs 'GetTip          = ()
     ProtocolRequestArgs 'GetBlocks       = Range
     ProtocolRequestArgs 'GetBlockHeaders = Range
 
 -- | A protocol response, indexed by the corresponding 'ProtocolRequest, so
 -- that matching the wrong type will result in a type error.
-type family ProtocolResponse c (m :: * -> *) tx s (r :: ProtocolRequest) :: *
+type family ProtocolResponse c (m :: * -> *) tx s (r :: ProtocolRequest) :: * where
+    ProtocolResponse c m tx s 'GetTip =
+        Block c tx (Sealed c s)
+    ProtocolResponse c m tx s 'GetBlocks =
+        ConduitT () (Block c tx (Sealed c s)) m ()
+    ProtocolResponse c m tx s 'GetBlockHeaders =
+        ConduitT () (BlockHeader c (Sealed c s)) m ()
 
 -- | A data fetcher is a wrapper around an action that given a (singleton)
 -- 'SProtocolRequest' and a set of arguments, returns a 'ProtocolResponse'
@@ -159,7 +184,7 @@ newtype DataFetcher c tx s m =
 -- | An opaque reference to a record of functions which can be used to query
 -- the network and the other parts of the system for information.
 data SyncContext c tx s m = SyncContext
-    { scNu               :: Nu
+    { scNu               :: Natural
     -- ^ Used to determine the block tolerance to consider
     -- ourselves synced. It correspond to /nu/ from the spec, and is used
     -- in the calculation of 'isDone'.
@@ -176,14 +201,14 @@ data SyncContext c tx s m = SyncContext
     -- variation of it.
     , scLocalChainReader  :: BlockStoreReader c tx s m
     -- ^ A read-only handle to the local blockchain.
-    , scUpstreamConsumers :: [SyncEvent c tx s -> m ()]
+    , scEventHandlers :: [SyncEvent c tx s -> m ()]
     -- ^ A list of \"upstream consumers\", represented as effectful actions from
     -- a 'SyncEvent' to 'm ()'.
     }
 
 -- | A sync monad over @m@, that can throw 'SyncError's.
-newtype Sync c tx s m a =
-    Sync { runSync :: ExceptT SyncError (ReaderT (SyncContext c tx s m) m) a }
+newtype SyncT c tx s m a =
+    SyncT { runSyncT :: ExceptT SyncError (ReaderT (SyncContext c tx s m) m) a }
     deriving ( Functor
              , Applicative
              , Monad
@@ -191,20 +216,20 @@ newtype Sync c tx s m a =
              , MonadReader (SyncContext c tx s m)
              )
 
-instance MonadTrans (Sync c tx s) where
-    lift = Sync . lift . lift
+instance MonadTrans (SyncT c tx s) where
+    lift = SyncT . lift . lift
 
-instance MonadIO m => MonadIO (Sync c tx s m) where
-    liftIO = Sync . liftIO
+instance MonadIO m => MonadIO (SyncT c tx s m) where
+    liftIO = SyncT . liftIO
 
 {------------------------------------------------------------------------------
-  Convenience functions over Sync
+  Convenience functions over SyncT
 ------------------------------------------------------------------------------}
 
 withActivePeers
     :: Monad m
-    => (ActivePeers c -> Sync c tx s m a)
-    -> Sync c tx s m a
+    => (ActivePeers c -> SyncT c tx s m a)
+    -> SyncT c tx s m a
 withActivePeers f = do
     ctx <- ask
     activePeers <- lift (scActivePeers ctx)
@@ -216,8 +241,8 @@ withActivePeers f = do
 -- all the active peers available.
 withActivePeer
     :: Monad m
-    => (ActivePeer c -> Sync c tx s m a)
-    -> Sync c tx s m a
+    => (ActivePeer c -> SyncT c tx s m a)
+    -> SyncT c tx s m a
 withActivePeer f = do
     ctx <- ask
     activePeers <- lift (scActivePeers ctx)
@@ -232,9 +257,9 @@ withActivePeer f = do
 height :: Block c tx s -> Height
 height = blockHeight . blockHeader
 
--- | The nu parameter, from the spec.
-type Nu = Natural
-
+-- | The maximum number of blocks we can request to each of our peers in a
+-- single request. It loosely correspond to the notion of "in flight blocks"
+-- in Bitcoin's inventory exchange.
 maxBlocksPerPeer :: Int
 maxBlocksPerPeer = 50
 
@@ -246,12 +271,13 @@ isDone
        , Eq (Hash c)
        , Eq (Beneficiary c)
        )
-    => Nu
+    => Natural
     -> Block c tx s
     -> Block c tx s
     -> Bool
-isDone (fromIntegral -> nu) localTip remoteTip =
-    remoteTip == localTip || height remoteTip - height localTip < nu
+isDone (fromIntegral -> nu) localTip remoteTip
+    | height localTip > height remoteTip = False -- a rollback possibly occurred.
+    | otherwise = remoteTip == localTip || height remoteTip - height localTip < nu
 
 -- | Returns the range between two blocks.
 range
@@ -274,13 +300,12 @@ range localTip remoteTip
 -- concurrently, picking the tip returned by /most/ of the peers.
 getRemoteTip
     :: forall c tx s m.
-       ( ProtocolResponse c m tx s 'GetTip ~ Block c tx (Sealed c s)
-       , Monad m
+       ( Monad m
        , Ord tx
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
-       ) => Sync c tx s m (ProtocolResponse c m tx s 'GetTip)
+       ) => SyncT c tx s m (ProtocolResponse c m tx s 'GetTip)
 getRemoteTip = withActivePeers $ \active -> do
     dataFetcher     <- scDataFetcher  <$> ask
     forConcurrently <- scConcurrently <$> ask
@@ -310,28 +335,26 @@ getRemoteTip = withActivePeers $ \active -> do
 
 -- | The 'bestHeight' operation from the spec.
 getRemoteHeight
-    :: ( ProtocolResponse c m tx s 'GetTip ~ Block c tx (Sealed c s)
-       , Monad m
+    :: ( Monad m
        , Ord tx
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
        )
-    => Sync c tx s m Height
+    => SyncT c tx s m Height
 getRemoteHeight = map height getRemoteTip
 
 -- | Given a valid 'Range', syncs the blocks within that range.
 syncBlocks
     :: forall c tx s m.
-       ( ProtocolResponse c m tx s 'GetBlocks ~ ConduitT () (Block c tx (Sealed c s)) m ()
-       , Monad m
+       ( Monad m
        , Ord tx
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
        )
     => Range
-    -> Sync c tx s m ()
+    -> SyncT c tx s m ()
 syncBlocks rng = do
     ctx <- ask
     let fetcher = scDataFetcher ctx
@@ -351,15 +374,15 @@ syncBlocks rng = do
     blocksPerPeer :: ActivePeers c -> Int
     blocksPerPeer peers =
         min maxBlocksPerPeer
-            (ceiling @Double @Int (fromIntegral (end rng - start rng) / fromIntegral (length peers)))
+            (ceiling @Double @Int (fromIntegral (rangeEnd rng - rangeStart rng) / fromIntegral (length peers)))
 
     -- Distribute work across peers, which is equally split, where
-    -- each peer can be given @at most@ 'maxBlocksPerPeer' at the time,
+    -- each peer can be given /at most/ 'maxBlocksPerPeer' at the time,
     -- in order to limit the amount of blocks in transit each time.
     workDistribution :: ActivePeers c -> [(ActivePeer c, [Height])]
     workDistribution peers =
         zip (cycle (HS.toList peers))
-            (chunksOf (blocksPerPeer peers) [start rng .. end rng])
+            (chunksOf (blocksPerPeer peers) [rangeStart rng .. rangeEnd rng])
 
     -- Fetch some blocks from an active peer, and returns any fetched block
     -- plus any missing block, identified by the height.
@@ -390,7 +413,7 @@ syncBlocks rng = do
         -> m [Height]
     notifyUpstreamConsumers ctx (requested, missing) = do
         forM_ requested $ \b ->
-            forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+            forM_ (scEventHandlers ctx) $ \dispatch ->
                 dispatch (SyncBlock b)
         pure missing
 
@@ -417,5 +440,5 @@ syncBlocks rng = do
                         ) Nothing (HS.toList peers)
        case mbBlock of
          Nothing -> pure () -- TODO(adn) telemetry?
-         Just b -> forM_ (scUpstreamConsumers ctx) $ \dispatch ->
+         Just b -> forM_ (scEventHandlers ctx) $ \dispatch ->
                        dispatch (SyncBlock b)

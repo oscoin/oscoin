@@ -4,19 +4,20 @@ module Oscoin.Protocol.Sync.Mock where
 import           Oscoin.Crypto
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain (Blockchain, blocks, tip)
+import           Oscoin.Crypto.Blockchain (Blockchain, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, BlockHeader, Score, Sealed, blockHeader, blockHeight)
+                 (Block, Score, Sealed, blockHeader, blockHeight)
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Protocol.Sync
+import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Telemetry.Trace
 import           Oscoin.Time.Chrono as Chrono
 
 import           Control.Monad.RWS.Strict hiding (get, gets)
-import           Data.Conduit
+import           Data.Conduit.Combinators (yieldMany)
 import           Data.Hashable (Hashable)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -24,17 +25,6 @@ import           Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
 import           Lens.Micro (Lens', lens)
 
-
-{------------------------------------------------------------------------------
-  Instances
-------------------------------------------------------------------------------}
-
-type instance ProtocolResponse c m MockTx MockSeal 'GetTip =
-        Block c MockTx (Sealed c MockSeal)
-type instance ProtocolResponse c m MockTx MockSeal 'GetBlocks =
-        ConduitT () (Block c MockTx (Sealed c MockSeal)) m ()
-type instance ProtocolResponse c m MockTx MockSeal 'GetBlockHeaders =
-        OldestFirst [] (BlockHeader c (Sealed c MockSeal))
 
 {------------------------------------------------------------------------------
   Types
@@ -100,13 +90,14 @@ mockContext =
         , scEventTracer       = probed noProbe
         , scConcurrently      = forM
         , scLocalChainReader  = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
-        , scUpstreamConsumers = [ \se -> tell [se] ]
+        , scEventHandlers = [ \se -> tell [se] ]
         }
 
 -- | Creates a new simulation 'DataFetcher'.
 mkDataFetcherSim
     :: ( Eq (Crypto.PublicKey MockCrypto)
        , Hashable (Crypto.PublicKey MockCrypto)
+       , Crypto.Hashable MockCrypto MockTx
        )
     => DataFetcher MockCrypto MockTx MockSeal Sim
 mkDataFetcherSim = DataFetcher $ \peer -> \case
@@ -115,34 +106,34 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
         case HM.lookup peer _mockPeerState of
             Nothing -> panic "newDataFetcherSim - precondition violation, empty blockchain."
             Just bc -> pure . Right $ tip bc
-    -- NOTE(adn) We are leaking our abstractions here and bypassing the
-    -- 'BlockStoreReader' interface, but this is an interim measure while we
-    -- wait for oscoin#550.
-    SGetBlocks -> \Range{..} -> do
-        allBlocks <- OldestFirst
-                   . take (fromIntegral (end - start) + 1) -- inclusive
-                   . drop (fromIntegral start)
-                 <$> getAllBlocks peer
-        pure $ Right (forM_ allBlocks yield)
 
-    -- NOTE(adn) We are leaking our abstractions here and bypassing the
-    -- 'BlockStoreReader' interface, but this is an interim measure while we
-    -- wait for oscoin#550.
-    SGetBlockHeaders -> \Range{..} ->   Right
-                                      . OldestFirst
-                                      . take (fromIntegral (end - start) + 1) -- inclusive
-                                      . drop (fromIntegral start)
-                                      . map blockHeader
-                                    <$> getAllBlocks peer
+    SGetBlocks -> \rng -> do
+        blocks <- lookupBlocks rng peer
+        pure $ Right (yieldMany blocks)
+
+    SGetBlockHeaders -> \rng -> do
+        blocks <- lookupBlocks rng peer
+        pure $ Right (yieldMany (map blockHeader blocks))
   where
-      getAllBlocks
-          :: MockPeer
+      lookupBlocks
+          :: Range
+          -> MockPeer
           -> Sim [Block MockCrypto MockTx (Sealed MockCrypto MockSeal)]
-      getAllBlocks peer = do
+      lookupBlocks Range{..} peer = do
           WorldState{..} <- get
           case HM.lookup peer _mockPeerState of
             Nothing -> pure []
-            Just bc -> pure (Chrono.toOldestFirst . Chrono.reverse . blocks $ bc)
+            Just c  -> do
+              -- The peers are read-only and don't do chain selection, so
+              -- the score function is irrelevant here.
+              let peerChain = BlockStore.Pure.initWithChain c mockScore
+              let store = fst (BlockStore.Pure.mkStateBlockStore (chainL peerChain))
+              Chrono.toOldestFirst <$> BlockStore.lookupBlocksByHeight store (rangeStart, rangeEnd)
+
+      chainL
+          :: BlockStore.Pure.Handle MockCrypto MockTx MockSeal
+          -> Lens' WorldState (BlockStore.Pure.Handle MockCrypto MockTx MockSeal)
+      chainL peerChain = lens (const peerChain) const
 
 {------------------------------------------------------------------------------
   Running a Sync operation
@@ -152,7 +143,7 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
 runMockSync
     :: WorldState
     -> SyncContext MockCrypto MockTx MockSeal Sim
-    -> Sync MockCrypto MockTx MockSeal Sim a
+    -> SyncT MockCrypto MockTx MockSeal Sim a
     -> (Either SyncError a, [SyncEvent MockCrypto MockTx MockSeal])
-runMockSync ws syncContext (Sync s) =
+runMockSync ws syncContext (SyncT s) =
     evalRWS (runReaderT (runExceptT s) $ syncContext) () ws
