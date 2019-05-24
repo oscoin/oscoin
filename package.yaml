@@ -90,6 +90,7 @@ library:
     - vector
     - wai
     - wai-middleware-static
+    - warp
     - writer-cps-mtl
     - yaml
 
@@ -193,6 +194,7 @@ tests:
       - serialise
       - sqlite-simple
       - splitmix
+      - stm
       - stm-conduit
       - streaming-commons
       - tasty >=1.0.0.1

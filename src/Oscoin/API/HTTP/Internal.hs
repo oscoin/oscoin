@@ -3,6 +3,7 @@ module Oscoin.API.HTTP.Internal
     , Api
     , ApiTx
     , runApi
+    , runApi'
     , liftNode
 
     , trailingSlashPolicy
@@ -26,6 +27,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
 import           Oscoin.Data.Tx
 import qualified Oscoin.Node as Node
+import           Oscoin.Telemetry.Logging (Logger, debug, ftag, shown, (%))
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as Serialise
@@ -36,6 +38,7 @@ import qualified Data.Text as T
 import           Network.HTTP.Types.Header (HeaderName)
 import qualified Network.HTTP.Types.Status as HTTP
 import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Middleware.Static as Wai
 import           Web.HttpApiData (FromHttpApiData, parseQueryParam)
 import           Web.Spock
@@ -145,6 +148,27 @@ runApi :: Api c tx s i ()
     -> IO ()
 runApi app port hdl =
     runSpock port (mkMiddleware app hdl)
+
+-- | Generic function to run the 'Api'. It takes as input a 'Logger', a
+-- callback to be used after the listening socket is ready and a 'Bool' to
+-- whether or not display the banner at startup.
+runApi'
+    :: Logger
+    -- ^ A 'Logger'.
+    -> IO ()
+    -- ^ An action to be called when the listening socket is ready.
+    -> Api c tx s i ()
+    -- ^ The 'Api'.
+    -> Int
+    -- ^ The listening port.
+    -> Node.Handle c tx s i
+    -- ^ The node 'Handle'.
+    -> IO ()
+runApi' logger onReady app port hdl = do
+    debug logger "Spock is running" (ftag "port" % shown) port
+    waiApp <- Spock.spockAsApp (mkMiddleware app hdl)
+    let settings = Warp.setPort port Warp.defaultSettings
+    Warp.runSettings (Warp.setBeforeMainLoop onReady settings) waiApp
 
 mkMiddleware
     :: Api c tx s i ()

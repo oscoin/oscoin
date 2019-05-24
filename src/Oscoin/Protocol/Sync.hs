@@ -89,11 +89,18 @@ data SyncError =
       RequestTimeout ProtocolRequest Addr Timeout
       -- ^ The given peer exceeded the request timeout when serving this
       -- 'SyncProtocolRequest'.
+    | RequestNetworkError ProtocolRequest Addr String
+    -- ^ NOTE (adn) Ideally this would carry an exception, but neither
+    -- 'SomeException' nor 'HttpException' implements 'Eq'. We could theoretically
+    -- implement 'Eq' manually for 'HttpException', but that wouldn't be a great
+    -- idea anyway, not to mention we would expose the type of network communication
+    -- to the callers. We cannot recover from a network failure anyway, so the
+    -- 'String' here is merely used to inform upstream users of what went wrong.
     | NoActivePeers
       -- ^ There are not active peers to talk to.
     | NoRemoteTipFound
       -- ^ It was not possible to fetch a valid tip from our peers.
-    | AllPeersTimeoutError
+    | AllPeersSyncError [SyncError]
       -- ^ All the queried peers didn't respond in the allocated timeout.
     deriving (Show, Eq)
 
@@ -146,7 +153,7 @@ newtype DataFetcher c tx s m =
       fetch :: forall r. ActivePeer c
             -> SProtocolRequest r
             -> ProtocolRequestArgs r
-            -> m (Either Timeout (ProtocolResponse c m tx s r))
+            -> m (Either SyncError (ProtocolResponse c m tx s r))
                 }
 
 -- | An opaque reference to a record of functions which can be used to query
@@ -280,8 +287,7 @@ getRemoteTip = withActivePeers $ \active -> do
     results  <- lift $
         forConcurrently (HS.toList active) (\a -> fetch dataFetcher a SGetTip ())
     case partitionEithers results of
-      (_t:_, [])           -> throwError AllPeersTimeoutError
-      ([], [])             -> throwError NoRemoteTipFound
+      (errs, [])           -> throwError (AllPeersSyncError errs)
       (_timeouts, allTips) ->
           -- Compare the result on the frequency, and pick the highest block
           -- in case of \"draws\".

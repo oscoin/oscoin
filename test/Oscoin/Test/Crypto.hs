@@ -23,6 +23,7 @@ import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess, convert)
+import qualified Data.Hashable as Data
 import qualified Data.Map as Map
 import           Database.SQLite.Simple.FromField
 import           Database.SQLite.Simple.Orphans ()
@@ -110,6 +111,7 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Hashable c ByteString
                   , Hashable c LByteString
                   , Hashable c (PublicKey c)
+                  , Data.Hashable (PublicKey c)
                   , Hashable c (TxState c (Tx c))
                   , AuthTree.MerkleHash (Hash c)
                   , Ord (Hash c)

@@ -1,6 +1,7 @@
 module Oscoin.API.HTTP
     ( run
     , app
+    , api
     ) where
 
 import           Oscoin.Prelude hiding (get)

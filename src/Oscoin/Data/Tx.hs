@@ -59,7 +59,7 @@ instance Query DummyEnv where
     query path (DummyEnv st) = Map.lookup (T.intercalate "/" path) st
 
 newtype DummyPayload = DummyPayload ByteString
-    deriving (Show, Eq, Serialise, ByteArrayAccess)
+    deriving (Show, Eq, Ord, Serialise, ByteArrayAccess)
 
 -- These are bogus Aeson instances which serves just as a placeholder for
 -- the times it takes to replace 'Tx' with the proper 'OscoinTx'.

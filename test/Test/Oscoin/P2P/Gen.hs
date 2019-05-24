@@ -128,7 +128,7 @@ genAddr
     :: Gen Addr
 genAddr = do
     host <- genHost
-    port <- fromIntegral <$> Gen.word16 Range.constantBounded
+    port <- fromIntegral <$> Gen.word16 (Range.constant 6000 50000)
     pure $ mkAddr host port
 
 genNodeInfo :: PublicKey c -> Gen (NodeInfo c)

@@ -13,6 +13,7 @@ module Oscoin.Test.HTTP.Helpers
     , runSessionWithState'
     , liftWaiSession
     , liftNode
+    , withNode
 
     , assertResultOK
     , assertStatus
