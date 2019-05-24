@@ -18,8 +18,6 @@ import qualified Oscoin.Time as Time
 
 import           Control.Concurrent (threadDelay)
 import           Crypto.Random.Types (MonadRandom(..))
-import qualified Data.Aeson as JSON
-import qualified Data.ByteString.Lazy as LBS
 
 type CommandRunner a = CommandRunnerT IO a
 
@@ -60,8 +58,5 @@ instance
     sleep milliseconds = liftIO $ threadDelay (1000 * milliseconds)
     putLine            = liftIO . putStrLn
     putString          = liftIO . putStr
-    readTxFile path    =
-        either (panic . toS) identity . JSON.eitherDecode <$>
-            liftIO (LBS.readFile path)
     getTime            = liftIO Time.now
     getClient          = API.hoistClient liftIO . commandClient <$> askCommandEnv

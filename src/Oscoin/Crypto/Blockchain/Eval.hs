@@ -7,7 +7,6 @@ module Oscoin.Crypto.Blockchain.Eval
     , Receipt(..)
     , buildBlock
     , buildBlockStrict
-    , buildGenesis
     , evalBlock
     , evalTraverse
     ) where
@@ -112,23 +111,6 @@ buildBlockStrict
     -> Either (tx, EvalError) (Block c tx Unsealed)
 buildBlockStrict eval tick benef st txs parent =
     mkUnsealedBlock (Just parent) tick benef txs <$> evalEither txs eval st
-
--- | Try to build a genesis block. See 'buildBlockStrict' for more information.
-buildGenesis
-    :: ( Crypto.Hashable c st
-       , Serialise tx
-       , Serialise (Beneficiary c)
-       , Crypto.Hashable c (BlockHeader c Unsealed)
-       , AuthTree.MerkleHash (Hash c)
-       )
-    => Evaluator st tx o
-    -> Timestamp
-    -> Beneficiary c
-    -> [tx]
-    -> st
-    -> Either (tx, EvalError) (Block c tx Unsealed)
-buildGenesis eval tick benef txs st =
-    mkUnsealedBlock Nothing tick benef txs <$> evalEither txs eval st
 
 -- | Evaluate the transactions contained in the block against the given
 -- state and return the new state and all the produced Receipts.

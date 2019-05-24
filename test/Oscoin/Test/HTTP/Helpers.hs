@@ -187,7 +187,7 @@ genDummyTx = do
 createValidTx
     :: forall c m.
        (IsCrypto c, MonadIO m)
-    => TxPayload c (Tx c)
+    => DummyPayload
     -> m (Hashed c (Tx c), Tx c)
 createValidTx payload = liftIO $ do
     (pubKey, priKey) <- Crypto.generateKeyPair

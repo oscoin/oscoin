@@ -90,7 +90,6 @@ instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
     sleep _       = pure ()
     putLine t     = putStr (t <> "\n")
     putString t   = modify $ \s -> s { commandOutput = commandOutput s <> t }
-    readTxFile _  = pure $ Left "can't read file in tests"
     getTime       = pure Time.epoch
     getClient     = panic "Test client not implemented"
 
