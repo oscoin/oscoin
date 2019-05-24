@@ -16,6 +16,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Mock
 import           Oscoin.Crypto.PubKey
+import           Oscoin.Data.Ledger (Contribution, DependencyUpdate)
 import           Oscoin.Data.Tx
 import           Oscoin.Test.Util
 
@@ -93,6 +94,8 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Serialise (Signature c)
                   , Serialise (BlockHash c)
                   , Serialise (ShortHash c)
+                  , Serialise (DependencyUpdate c)
+                  , Serialise (Contribution c)
                   , Ord (PublicKey c)
                   , Ord (Signature c)
                   , Ord (ShortHash c)

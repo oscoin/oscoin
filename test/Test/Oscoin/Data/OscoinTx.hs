@@ -2,6 +2,7 @@ module Test.Oscoin.Data.OscoinTx where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Configuration (allNetworks)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
                  (HasDigitalSignature, KeyPair, PrivateKey, PublicKey)
@@ -11,10 +12,12 @@ import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
 import           Oscoin.Test.Util
 
+import qualified Codec.Serialise as CBOR
 import qualified Crypto.Data.Auth.Tree as WorldState
 
 import           Test.Oscoin.Crypto.Hash.Gen (genHash, genShortHash)
-import           Test.Oscoin.P2P.Handshake (genKeyPair, genKeyPairPair)
+import           Test.Oscoin.Crypto.PubKey.Gen (genPublicKey, genSignature)
+import           Test.Oscoin.P2P.Handshake (genKeyPairPair)
 
 import           Test.Hedgehog.Extended
 import           Test.Tasty
@@ -25,7 +28,10 @@ import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
 
 
-tests :: forall c. Dict (IsCrypto c) -> TestTree
+tests
+    :: forall c. CBOR.Serialise (Contribution c)
+    => CBOR.Serialise (DependencyUpdate c)
+    => Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     [ testProperty "Transfer balance"        (propTransferBalance @c Dict)
     , testProperty "Apply transaction"       (propApplyTxPayload  @c Dict)
@@ -33,11 +39,12 @@ tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
     , testProperty "Tx fee & burn"           (propTxFeeBurn       @c Dict)
     , testProperty "Register project"        (propRegisterProj    @c Dict)
     , testProperty "Nonces"                  (propNonce           @c Dict)
+    , testProperty "Roundtrip CBOR"          (propRoundtripCBOR   @c Dict)
     ]
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
 propApplyTxPayload Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -132,7 +139,7 @@ propMultiTransfer Dict = property $ do
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -193,7 +200,7 @@ propRegisterProj Dict = property $ do
 
 propNonce :: forall c. Dict (IsCrypto c) -> Property
 propNonce Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -210,6 +217,22 @@ propNonce Dict = property $ do
     -- Alice's nonce is now incremented by `1`.
     nonce' === (accountNonce acc + 1)
 
+propRoundtripCBOR
+    :: forall c. CBOR.Serialise (Contribution c)
+    => CBOR.Serialise (DependencyUpdate c)
+    => HasHashing c
+    => Dict (IsCrypto c) -> Property
+propRoundtripCBOR Dict = property $ do
+    msg <- forAll (genTxMessage @c)
+    (CBOR.deserialise . CBOR.serialise) msg === msg
+
+    author <- forAll genPublicKey
+    pay    <- forAll (genTxPayload @c author)
+    (CBOR.deserialise . CBOR.serialise) pay === pay
+
+    tx <- forAll (genTx @c)
+    (CBOR.deserialise . CBOR.serialise) tx === tx
+
 -------------------------------------------------------------------------------
 -- Utility
 -------------------------------------------------------------------------------
@@ -219,9 +242,6 @@ lookupBalance acc ws = accountBalance <$> lookupAccount acc ws
 
 lookupNonce :: forall c. (IsCrypto c) => AccountId c -> WorldState c -> Either (TxError c) Nonce
 lookupNonce acc ws = accountNonce <$> lookupAccount acc ws
-
-publicKey :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c)
-publicKey = fst <$> genKeyPair
 
 publicKeyPair :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c, PublicKey c)
 publicKeyPair = do
@@ -317,3 +337,33 @@ genTransfer :: AccountId c -> Range Balance -> Gen (TxMessage c)
 genTransfer receiver range =
     TxTransfer receiver <$> Gen.integral range
 
+genTxMessage :: IsCrypto c => Gen (TxMessage c)
+genTxMessage = do
+    acc <- genAccountId
+    Gen.choice
+        [ genRegisterProject acc
+        , genUnregisterProject acc
+        , genAuthorize acc
+        , genDeauthorize acc
+        , genCheckpoint acc
+        , genUpdateContract acc
+        , genTransfer acc Range.constantBounded
+        ]
+
+genTxPayload :: (IsCrypto c) => PublicKey c -> Gen (TxPayload c)
+genTxPayload txAuthor = do
+    txMessages <- Gen.list (Range.constant 0 3) genTxMessage
+    txNonce    <- genNonce 0 maxBound
+    txFee      <- genBalance
+    txBurn     <- genBalance
+
+    pure TxPayload{..}
+
+genTx :: forall c. (IsCrypto c) => Gen (Tx c)
+genTx = do
+    pk          <- genPublicKey
+    txPayload   <- genTxPayload @c pk
+    txNetwork   <- Gen.element allNetworks
+    txSignature <- genSignature
+
+    pure  Tx'{..}
