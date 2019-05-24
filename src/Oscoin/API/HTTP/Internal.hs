@@ -69,7 +69,6 @@ type ApiTx c tx =
     ( Serialise tx
     , Crypto.Hashable c tx
     , Query (TxState c tx)
-    , Serialise (QueryVal (TxState c tx))
     , Serialise (TxOutput c tx)
     )
 

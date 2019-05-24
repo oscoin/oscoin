@@ -14,13 +14,12 @@ module Oscoin.API.Client.HTTP
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
-import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash (Hash, fromHashed)
 import           Oscoin.Crypto.PubKey (PublicKey, Signature)
 
 import           Codec.Serialise
-import qualified Data.Text as T
+import qualified Data.ByteString.BaseN as BaseN
 import           Formatting.Buildable (Buildable)
 import qualified Network.HTTP.Client as Client
 import           Network.HTTP.Types.Header
@@ -34,6 +33,7 @@ createNetworkHttpClient
        , Serialise (PublicKey c)
        , Serialise (Signature c)
        , MonadIO m
+       , MonadThrow m
        , MonadIO n
        )
     => Text -> n (Client c m)
@@ -57,6 +57,7 @@ data Response = Response
     , responseStatus :: Status
     }
 
+
 -- | Make a 'Client' from a function executing the underlying HTTP
 -- requests.
 httpClientFromRequest
@@ -64,7 +65,7 @@ httpClientFromRequest
        , Serialise (BlockHash c)
        , Serialise (PublicKey c)
        , Serialise (Signature c)
-       , Monad m
+       , MonadThrow m
        )
     => (Request -> m Response) -> Client c m
 httpClientFromRequest httpRequest = Client{..}
@@ -76,7 +77,7 @@ httpClientFromRequest httpRequest = Client{..}
             get httpRequest $ "/transactions/" <> toUrlPiece (fromHashed txId)
 
         getState key =
-            get httpRequest $ "/state?q=[" <> T.intercalate "," key <> "]"
+            get httpRequest $ "/state/" <> toS (BaseN.encodedBytes $ BaseN.encodeBase16 key)
 
 
 makeHttpRequest :: Client.Manager -> Client.Request -> Request -> IO Response
@@ -94,14 +95,18 @@ makeHttpRequest manager baseRequest Request{..} = do
         }
 
 
-executeRequest :: forall a m. (Serialise a, Monad m) => Requester m -> Request -> m (Result a)
+executeRequest
+    :: (Serialise a, MonadThrow m)
+    => Requester m -> Request -> m a
 executeRequest httpRequest req = do
     Response{..} <- httpRequest req
-    pure $ case deserialiseOrFail $ responseBody of
-        Left _    -> Err "Failed to deserialise response"
-        Right val -> val
+    case deserialiseOrFail $ responseBody of
+        Left err  -> throw err
+        Right val -> pure val
 
-get :: (Monad m, Serialise a) => Requester m -> Text -> m (Result a)
+get
+    :: (MonadThrow m, Serialise a)
+    => Requester m -> Text -> m a
 get httpRequest reqPath =
     executeRequest httpRequest $
         Request
@@ -111,7 +116,9 @@ get httpRequest reqPath =
             , requestBody = mempty
             }
 
-post :: (Monad m, Serialise a, Serialise b) => Requester m -> Text -> a -> m (Result b)
+post
+    :: (MonadThrow m, Serialise a, Serialise b)
+    => Requester m -> Text -> a -> m b
 post httpRequest reqPath reqBody =
     executeRequest httpRequest $
         Request

@@ -17,7 +17,6 @@ import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess)
 import           Data.Coerce
 import qualified Data.Map as Map
-import qualified Data.Text as T
 
 import qualified Oscoin.Data.Ledger as Ledger
 import qualified Oscoin.Data.OscoinTx as OscoinTx
@@ -29,7 +28,7 @@ type family TxOutput c tx where
 
 type family TxState c tx where
     TxState c (OscoinTx.Tx c) = Ledger.WorldState c
-    TxState c (Tx c)          = DummyEnv
+    TxState c (Tx c)          = LegacyTxState
 
 -- | A 'TxPayload' represent the \"inner body\" of a transaction, i.e. the
 -- unsigned transaction payload that together with a 'Signature' qualifies
@@ -47,16 +46,15 @@ type family TxValidationError c tx
 
 type TxValidator c tx = tx -> Either (TxValidationError c tx) ()
 
-newtype DummyEnv = DummyEnv (Map Text DummyPayload)
+newtype LegacyTxState = LegacyTxState (Map ByteString ByteString)
     deriving (Show, Eq, Semigroup, Monoid)
 
 
-instance HasHashing c => Hashable c DummyEnv where
-    hash (DummyEnv st) = toHashed . fromHashed . hashSerial $ st
+instance HasHashing c => Hashable c LegacyTxState where
+    hash (LegacyTxState st) = toHashed . fromHashed . hashSerial $ st
 
-instance Query DummyEnv where
-    type QueryVal DummyEnv   = DummyPayload
-    query path (DummyEnv st) = Map.lookup (T.intercalate "/" path) st
+instance Query LegacyTxState where
+    query key (LegacyTxState st) = Map.lookup key st
 
 newtype DummyPayload = DummyPayload ByteString
     deriving (Show, Eq, Ord, Serialise, ByteArrayAccess)

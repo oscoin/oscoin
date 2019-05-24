@@ -80,7 +80,7 @@ import qualified Network.Wai.Test as Wai
 --
 -- See also 'liftWaiSession' and 'liftNode'.
 newtype Session c s a = Session (ReaderT (NodeHandle c s) Wai.Session a)
-    deriving (Functor, Applicative, Monad, MonadIO)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadThrow)
 
 instance MonadFail (Session c s) where
     fail = assertFailure
@@ -219,11 +219,11 @@ runSessionWithState
        )
     => s
     -- ^ A seal for the genesis block.
-    -> [(Text, DummyPayload)]
+    -> [(ByteString, ByteString)]
     -> Session c s ()
     -> m ()
 runSessionWithState seal bindings (Session sess)= do
-    let initialState = DummyEnv $ Map.fromList bindings
+    let initialState = LegacyTxState $ Map.fromList bindings
     let genBlock = sealBlock seal $ emptyGenesisFromState epoch defaultBeneficiary initialState
     let nst = nodeState [] (fromGenesis genBlock) initialState
     liftIO $ withNode seal nst $ \nh -> do
@@ -235,7 +235,7 @@ runSessionWithState'
     :: ( IsCrypto c
        , MonadIO m
        )
-    => [(Text, DummyPayload)]
+    => [(ByteString, ByteString)]
     -> Session c DummySeal ()
     -> m ()
 runSessionWithState' = runSessionWithState mempty

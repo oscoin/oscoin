@@ -107,9 +107,9 @@ api mdlware = do
 
     get ("transactions" <//> var) (Handlers.getTransaction . toHashed)
 
-    -- /state/:chain ----------------------------------------------------------
+    -- /state/:key ------------------------------------------------------------
 
-    get ("state" <//> wildcard) Handlers.getStatePath
+    get ("state" <//> wildcard) Handlers.getStateValue
 
 
 -- Internal --------------------------------------------------------------------

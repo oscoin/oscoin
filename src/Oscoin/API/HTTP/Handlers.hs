@@ -2,7 +2,6 @@ module Oscoin.API.HTTP.Handlers where
 
 import           Oscoin.Prelude
 
-import           Lens.Micro.Mtl (view)
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain (Height, TxLookup(..))
@@ -17,7 +16,9 @@ import           Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Time.Chrono as Chrono
 
 import           Codec.Serialise (Serialise)
+import           Data.ByteString.BaseN (decodeBase16)
 import           Formatting.Buildable (Buildable)
+import           Lens.Micro.Mtl (view)
 import           Network.HTTP.Types.Status
 
 root :: ApiAction c tx s i ()
@@ -119,15 +120,16 @@ lookupBlocksByHeight = do
     blocks <- liftNode $ Node.lookupBlocksByHeight (start, end)
     respond ok200 $ Ok (Chrono.toOldestFirst blocks)
 
-getStatePath
+getStateValue
     :: (ApiTx c tx)
     => Text
     -> ApiAction c tx s i ()
-getStatePath _chain = do
-    path <- listParam "q"
-    result' <- liftNode $ Node.getPathLatest path
-    case result' of
-        Just val ->
-            respond ok200 (Ok val)
-        Nothing ->
-            respond notFound404 $ errBody "Value not found"
+getStateValue encodedKey =
+    case decodeBase16 (toS encodedKey) of
+        Nothing -> respond badRequest400 $ errBody "Invalid hex string"
+        Just key -> do
+            result <- liftNode $ Node.getStateValue (toS key)
+            respond (statusCode result) result
+  where
+    statusCode (Just _) = ok200
+    statusCode Nothing  = notFound404
