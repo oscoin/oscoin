@@ -50,7 +50,7 @@ data Ledger crypto seal tx output state (m :: * -> *) = Ledger
     { ledgerBlockStoreReader :: BlockStoreReader crypto tx seal m
     , ledgerStateStore       :: HashStore crypto state m
     , ledgerReceiptStore     :: ReceiptStore.ReceiptStore crypto tx output m
-    , ledgerEvaluator        :: Evaluator state tx output
+    , ledgerEvaluator        :: Evaluator crypto state tx output
     }
 
 hoist
@@ -76,7 +76,7 @@ newFromBlockStoreIO
        , Crypto.Hashable crypto state
        , Crypto.Hashable crypto tx
        )
-    => Evaluator state tx output
+    => Evaluator crypto state tx output
     -> BlockStoreReader crypto tx seal IO
     -> state
     -> IO (Ledger crypto seal tx output state m)
@@ -94,7 +94,7 @@ mkLedger
     :: BlockStoreReader crypto tx seal m
     -> HashStore crypto state m
     -- ^ State store
-    -> Evaluator state tx output
+    -> Evaluator crypto state tx output
     -> ReceiptStore.ReceiptStore crypto tx output m
     -> Ledger crypto seal tx output state m
 mkLedger ledgerBlockStoreReader ledgerStateStore ledgerEvaluator ledgerReceiptStore =

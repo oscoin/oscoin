@@ -44,7 +44,7 @@ prop_getTipWithState :: forall c. Dict (IsCrypto c) -> Property
 prop_getTipWithState Dict = property $ do
     (ledger, blockStoreWriter) <- newDummyLedger @c
     (parentBlock, parentState) <- evalEither =<< Ledger.getTipWithState ledger
-    (blk, st) <- forAll $ genEvaledBlock parentBlock parentState dummyEval
+    (blk, st) <- forAll $ genEvaledBlock parentBlock parentState dummyEvalBlock
     BlockStore.insertBlock blockStoreWriter blk
     result <- Ledger.getTipWithState ledger
     result === Right (blk, st)
@@ -56,7 +56,7 @@ prop_lookupReceipt :: forall c. Dict (IsCrypto c) -> Property
 prop_lookupReceipt Dict = property $ do
     (ledger, blockStoreWriter) <- newDummyLedger @c
     (parentBlock, parentState) <- evalEither =<< Ledger.getTipWithState ledger
-    (blk, _) <- forAll $ genEvaledBlock parentBlock parentState dummyEval
+    (blk, _) <- forAll $ genEvaledBlock parentBlock parentState dummyEvalBlock
     BlockStore.insertBlock blockStoreWriter blk
     tx <- forAll $ Gen.element (toList $ blockTxs blk)
     maybeReceipt <- Ledger.lookupReceipt ledger (Crypto.hash tx)
@@ -84,7 +84,7 @@ prop_buildNextBlock Dict = property $ do
     timestamp <- forAll $ Gen.arbitrary
     nextBlock <- evalEither =<< Ledger.buildNextBlock ledger timestamp defaultBeneficiary txs
 
-    let (_, expectedState) = evalTraverse dummyEval txs parentState
+    let (_, expectedState) = dummyEvalBlock (defaultBeneficiary @c) txs parentState
     toList (blockTxs nextBlock) === txs
     blockStateHash (blockHeader nextBlock) === Crypto.fromHashed (Crypto.hash expectedState)
     parentHash nextBlock === blockHash parentBlock
@@ -100,7 +100,7 @@ newDummyLedger
         )
 newDummyLedger = do
     (blockStoreReader, blockStoreWriter) <- liftIO $ newBlockStoreFromGenesisIO genesisBlk
-    ledger <- liftIO $ Ledger.newFromBlockStoreIO dummyEval blockStoreReader genesisState
+    ledger <- liftIO $ Ledger.newFromBlockStoreIO dummyEvalBlock blockStoreReader genesisState
     pure (ledger, BlockStore.hoistBlockStoreWriter liftIO blockStoreWriter)
   where
     genesisState = [] :: [DummyTx]
@@ -120,10 +120,10 @@ genEvaledBlock
        )
     => Block c tx s
     -> state
-    -> Evaluator state tx output
+    -> Evaluator c state tx output
     -> m (Block c tx s, state)
 genEvaledBlock parentBlock parentState evl = do
     txs <- Gen.list (Range.linear 1 6) Gen.arbitrary
-    let (_, newState) = evalTraverse evl txs parentState
+    let (_, newState) = evl defaultBeneficiary txs parentState
     newBlock <- Gen.quickcheck $ genBlockWith parentBlock txs newState
     pure (newBlock, newState)

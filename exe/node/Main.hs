@@ -116,7 +116,7 @@ main = do
                     gen
             -- FIXME(adn) Replace with a proper evaluator & state once we switch to
             -- the OscoinTx type.
-            let dummyEval _ s = Right ([], s)
+            let dummyEval _ _ s = ([], s)
             ledger <- liftIO $
                 Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
 

@@ -162,8 +162,8 @@ withNode seal NodeState{..} k = do
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
-    let dummyEval _ s = Right ([], s)
-    ledger <- Ledger.newFromBlockStoreIO dummyEval blockStoreReader statestoreState
+    let dummyEvalBlock _ txs s = (map (\_ -> Right []) txs, s)
+    ledger <- Ledger.newFromBlockStoreIO dummyEvalBlock blockStoreReader statestoreState
     runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode
             cfg

@@ -87,7 +87,7 @@ instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState 
         let blockStore = testableBlockStore
         let stateStore = mkStateHashStore nakStateStoreL
         let receiptStore = mkStateReceiptStore nakReceiptStoreL
-        let ledger = Ledger.mkLedger (fst blockStore) stateStore dummyEval receiptStore
+        let ledger = Ledger.mkLedger (fst blockStore) stateStore dummyEvalBlock receiptStore
         maybeBlock <- mineBlock ledger nakConsensus tn defaultBeneficiary
         -- NOTE (adn): We are bypassing the protocol at the moment, but we
         -- probably shouldn't.
