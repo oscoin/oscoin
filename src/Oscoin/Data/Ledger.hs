@@ -43,10 +43,10 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey (PublicKey, Signature, Signed)
 
+import qualified Codec.CBOR.Decoding as CBOR
+import qualified Codec.CBOR.Encoding as CBOR
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
-import qualified Codec.Serialise.Decoding as CBOR
-import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
 import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as WorldState
@@ -209,7 +209,7 @@ instance ( Serialise (Crypto.Hash c)
         <> CBOR.encode contribSignoff
         <> CBOR.encode contribLabels
     decode = do
-        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWordCanonical
         case pre of
             (6, 0) ->
                 Contribution
@@ -275,7 +275,7 @@ instance ( Serialise (Crypto.Hash c)
         <> CBOR.encode proj
 
     decode = do
-        pre <- liftA2 (,) CBOR.decodeListLen CBOR.decodeWord
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWordCanonical
         case pre of
             (3, 0) -> Depend   <$> CBOR.decode <*> CBOR.decode
             (2, 1) -> Undepend <$> CBOR.decode

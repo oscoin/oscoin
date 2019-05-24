@@ -27,6 +27,10 @@ module Oscoin.Configuration
 
 import           Oscoin.Prelude hiding (option, (<.>))
 
+import qualified Codec.CBOR.Decoding as CBOR
+import qualified Codec.CBOR.Encoding as CBOR
+import           Codec.Serialise (Serialise(..))
+import           Control.Monad.Fail (fail)
 import qualified Formatting as F
 import           Options.Applicative
 import           Paths_oscoin (getDataDir)
@@ -153,3 +157,22 @@ readNetworkText "mainnet" = pure Mainnet
 readNetworkText "testnet" = pure Testnet
 readNetworkText "devnet"  = pure Devnet
 readNetworkText x         = Left . toS $ "Unkown network: " <> x
+
+instance Serialise Network where
+    encode Mainnet =
+           CBOR.encodeListLen 1
+        <> CBOR.encodeWord 0
+    encode Testnet =
+           CBOR.encodeListLen 1
+        <> CBOR.encodeWord 1
+    encode Devnet =
+           CBOR.encodeListLen 1
+        <> CBOR.encodeWord 2
+
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWord16Canonical
+        case pre of
+            (1, 0) -> pure Mainnet
+            (1, 1) -> pure Testnet
+            (1, 2) -> pure Devnet
+            e      -> fail $ "Failed decoding Network from CBOR: " ++ show e

@@ -2,6 +2,7 @@ module Test.Oscoin.Data.OscoinTx where
 
 import           Oscoin.Prelude
 
+import           Oscoin.Configuration (allNetworks)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
                  (HasDigitalSignature, KeyPair, PrivateKey, PublicKey)
@@ -15,7 +16,8 @@ import qualified Codec.Serialise as CBOR
 import qualified Crypto.Data.Auth.Tree as WorldState
 
 import           Test.Oscoin.Crypto.Hash.Gen (genHash, genShortHash)
-import           Test.Oscoin.P2P.Handshake (genKeyPair, genKeyPairPair)
+import           Test.Oscoin.Crypto.PubKey.Gen (genPublicKey, genSignature)
+import           Test.Oscoin.P2P.Handshake (genKeyPairPair)
 
 import           Test.Hedgehog.Extended
 import           Test.Tasty
@@ -42,7 +44,7 @@ tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
 propApplyTxPayload Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -137,7 +139,7 @@ propMultiTransfer Dict = property $ do
 
 propTxFeeBurn :: forall c. Dict (IsCrypto c) -> Property
 propTxFeeBurn Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -198,7 +200,7 @@ propRegisterProj Dict = property $ do
 
 propNonce :: forall c. Dict (IsCrypto c) -> Property
 propNonce Dict = property $ do
-    alicePk <- publicKey @c
+    alicePk <- forAll (genPublicKey @c)
     charlie <- forAll (genAccountId @c)
 
     let alice = toAccountId alicePk
@@ -218,14 +220,18 @@ propNonce Dict = property $ do
 propRoundtripCBOR
     :: forall c. CBOR.Serialise (Contribution c)
     => CBOR.Serialise (DependencyUpdate c)
+    => HasHashing c
     => Dict (IsCrypto c) -> Property
 propRoundtripCBOR Dict = property $ do
     msg <- forAll (genTxMessage @c)
     (CBOR.deserialise . CBOR.serialise) msg === msg
 
-    author <- publicKey @c
+    author <- forAll genPublicKey
     pay    <- forAll (genTxPayload @c author)
     (CBOR.deserialise . CBOR.serialise) pay === pay
+
+    tx <- forAll (genTx @c)
+    (CBOR.deserialise . CBOR.serialise) tx === tx
 
 -------------------------------------------------------------------------------
 -- Utility
@@ -236,9 +242,6 @@ lookupBalance acc ws = accountBalance <$> lookupAccount acc ws
 
 lookupNonce :: forall c. (IsCrypto c) => AccountId c -> WorldState c -> Either (TxError c) Nonce
 lookupNonce acc ws = accountNonce <$> lookupAccount acc ws
-
-publicKey :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c)
-publicKey = fst <$> genKeyPair
 
 publicKeyPair :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c, PublicKey c)
 publicKeyPair = do
@@ -347,7 +350,7 @@ genTxMessage = do
         , genTransfer acc Range.constantBounded
         ]
 
-genTxPayload :: IsCrypto c => PublicKey c -> Gen (TxPayload c)
+genTxPayload :: (IsCrypto c) => PublicKey c -> Gen (TxPayload c)
 genTxPayload txAuthor = do
     txMessages <- Gen.list (Range.constant 0 3) genTxMessage
     txNonce    <- genNonce 0 maxBound
@@ -355,3 +358,12 @@ genTxPayload txAuthor = do
     txBurn     <- genBalance
 
     pure TxPayload{..}
+
+genTx :: forall c. (IsCrypto c) => Gen (Tx c)
+genTx = do
+    pk          <- genPublicKey
+    txPayload   <- genTxPayload @c pk
+    txNetwork   <- Gen.element allNetworks
+    txSignature <- genSignature
+
+    pure  Tx'{..}
