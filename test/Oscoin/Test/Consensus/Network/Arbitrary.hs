@@ -8,8 +8,6 @@ module Oscoin.Test.Consensus.Network.Arbitrary
 
 import           Oscoin.Prelude
 
-import           Oscoin.Crypto.Blockchain.Eval (identityEval)
-
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Crypto
 import           Oscoin.Time
@@ -96,7 +94,6 @@ arbitrarySynchronousNetwork blockTime = do
         , tnLog        = []
         , tnLatencies  = repeat 0
         , tnRng        = rng
-        , tnEval       = identityEval
         , tnValidate   = \_ -> Right ()
         , tnMsgCount   = 0
         , tnLastTick   = fromEpoch duration

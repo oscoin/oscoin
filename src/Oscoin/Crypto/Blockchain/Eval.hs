@@ -1,7 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Blockchain.Eval
     ( Evaluator
-    , identityEval
     , EvalError(..)
     , EvalResult
     , Receipt(..)
@@ -26,9 +25,6 @@ import qualified Generics.SOP as SOP
 type EvalResult state output = Either EvalError (output, state)
 
 type Evaluator state tx output = tx -> state -> EvalResult state output
-
-identityEval :: Evaluator s tx ()
-identityEval _ s = Right ((), s)
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
