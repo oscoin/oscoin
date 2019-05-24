@@ -9,7 +9,6 @@ module Oscoin.API.Types
     ) where
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashed)
 import           Oscoin.Data.Tx.Abstract
 import           Oscoin.Prelude
@@ -41,7 +40,7 @@ data TxLookupResponse c tx = TxLookupResponse
     -- ^ Hash of the transaction.
     , txBlockHash     :: Maybe (BlockHash c)
     -- ^ @BlockHash@ of the 'Block' in which the transaction was included.
-    , txOutput        :: Maybe (Either EvalError (TxOutput c tx))
+    , txOutput        :: Maybe (TxOutput c tx)
     -- ^ Output of the transaction if it was evaluated. If the
     -- evaluation was successful the transaction is included in the
     -- block 'txBlockHash'.

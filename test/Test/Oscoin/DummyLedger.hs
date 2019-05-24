@@ -52,4 +52,4 @@ type DummyOutput = DummyTx
 
 -- | Prepends the transaction to the state and output the transaction.
 dummyEvalBlock :: Evaluator c DummyState DummyTx DummyOutput
-dummyEvalBlock _beneficiary txs st = (map Right txs, reverse txs <> st )
+dummyEvalBlock _beneficiary txs st = (txs, reverse txs <> st )

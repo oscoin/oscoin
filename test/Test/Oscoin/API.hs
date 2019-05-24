@@ -75,7 +75,7 @@ tests Dict = testGroup "Test.Oscoin.API"
                     { txHash = Crypto.hash tx
                     , txBlockHash = Just (blockHash blk)
                     , txConfirmations = 6
-                    , txOutput = Just (Right [])
+                    , txOutput = Just []
                     , txPayload = tx
                     }
             response @?= API.Ok expected

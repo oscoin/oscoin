@@ -66,7 +66,7 @@ prop_lookupReceipt Dict = property $ do
 
     receiptTx receipt === Crypto.hash tx
     receiptTxBlock receipt === blockHash blk
-    receiptTxOutput receipt === Right tx
+    receiptTxOutput receipt === tx
 
 
 -- Checks that a block created with 'Ledger.buildNextBlock' satisfies

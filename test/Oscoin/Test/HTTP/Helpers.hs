@@ -171,7 +171,7 @@ withNode emptyTxOutput validateTx seal NodeState{..} k = do
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
-    let dummyEvalBlock _ txs s = (map (\_ -> Right emptyTxOutput) txs, s)
+    let dummyEvalBlock _ txs s = (map (const emptyTxOutput) txs, s)
     ledger <- Ledger.newFromBlockStoreIO dummyEvalBlock blockStoreReader statestoreState
     runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode
