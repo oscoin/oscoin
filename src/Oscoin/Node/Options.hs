@@ -117,7 +117,7 @@ nodeOptionsParser cps = Options
         )
     <*> option (maybeReader readBeneficiary)
         ( long "beneficiary"
-       <> help "Beneficiary id for block rewards"
+       <> help "Beneficiary account id for block rewards. Hex encoded with leading 0x"
         )
   where
     readBeneficiary = Crypto.parseShortHash . T.pack

@@ -20,7 +20,7 @@ First, generate a key pair for your node::
 
 Then run the full node with::
 
-   stack exec oscoin -- --no-empty-blocks
+   stack exec oscoin -- --no-empty-blocks --beneficiary 0x0000000000000000000000000000000000000000
 
 Testing
 -------
