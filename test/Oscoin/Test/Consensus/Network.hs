@@ -41,7 +41,6 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockPrevHash
                  , blockTxs
                  )
-import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
@@ -144,15 +143,11 @@ data TestNetwork c s a = TestNetwork
     -- message we take the first element to determine when the message
     -- gets delivered.
     , tnRng        :: StdGen
-    , tnEval       :: DummyEval
     , tnValidate   :: DummyValidate c s
     , tnMsgCount   :: Int
     -- ^ Number of messages delivered in the network
     , tnLastTick   :: Timestamp
     }
-
--- | Test evaluator.
-type DummyEval = Evaluator DummyState DummyTx ()
 
 -- | Test block validator.
 type DummyValidate c s =
