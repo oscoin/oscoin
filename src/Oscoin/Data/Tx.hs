@@ -30,18 +30,6 @@ type family TxState c tx where
     TxState c (OscoinTx.Tx c) = Ledger.WorldState c
     TxState c (Tx c)          = LegacyTxState
 
--- | A 'TxPayload' represent the \"inner body\" of a transaction, i.e. the
--- unsigned transaction payload that together with a 'Signature' qualifies
--- a transaction. Due to a slightly incorrect implementation of how signing
--- worked in the legacy 'Tx', this alias to 'DummyPayload' for the legacy
--- 'Tx', but hopefully will go away once we switch to 'OscoinTx'.
--- N.B. The use of this type family might become moot if we switch to a more
--- concrete way to representing transactions without the system, but it serves
--- for now as a compat-shim to make the types unify.
-type family TxPayload c tx where
-    TxPayload c (OscoinTx.Tx c) = OscoinTx.TxPayload c
-    TxPayload c (Tx c)          = DummyPayload
-
 type family TxValidationError c tx
 
 type TxValidator c tx = tx -> Either (TxValidationError c tx) ()
