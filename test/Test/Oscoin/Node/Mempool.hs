@@ -5,7 +5,7 @@ module Test.Oscoin.Node.Mempool
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash
-import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.Node.Mempool.Event as Mempool
 
@@ -133,6 +133,6 @@ genDummyTx = Gen.frequency
     , (1, pure DummyTxInvalid)
     ]
 
-dummyValidate :: DummyTx -> Either (TxValidationError c DummyTx) ()
+dummyValidate :: TxValidator c DummyTx
 dummyValidate (DummyTxValid _) = Right ()
 dummyValidate DummyTxInvalid   = Left DummyTxError

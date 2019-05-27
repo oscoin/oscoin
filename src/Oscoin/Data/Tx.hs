@@ -7,6 +7,7 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Hash
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
+import           Oscoin.Data.Tx.Abstract
 
 import           Codec.Serialise
 import qualified Codec.Serialise as CBOR
@@ -18,25 +19,15 @@ import           Data.ByteArray (ByteArrayAccess)
 import           Data.Coerce
 import qualified Data.Map as Map
 
-import qualified Oscoin.Data.Ledger as Ledger
 import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Query
 
-type family TxOutput c tx where
-    TxOutput c (OscoinTx.Tx c) = OscoinTx.TxOutput
-    TxOutput c (Tx c)          = OscoinTx.TxOutput
 
-type family TxState c tx where
-    TxState c (OscoinTx.Tx c) = Ledger.WorldState c
-    TxState c (Tx c)          = LegacyTxState
-
-type family TxValidationError c tx
-
-type TxValidator c tx = tx -> Either (TxValidationError c tx) ()
+type instance TxOutput c (Tx c) = OscoinTx.TxOutput
+type instance TxState c (Tx c) = LegacyTxState
 
 newtype LegacyTxState = LegacyTxState (Map ByteString ByteString)
     deriving (Show, Eq, Semigroup, Monoid)
-
 
 instance HasHashing c => Hashable c LegacyTxState where
     hash (LegacyTxState st) = toHashed . fromHashed . hashSerial $ st

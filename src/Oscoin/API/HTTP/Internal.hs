@@ -25,7 +25,7 @@ import           Oscoin.Prelude hiding (State, state)
 import           Oscoin.API.Types
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
-import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import qualified Oscoin.Node as Node
 import           Oscoin.Telemetry.Logging (Logger, debug, ftag, shown, (%))
 

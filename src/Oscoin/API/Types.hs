@@ -11,7 +11,7 @@ module Oscoin.API.Types
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import           Oscoin.Crypto.Blockchain.Eval (EvalError)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashed)
-import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import           Oscoin.Prelude
 
 import qualified Codec.Serialise as Serial

@@ -18,7 +18,7 @@ import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
 import           Oscoin.Crypto.Hash (Hash, Hashable)
-import qualified Oscoin.Data.Tx as Tx
+import           Oscoin.Data.Tx.Abstract (TxOutput, TxState)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Mempool.Class (MonadMempool(..))
 import qualified Oscoin.P2P.Types as P2P (Network)
@@ -66,7 +66,7 @@ data Handle c tx s i = Handle
     , hProtocol  :: Protocol.Handle c tx s IO
     , hMempool   :: Mempool.Handle c tx
     , hConsensus :: Consensus c tx s (NodeT c tx s i IO)
-    , hLedger    :: Ledger.Ledger c s tx (Tx.TxOutput c tx) (Tx.TxState c tx) IO
+    , hLedger    :: Ledger.Ledger c s tx (TxOutput c tx) (TxState c tx) IO
     }
 
 -------------------------------------------------------------------------------
@@ -101,5 +101,5 @@ getBlockStoreReader = Ledger.blockStoreReader <$> getLedger
 
 getLedger
     :: (MonadIO m, MonadIO n)
-    => NodeT c tx s i m (Ledger.Ledger c s tx (Tx.TxOutput c tx) (Tx.TxState c tx) n)
+    => NodeT c tx s i m (Ledger.Ledger c s tx (TxOutput c tx) (TxState c tx) n)
 getLedger = Ledger.hoist liftIO <$> asks hLedger

@@ -9,8 +9,7 @@ module Oscoin.Test.Crypto.PubKey.Arbitrary (
     , withFastRandomBytes
     ) where
 
-import           Oscoin.Test.Crypto
-
+import           Oscoin.Crypto.Hash (HasHashing)
 import           Oscoin.Crypto.PubKey
                  ( HasDigitalSignature
                  , PrivateKey
@@ -92,7 +91,8 @@ arbitrarySigned
     :: forall a c.
        ( ByteArrayAccess a
        , Arbitrary a
-       , IsCrypto c
+       , HasHashing c
+       , HasDigitalSignature c
        ) => Proxy c
          -> Gen (Signed c a)
 arbitrarySigned Proxy = do

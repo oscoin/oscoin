@@ -38,6 +38,7 @@ import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
 import qualified Oscoin.P2P.Types as P2P (fromPhysicalNetwork, randomNetwork)

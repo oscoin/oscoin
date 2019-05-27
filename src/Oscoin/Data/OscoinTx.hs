@@ -13,6 +13,7 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Data.Ledger
+import qualified Oscoin.Data.Tx.Abstract as Abstract
 
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Encoding as CBOR
@@ -46,10 +47,12 @@ data Tx' (version :: Nat) c = Tx'
 txVersion :: forall version c. KnownNat version => Tx' version c -> Word16
 txVersion _ = fromIntegral (natVal (Proxy @version))
 
-data TxValidationError = TxInvalidSignature
+validateTx :: Tx c -> Either (TxError c) ()
+validateTx _ = Right ()
 
-txValidate :: Tx c -> Either TxValidationError ()
-txValidate _ = Right ()
+type instance Abstract.TxValidationError c (Tx c) = TxError c
+type instance Abstract.TxState c (Tx c) = WorldState c
+type instance Abstract.TxOutput c (Tx c) = TxOutput
 
 -- | Transaction payload.
 data TxPayload c = TxPayload

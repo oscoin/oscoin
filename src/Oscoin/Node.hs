@@ -35,7 +35,7 @@ import           Oscoin.Crypto.Blockchain.Eval (Receipt)
 import           Oscoin.Crypto.Hash (Hash, Hashable, Hashed, formatHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Data.Query
-import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import           Oscoin.Node.Mempool (Mempool)
 import qualified Oscoin.Node.Mempool as Mempool
 import           Oscoin.Node.Trans

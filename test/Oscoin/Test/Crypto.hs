@@ -18,6 +18,7 @@ import           Oscoin.Crypto.Hash.Mock
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Data.Ledger (Contribution, DependencyUpdate)
 import           Oscoin.Data.Tx
+import           Oscoin.Data.Tx.Abstract
 import           Oscoin.Test.Util
 
 import           Codec.Serialise (Serialise)

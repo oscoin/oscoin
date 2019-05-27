@@ -8,7 +8,7 @@ module Oscoin.Node.Mempool.Class
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Hash (Hashed)
-import           Oscoin.Data.Tx (TxValidationError)
+import           Oscoin.Data.Tx.Abstract (TxValidationError)
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 
 -- MonadMempool ---------------------------------------------------------------

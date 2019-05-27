@@ -20,7 +20,7 @@ import           Oscoin.Prelude hiding (toList)
 
 import           Oscoin.Crypto.Hash (Hash)
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.Tx (TxValidationError, TxValidator)
+import           Oscoin.Data.Tx.Abstract
 import           Oscoin.Node.Mempool.Event (Channel, Event(..))
 import           Oscoin.Node.Mempool.Internal (Mempool)
 import qualified Oscoin.Node.Mempool.Internal as Internal
