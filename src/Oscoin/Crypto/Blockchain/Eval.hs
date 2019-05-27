@@ -5,9 +5,7 @@ module Oscoin.Crypto.Blockchain.Eval
     , EvalResult
     , Receipt(..)
     , buildBlock
-    , buildBlockStrict
     , evalBlock
-    , evalTraverse
     ) where
 
 import           Oscoin.Prelude
@@ -24,7 +22,7 @@ import qualified Generics.SOP as SOP
 
 type EvalResult state output = Either EvalError (output, state)
 
-type Evaluator state tx output = tx -> state -> EvalResult state output
+type Evaluator c state tx output = Beneficiary c -> [tx] -> state -> ([Either EvalError output], state)
 
 newtype EvalError = EvalError { fromEvalError :: Text }
     deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
@@ -72,7 +70,7 @@ buildBlock
        , Crypto.Hashable c (BlockHeader c Unsealed)
        , AuthTree.MerkleHash (Hash c)
        )
-    => Evaluator st tx o
+    => Evaluator c st tx o
     -> Timestamp
     -> Beneficiary c
     -> st
@@ -81,73 +79,41 @@ buildBlock
     -> (Block c tx Unsealed, st, [Receipt c tx o])
 buildBlock eval tick benef st txs parentBlock =
     let initialState = st
-        (txOutputs, newState) = evalTraverse eval txs initialState
+        (txOutputs, newState) = evalWithTxs eval benef txs initialState
         validTxs = [tx | (tx, Right _) <- txOutputs]
         newBlock = mkUnsealedBlock (Just parentBlock) tick benef validTxs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
      in (newBlock, newState, receipts)
 
 
--- | Try to build a block like 'buildBlock' by applying @txs@ to the
--- state of a previous block. Unlinke 'buildBlock' evaluation will
--- abort if one of the transactions produces an error.
-buildBlockStrict
-    :: ( Serialise tx
-       , Serialise (Beneficiary c)
-       , Crypto.Hashable c st
-       , Crypto.Hashable c (BlockHeader c Unsealed)
-       , AuthTree.MerkleHash (Hash c)
-       )
-    => Evaluator st tx o
-    -> Timestamp
-    -> Beneficiary c
-    -> st
-    -> [tx]
-    -> Block c tx s
-    -> Either (tx, EvalError) (Block c tx Unsealed)
-buildBlockStrict eval tick benef st txs parent =
-    mkUnsealedBlock (Just parent) tick benef txs <$> evalEither txs eval st
-
 -- | Evaluate the transactions contained in the block against the given
 -- state and return the new state and all the produced Receipts.
 evalBlock
     :: forall c st tx o s.
        (Crypto.Hashable c tx)
-    => Evaluator st tx o
+    => Evaluator c st tx o
     -> st
     -> Block c tx s
     -> (st, [Receipt c tx o])
 evalBlock eval initialState blk =
-    let (txOutputs, newState) = evalTraverse eval (blockTxs blk) initialState
-        receipts = map (uncurry $ mkReceipt blk) txOutputs
+    let (txAndOutputs, newState) = evalWithTxs eval (blockBeneficiary blk) (toList $ blockTxs blk) initialState
+        receipts = [mkReceipt blk tx output | (tx, output) <- txAndOutputs]
      in (newState, toList receipts)
+
 
 -- Internal ------------------------------------------------------
 
--- | Traverses transactions, evalutes them against the
--- given state and provides the output of the transaction.
---
--- If the evaluation of a transaction fails the state remains untouched
--- and we proceed evaluating the next transaction.
-evalTraverse
-    :: (Traversable t)
-    => Evaluator state tx output
-    -> t tx
-    -> state
-    -> (t (tx, Either EvalError output), state)
-evalTraverse eval txs s = runState (traverse go txs) s
-  where
-    go tx = do
-        result <- evalToState eval tx
-        pure (tx, result)
 
-evalToState :: Evaluator state tx output -> tx -> State state (Either EvalError output)
-evalToState eval tx = state go
-  where
-    go st =
-        case eval tx st of
-            Left err            -> (Left err, st)
-            Right (output, st') -> (Right output, st')
+evalWithTxs
+    :: Evaluator c state tx output
+    -> Beneficiary c
+    -> [tx]
+    -> state
+    -> ([(tx, Either EvalError output)], state)
+evalWithTxs eval beneficiary txs oldState =
+    let (txOutputs, newState) = eval beneficiary txs oldState
+        outputsWithTxs = zip txs txOutputs
+    in (outputsWithTxs, newState)
 
 
 -- | Return an unsealed block holding the given transactions and state
@@ -179,15 +145,3 @@ mkUnsealedBlock parent blockTimestamp benef txs blockState =
         Just p  -> hdr { blockHeight    = succ . blockHeight . blockHeader $ p
                        , blockPrevHash  = blockHash p
                        }
-
-evalEither
-    :: [tx]
-    -> Evaluator st tx o
-    -> st
-    -> Either (tx, EvalError) st
-evalEither txs eval initState = foldlM step initState txs
-  where
-    step s tx =
-        case eval tx s of
-            Left err                  -> Left (tx, err)
-            Right (_output, newState) -> Right newState

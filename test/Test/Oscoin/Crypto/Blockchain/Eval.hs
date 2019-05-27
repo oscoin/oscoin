@@ -22,7 +22,6 @@ import           Test.Tasty.QuickCheck
 tests :: forall c. Dict (IsCrypto c) -> TestTree
 tests d = testGroup "Test.Oscoin.Crypto.Blockchain.Eval"
     [ test_buildBlock d
-    , test_evalBlock d
     ]
 
 test_buildBlock :: forall c. Dict (IsCrypto c) -> TestTree
@@ -52,26 +51,6 @@ test_buildBlock d@Dict = testGroup "buildBlock"
                 in  blockTxs blkWithErrors === blockTxs blkWithoutErrors
     ]
 
-
-test_evalBlock :: forall c. Dict (IsCrypto c) -> TestTree
-test_evalBlock Dict = testGroup "evalBlock"
-    [ testProperty "produces the correct state" $ property $ do
-        txs <- arbitrary
-        let blk = mkBlock emptyHeader defaultBeneficiary txs :: Block c Tx Unsealed
-        let expectedState = reverse [ output | TxOk output <- txs ]
-        let (newSt, _) = evalBlock evalTx [] blk
-        pure $ newSt === expectedState
-    , testProperty "includes all receipts" $ property $ do
-        txs <- arbitrary
-        let blk = mkBlock emptyHeader defaultBeneficiary txs :: Block c Tx Unsealed
-        let (_, receipts) = evalBlock evalTx [] blk
-        pure $ conjoin
-            [ map receiptTx receipts === map Crypto.hash txs
-            , map receiptTxOutput receipts === map txToResult txs
-            , map receiptTxBlock receipts === map (\_ -> blockHash blk) txs
-            ]
-    ]
-
 --
 -- * Test evaluator
 --
@@ -93,10 +72,6 @@ txIsOk :: Tx -> Bool
 txIsOk (TxOk _)  = True
 txIsOk (TxErr _) = False
 
-txToResult :: Tx -> Either EvalError Output
-txToResult (TxOk output) = Right output
-txToResult (TxErr err)   = Left (EvalError $ show err)
-
 instance Arbitrary Tx where
     arbitrary = txFromEither <$> arbitrary
       where
@@ -108,9 +83,14 @@ instance Serialise Tx
 instance Crypto.HasHashing c => Crypto.Hashable c Tx where
     hash = Crypto.hashSerial
 
-evalTx :: Evaluator St Tx Output
-evalTx (TxOk output) st = Right (output, output : st)
-evalTx (TxErr err) _    = Left (EvalError (show err))
+blockEval :: Evaluator c St Tx Output
+blockEval _beneficiary [] oldState = ([], oldState)
+blockEval beneficiary (tx:txs) oldState =
+    let (result, newState) = case tx of
+            (TxOk output) -> (Right output, output : oldState)
+            (TxErr err)   -> (Left (EvalError (show err)), oldState)
+        (results, finalState) = blockEval beneficiary txs newState
+    in (result:results, finalState)
 
 
 -- | Build block on an empty genesis block with 'eval' as defined
@@ -121,4 +101,4 @@ buildTestBlock
     -> [Tx]
     -> (Block c Tx Unsealed, St, [Receipt c Tx Output])
 buildTestBlock Dict st txs =
-    buildBlock evalTx epoch defaultBeneficiary st txs (emptyGenesisBlock epoch defaultBeneficiary)
+    buildBlock blockEval epoch defaultBeneficiary st txs (emptyGenesisBlock epoch defaultBeneficiary)

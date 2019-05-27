@@ -11,7 +11,7 @@ module Test.Oscoin.DummyLedger
     ( DummyTx(..)
     , DummyState
     , DummyOutput
-    , dummyEval
+    , dummyEvalBlock
     ) where
 
 
@@ -63,5 +63,5 @@ type DummyState = [DummyTx]
 type DummyOutput = DummyTx
 
 -- | Prepends the transaction to the state and output the transaction.
-dummyEval :: Evaluator DummyState DummyTx DummyOutput
-dummyEval tx txs = Right (tx, tx:txs)
+dummyEvalBlock :: Evaluator c DummyState DummyTx DummyOutput
+dummyEvalBlock _beneficiary txs st = (map Right txs, reverse txs <> st )
