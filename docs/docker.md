@@ -60,32 +60,69 @@ a simple CLI command, with support for flags.
 ```console
 docker run eu.gcr.io/opensourcecoin/oscoin --help
 Usage: oscoin [-h|--host ARG] [--gossip-port ARG] [--api-port ARG]
-              --seed HOST:PORT [--genesis ARG] [--no-empty-blocks]
-              [--keys KEY-PATH (e.g. ~/.config/oscoin)] [-e|--environment ENV]
-              [--ekg-host ARG] [--ekg-port ARG]
+              [--network STRING|mainnet|testnet|devnet] [--seed HOST:PORT]
+              [--sd-domain DOMAIN NAME] [--enable-mdns]
+              [--block-time-lower SECONDS] [--keys FILEPATH]
+              [--blockstore FILEPATH] [--genesis FILEPATH]
+              [--environment production|development] [--metrics-host ARG]
+              [--metrics-port ARG] [--ekg-host ARG] [--ekg-port ARG]
+              [--allow-ephemeral-keys] --beneficiary ARG
   Oscoin Node
 
 Available options:
   -h,--help                Show this help text
-  -h,--host ARG            Host name to bind to for
-                           gossip (default: "127.0.0.1")
+  -h,--host ARG            IP address to bind to (both API and
+                           gossip) (default: 127.0.0.1)
   --gossip-port ARG        Port number to bind to for gossip (default: 6942)
   --api-port ARG           Port number to bind to for the HTTP
                            API (default: 8477)
-  --seed HOST:PORT         One or more gossip seed nodes to connect to. The
-                           first node in a new network may use its own address.
-  --genesis ARG            Path to genesis file
-  --no-empty-blocks        Do not generate empty blocks
-  --keys KEY-PATH (e.g. ~/.config/oscoin)
-                           The optional path to the folder containing the oscoin
-                           keys. If not specified, defaults to a path inside the
-                           Xdg directory.
-  -e,--environment ENV     The environment this node is running in. One between
-                           production,development,testing. (default: development)
-  --ekg-host ARG           Host name to bind to for the EKG
-                           server (default: "0.0.0.0")
-  --ekg-port ARG           Port number to bind to for the EKG
-                           server (default: 8090)
+  --network STRING|mainnet|testnet|devnet
+                           The name of the overlay network to
+                           join (default: randomly generated)
+  --seed HOST:PORT         Zero or more gossip seed nodes to connect to
+                           
+                           If HOST is an IPv6 address, it must be enclosed in
+                           square brackets to delimit it from the portnumber.
+                           
+                           If HOST is a domain name, all IPv4 and IPv6 addresses
+                           bound to it will be considered as distinct peer
+                           addresses.
+                           
+                           Examples:
+                           
+                           --seed="[2001:db8::01]:6942"
+                           --seed="127.0.0.1:6942"
+                           --seed=testnet.oscoin.io:6942"
+  --sd-domain DOMAIN NAME  Zero or more search domains to query for SRV records
+                           
+                           Examples:
+                           
+                           --sd-domain=svc.cluster.local
+                           --sd-domain=oscoin.io
+                           --sd-domain=monadic.xyz
+  --enable-mdns            Enable mDNS discovery
+  --block-time-lower SECONDS
+                           Lower bound on the block time. Applies only to empty
+                           blocks in the development environment, and is useful
+                           to avoid busy looping in an idle
+                           network. (default: 1)
+  --keys FILEPATH          Directory where the keypair is stored. Default:
+                           $XDG_CONFIG_HOME/oscoin (default: "/home/xla/.config/oscoin")
+  --blockstore FILEPATH    Path to the block store SQLite .db file. Default:
+                           $XDG_DATA_HOME/oscoin/blockstore.db (default: "/home/xla/.local/share/oscoin/blockstore.db")
+  --genesis FILEPATH       Path to the genesis.yaml file. Default:
+                           $oscoin_datadir/data/genesis.yaml (default: "/home/xla/dev/src/github.com/oscoin/oscoin/.stack-work/install/x86_64-linux-tinfo6/custom-oscoin-deps-13.16-jMt4GG9xwweM/8.6.4/share/x86_64-linux-ghc-8.6.4/oscoin-0.1.0.0/data/genesis.yaml")
+  --environment production|development
+                           The deployment environment (default: development)
+  --metrics-host ARG       Host name to bind to for the prometheus metrics
+                           endpoint
+  --metrics-port ARG       Port number to bind to for the prometheus metrics
+                           endpoint
+  --ekg-host ARG           Host name to bind to for the EKG server
+  --ekg-port ARG           Port number to bind to for the EKG server
+  --allow-ephemeral-keys   Create a fresh keypair if none could be found
+  --beneficiary ARG        Beneficiary account id for block rewards. Hex encoded
+                           with leading 0x
 ```
 
 If an image expects certain paths to exists at run-time, those need to be volume mounted (e.g. private keys).
