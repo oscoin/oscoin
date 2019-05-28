@@ -98,6 +98,10 @@ cloudConfig (max 1 . min 8 -> numLocalDisks) containers =
         \$(curl -Ss -H\"Metadata-Flavor: Google\" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip) > \
         \/var/run/metadata"
 
+    -- FIXME: support non-default topologies
+    iptablesAllowVPCInternal =
+        "iptables -w -A INPUT -p tcp -s 10.128.0.0/9 -j ACCEPT"
+
     cmds =
         let
             ephemeralUserDirs = flip concatMap usrs $ \usr ->
@@ -125,6 +129,7 @@ cloudConfig (max 1 . min 8 -> numLocalDisks) containers =
          in
             Vector.fromList
                 $ metadataHack
+                : iptablesAllowVPCInternal
                 : map fmt ephemeralUserDirs
                <> map fmt (systemdReload : servicesStart)
 

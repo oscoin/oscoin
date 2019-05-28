@@ -62,7 +62,7 @@ roles/monitoring.metricWriter
 _member="serviceAccount:${GCE_SERVICEACCOUNT_NAME}@${GCE_PROJECT_ID}.iam.gserviceaccount.com"
 
 for role in $_roles; do
-    gcloud iam service-accounts add-iam-policy-binding $GCE_PROJECT_ID \
+    gcloud projects add-iam-policy-binding $GCE_PROJECT_ID \
         --member="$_member" \
         --role="$role"
 done
