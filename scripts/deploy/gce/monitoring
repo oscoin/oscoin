@@ -2,6 +2,20 @@
 
 set -euo pipefail
 
+#
+# Deploy a simple monitoring server on GCE (Grafana + Prometheus)
+#
+# Exposes Grafana with a Let's Encrypt certificate. Prometheus' Web UI is not
+# exposed, advanced users may want to forward port 9090 over SSH. Both the TSDB
+# and Grafana (SQLite) database reside on a persistent disk.
+#
+# A number of standard dashboards is maintained under
+# `etc/grafana/provisioning/dashboards`. Please follow this guide when making
+# changes:
+#
+# https://grafana.com/docs/administration/provisioning/#dashboards
+#
+
 GCE_REGION=${GCE_REGION:-europe-west3}
 GCE_ZONE=${GCE_ZONE:-$GCE_REGION-a}
 GCE_VPC=${GCE_VPC:-devnet}
@@ -194,9 +208,14 @@ sudo chmod g+r \
     /mnt/disks/persistent/letsencrypt/archive/$GCE_DNS_DOMAIN/privkey1.pem
 
 sudo systemctl daemon-reload
-units="grafana.service prometheus.service certbot-renew.service certbot-renew.timer"
+
+units="grafana.service
+prometheus.service
+certbot-renew.service
+certbot-renew.timer
+"
 for s in \$units; do
-    sudo systemctl enable \$s
-    sudo systemctl start  \$s
+    sudo systemctl enable  \$s
+    sudo systemctl restart \$s
 done
 EOF
