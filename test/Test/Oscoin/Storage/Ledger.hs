@@ -10,7 +10,6 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Oscoin.Storage.Block.Memory (newBlockStoreFromGenesisIO)
 import qualified Oscoin.Storage.Ledger as Ledger
-import qualified Oscoin.Time as Time
 
 import           Codec.Serialise
 
@@ -22,8 +21,6 @@ import qualified Hedgehog.Range as Range
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
 import           Test.Oscoin.DummyLedger
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty
@@ -82,9 +79,9 @@ prop_buildNextBlock Dict = property $ do
     (parentBlock, parentState) <- evalEither =<< Ledger.getTipWithState ledger
     txs <- forAll $ Gen.list (Range.linear 1 6) Gen.arbitrary
     timestamp <- forAll $ Gen.arbitrary
-    nextBlock <- evalEither =<< Ledger.buildNextBlock ledger timestamp defaultBeneficiary txs
+    nextBlock <- evalEither =<< Ledger.buildNextBlock ledger timestamp someBeneficiary txs
 
-    let (_, expectedState) = dummyEvalBlock (defaultBeneficiary @c) txs parentState
+    let (_, expectedState) = dummyEvalBlock (someBeneficiary @c) txs parentState
     toList (blockTxs nextBlock) === txs
     blockStateHash (blockHeader nextBlock) === Crypto.fromHashed (Crypto.hash expectedState)
     parentHash nextBlock === blockHash parentBlock
@@ -104,7 +101,7 @@ newDummyLedger = do
     pure (ledger, BlockStore.hoistBlockStoreWriter liftIO blockStoreWriter)
   where
     genesisState = [] :: [DummyTx]
-    genesisBlk = sealBlock () $ emptyGenesisFromState Time.epoch defaultBeneficiary genesisState
+    genesisBlk = someGenesisBlock' () (Crypto.fromHashed $ Crypto.hash genesisState)
 
 
 -- | Generate an arbitrary child block with arbitrary transactions and
@@ -124,6 +121,7 @@ genEvaledBlock
     -> m (Block c tx s, state)
 genEvaledBlock parentBlock parentState evl = do
     txs <- Gen.list (Range.linear 1 6) Gen.arbitrary
-    let (_, newState) = evl defaultBeneficiary txs parentState
+    beneficiary <- genBeneficiary
+    let (_, newState) = evl beneficiary txs parentState
     newBlock <- Gen.quickcheck $ genBlockWith parentBlock txs newState
     pure (newBlock, newState)

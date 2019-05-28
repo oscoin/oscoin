@@ -14,13 +14,7 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, blocks, tip, unsafeToBlockchain, (|>))
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Block
-                 , Sealed
-                 , blockHash
-                 , blockHeader
-                 , emptyGenesisBlock
-                 , sealBlock
-                 )
+                 (Block, Sealed, blockHash, blockHeader)
 import           Oscoin.Data.OscoinTx
 import           Oscoin.P2P
                  ( Addr(..)
@@ -39,7 +33,6 @@ import           Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (noLogger)
 import           Oscoin.Telemetry.Metrics (labelsFromList, newMetricsStore)
 import           Oscoin.Telemetry.Trace (noProbe)
-import qualified Oscoin.Time as Time
 import           Oscoin.Time.Chrono as Chrono
 
 import           Codec.Serialise
@@ -61,9 +54,7 @@ import           Hedgehog.Internal.Property (forAllT)
 import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
 import           Oscoin.Test.Consensus.Nakamoto.Arbitrary ()
-import           Oscoin.Test.Crypto.Blockchain.Block.Generators (genBlockFrom)
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers (nodeState, withNode)
@@ -429,8 +420,7 @@ defaultGenesis
     => Dict (IsCrypto c)
     -> s
     -> Block c tx (Sealed c s)
-defaultGenesis Dict emptySeal =
-    sealBlock emptySeal (emptyGenesisBlock Time.epoch defaultBeneficiary)
+defaultGenesis Dict seal = someGenesisBlock seal
 
 nakamotoGenesis :: Dict (IsCrypto c) -> Block c tx (Sealed c Nakamoto.PoW)
 nakamotoGenesis d = defaultGenesis d Nakamoto.emptyPoW

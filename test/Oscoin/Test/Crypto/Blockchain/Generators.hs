@@ -1,7 +1,7 @@
 module Oscoin.Test.Crypto.Blockchain.Generators
     ( ForkParams(..)
 
-    , defaultBeneficiary
+    , someBeneficiary
 
       -- * Generating generic chains
     , genBlockchain
@@ -26,9 +26,9 @@ import qualified Oscoin.Time.Chrono as Chrono
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Test.Oscoin.Crypto.Hash.Gen
 import           Test.QuickCheck
+import           Test.QuickCheck.Hedgehog
 
 -- | Generates a 'Blockchain' starting with the provided genesis block.
 --
@@ -80,9 +80,8 @@ genBlockchain
        )
     => Gen (Blockchain c tx s)
 genBlockchain = do
-    ts <- arbitrary
     seal <- arbitrary
-    genBlockchainFrom (sealBlock seal (emptyGenesisBlock ts defaultBeneficiary))
+    genBlockchainFrom $ someGenesisBlock seal
 
 
 data ForkParams = ForkParams
@@ -216,7 +215,8 @@ genNakamotoBlockchain
 genNakamotoBlockchain = do
     blockTimestamp <- arbitrary
     genesisSeal <- genPoWSeal
-    let blockData@BlockData{..} = mkBlockData defaultBeneficiary ([] @tx)
+    beneficiary <- hedgehog genShortHash
+    let blockData@BlockData{..} = mkBlockData beneficiary ([] @tx)
     let genHeader = emptyHeader
             { blockSeal = genesisSeal
             , blockTimestamp

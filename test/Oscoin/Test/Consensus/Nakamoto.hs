@@ -19,12 +19,10 @@ import qualified Oscoin.Storage.Block.Pure as BlockStore.Pure
 import           Oscoin.Storage.HashStore
 import qualified Oscoin.Storage.Ledger as Ledger
 import           Oscoin.Storage.Receipt
-import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Test.Oscoin.DummyLedger
 
 import           Codec.Serialise (Serialise)
@@ -88,7 +86,7 @@ instance (IsCrypto c) => TestableNode c PoW (NakamotoNode c) (NakamotoNodeState 
         let stateStore = mkStateHashStore nakStateStoreL
         let receiptStore = mkStateReceiptStore nakReceiptStoreL
         let ledger = Ledger.mkLedger (fst blockStore) stateStore dummyEvalBlock receiptStore
-        maybeBlock <- mineBlock ledger nakConsensus tn defaultBeneficiary
+        maybeBlock <- mineBlock ledger nakConsensus tn someBeneficiary
         -- NOTE (adn): We are bypassing the protocol at the moment, but we
         -- probably shouldn't.
         forM maybeBlock $ \blk -> do
@@ -125,7 +123,7 @@ initNakamoto nid = NakamotoNodeState
     , nakReceiptStore = Map.empty
     }
   where
-    genBlk   = sealBlock emptyPoW $ emptyGenesisFromState epoch defaultBeneficiary genesisState
+    genBlk = someGenesisBlock' emptyPoW $ Crypto.fromHashed $ Crypto.hash genesisState
     genesisState = mempty :: DummyState
 
 
