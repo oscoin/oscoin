@@ -101,9 +101,15 @@ withProtocol o validateFull scoreBlock bs config action =
     let protocol = Protocol bs o validateFull scoreBlock config
     in action protocol
 
--- | Initialises and runs the 'Protocol', by spinning an asynchronous worker
--- which executes the 'fetchNextBlock' function to pull new blocks from outside
--- and steps the protocol.
+-- | Initialises and runs the 'Protocol'.
+-- Returns a 'Handle' which can be used to submit new blocks to the 'Protocol'
+-- either in a blocking (cfr. 'dispatchBlockSync') or a non-blocking
+-- (cfr. 'dispatchBlockAsync') fashion.
+--
+-- N.b. In order to dispatch blocks in a non-blocking way, this function
+-- internally spawns an asynchronous worker as a green thread. As we do not
+-- want such worker to go dead silently, we rethrow any exception raised by
+-- the latter in the main thread.
 runProtocol
     :: forall c tx s a.
        ( Ord s
@@ -126,6 +132,14 @@ runProtocol validateFull scoreBlock telemetry bs config use =
         let o = O.emptyOrphanage scoreBlock
         proto               <- newMVar (Protocol bs o validateFull scoreBlock config)
         incomingBlocksQueue <- atomically $ newTBQueue 64
+
+        worker <- Async.async $ forever $ do
+                      block  <- atomically $ readTBQueue incomingBlocksQueue
+                      events <- modifyMVar proto $ \p -> stepProtocol p block
+                      forM_ events (Telemetry.emit telemetry)
+
+        Async.link worker
+
         let hdl = Handle
               { dispatchBlockSync = \blk -> do
                   events <- modifyMVar proto $ \p -> stepProtocol p blk
@@ -134,16 +148,11 @@ runProtocol validateFull scoreBlock telemetry bs config use =
               , isNovelBlock = \h -> withMVar proto $ \p -> isNovelBlockInternal p h
               }
 
-        worker <- Async.async $ do
-                      block  <- atomically $ readTBQueue incomingBlocksQueue
-                      events <- modifyMVar proto $ \p -> stepProtocol p block
-                      forM_ events (Telemetry.emit telemetry)
         pure (hdl, worker)
 
+    -- TODO(adn) Log/emit that we are stopping the protocol runner.
     dispose :: (Handle c tx s IO, Async ()) -> IO ()
-    dispose (_, worker) =
-        -- TODO(adn) Log/emit that we are stopping the protocol runner.
-        Async.cancel worker
+    dispose = Async.cancel . snd
 
 -- | Main powerhouse of the 'Protocol' module. In order, this endless
 -- loop does the following:
