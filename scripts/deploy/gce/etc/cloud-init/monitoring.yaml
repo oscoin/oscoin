@@ -15,3 +15,6 @@ runcmd:
 
 - mkdir --parents /mnt/disks/persistent/nginx/html
 - mkdir --parents /mnt/disks/persistent/letsencrypt
+
+- iptables -w -a INPUT -p tcp -s 10.128.0.0/9 -j ACCEPT
+- iptables -w -a INPUT -p tcp --dport 3000 -j ACCEPT
