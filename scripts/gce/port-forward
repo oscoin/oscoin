@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+instance="$1"
+remote_port="$2"
+local_port="${3:-$2}"
+zone="${GCE_ZONE:-""}"
+
+if [[ -z "$instance" || -z "$remote_port" ]]; then
+    echo "Usage: port-forward <instance name> <remote port> [<local port>]"
+    echo "You may need to set the GCE_ZONE environment variable."
+    exit 1;
+fi
+
+if [[ -n "$zone" ]]; then
+    zone="--zone=$zone"
+fi
+
+echo "Establishing SSH tunnel..."
+gcloud compute ssh "$instance" \
+    "$zone" \
+    --ssh-flag='-N' \
+    --ssh-flag="-L ${local_port}:localhost:${remote_port}" 2>&1>/dev/null &
+echo "Tunnel ${local_port}:${instance}:${remote_port} up"
