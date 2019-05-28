@@ -335,14 +335,16 @@ spinUpNode
     -> TBQueue ()
     -> (ActivePeer c, Blockchain c (Tx c) Nakamoto.PoW)
     -> IO (Async ())
-spinUpNode Dict tokens (peer, peerChain) = async $ do
-    let initialState = nodeState mempty peerChain mempty
-    withNode Nakamoto.emptyPoW initialState $ \hdl ->
-        API.runApi' noLogger
-                    (atomically $ writeTBQueue tokens ())
-                    (API.api identity)
-                    (fromIntegral $ addrPort $ nodeHttpApiAddr peer)
-                    hdl
+spinUpNode Dict tokens (peer, peerChain) = (\a -> link a >> pure a) =<<
+    async (do
+        let initialState = nodeState mempty peerChain mempty
+        withNode Nakamoto.emptyPoW initialState $ \hdl ->
+            API.runApi' noLogger
+                        (atomically $ writeTBQueue tokens ())
+                        (API.api identity)
+                        (fromIntegral $ addrPort $ nodeHttpApiAddr peer)
+                        hdl
+    )
 
 {------------------------------------------------------------------------------
   Constant values
