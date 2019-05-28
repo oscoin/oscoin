@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+GCE_REGION=${GCE_REGION:-europe-west3}
+GCE_ZONE=${GCE_ZONE:-$GCE_REGION-a}
+GCE_VPC=${GCE_VPC:-devnet}
+GCE_SERVICEACCOUNT=${GCE_SERVICEACCOUNT:-oscoin-monitoring@opensourcecoin.iam.gserviceaccount.com}
+
+GCE_DNS_ZONE=${GCE_DNS_ZONE:-os-computer}
+GCE_DNS_DOMAIN=${GCE_DNS_DOMAIN:-monitoring.os.computer}
+
+# For Google authentication against Grafana
+GCE_OAUTH_CLIENT_ID=${GCE_OAUTH_CLIENT_ID:?Google OAuth client_id not set}
+GCE_OAUTH_CLIENT_SECRET=${GCE_OAUTH_CLIENT_SECRET:?Google OAuth client_secret not set}
+GCE_OAUTH_DOMAIN=${GCE_OAUTH_DOMAIN:-monadic.xyz}
+
+LETSENCRYPT_CONTACT=${LETSENCRYPT_CONTACT:?You need to provide an email address for Lets Encrypt}
+
+VERBOSE=${VERBOSE:-0}
+
+if [[ "$VERBOSE" != "0" ]]; then
+    set -x
+fi
+
+# get / create persistent IP
+echo "Determining external IP address..."
+_have_addr=$(gcloud compute addresses list \
+    --filter="name:oscoin-monitoring AND region:${GCE_REGION}" \
+    --format='value(name)' | wc -l)
+
+if [[ "$_have_addr" == "0" ]]; then
+    echo "Creating external IP address..."
+    gcloud compute addresses create oscoin-monitoring --region="${GCE_REGION}"
+fi
+_addr=$(gcloud compute addresses describe oscoin-monitoring \
+    --region="$GCE_REGION" \
+    --format='value(address)')
+
+# get / create resource record
+echo "Checking if domain name $GCE_DNS_DOMAIN exists..."
+_have_rr=$(gcloud dns record-sets list \
+    --zone="${GCE_DNS_ZONE}" \
+    --filter="name:${GCE_DNS_DOMAIN}" \
+    --format='value(name)' | wc -l)
+
+if [[ "$_have_rr" == "0" ]]; then
+    echo "Creating domain name $GCE_DNS_DOMAIN ..."
+    gcloud dns record-sets transaction start --zone="$GCE_DNS_ZONE"
+    gcloud dns record-sets transaction add \
+        --zone="$GCE_DNS_ZONE" \
+        --name="$GCE_DNS_DOMAIN" \
+        --ttl=600 \
+        --type=A \
+        $_addr
+    gcloud dns record-sets transaction execute --zone="$GCE_DNS_ZONE"
+
+    echo "Domain name $GCE_DNS_DOMAIN created."
+    echo "In order to obtain an SSL certificate via Let's Encrypt, this domain"
+    echo "needs to be resolvable by the larger internet. Please wait a few"
+    echo "minutes before running this script again."
+    exit 1
+fi
+
+# get / create persistent disk
+echo "Checking if a persistent disk already exists..."
+_have_pd=$(gcloud compute disks list \
+    --filter="name:oscoin-monitoring-pd AND zone:${GCE_ZONE}" \
+    --format='value(name)' | wc -l)
+
+if [[ "$_have_pd" == "0" ]]; then
+    echo "Creating persistent disk..."
+    gcloud compute disks create oscoin-monitoring-pd \
+        --size=500GB \
+        --type=pd-ssd \
+        --zone="$GCE_ZONE"
+fi
+
+# create instance
+echo "Checking if instance already exists..."
+_have_instance=$(gcloud compute instances list \
+    --filter="name:oscoin-monitoring AND zone:${GCE_ZONE}" \
+    --format='value(name)' | wc -l)
+
+if [[ "$_have_instance" == "0" ]]; then
+    echo "Creating instance..."
+    gcloud compute instances create oscoin-monitoring \
+        --address="$_addr" \
+        --image-project=cos-cloud \
+        --image-family=cos-stable \
+        --machine-type=n1-standard-8 \
+        --zone="$GCE_ZONE" \
+        --network="$GCE_VPC" \
+        --service-account="$GCE_SERVICEACCOUNT" \
+        --scopes=monitoring-write,logging-write \
+        --tags="oscoin-monitoring,http-server,https-server" \
+        --metadata="google-logging-enabled=true" \
+        --metadata-from-file=user-data=etc/cloud-init/monitoring.yaml \
+        --disk=auto-delete=no,boot=no,device-name=pd-0,mode=rw,name=oscoin-monitoring-pd
+
+    echo "Starting instance..."
+    gcloud compute instances start oscoin-monitoring --zone="$GCE_ZONE"
+fi
+
+echo "Mounting persistent disk. The PD may need formatting."
+gcloud compute ssh oscoin-monitoring --zone="$GCE_ZONE" -- <<EOF
+    set -eou pipefail
+
+    sudo toolbox apt-get update || true
+    sudo toolbox apt-get install -y file
+    sudo toolbox --bind-ro=/dev:/dev-host file -sL /dev-host/disk/by-id/google-pd-0 2>/dev/null|grep -s UUID || {
+        sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-pd-0
+    }
+    sudo mkdir -p /mnt/disks/persistent
+    sudo mount -o discard,defaults \
+        /dev/disk/by-id/google-pd-0 \
+        /mnt/disks/persistent || true
+EOF
+
+echo "Creating directories on persistent disk..."
+gcloud compute ssh oscoin-monitoring --zone="$GCE_ZONE" -- <<EOF
+    set -eou pipefail
+    sudo mkdir -p /mnt/disks/persistent/{grafana,prometheus,letsencrypt}
+    sudo mkdir -p /mnt/disks/persistent/{grafana,prometheus}/{etc,storage}
+    sudo chown -R grafana:grafana /mnt/disks/persistent/grafana
+    sudo chown -R prometheus:prometheus /mnt/disks/persistent/prometheus
+EOF
+
+# This succeeds non-interactively approx. 9 out of 10 times
+echo "Obtaining SSL certificate via Let's Encrypt..."
+gcloud compute ssh oscoin-monitoring --zone="$GCE_ZONE" -- <<EOF
+set -eoux pipefail
+
+sudo systemctl stop grafana || true
+sudo docker run --rm \
+    --mount=type=bind,source=/mnt/disks/persistent/letsencrypt,target=/etc/letsencrypt,readonly=false \
+    -p 80:80 \
+    -p 443:443 \
+    certbot/certbot@sha256:ec4383b768b6a162889adcdce2d60cb4c760d2fa48287a354c0182c5e2330fed \
+    certonly \
+    --non-interactive \
+    --standalone \
+    --agree-tos \
+    -m $LETSENCRYPT_CONTACT \
+    --domain="$GCE_DNS_DOMAIN"
+sudo systemctl start grafana || true
+EOF
+
+echo "Copying configuration files..."
+gcloud compute scp --zone="$GCE_ZONE" --recurse \
+    $(dirname $BASH_SOURCE)/etc oscoin-monitoring:/tmp
+
+_grafana_env=$(mktemp grafana.env.XXXXX)
+cat > "$_grafana_env" <<EOF
+GF_AUTH_GOOGLE_CLIENT_ID=$GCE_OAUTH_CLIENT_ID
+GF_AUTH_GOOGLE_CLIENT_SECRET=$GCE_OAUTH_CLIENT_SECRET
+GF_AUTH_GOOGLE_ALLOWED_DOMAINS=$GCE_OAUTH_DOMAIN
+GF_SERVER_DOMAIN=$GCE_DNS_DOMAIN
+GF_SERVER_ROOT_URL=https://$GCE_DNS_DOMAIN
+GF_SERVER_CERT_FILE=/etc/letsencrypt/live/$GCE_DNS_DOMAIN/fullchain.pem
+GF_SERVER_CERT_KEY=/etc/letsencrypt/live/$GCE_DNS_DOMAIN/privkey.pem
+EOF
+gcloud compute scp --zone="$GCE_ZONE" \
+    "$_grafana_env" oscoin-monitoring:/tmp/etc/grafana/env
+rm "$_grafana_env"
+
+gcloud compute ssh oscoin-monitoring --zone="$GCE_ZONE" -- <<EOF
+set -eoux pipefail
+
+sudo chown root:root /tmp/etc
+sudo chmod 400 /tmp/etc/grafana/env
+
+sudo cp -r /tmp/etc/grafana/* /mnt/disks/persistent/grafana/etc
+sudo cp -r /tmp/etc/prometheus/* /mnt/disks/persistent/prometheus/etc
+sudo cp -r /tmp/etc/systemd/system/* /etc/systemd/system
+sudo cp -r /tmp/etc/letsencrypt/renewal-hooks/* /mnt/disks/persistent/letsencrypt/renewal-hooks
+
+sudo rm -rf /tmp/etc
+
+sudo chown -R grafana:grafana /mnt/disks/persistent/grafana/etc
+sudo chown -R prometheus:prometheus /mnt/disks/persistent/prometheus/etc
+
+# Can't use cloud-init, because we need the GID for docker
+sudo groupadd --gid 9002 letsencrypt || true
+sudo usermod -G letsencrypt grafana || true
+
+# Towers of Annoy
+sudo chgrp -R letsencrypt /mnt/disks/persistent/letsencrypt
+sudo chmod 750 /mnt/disks/persistent/letsencrypt/live
+sudo chmod 750 /mnt/disks/persistent/letsencrypt/archive
+sudo chmod g+r \
+    /mnt/disks/persistent/letsencrypt/archive/$GCE_DNS_DOMAIN/fullchain1.pem
+sudo chmod g+r \
+    /mnt/disks/persistent/letsencrypt/archive/$GCE_DNS_DOMAIN/privkey1.pem
+
+sudo systemctl daemon-reload
+units="grafana.service prometheus.service certbot-renew.service certbot-renew.timer"
+for s in \$units; do
+    sudo systemctl enable \$s
+    sudo systemctl start  \$s
+done
+EOF
