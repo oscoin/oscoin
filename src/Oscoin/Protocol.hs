@@ -35,7 +35,7 @@ import           Oscoin.Time.Chrono as Chrono
 
 import           Control.Concurrent.Async (Async)
 import qualified Control.Concurrent.Async as Async
-import           Control.Concurrent.STM
+import qualified Control.Concurrent.Chan.Unagi.Bounded as Unagi
 import qualified Data.List.NonEmpty as NonEmpty
 
 -- | This data structure incorporates all the different components and
@@ -130,11 +130,11 @@ runProtocol validateFull scoreBlock telemetry bs config use =
     acquire :: IO (Handle c tx s IO, Async ())
     acquire = do
         let o = O.emptyOrphanage scoreBlock
-        proto               <- newMVar (Protocol bs o validateFull scoreBlock config)
-        incomingBlocksQueue <- atomically $ newTBQueue 64
+        proto             <- newMVar (Protocol bs o validateFull scoreBlock config)
+        (inChan, outChan) <- Unagi.newChan 64
 
         worker <- Async.async $ forever $ do
-                      block  <- atomically $ readTBQueue incomingBlocksQueue
+                      block  <- Unagi.readChan outChan
                       events <- modifyMVar proto $ \p -> stepProtocol p block
                       forM_ events (Telemetry.emit telemetry)
 
@@ -144,7 +144,7 @@ runProtocol validateFull scoreBlock telemetry bs config use =
               { dispatchBlockSync = \blk -> do
                   events <- modifyMVar proto $ \p -> stepProtocol p blk
                   forM_ events (Telemetry.emit telemetry)
-              , dispatchBlockAsync = atomically . writeTBQueue incomingBlocksQueue
+              , dispatchBlockAsync = Unagi.writeChan inChan
               , isNovelBlock = \h -> withMVar proto $ \p -> isNovelBlockInternal p h
               }
 

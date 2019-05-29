@@ -84,6 +84,7 @@ library:
     - stm >=2.4.5.0
     - text
     - transformers
+    - unagi-chan
     - unix
     - unliftio
     - unordered-containers

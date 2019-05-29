@@ -16,6 +16,7 @@ packages:
 - stm-containers-1.1.0.2@sha256:68f11870da794c570245f03fff98bc06251443780315324a7f2b01a07a1ebe91
 - stm-hamt-1.2.0.2@sha256:18126db7bf2d9c967a6020c677b3005dd957a4c39d69aeaea3c29c90de8f6124
 - primitive-extras-0.7.1@sha256:23905c57089418b1a2d324cfee3e81bbd5a344a0fa56a827867b2dce275fdb5e
+- unagi-chan-0.4.1.0@sha256:97e08dd9a73462ca284bfd2f904cd471c94e1207c2dd79a59efcc8fe2c93de41
 
   # https://github.com/nick8325/quickcheck/issues/234
 - git: https://github.com/oscoin/qc-instances
