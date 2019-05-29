@@ -19,7 +19,6 @@ import           Oscoin.P2P.Types (Network)
 
 import           Data.Coerce (coerce)
 import           Data.Generics.Product (the)
-import           Data.IP (IP)
 import qualified Data.List as List
 import           Lens.Micro (over, set)
 import           Network.Socket (HostName)
@@ -38,19 +37,22 @@ gceNodeOptions
 gceNodeOptions nopt =
     let
         adjustments =
-              set  (the @"optHost")                            ("0.0.0.0" :: IP)
-            . set  (the @"optMetricsHost")                     (Nothing @HostName)
+              set  (the @"optMetricsHost")                     (Nothing @HostName)
             . set  (the @"optEkgHost")                         (Nothing @HostName)
             . over (the @"optMetricsPort")                     (Just . fromMaybe 8081)
             . set  (the @"optPaths" . the @"blockstorePath")   "/storage/blockstore.db"
             . set  (the @"optDiscovery" . the @"optEnableMDns") False
 
-        removals = removeOpt "keys" >=> removeOpt "genesis-parameters"
+        removals =
+                removeOpt "host"
+            >=> removeOpt "keys"
+            >=> removeOpt "genesis-parameters"
 
         -- FIXME: we should track option names at the type level (using e.g.
         -- @vinyl@)
         additions xs =
-              ShOpt (Opt "metrics-host" (ShVar "GCE_LOCAL_IPV4"))
+              ShOpt (Opt "host"         (ShVar "GCE_LOCAL_IPV4"))
+            : ShOpt (Opt "metrics-host" (ShVar "GCE_LOCAL_IPV4"))
             : ShOpt (Opt "ekg-host"     (ShVar "GCE_LOCAL_IPV4"))
             : xs
      in
