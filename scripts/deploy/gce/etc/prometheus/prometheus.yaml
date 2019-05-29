@@ -1,0 +1,6 @@
+scrape_configs:
+- job_name: oscoin
+  dns_sd_configs:
+  - type: SRV
+    names:
+    - _metrics._tcp.oscoin.devnet.oscoin.internal

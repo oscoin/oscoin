@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+chmod 750 /mnt/disks/persistent/letsencrypt/live
+chmod 750 /mnt/disks/persistent/letsencrypt/archive
+
+find /mnt/disks/persistent/letsencrypt/archive -name "*.pem" -exec chmod g+r {} \;

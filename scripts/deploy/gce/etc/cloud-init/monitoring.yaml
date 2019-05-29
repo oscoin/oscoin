@@ -1,0 +1,20 @@
+#cloud-config
+
+users:
+- name: grafana
+  uid: 9000
+- name: prometheus
+  uid: 9001
+
+runcmd:
+- mkdir /mnt/disks/persistent/grafana
+- chown -R grafana:grafana /mnt/disks/persistent/grafana
+
+- mkdir /mnt/disks/persistent/prometheus
+- chown -R prometheus:prometheus /mnt/disks/persistent/prometheus
+
+- mkdir --parents /mnt/disks/persistent/nginx/html
+- mkdir --parents /mnt/disks/persistent/letsencrypt
+
+- iptables -w -a INPUT -p tcp -s 10.128.0.0/9 -j ACCEPT
+- iptables -w -a INPUT -p tcp --dport 3000 -j ACCEPT

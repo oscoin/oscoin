@@ -1,0 +1,16 @@
+[Unit]
+Description=Let's Encrypt Renewal
+
+[Service]
+Type=oneshot
+# Should this use Conflicts= and ???
+ExecStartPre=/usr/bin/systemctl stop grafana
+ExecStopPost=/usr/bin/systemctl start grafana
+ExecStart=/usr/bin/docker run --rm \
+    --name=certbot-renew \
+    --mount=type=bind,source=/mnt/disks/persistent/letsencrypt,target=/etc/letsencrypt,readonly=false \
+    certbot/certbot@sha256:ec4383b768b6a162889adcdce2d60cb4c760d2fa48287a354c0182c5e2330fed \
+    renew --non-interactive
+
+[Install]
+WantedBy=multi-user.target

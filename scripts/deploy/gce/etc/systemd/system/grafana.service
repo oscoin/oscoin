@@ -1,0 +1,23 @@
+[Unit]
+Description=Grafana Dashboards
+Wants=multi-user.target
+After=multi-user.target
+ConditionPathExists=/mnt/disks/persistent/grafana/etc/grafana.ini
+ConditionPathExists=/mnt/disks/persistent/grafana/etc/env
+
+[Service]
+ExecStart=/usr/bin/docker run \
+    --name=grafana \
+    --user=9000:9000 \
+    --group-add=9002 \
+    --env-file=/mnt/disks/persistent/grafana/etc/env \
+    -p 443:3000 \
+    --mount=type=bind,source=/mnt/disks/persistent/grafana/etc,target=/etc/grafana,readonly=true \
+    --mount=type=bind,source=/mnt/disks/persistent/grafana/storage,target=/storage,readonly=false \
+    --mount=type=bind,source=/mnt/disks/persistent/letsencrypt,target=/etc/letsencrypt,readonly=true \
+    grafana/grafana@sha256:9e7fe9c7903a77107b28f63842f1fd1f358668933c0c51c0220c9889f1a2d878
+ExecStop=/usr/bin/docker stop grafana
+ExecStopPost=/usr/bin/docker rm grafana
+
+[Install]
+WantedBy=multi-user.target

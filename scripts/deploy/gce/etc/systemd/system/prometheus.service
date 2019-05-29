@@ -1,0 +1,21 @@
+[Unit]
+Description=Prometheus Monitoring
+Wants=multi-user.target
+After=multi-user.target
+ConditionPathExists=/mnt/disks/persistent/prometheus/etc/prometheus.yaml
+
+[Service]
+ExecStart=/usr/bin/docker run \
+    --name=prometheus \
+    --user=9001:9001 \
+    --network=host \
+    --mount=type=bind,source=/mnt/disks/persistent/prometheus/etc,target=/etc/prometheus,readonly=true \
+    --mount=type=bind,source=/mnt/disks/persistent/prometheus/storage,target=/storage,readonly=false \
+    quay.io/prometheus/prometheus@sha256:05350e0d1a577674442046961abf56b3e883dcd82346962f9e73f00667958f6b \
+    --config.file=/etc/prometheus/prometheus.yaml \
+    --storage.tsdb.path=/storage
+ExecStop=/usr/bin/docker stop prometheus
+ExecStopPost=/usr/bin/docker rm prometheus
+
+[Install]
+WantedBy=multi-user.target

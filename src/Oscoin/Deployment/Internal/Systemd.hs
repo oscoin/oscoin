@@ -95,6 +95,7 @@ dockerDaemonService rlogin name container =
             , execStart    = fmtTxt
                 . SomeCmd "/usr/bin/docker"
                 $ LitOpt (Arg "run")
+                : LitOpt (Opt "name" name)
                 : Doge.containerConfigOpts container
 
             , execStop     = Just . fmtTxt $

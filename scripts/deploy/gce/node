@@ -22,7 +22,7 @@ OSCOIN_METRICS_PORT=${OSCOIN_METRICS_PORT:-8081}
 OSCOIN_BENEFICIARY=${OSCOIN_BENEFICIARY:?Beneficiary address not set}
 
 GCE_PROJECT_ID=${GCE_PROJECT_ID:-opensourcecoin}
-GCE_REGION=${GCE_REGION:-europe-west1}
+GCE_REGION=${GCE_REGION:-europe-west3}
 GCE_VPC=${GCE_VPC:-$OSCOIN_NETWORK}
 GCE_SERVICEACCOUNT=${GCE_SERVICEACCOUNT:-oscoin-node@opensourcecoin.iam.gserviceaccount.com}
 GCE_MACHINE_TYPE=${GCE_MACHINE_TYPE:-n1-standard-1}
@@ -70,6 +70,7 @@ gcloud compute instance-templates create \
     --machine-type="$GCE_MACHINE_TYPE" \
     --region="$GCE_REGION" \
     --service-account="$GCE_SERVICEACCOUNT" \
+    --network="$GCE_VPC" \
     --scopes=monitoring-write,logging-write,storage-ro \
     --tags="oscoin-node,oscoin-$OSCOIN_NETWORK" \
     --labels="gossip-port=${OSCOIN_GOSSIP_PORT},api-port=${OSCOIN_API_PORT},metrics-port=${OSCOIN_METRICS_PORT}" \
