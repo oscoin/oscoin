@@ -51,16 +51,16 @@ getConfigPaths = ConfigPaths
     <*> getDataDir
 
 data Paths = Paths
-    { keysDir        :: FilePath
+    { keysDir               :: FilePath
     -- ^ Directory where the keypair is stored.
     --
     -- Default: $XDG_CONFIG_HOME/oscoin
-    , blockstorePath :: FilePath
+    , blockstorePath        :: FilePath
     -- ^ Path to the block store SQLite .db file.
     --
     -- Default: $XDG_DATA_HOME/oscoin/blockstore.db
-    , genesisPath    :: FilePath
-    -- ^ Path to the genesis YAML file.
+    , genesisParametersPath :: FilePath
+    -- ^ Path to YAML encoded 'Oscoin.Crypto.Blockchain.Genesis.GenesisParameters'.
     --
     -- Default: $oscoin_datadir/data/genesis.yaml
     } deriving (Eq, Show, Generic)
@@ -84,8 +84,8 @@ pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
        <> showDefault
         )
     <*> option str
-        ( long "genesis"
-       <> help "Path to the genesis.yaml file. \
+        ( long "genesis-parameters"
+       <> help "Path to YAML encoded genesis parameters \
                \Default: $oscoin_datadir/data/genesis.yaml"
        <> metavar "FILEPATH"
        <> value (dataDir </> "data" </> "genesis" <.> "yaml")
@@ -93,10 +93,10 @@ pathsParser ConfigPaths { xdgConfigHome, xdgConfigData, dataDir } = Paths
         )
 
 pathsOpts :: Paths -> [Opt Text]
-pathsOpts (Paths keysDir blockstorePath genesisPath) =
+pathsOpts (Paths keysDir blockstorePath genesisParametersPath) =
     [ Opt "keys"       . toS $ keysDir
     , Opt "blockstore" . toS $ blockstorePath
-    , Opt "genesis"    . toS $ genesisPath
+    , Opt "genesis-parameters" . toS $ genesisParametersPath
     ]
 
 renderPathsOpts :: Paths -> [Text]

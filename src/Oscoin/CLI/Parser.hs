@@ -46,7 +46,7 @@ mainParser cps = CLI
     <*> environmentParser
     <*> subparser
         ( command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
-       <> command "genesis"  (genesisParser  `withInfo` "Genesis commands")
+       <> command "genesis-parameters" genesisParser
         )
 
 keyPairParser :: Parser (Command c)
@@ -56,9 +56,10 @@ keyPairParser = subparser
     where
         keyPairGenerate = pure GenerateKeyPair
 
-genesisParser :: HasHashing c => Parser (Command c)
-genesisParser =
-    GenesisCreate <$> genesisDifficulty <*> genesisBeneficiary
+genesisParser :: HasHashing c => ParserInfo (Command c)
+genesisParser = withInfo
+    (GenesisCreate <$> genesisDifficulty <*> genesisBeneficiary)
+    "Outputs parameters that define the genesis block"
   where
     genesisDifficulty = option (maybeReader (parseDifficulty . T.pack))
         (  long "difficulty"

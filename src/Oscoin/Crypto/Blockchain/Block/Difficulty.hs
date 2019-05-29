@@ -19,7 +19,6 @@ import           Codec.Serialise (Serialise(..))
 import qualified Codec.Serialise.Decoding as Serialise
 import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
-import           Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import qualified Data.Binary.Builder as Binary
 import qualified Data.Binary.Get as Binary
 import qualified Data.ByteString as BS
@@ -56,15 +55,6 @@ instance Serialise Difficulty where
         case decodeDifficulty difi of
             (_, True)  -> fail "Overflow trying to decode difficulty"
             (_, False) -> pure difi
-
-instance ToJSON Difficulty where
-    toJSON = toJSON . prettyDifficulty
-
-instance FromJSON Difficulty where
-    parseJSON = withText "Difficulty" $ \t ->
-        case parseDifficulty t of
-            Just d  -> pure d
-            Nothing -> fail "Error decoding difficulty"
 
 unsafeDifficulty :: Word32 -> Difficulty
 unsafeDifficulty = Difficulty

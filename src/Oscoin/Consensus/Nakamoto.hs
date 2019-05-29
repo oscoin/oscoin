@@ -8,6 +8,7 @@ module Oscoin.Consensus.Nakamoto
     , PoW(..)
     , emptyPoW
     , hasPoW
+    , findPoW
     , chainDifficulty
     , chainScore
     , blockScore
@@ -31,7 +32,6 @@ import           Codec.Serialise (Serialise)
 import           Control.Monad.Except (liftEither, runExcept)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Crypto.Number.Serialize (os2ip)
-import           Data.Aeson (FromJSON, ToJSON)
 import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.List.NonEmpty as NonEmpty
 import           Database.SQLite.Simple.FromField (FromField)
@@ -52,7 +52,7 @@ type Nonce = Word32
 
 -- | A PoW seal.
 newtype PoW = PoW Nonce
-    deriving (Eq, Ord, Show, Generic, FromField, ToField, ToJSON, FromJSON, Serialise)
+    deriving (Eq, Ord, Show, Generic, FromField, ToField, Serialise)
 
 -- | An empty (zero nonce) proof-of-work.
 emptyPoW :: PoW
@@ -145,19 +145,31 @@ mineNakamoto probed difiFn getBlocks unsealedBlock = do
     let bh = (blockHeader unsealedBlock) { blockTargetDifficulty = diffy }
         candidateBlock = unsealedBlock { blockHeader = bh }
 
-    pure $ (`sealBlock` candidateBlock) <$> mine bh (PoW 0)
+    pure $ (`sealBlock` candidateBlock) <$> findPoW bh
 
   where
     currentDifficulty []      = blockTargetDifficulty . blockHeader $ unsealedBlock
     currentDifficulty (blk:_) = blockTargetDifficulty . blockHeader $ blk
 
-    mine :: BlockHeader c Unsealed -> PoW -> Maybe PoW
-    mine hdr pow@(PoW nonce)
-        | hasPoW (sealHeader pow hdr) = Just pow
-        | nonce < maxBound            = mine hdr (PoW (nonce + 1))
+-- | Find a 'PoW' such that the header sealed with the proof of work
+-- satisfies the header’s 'blockTargetDifficulty'. Returns 'Nothing' if
+-- no such 'PoW' exists.
+findPoW
+    :: forall c s.
+       ( ByteArrayAccess (BlockHash c)
+       , Hashable c (BlockHeader c (Sealed c PoW))
+       )
+    => BlockHeader c s
+    -> Maybe PoW
+findPoW unsealedHeader = findPowFrom (PoW 0)
+  where
+    findPowFrom :: PoW -> Maybe PoW
+    findPowFrom pow@(PoW nonce)
+        | hasPoW (sealHeader pow unsealedHeader) = Just pow
+        | nonce < maxBound            = findPowFrom (PoW (nonce + 1))
         | otherwise                   = Nothing
 
-    sealHeader :: PoW -> BlockHeader c Unsealed -> BlockHeader c (Sealed c PoW)
+    sealHeader :: PoW -> BlockHeader c s -> BlockHeader c (Sealed c PoW)
     sealHeader seal hdr =
         hdr { blockSeal = SealedWith seal }
 

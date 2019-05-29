@@ -9,7 +9,7 @@ module Oscoin.Crypto.Blockchain.Block
     , BlockHash
     , BlockHeader(..)
     , BlockData(..)
-    , Unsealed
+    , Unsealed(..)
     , Sealed(..)
     , StateHash
     , Height
@@ -55,8 +55,6 @@ import qualified Codec.Serialise.Encoding as Serialise
 import           Control.Monad (fail)
 import qualified Crypto.Data.Auth.Tree as AuthTree
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
-import           Data.Aeson
-                 (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Sequence as Seq
 import           GHC.Generics (Generic)
@@ -142,35 +140,6 @@ instance (Serialise (Hash c), Serialise s) => Serialise (BlockHeader c s) where
 instance (Serialise (Hash c), Serialise s, Crypto.HasHashing c)
     => Crypto.Hashable c (BlockHeader c s) where
     hash = Crypto.hashSerial
-
-instance ToJSON s => ToJSON (Sealed c s) where
-    toJSON (SealedWith s) = toJSON s
-
-instance FromJSON s => FromJSON (Sealed c s) where
-    parseJSON x = SealedWith <$> parseJSON x
-
-instance (ToJSON (Hash c), ToJSON s) => ToJSON (BlockHeader c s) where
-    toJSON BlockHeader{..} = object
-        [ "height"           .= blockHeight
-        , "parentHash"       .= blockPrevHash
-        , "timestamp"        .= blockTimestamp
-        , "dataHash"         .= blockDataHash
-        , "stateHash"        .= blockStateHash
-        , "seal"             .= blockSeal
-        , "targetDifficulty" .= blockTargetDifficulty
-        ]
-
-instance (FromJSON (Hash c), FromJSON s) => FromJSON (BlockHeader c s) where
-  parseJSON = withObject "BlockHeader" $ \o -> do
-        blockHeight           <- o .: "height"
-        blockPrevHash         <- o .: "parentHash"
-        blockTimestamp        <- o .: "timestamp"
-        blockDataHash         <- o .: "dataHash"
-        blockStateHash        <- o .: "stateHash"
-        blockSeal             <- o .: "seal"
-        blockTargetDifficulty <- o .: "targetDifficulty"
-
-        pure BlockHeader{..}
 
 blockHeaderSealL :: Lens (BlockHeader c s) (BlockHeader c s') s s'
 blockHeaderSealL = lens blockSeal (\h x -> h { blockSeal = x })
@@ -269,22 +238,6 @@ instance (Serialise tx, Serialise (Beneficiary c)) => Serialise (BlockData c tx)
             _ ->
                 fail "Error decoding block data: unknown tag"
 
-instance ( FromJSON tx
-         , FromJSON (BlockData c tx)
-         , FromJSON (Beneficiary c)
-         ) => FromJSON (BlockData c tx) where
-  parseJSON = withObject "BlockData" $ \o -> do
-      blockDataBeneficiary <- o .: "beneficiary"
-      blockDataTxs         <- o .: "txs"
-
-      pure BlockData{..}
-
-instance (ToJSON tx, ToJSON (Beneficiary c)) => ToJSON (BlockData c tx) where
-    toJSON BlockData{..} = object
-        [ "beneficiary"   .= blockDataBeneficiary
-        , "txs"           .= blockDataTxs
-        ]
-
 deriving instance (Show (Beneficiary c), Show s) => Show (BlockData c s)
 deriving instance (Ord (Beneficiary c), Ord s) => Ord (BlockData c s)
 deriving instance (Eq (Beneficiary c), Eq s) => Eq (BlockData c s)
@@ -322,27 +275,6 @@ instance ( Serialise tx
             _ ->
                 fail "Error decoding block: unknown tag"
 
-instance (ToJSON s, ToJSON (Hash c), ToJSON tx, ToJSON (BlockData c tx)) => ToJSON (Block c tx s) where
-    toJSON Block{..} = object
-        [ "hash"   .= blockHash
-        , "header" .= blockHeader
-        , "data"   .= blockData
-        ]
-
-instance ( FromJSON s
-         , FromJSON (Hash c)
-         , FromJSON tx
-         , FromJSON (BlockData c tx)
-         , HasBlockHeader c s
-         ) => FromJSON (Block c tx s) where
-  parseJSON = withObject "Block" $ \o -> do
-        blockHeader <- o .: "header"
-        blockData   <- o .: "data"
-        blockHash   <- o .: "hash"
-
-        if headerHash blockHeader /= blockHash
-           then fail "Error decoding block: hash does not match data"
-           else pure Block{..}
 
 blockHeaderL
     :: (HasBlockHeader c s')

@@ -1,13 +1,5 @@
-hash: 2DrjgbEiCx2ZWa2ob5HgZMaDFTgaY1r2aFDRGbFQKzhJRnfkZK
-data:
-  txs: []
-  beneficiary: '0x0000000000000000000000000000000000000000'
-header:
-  height: 0
-  dataHash: 2DrjgbGEpqLFjKYwNp8hhAYt3KpK2GPgk8aLAvG3Joo454M9tb
-  targetDifficulty: ffff0021
-  stateHash: 2DrjgbJVAd2Q9WQVZT1Vtam2hCNGZSefi5DwPJNbSaxWmuUypo
-  seal: 0
-  timestamp: 1558543390487199604
-  parentHash: 2Drjgb4FtifQz3pNjpYitXQVQXvVG3WBeub54JJnq438GFasNF
+pow: 0
+startDifficulty: ffff0021
+beneficiary: '0x0000000000000000000000000000000000000000'
+timestamp: 1559041196429336548
 

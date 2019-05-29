@@ -1,6 +1,5 @@
 module Oscoin.Consensus.Mining
     ( mineBlock
-    , mineGenesis
     ) where
 
 import           Oscoin.Prelude
@@ -45,17 +44,3 @@ mineBlock ledger Consensus{cMiner} time benef = do
             lift $ do
                 Mempool.delTxs (blockTxs sealedBlock)
                 pure $ sealedBlock
-
--- | Mine a genesis block with the given 'Miner'.
-mineGenesis
-    :: Monad m
-    => Miner c s m
-    -> Block c tx Unsealed
-    -> m (Either Text (Block c tx (Sealed c s)))
-mineGenesis mine blk = do
-    result <- mine (\_ -> pure []) blk
-    pure $ case result of
-        Just sealedBlock ->
-            Right sealedBlock
-        Nothing ->
-            Left "can't mine genesis"

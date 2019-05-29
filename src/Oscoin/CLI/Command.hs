@@ -7,22 +7,13 @@ module Oscoin.CLI.Command
 
 import           Oscoin.Prelude
 
+import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import qualified Oscoin.API.Client as API
 import           Oscoin.CLI.KeyStore
-import           Oscoin.Consensus.Mining (mineGenesis)
-import           Oscoin.Consensus.Nakamoto (PoW, mineNakamoto)
 import           Oscoin.Crypto.Blockchain.Block
-                 ( Beneficiary
-                 , Block
-                 , BlockHash
-                 , Difficulty
-                 , SealedBlock
-                 , Unsealed
-                 , emptyGenesisFromState
-                 )
+import           Oscoin.Crypto.Blockchain.Genesis (createGenesisParameters)
+import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
-import           Oscoin.Data.Tx
-import qualified Oscoin.Telemetry as Telemetry
 import           Oscoin.Time (Timestamp)
 
 import           Codec.Serialise (Serialise)
@@ -57,7 +48,9 @@ dispatchCommand
        , Serialise (BlockHash c)
        , Crypto.HasDigitalSignature c
        , ByteArrayAccess (BlockHash c)
-       , Yaml.ToJSON (SealedBlock c (Tx c) PoW)
+       , Serialise (Beneficiary c)
+       , AuthTree.MerkleHash (Crypto.Hash c)
+       , Yaml.ToJSON (Crypto.ShortHash c)
        )
     => Command c
     -> m Result
@@ -74,20 +67,20 @@ genesisCreate
     :: forall c m.
        ( MonadCLI c m
        , Serialise (BlockHash c)
+       , Serialise (Beneficiary c)
        , ByteArrayAccess (BlockHash c)
-       , Yaml.ToJSON (SealedBlock c (Tx c) PoW)
+       , AuthTree.MerkleHash (Crypto.Hash c)
+       , Yaml.ToJSON (Crypto.ShortHash c)
        )
     => Beneficiary c
     -> Difficulty
     -> m Result
 genesisCreate benef diffi = do
     time <- getTime
-    let unsealedGen :: Block c (Tx c) Unsealed = emptyGenesisFromState time benef (mempty :: LegacyTxState)
-    result <- mineGenesis
-        (mineNakamoto (Telemetry.probed Telemetry.noProbe) (const diffi)) unsealedGen
-    case result of
-        Left err  ->
-            pure $ ResultError err
-        Right gen -> do
+    let maybeGenesisParameters = createGenesisParameters benef time diffi
+    case maybeGenesisParameters of
+        Nothing ->
+            pure $ ResultError "Failed to generate proof of work for genesis parameters"
+        Just gen -> do
             putLine . decodeUtf8 . Yaml.encode $ gen
             pure ResultOk

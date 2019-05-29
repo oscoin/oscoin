@@ -14,9 +14,7 @@ import qualified Codec.Serialise as CBOR
 import qualified Codec.Serialise.Decoding as CBOR
 import qualified Codec.Serialise.Encoding as CBOR
 import           Control.Monad.Fail (fail)
-import           Data.Aeson
 import           Data.ByteArray (ByteArrayAccess)
-import           Data.Coerce
 import qualified Data.Map as Map
 
 import qualified Oscoin.Data.OscoinTx as OscoinTx
@@ -37,14 +35,6 @@ instance Query LegacyTxState where
 
 newtype DummyPayload = DummyPayload ByteString
     deriving (Show, Eq, Ord, Serialise, ByteArrayAccess)
-
--- These are bogus Aeson instances which serves just as a placeholder for
--- the times it takes to replace 'Tx' with the proper 'OscoinTx'.
-instance ToJSON DummyPayload where
-    toJSON = toJSON . decodeUtf8 . coerce
-
-instance FromJSON DummyPayload where
-    parseJSON o = DummyPayload . encodeUtf8 <$> parseJSON o
 
 type Tx c = Tx' c DummyPayload
 
@@ -104,36 +94,6 @@ instance ( Serialise (PublicKey c)
                  <*> CBOR.decode
                  <*> CBOR.decode
           e -> fail $ "Failed decoding Tx from CBOR: " ++ show e
-
-instance ( Crypto.HasHashing c
-         , Crypto.Hashable c (Tx' c msg)
-         , ToJSON (PublicKey c)
-         , ToJSON (Crypto.Hash c)
-         , ToJSON (Signature c)
-         , ToJSON msg
-         ) => ToJSON (Tx' c msg) where
-    toJSON tx@Tx{..} =
-        let (h :: Crypto.Hashed c (Tx' c msg)) = Crypto.hash tx
-        in object [ "hash"    .= toJSON h
-                  , "message" .= toJSON txMessage
-                  , "pubkey"  .= toJSON txPubKey
-                  , "chainId" .= toJSON txChainId
-                  , "nonce"   .= toJSON txNonce
-                  , "ctx"     .= toJSON txContext
-                  ]
-
-instance ( FromJSON (BlockHash c)
-         , FromJSON (PublicKey c)
-         , FromJSON (Signature c)
-         , FromJSON msg
-         ) => FromJSON (Tx' c msg) where
-    parseJSON = withObject "Tx" $ \o -> do
-        txMessage <-  o .: "message"
-        txPubKey  <- o .: "pubkey"
-        txChainId <- o .: "chainId"
-        txNonce   <- o .: "nonce"
-        txContext <- o .: "ctx"
-        pure Tx{..}
 
 mkTx :: Crypto.HasHashing c => Signed c msg -> PublicKey c -> Tx' c msg
 mkTx sm pk = Tx

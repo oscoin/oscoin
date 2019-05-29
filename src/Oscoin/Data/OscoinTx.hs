@@ -21,7 +21,6 @@ import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
 import           Control.Monad.Fail (fail)
 import qualified Crypto.Data.Auth.Tree as WorldState
-import qualified Data.Aeson as JSON
 import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
@@ -94,9 +93,6 @@ data TxMessageOutput = TxMessageOutput
     deriving (Show, Eq, Generic)
 
 instance CBOR.Serialise TxMessageOutput
-
-instance JSON.ToJSON   TxMessageOutput
-instance JSON.FromJSON TxMessageOutput
 
 instance ByteArrayAccess TxOutput where
     length = length . LBS.toStrict . CBOR.serialise

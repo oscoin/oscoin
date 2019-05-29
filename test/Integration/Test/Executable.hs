@@ -82,7 +82,7 @@ withOscoinExe Ports{..} f = do
                                  , show ekgPort
                                  , "--blockstore"
                                  , dbPath
-                                 , "--genesis"
+                                 , "--genesis-parameters"
                                  , "data/genesis.yaml"
                                  , "--beneficiary"
                                  , show beneficiary

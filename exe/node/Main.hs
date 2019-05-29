@@ -8,8 +8,7 @@ import           Oscoin.Configuration
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
-import           Oscoin.Crypto (Crypto)
-import           Oscoin.Crypto.Blockchain.Block (Block, Sealed)
+import           Oscoin.Crypto.Blockchain.Genesis (buildGenesisBlock)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
 import           Oscoin.Node (runNodeT, withNode)
@@ -40,9 +39,6 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 
 import           Options.Applicative
-
-type GenesisBlock =
-    Block Crypto (Tx Crypto) (Sealed Crypto Nakamoto.PoW)
 
 main :: IO ()
 main = do
@@ -77,7 +73,8 @@ main = do
 
     nid <- pure (mkNodeId $ fst keys)
     mem <- Mempool.newIO validateTx
-    gen <- Yaml.decodeFileThrow (genesisPath optPaths) :: IO GenesisBlock
+    genesisBlockParams <- Yaml.decodeFileThrow (genesisParametersPath optPaths)
+    let genesisBlock = buildGenesisBlock genesisBlockParams
 
     metricsStore <-
         newMetricsStore $ labelsFromList
@@ -113,7 +110,7 @@ main = do
             blkStore <- managed $
                 BlockStore.SQLite.withBlockStore
                     (blockstorePath optPaths)
-                    gen
+                    genesisBlock
             -- FIXME(adn) Replace with a proper evaluator & state once we switch to
             -- the OscoinTx type.
             let dummyEval _ _ s = ([], s)

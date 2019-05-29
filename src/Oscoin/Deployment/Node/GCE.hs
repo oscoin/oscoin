@@ -45,7 +45,7 @@ gceNodeOptions nopt =
             . set  (the @"optPaths" . the @"blockstorePath")   "/storage/blockstore.db"
             . set  (the @"optDiscovery" . the @"optEnableMDns") False
 
-        removals = removeOpt "keys" >=> removeOpt "genesis"
+        removals = removeOpt "keys" >=> removeOpt "genesis-parameters"
 
         -- FIXME: we should track option names at the type level (using e.g.
         -- @vinyl@)

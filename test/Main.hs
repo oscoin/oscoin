@@ -21,6 +21,7 @@ import qualified Test.Oscoin.API.HTTP
 import qualified Test.Oscoin.Configuration
 import qualified Test.Oscoin.Crypto.Blockchain.Eval
 import qualified Test.Oscoin.Crypto.Blockchain.GeneratorsTest
+import qualified Test.Oscoin.Crypto.Blockchain.Genesis
 import qualified Test.Oscoin.Crypto.Hash
 import qualified Test.Oscoin.Crypto.PubKey
 import qualified Test.Oscoin.Data.OscoinTx
@@ -100,6 +101,7 @@ main = do
                     , Test.Oscoin.Protocol.tests crypto
                     , Test.Oscoin.Storage.Block.Orphanage.tests crypto
                     , Test.Oscoin.Storage.Ledger.tests crypto
+                    , Test.Oscoin.Crypto.Blockchain.Genesis.tests crypto
                     ]
                 , testGroup (cryptoName MockCryptoTest)
                     [ Test.Oscoin.Crypto.Hash.tests mockCrypto
