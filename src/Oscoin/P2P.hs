@@ -242,7 +242,7 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
                 BlockMsg blk ->
                     let
                         parentHash = blockPrevHash $ blockHeader blk
-                        parentId   = toStrict $ CBOR.serialise parentHash
+                        parentId   = toStrict $ CBOR.serialise (BlockId @c @tx parentHash)
                         -- If we didn't find it, indicate 'parent' is missing.
                         -- Otherwise, 'Nothing' is missing.
                         missing    = maybe (Just parentId) (const Nothing)
@@ -265,7 +265,8 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
         Storage.Error   _ -> Bcast.Error
 
 wrapLookup
-    :: ( Crypto.HasHashing c
+    :: forall c tx s.
+       ( Crypto.HasHashing c
        , Serialise s
        , Serialise tx
        , Serialise (BlockHash c)
@@ -277,8 +278,8 @@ wrapLookup
     -> IO (Maybe ByteString)
 wrapLookup lookupBlock lookupTx mid =
     case deserialiseMessageId mid of
-        Right (BlockId i) -> map (toStrict . CBOR.serialise) <$> lookupBlock i
-        Right (TxId txId) -> map (toStrict . CBOR.serialise) <$> lookupTx txId
+        Right (BlockId i) -> map (toStrict . CBOR.serialise . BlockMsg)        <$> lookupBlock i
+        Right (TxId txId) -> map (toStrict . CBOR.serialise . TxMsg @c @tx @s) <$> lookupTx txId
         Left _ -> pure Nothing
 
 fromGossip
