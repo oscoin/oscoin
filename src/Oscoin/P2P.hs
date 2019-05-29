@@ -57,6 +57,7 @@ import           Data.ByteArray (ByteArrayAccess(..))
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 import           Data.Hashable (Hashable)
 import           Data.HashSet (HashSet)
+import qualified Data.HashSet as HashSet
 import qualified Data.Set as Set
 import           Formatting.Buildable (Buildable)
 import           Network.Socket (SockAddr, Socket)
@@ -137,9 +138,7 @@ withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
             (addrPort . bootGossipAddr $ selfAddr)
     peers <- disco
     runGossip self peers $ \env ->
-        snd <$> concurrently
-            (when (Set.null peers) . void $ keepDiscovering env)
-            (run env)
+        snd <$> concurrently (void $ keepDiscovering env) (run env)
   where
     scheduleInterval = 10
 
@@ -160,10 +159,14 @@ withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
             . const
             . recoverAll policy
             . const $ do
-                peers <- disco
-                unless (Set.null peers) $
-                    Gossip.Run.joinAny env (toList peers)
-                pure peers
+                active <- getPeers env
+                if HashSet.null active then do
+                    peers <- disco
+                    unless (Set.null peers) $
+                        Gossip.Run.joinAny env (toList peers)
+                    pure peers
+                else
+                    pure Set.empty
 
     policy = capDelay (60 * 1_000_000) $ fullJitterBackoff 500_000
 

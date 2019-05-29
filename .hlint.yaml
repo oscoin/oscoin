@@ -47,7 +47,7 @@
 
 - ignore:
     name: Avoid restricted qualification
-    within: [System.Console.Option]
-- ignore:
-    name: Avoid restricted qualification
-    within: [Oscoin.Protocol.Sync]
+    within:
+    - Oscoin.P2P
+    - Oscoin.Protocol.Sync
+    - System.Console.Option
