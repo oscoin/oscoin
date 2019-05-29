@@ -98,7 +98,7 @@ gceContainer opts version (storage :| _) = ContainerConfig
     , workingDir = Just "/home/oscoin"
     , entrypoint = Just "/bin/oscoin"
     , hostConfig = HostConfig
-        { logDriver      = JsonFile
+        { logDriver      = Journald
         , networkMode    = NetworkHost
         , mount          =
             [ Mount

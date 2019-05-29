@@ -9,7 +9,7 @@ module Oscoin.Deployment.Internal.GCE
     )
 where
 
-import           Oscoin.Prelude
+import           Oscoin.Prelude hiding ((<.>))
 
 import           Oscoin.Deployment.Internal.CloudInit
 import           Oscoin.Deployment.Internal.Docker
@@ -20,14 +20,14 @@ import           Oscoin.Deployment.Internal.Systemd
 import           Data.Generics.Product (the)
 import           Data.List (nubBy)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Formatting as F
 import           Lens.Micro (set, to, (.~))
 import           Lens.Micro.Extras (view)
 import           System.Console.Option
-import           System.FilePath ((</>))
-import           System.Posix
-                 (groupReadMode, otherReadMode, ownerReadMode, ownerWriteMode)
+import           System.FilePath ((<.>), (</>))
+import           System.Posix (groupReadMode, otherReadMode, ownerReadMode)
 
 newtype MountPoint = MountPoint { fromMountPoint :: FilePath }
     deriving (Eq, Ord, Show, Read, IsString)
@@ -141,17 +141,32 @@ cloudConfig (max 1 . min 8 -> numLocalDisks) containers =
             (Map.toList containers')
 
     srvUnitFile srv =
-        mkWriteFiles ( "/etc/systemd/system/"
-                    <> toS (view (the @"name") srv)
-                    <> ".service"
-                     )
-                     (fromPosixFileMode (  ownerReadMode
-                                       .|. ownerWriteMode
-                                       .|. groupReadMode
-                                       .|. otherReadMode
-                                        ))
-                     rootOwner
-                     (plainTextFileContents $ renderService srv)
+        mkWriteFiles
+            ("/etc/systemd/system/" </> toS (view (the @"name") srv) <.> "service")
+            (fromPosixFileMode (ownerReadMode .|. groupReadMode .|. otherReadMode))
+            rootOwner
+            (plainTextFileContents $ renderService srv)
+
+    fluentdSource container =
+        mkWriteFiles
+            ("/etc/stackdriver/logging.config.d/" </> toS container <.> "conf")
+            (fromPosixFileMode (ownerReadMode .|. groupReadMode .|. otherReadMode))
+            rootOwner
+            . plainTextFileContents $ Text.unlines
+                [ "<source>"
+                , "  @type systemd"
+                , "  match [{\"CONTAINER_NAME\": \"" <> container <> "\"}]"
+                , "  <storage>"
+                , "    @type local"
+                , "    persistent true"
+                , "    path /var/log/google-fluentd/" <> container <> ".log.pos"
+                , "  </storage>"
+                , "  read_from_head true"
+                , "  tag containers"
+                , "</source>"
+                ]
 
     files =
-        Vector.fromList $ map srvUnitFile srvs
+        Vector.fromList
+            $ map fluentdSource (Map.keys containers)
+           <> map srvUnitFile srvs
