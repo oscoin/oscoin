@@ -14,7 +14,14 @@ import           Oscoin.Crypto.Blockchain
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, blockHeader, emptyGenesisBlock, sealBlock)
 import           Oscoin.Data.Tx
-import           Oscoin.P2P (Addr(..), mkAddr, nodeHttpApiAddr, readHost)
+import           Oscoin.P2P
+                 ( Addr(..)
+                 , mkAddr
+                 , mkNodeId
+                 , mkNodeInfo
+                 , nodeHttpApiAddr
+                 , readHost
+                 )
 import           Oscoin.Protocol.Sync as Sync
 import qualified Oscoin.Protocol.Sync.Mock as Mock
 import qualified Oscoin.Protocol.Sync.RealWorld as IO
@@ -29,11 +36,15 @@ import           Data.Conduit
 import           Data.Conduit.Combinators (sinkList)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as Set
+import           Data.IORef
 import           Data.Maybe (fromJust)
 import           Lens.Micro (over)
+import           Network.Socket (PortNumber)
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           Hedgehog
 import           Hedgehog.Gen.QuickCheck (quickcheck)
+import           Hedgehog.Internal.Property (forAllT)
 import qualified Oscoin.Storage.Block.STM as STM
 import           Oscoin.Test.Consensus.Nakamoto.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators (genBlockFrom)
@@ -42,7 +53,7 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers (nodeState, withNode)
-import           Test.Oscoin.P2P.Gen (genNodeInfo)
+import           Test.Oscoin.P2P.Gen (genPortNumber)
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.Hedgehog (testProperty)
@@ -142,9 +153,9 @@ prop_getRemoteTip_sim_three_peers_majority = property $ do
 
 prop_getRemoteTip_io_three_peers_majority :: Dict (IsCrypto c) -> Property
 prop_getRemoteTip_io_three_peers_majority d@Dict = withTests 1 . property $ do
-    testPeer1@(peer1, chain1) <- forAll (genNakamotoPeer d)
-    (peer2, _) <- forAll (genNakamotoPeer d)
-    (peer3, _) <- forAll (genNakamotoPeer d)
+    testPeer1@(peer1, chain1) <- forAllT (genNakamotoPeer d)
+    (peer2, _) <- forAllT (genNakamotoPeer d)
+    (peer3, _) <- forAllT (genNakamotoPeer d)
     chain2 <- flip (|>) chain1 <$> forAll (quickcheck (genBlockFrom (tip chain1)))
 
     let getActive = pure $ Set.fromList [peer1, peer2, peer3]
@@ -233,9 +244,9 @@ prop_syncBlocks_sim_full = property $ do
 
 prop_syncBlocks_io_full :: Dict (IsCrypto c) -> Property
 prop_syncBlocks_io_full d@Dict = withTests 1 . property $ do
-    testPeer1@(peer1, chain1) <- forAll (genNakamotoPeer d)
-    (peer2, _) <- forAll (genNakamotoPeer d)
-    (peer3, _) <- forAll (genNakamotoPeer d)
+    testPeer1@(peer1, chain1) <- forAllT (genNakamotoPeer d)
+    (peer2, _) <- forAllT (genNakamotoPeer d)
+    (peer3, _) <- forAllT (genNakamotoPeer d)
 
     let allBlocksNoGenesis = drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
     let fullRange = fromJust $ range (nakamotoGenesis d) (tip chain1)
@@ -278,9 +289,9 @@ prop_syncBlocks_sim_missing = property $ do
 
 prop_syncBlocks_io_missing :: Dict (IsCrypto c) -> Property
 prop_syncBlocks_io_missing d@Dict = withTests 1 . property $ do
-    testPeer1@(peer1, chain1) <- forAll (genNakamotoPeer d)
-    (peer2, _) <- forAll (genNakamotoPeer d)
-    (peer3, _) <- forAll (genNakamotoPeer d)
+    testPeer1@(peer1, chain1) <- forAllT (genNakamotoPeer d)
+    (peer2, _) <- forAllT (genNakamotoPeer d)
+    (peer3, _) <- forAllT (genNakamotoPeer d)
 
     let allBlocksNoGenesis =
             drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
@@ -371,32 +382,68 @@ mockGenesis = defaultGenesis (Dict :: Dict (IsCrypto MockCrypto)) mempty
   Generators
 ------------------------------------------------------------------------------}
 
+-- Generating unique ports
+--
+-- In order to test the Sync logic for the 'RealWorld' implementation, we need
+-- to spin up some threads to actually bind on some ports in order to respond
+-- to HTTP requests from other peers. However, generating such random ports is
+-- not useful for these kind of tests, as ports on a local machine are a finite
+-- resource and generating them randomly means it's more likely to get a
+-- collision. If that happens, an exception would be raised and the tests would
+-- fail. To avoid that, we simply keep track of a global HTTP port \"dispenser\",
+-- which allocates ports sequentally and thus allows tests (even if ran in
+-- parallel) to all succeed.
+
+-- | A global counter for the HTTP ports.
+--
+-- N.B. We start from 0 for a simple reason: in case we reach the maximum
+-- number of ports (i.e. maxBound :: Word16, i.e. 65535), the counter would
+-- overflow, starting from 0. However, we cannot bind to 0 (nor to a bunch of
+-- system-used ports). This is why in `nextUnusedHttpPort' we increment the
+-- counter by 1 but we return /port + 3000/: This ensure that in case of
+-- overflow we would resume back from an allowed range.
+uniqueHttpPortRef :: IORef PortNumber
+uniqueHttpPortRef = unsafePerformIO $ newIORef 0
+{-# NOINLINE uniqueHttpPortRef #-}
+
+-- N.b. the call to 'max' in the second element of the tuple ensures that when
+-- we are approaching overflow, we would resume back from 3000.
+nextUnusedHttpPort :: IO PortNumber
+nextUnusedHttpPort =
+    atomicModifyIORef' uniqueHttpPortRef
+                       (\port -> (port + 1, max 3000 (port + 3000)))
+
 genMockPeer :: Gen (Mock.MockPeer, Mock.PeerData)
-genMockPeer =
+genMockPeer = do
     let proof = Dict :: Dict (IsCrypto MockCrypto)
-    in genActivePeer proof (defaultGenesis proof mempty)
+    port <- genPortNumber
+    genActivePeer proof (defaultGenesis proof mempty) port
 
 genNakamotoPeer
-    :: forall c. Dict (IsCrypto c)
-    -> Gen (ActivePeer c, Blockchain c (Tx c) Nakamoto.PoW)
-genNakamotoPeer d@Dict = genActivePeer d (nakamotoGenesis d)
+    :: forall c m. MonadIO m
+    => Dict (IsCrypto c)
+    -> GenT m (ActivePeer c, Blockchain c (Tx c) Nakamoto.PoW)
+genNakamotoPeer d@Dict = do
+    port <- liftIO nextUnusedHttpPort
+    genActivePeer d (nakamotoGenesis d) port
 
 genActivePeer
-    :: forall c tx s.
+    :: forall c tx s m.
        ( Arbitrary tx
        , Serialise tx
        , Arbitrary s
        , Serialise s
+       , Monad m
        )
     => Dict (IsCrypto c)
     -> Block c tx (Sealed c s)
     -- ^ The genesis block.
-    -> Gen (ActivePeer c, Blockchain c tx s)
-genActivePeer Dict genesis = do
+    -> PortNumber
+    -> GenT m (ActivePeer c, Blockchain c tx s)
+genActivePeer Dict genesis port = do
   (pk, _) <- quickcheck arbitraryKeyPair
-  info    <- genNodeInfo pk
   let localHost = case readHost "127.0.0.1" of
                     Left e  -> panic (show e)
                     Right l -> l
-  let localInfo = info { nodeHttpApiAddr = mkAddr localHost (addrPort $ nodeHttpApiAddr info) }
-  (,) <$> pure localInfo <*> quickcheck (genBlockchainFrom genesis)
+  (,) <$> pure (mkNodeInfo (mkAddr localHost port) (mkNodeId pk))
+      <*> quickcheck (genBlockchainFrom genesis)

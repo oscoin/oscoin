@@ -51,3 +51,7 @@
     - Oscoin.P2P
     - Oscoin.Protocol.Sync
     - System.Console.Option
+- ignore:
+    name: Avoid restricted function
+    within:
+    - Test.Oscoin.Protocol.Sync
