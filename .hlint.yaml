@@ -2,19 +2,6 @@
 
 - arguments: [-XTypeApplications]
 
-- modules:
-  - {name: [Data.Set, Data.HashSet],     as: Set}
-  - {name: [Data.Map],                   as: Map}
-  - {name: [Data.HashMap],               as: HashMap}
-  - {name: [Data.List.NonEmpty],         as: NonEmpty}
-  - {name: [Data.Sequence],              as: Seq}
-  - {name: [Data.Text],                  as: T}
-  - {name: [Data.Text.Lazy],             as: LT}
-  - {name: [Data.ByteString],            as: BS}
-  - {name: [Data.ByteString.Lazy],       as: LBS}
-  - {name: [Data.ByteString.Char8],      as: C8}
-  - {name: [Data.ByteString.Lazy.Char8], as: L8}
-
 - functions:
   - {name: unsafePerformIO, within: [Oscoin.Test.Crypto.Blockchain.Block.Helpers]}
 
@@ -45,13 +32,6 @@
 - ignore: {name: Use print}
 - ignore: {name: Use camelCase}
 
-- ignore:
-    name: Avoid restricted qualification
-    within:
-    - Oscoin.Deployment.Internal.GCE
-    - Oscoin.P2P
-    - Oscoin.Protocol.Sync
-    - System.Console.Option
 - ignore:
     name: Avoid restricted function
     within:
