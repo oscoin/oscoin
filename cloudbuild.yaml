@@ -162,7 +162,7 @@ steps:
     - OSCOIN_METRICS_PORT=8081
     - OSCOIN_DEPLOY=bin/oscoin-deploy
     - GCE_PROJECT_ID=$PROJECT_ID
-    - GCE_REGION=europe-west1
+    - GCE_REGION=europe-west3
     - GCE_VPC=devnet
     - GCE_SERVICEACCOUNT=oscoin-node@opensourcecoin.iam.gserviceaccount.com
     - GCE_MACHINE_TYPE=n1-standard-1
