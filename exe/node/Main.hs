@@ -31,6 +31,7 @@ import           Oscoin.Telemetry.Logging (withStdLogger)
 import qualified Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
 import           Oscoin.Telemetry.Middleware (telemetryMiddleware)
+import qualified Oscoin.Telemetry.Options as Telemetry
 
 import           Control.Monad.Managed (managed, runManaged)
 import qualified Data.Set as Set
@@ -60,6 +61,7 @@ main = do
         , optEkgPort
         , optAllowEphemeralKeys
         , optBeneficiary
+        , optTelemetry
         } <-
         execParser $
             info (helper <*> Node.nodeOptionsParser cfgPaths)
@@ -83,7 +85,11 @@ main = do
             [("env", renderEnvironment optEnvironment)]
 
     let consensusConfig = Consensus.configForEnvironment optEnvironment
-    let logConfig       = Log.configForEnvironment optEnvironment
+    let logConfig       =
+            Log.defaultConfig
+                { Log.cfgLevel = Telemetry.optLogSeverity optTelemetry
+                , Log.cfgStyle = Telemetry.optLogStyle optTelemetry
+                }
 
     optDiscovery' <-
         either (die . toS) pure =<< P2P.Disco.evalOptions optDiscovery

@@ -13,6 +13,7 @@ import qualified Test.Oscoin.Configuration.Gen as Config.Gen
 import qualified Test.Oscoin.Crypto.Hash.Gen as Hash.Gen
 import qualified Test.Oscoin.P2P.Disco.Options.Gen as Disco.Gen
 import qualified Test.Oscoin.P2P.Gen as P2P.Gen
+import qualified Test.Oscoin.Telemetry.Gen as Telemetry.Gen
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -36,3 +37,4 @@ genNodeOptions = Options
     <*> Gen.maybe P2P.Gen.genPortNumber
     <*> Gen.bool
     <*> Hash.Gen.genShortHash
+    <*> Telemetry.Gen.genTelemetryOptions
