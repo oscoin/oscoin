@@ -4,6 +4,7 @@ module Oscoin.Storage.Block.Orphanage
     , emptyOrphanage
     , getOrphans
     , member
+    , candidateAvailable
     , insertOrphan
     , toBlocksOldestFirst
     , selectBestChain
@@ -182,6 +183,16 @@ getOrphans = Map.keysSet . orphans
 
 member :: Ord (BlockHash c) => Orphanage c tx s -> BlockHash c -> Bool
 member o h = Set.member h . Map.keysSet . orphans $ o
+
+-- | /O(log n)/ Returns 'True' if the input candidate matches an available chain in
+-- the orphanage.
+candidateAvailable
+    :: Ord (Hash c)
+    => Hash c
+    -> Orphanage c tx s
+    -> Bool
+candidateAvailable rootHash Orphanage{candidates} =
+    isJust (Map.lookup rootHash candidates)
 
 -- | /O(log(n))/ Picks the best candidate out of the candidate set at the given 'BlockHash'.
 selectBestCandidate

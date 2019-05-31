@@ -183,37 +183,41 @@ stepProtocol mgr incomingBlock = do
         currentTip <- BlockStore.getTip bsPublicAPI
         pure $ blockHash currentTip == Block.parentHash incomingBlock
 
-    (mgr', evts) <-
-       if extendsTip
-          then do
-              -- Get the last (cached) 'mutableChainDepth' blocks and performs
-              -- full block validation.
-              let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
-              ancestors <- BlockStore.getBlocksByDepth bsPublicAPI depth
+    if extendsTip
+       then do
+           -- Get the last (cached) 'mutableChainDepth' blocks and performs
+           -- full block validation.
+           let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
+           ancestors <- BlockStore.getBlocksByDepth bsPublicAPI depth
 
-              case protoValidateFull mgr (toNewestFirst ancestors) incomingBlock of
-                  Left validationError ->
-                      let evt = BlockValidationFailedEvent (blockHash incomingBlock) validationError
-                      in pure (mgr, [evt])
-                  Right () -> do
-                      -- Step 3: store the fully-validated block.
-                      BlockStore.insertBlock bsPrivateAPI incomingBlock
-                      pure (mgr, mempty)
+           case protoValidateFull mgr (toNewestFirst ancestors) incomingBlock of
+               Left validationError ->
+                   let evt = BlockValidationFailedEvent (blockHash incomingBlock) validationError
+                   in pure (mgr, [evt])
+               Right () -> do
+                   -- Step 3: store the fully-validated block.
+                   BlockStore.insertBlock bsPrivateAPI incomingBlock
+                   -- At this point, we need to check whether or not in the
+                   -- orphanage there is a candidate available, because the
+                   -- incoming block might be a fork-block which is extending
+                   -- an orphan chain
+                   if O.candidateAvailable (blockHash incomingBlock) (protoOrphanage mgr)
+                      then (,mempty) <$> selectBestChain mgr
+                      else pure (mgr, mempty)
 
-          -- NOTE(adn) This is a side effect of the fact that storing
-          -- the genesis as an orphan would insert it into the orphanage with
-          -- its parent hash, which means that we won't be able to retrieve
-          -- a potential candidate branching off from genesis in our 'selectBestChain'
-          -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
-          -- inserting the genesis block into the orphanage in the first place;
-          -- After all, the genesis block should never be considered an orphan.
-          else map (,mempty) . pure $
-              if not (isGenesisBlock incomingBlock)
-                  then mgr { protoOrphanage = O.insertOrphan incomingBlock (protoOrphanage mgr) }
-                  else mgr
+       -- NOTE(adn) This is a side effect of the fact that storing
+       -- the genesis as an orphan would insert it into the orphanage with
+       -- its parent hash, which means that we won't be able to retrieve
+       -- a potential candidate branching off from genesis in our 'selectBestChain'
+       -- function (cfr. QuickCheck seed 554786). To avoid that, we avoid
+       -- inserting the genesis block into the orphanage in the first place;
+       -- After all, the genesis block should never be considered an orphan.
+       else if not (isGenesisBlock incomingBlock)
+               then -- Step 4: Chain selection, as a new orphan has been added.
+                   let o' = O.insertOrphan incomingBlock (protoOrphanage mgr)
+                   in (,mempty) <$> selectBestChain mgr { protoOrphanage = o' }
+               else pure (mgr, mempty)
 
-    -- Step 4: Chain selection.
-    (,evts) <$> selectBestChain mgr'
   where
       bsPublicAPI :: BlockStoreReader c tx s m
       bsPublicAPI = fst . protoFullBlockStore $ mgr
