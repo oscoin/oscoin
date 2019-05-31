@@ -130,7 +130,7 @@ withGossip
     -> Handshake e (NodeInfo c) (Wire c) o
     -> (Gossip.Run.Env (NodeInfo c) -> IO a)
     -> IO a
-withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
+withGossip telemetry selfAddr disco Storage{..} handshake run = do
     self  <-
         Gossip.knownPeer
             (runIdentity . bootNodeId $ selfAddr)
@@ -138,7 +138,7 @@ withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
             (addrPort . bootGossipAddr $ selfAddr)
     peers <- disco
     runGossip self peers $ \env ->
-        snd <$> concurrently (void $ keepDiscovering env) (run env)
+        snd <$> concurrently (keepDiscovering env) (run env)
   where
     scheduleInterval = 10
 
@@ -148,18 +148,22 @@ withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
             Membership.defaultConfig
             Periodic.defaultConfig
             scheduleInterval
-            (wrapHandshake @c telemetryStore handshake)
-            (wrapApply telemetryStore storageLookupBlock storageApplyBlock storageApplyTx)
+            (wrapHandshake @c telemetry handshake)
+            (wrapApply telemetry storageLookupBlock storageApplyBlock storageApplyTx)
             (wrapLookup storageLookupBlock storageLookupTx)
-            (Telemetry.emit telemetryStore . Telemetry.GossipEvent)
+            (Telemetry.emit telemetry . Telemetry.GossipEvent)
             (toList peers) -- TODO(kim): make this a 'Set' in gossip, too
 
-    keepDiscovering env =
-        retrying policy (const $ pure . Set.null)
+    keepDiscovering env = forever $ do
+        void
+            -- retry if no peers were discovered
+            . retrying policy (const $ pure . Set.null)
             . const
+            -- retry on any (sync) exception
             . recoverAll policy
             . const $ do
                 active <- getPeers env
+                -- run disco if we are isolated
                 if HashSet.null active then do
                     peers <- disco
                     unless (Set.null peers) $
@@ -168,7 +172,12 @@ withGossip telemetryStore selfAddr disco Storage{..} handshake run = do
                 else
                     pure Set.empty
 
-    policy = capDelay (60 * 1_000_000) $ fullJitterBackoff 500_000
+        -- we are connected to > 0 peers, check again in 1min
+        threadDelay delayCap
+
+    policy = capDelay delayCap $ fullJitterBackoff 500_000
+
+    delayCap = 60 * 1_000_000
 
 --------------------------------------------------------------------------------
 
@@ -230,17 +239,17 @@ wrapApply
     -> Bcast.MessageId
     -> ByteString
     -> IO Bcast.ApplyResult
-wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
+wrapApply telemetry lookupBlock applyBlock applyTx mid payload =
     case fromGossip mid payload of
         Left conversionError -> do
-            emit telemetryStore (Peer2PeerErrorEvent conversionError)
+            emit telemetry (Peer2PeerErrorEvent conversionError)
             pure Bcast.Error
         Right msg -> map (uncurry convertApplyResult) $
             case msg of
                 TxMsg    tx  -> do
                     result <- applyTx tx
                     forM_ (TxReceivedEvent (Crypto.hash @c tx) : telemetryEvents result)
-                          (emit telemetryStore)
+                          (emit telemetry)
                     (,) Nothing <$> pure result
                 BlockMsg blk ->
                     let
@@ -254,7 +263,7 @@ wrapApply telemetryStore lookupBlock applyBlock applyTx mid payload =
                                (missing <$> lookupBlock parentHash)
                                (do result <- applyBlock blk
                                    forM_ (BlockReceivedEvent (blockHash blk) : telemetryEvents result)
-                                         (emit telemetryStore)
+                                         (emit telemetry)
                                    pure result
                                )
   where
