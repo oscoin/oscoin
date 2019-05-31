@@ -38,6 +38,8 @@ import qualified Oscoin.Telemetry as Telemetry
 
 import           Oscoin.P2P.Class
 import           Oscoin.P2P.Handshake
+import           Oscoin.P2P.Handshake.Trace
+import           Oscoin.P2P.Trace
 import qualified Oscoin.P2P.Transport as Transport
 import           Oscoin.P2P.Types
 
@@ -151,7 +153,7 @@ withGossip telemetry selfAddr disco Storage{..} handshake run = do
             (wrapHandshake @c telemetry handshake)
             (wrapApply telemetry storageLookupBlock storageApplyBlock storageApplyTx)
             (wrapLookup storageLookupBlock storageLookupTx)
-            (Telemetry.emit telemetry . Telemetry.GossipEvent)
+            (Telemetry.emit telemetry . P2PEvent . TraceGossip)
             (toList peers) -- TODO(kim): make this a 'Set' in gossip, too
 
     keepDiscovering env = forever $ do
@@ -165,6 +167,8 @@ withGossip telemetry selfAddr disco Storage{..} handshake run = do
                 active <- getPeers env
                 -- run disco if we are isolated
                 if HashSet.null active then do
+                    Telemetry.emit telemetry . P2PEvent @c . TraceP2P $
+                        NodeIsolated
                     peers <- disco
                     unless (Set.null peers) $
                         Gossip.Run.joinAny env (toList peers)
@@ -201,7 +205,7 @@ wrapHandshake telemetry handshake role sock addr psk = do
             handshake (mapHandshakeRole role) psk
     case hres of
         Left  e -> do
-            emit telemetry . Telemetry.HandshakeEvent @c $
+            emit telemetry . P2PEvent @c . TraceHandshake $
                 HandshakeError addr (toException e)
             throwM e
         Right r -> do
@@ -209,7 +213,8 @@ wrapHandshake telemetry handshake role sock addr psk = do
                         { Gossip.peerNodeId = hrPeerInfo r
                         , Gossip.peerAddr   = addr
                         }
-            emit telemetry . Telemetry.HandshakeEvent $ HandshakeComplete peer
+            emit telemetry . P2PEvent @c . TraceHandshake $
+                HandshakeComplete peer
             mutex <- newMVar ()
             let transp = Transport.streamingEnvelope (hrPreSend r) (hrPostRecv r)
                        $ Transport.streaming sock
@@ -226,6 +231,7 @@ wrapHandshake telemetry handshake role sock addr psk = do
 wrapApply
     :: forall c tx s.
        ( Crypto.Hashable c tx
+       , Crypto.Hashable c (Crypto.PublicKey c)
        , Buildable (Crypto.Hash c)
        , Serialise s
        , Serialise tx
@@ -241,8 +247,8 @@ wrapApply
     -> IO Bcast.ApplyResult
 wrapApply telemetry lookupBlock applyBlock applyTx mid payload =
     case fromGossip mid payload of
-        Left conversionError -> do
-            emit telemetry (Peer2PeerErrorEvent conversionError)
+        Left e -> do
+            emit telemetry (P2PEvent @c . TraceP2P $ ConversionError e)
             pure Bcast.Error
         Right msg -> map (uncurry convertApplyResult) $
             case msg of

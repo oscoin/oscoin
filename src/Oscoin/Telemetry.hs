@@ -48,6 +48,8 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey (PublicKey)
 import qualified Oscoin.P2P.Disco as Disco
 import qualified Oscoin.P2P.Disco.MDns as Disco
+import qualified Oscoin.P2P.Handshake.Trace as P2P (HandshakeEvent(..))
+import qualified Oscoin.P2P.Trace as P2P (P2PEvent(..), Traceable(..))
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
@@ -170,9 +172,6 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             Log.withNamespace "storage" $
                 Log.debugM "txs removed from the mempool"
                            (ftag "tx_hashes" % listOf formatHash) hashes
-        Peer2PeerErrorEvent conversionError ->
-            Log.withNamespace "p2p" $
-                Log.errM "P2P error" fmtLogConversionError conversionError
         HttpApiRequest req status duration ->
             let fmt = ftag "status" % fmtStatus % " " %
                       ftag "method" % fmtMethod % " " %
@@ -188,151 +187,180 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                           (HTTP.queryString req)
                           duration
 
-        -- NOTE(adn): Unfortunately I had no choice, as part of oscoin#368
-        -- if not \"unrolling\" the 'traceGossip' and 'traceHandshake' functions
-        -- as part of this big monolithic pattern match, otherwise 'c' would
-        -- escape its scope and GHC would bark.
-        GossipEvent    ev -> Log.withNamespace "gossip" $ case ev of
-            Gossip.TraceBootstrap e -> case e of
-                Gossip.Bootstrapping self _others ->
-                    Log.infoM "bootstrapping" fmtPeer self
-                Gossip.Bootstrapped self ->
-                    Log.infoM "bootstrapped" fmtPeer self
-
-            Gossip.TraceConnection e -> case e of
-                Gossip.Connecting addr minfo ->
-                    Log.infoM "connecting"
-                        ( ftag "addr" % fmtSockAddr
-                        % " "
-                        % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
-                        )
-                        addr
-                        (map P2P.nodeNodeId minfo)
-                Gossip.Connected peer ->
-                    Log.infoM "connected" fmtPeer peer
-                Gossip.ConnectFailed addr minfo ex ->
-                    Log.errM "failed to connect"
-                             ( ftag "addr" % fmtSockAddr
-                             % " "
-                             % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
-                             % " "
-                             % fexception
-                             )
-                             addr
-                             (map P2P.nodeNodeId minfo)
-                             ex
-                Gossip.ConnectionLost peer ex ->
-                    Log.infoM "connection reset by peer"
-                              (fmtPeer % " " % fexception)
-                              peer
-                              ex
-                Gossip.ConnectionAccepted addr ->
-                    Log.infoM "incoming connection" (ftag "addr" % fmtSockAddr) addr
-                Gossip.Disconnected peer ->
-                    Log.infoM "disconnected" fmtPeer peer
-
-            Gossip.TraceMembership e ->
-                let
-                    (msg, peer) = case e of
-                        Gossip.Promoted p ->
-                            ("peer promoted to active view", p)
-                        Gossip.Demoted p ->
-                            ("peer demoted from active view", p)
-                 in
-                    Log.debugM msg fmtPeer peer
-
-            Gossip.TraceWire (Gossip.ProtocolError rcpt ex) ->
-                Log.errM "error sending" (fmtPeer % " " % fexception) rcpt ex
-            Gossip.TraceWire e ->
-                let
-                    payloadInfo = \case
-                       Gossip.ProtocolPlumtree rpc ->
-                           case Gossip.EBT.rpcPayload rpc of
-                               Gossip.EBT.Gossip{} -> "gossip"
-                               Gossip.EBT.IHave{}  -> "ihave"
-                               Gossip.EBT.Prune    -> "prune"
-                               Gossip.EBT.Graft{}  -> "graft"
-
-                       Gossip.ProtocolHyParView rpc ->
-                           case Gossip.HPV.rpcPayload rpc of
-                               Gossip.HPV.Join           -> "join"
-                               Gossip.HPV.ForwardJoin{}  -> "forward join"
-                               Gossip.HPV.Disconnect     -> "disconnect"
-                               Gossip.HPV.Neighbor{}     -> "neighbor"
-                               Gossip.HPV.NeighborReject -> "neighbor reject"
-                               Gossip.HPV.Shuffle{}      -> "shuffle"
-                               Gossip.HPV.ShuffleReply{} -> "shuffle reply"
-
-                    (msg, pl, peer) = case e of
-                        Gossip.ProtocolRecv from rpc ->
-                            ("received", payloadInfo rpc, from)
-                        Gossip.ProtocolSend to' rpc ->
-                            ("sending", payloadInfo rpc, to')
-                        _ -> panic "Gossip.ProtocolError not handled"
-                 in
-                    Log.debugM msg (stext % " " % fmtPeer) pl peer
-
-        HandshakeEvent ev -> Log.withNamespace "p2p" $ case ev of
-            P2P.HandshakeError addr ex ->
-                Log.errM "error during handshake"
-                         (ftag "addr" % fmtSockAddr % " " % fexception)
-                         addr
-                         ex
-            P2P.HandshakeComplete peer ->
-                Log.debugM "handshake complete" fmtPeer peer
-
-        DiscoEvent ev -> Log.withNamespace "disco" $ case ev of
-            Disco.MDnsResponderEvent r -> case r of
-                Disco.ResponderError e
-                  -- this happens on ^C, so not very interesting
-                  | Just AsyncCancelled <- fromException e -> pure ()
-                Disco.ResponderError e ->
-                  Log.errM "mDNS responder error" fexception e
-                Disco.ResponderWhatsTheQuestion _ sender ->
-                    Log.infoM "mDNS: invalid query type"
-                              (ftag "sender" % fmtSockAddr)
-                              sender
-                Disco.ResponderHaveNoAnswer q sender ->
-                    Log.infoM "mDNS: received query for unknown SRV record"
-                              ( ftag "q" % stext
-                              % " "
-                              % ftag "sender" % fmtSockAddr
-                              )
-                              (decodeUtf8With lenientDecode $ DNS.qname q)
-                              sender
-                -- TODO(kim): debug actual payload?
-                Disco.ResponderRecv _ sender ->
-                    Log.infoM "mDNS: received query"
-                              (ftag "sender" % fmtSockAddr)
-                              sender
-                Disco.ResponderSend _ recipient ->
-                    Log.debugM "mDNS: sending query"
-                               (ftag "recipient" % fmtSockAddr)
-                               recipient
-
-            Disco.MDnsResolverEvent r -> case r of
-                Disco.ResolverError e ->
-                    Log.errM "mDNS resolver error" fexception e
-                Disco.ResolverRecv _ from ->
-                    Log.infoM "mDNS: received response"
-                              (ftag "from" % fmtSockAddr)
-                              from
-
-            Disco.AddrInfoError ip port e ->
-                Log.errM "getaddrinfo failed"
-                         ( ftag "ip"   % shown
-                         % ftag "port" % shown
-                         % fexception
-                         )
-                         ip
-                         port
-                         e
-
-            Disco.DNSError e ->
-                Log.errM "DNS error" fexception e
+        P2PEvent e -> handleP2P e
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
+
+    handleP2P
+        :: (Crypto.Hashable c (PublicKey c), Buildable (Crypto.Hash c))
+        => P2P.Traceable (P2P.NodeInfo c)
+        -> ReaderT Logger IO ()
+    handleP2P = \case
+        P2P.TraceDisco     ev -> handleDisco ev
+        P2P.TraceGossip    ev -> handleGossip ev
+        P2P.TraceHandshake ev -> handleHandshake ev
+        P2P.TraceP2P       ev -> Log.withNamespace "p2p" $ case ev of
+            P2P.ConversionError e ->
+                Log.errM "Conversion failed" fmtLogConversionError e
+
+            P2P.NodeIsolated ->
+                Log.errM "Ran out of peers. Node isolated!" noFields
+
+    handleDisco :: Disco.DiscoEvent -> ReaderT Logger IO ()
+    handleDisco = Log.withNamespace "disco" . \case
+        Disco.MDnsResponderEvent r -> case r of
+            Disco.ResponderError e
+              -- this happens on ^C, so not very interesting
+              | Just AsyncCancelled <- fromException e -> pure ()
+            Disco.ResponderError e ->
+              Log.errM "mDNS responder error" fexception e
+            Disco.ResponderWhatsTheQuestion _ sender ->
+                Log.infoM "mDNS: invalid query type"
+                          (ftag "sender" % fmtSockAddr)
+                          sender
+            Disco.ResponderHaveNoAnswer q sender ->
+                Log.infoM "mDNS: received query for unknown SRV record"
+                          ( ftag "q" % stext
+                          % " "
+                          % ftag "sender" % fmtSockAddr
+                          )
+                          (decodeUtf8With lenientDecode $ DNS.qname q)
+                          sender
+            -- TODO(kim): debug actual payload?
+            Disco.ResponderRecv _ sender ->
+                Log.infoM "mDNS: received query"
+                          (ftag "sender" % fmtSockAddr)
+                          sender
+            Disco.ResponderSend _ recipient ->
+                Log.debugM "mDNS: sending query"
+                           (ftag "recipient" % fmtSockAddr)
+                           recipient
+
+        Disco.MDnsResolverEvent r -> case r of
+            Disco.ResolverError e ->
+                Log.errM "mDNS resolver error" fexception e
+            Disco.ResolverRecv _ from ->
+                Log.infoM "mDNS: received response"
+                          (ftag "from" % fmtSockAddr)
+                          from
+
+        Disco.AddrInfoError ip port e ->
+            Log.errM "getaddrinfo failed"
+                     ( ftag "ip"   % shown
+                     % ftag "port" % shown
+                     % fexception
+                     )
+                     ip
+                     port
+                     e
+
+        Disco.DNSError e ->
+            Log.errM "DNS error" fexception e
+
+        Disco.DiscoStartEvent ->
+            Log.debugM "performing discovery..." noFields
+
+        Disco.DiscoCompleteEvent ->
+            Log.debugM "discovery complete" noFields
+
+    handleGossip
+        :: (Crypto.Hashable c (PublicKey c), Buildable (Crypto.Hash c))
+        => Gossip.Traceable (P2P.NodeInfo c)
+        -> ReaderT Logger IO ()
+    handleGossip = Log.withNamespace "gossip" . \case
+        Gossip.TraceBootstrap e -> case e of
+            Gossip.Bootstrapping self _others ->
+                Log.infoM "bootstrapping" fmtPeer self
+            Gossip.Bootstrapped self ->
+                Log.infoM "bootstrapped" fmtPeer self
+
+        Gossip.TraceConnection e -> case e of
+            Gossip.Connecting addr minfo ->
+                Log.infoM "connecting"
+                    ( ftag "addr" % fmtSockAddr
+                    % " "
+                    % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
+                    )
+                    addr
+                    (map P2P.nodeNodeId minfo)
+            Gossip.Connected peer ->
+                Log.infoM "connected" fmtPeer peer
+            Gossip.ConnectFailed addr minfo ex ->
+                Log.errM "failed to connect"
+                         ( ftag "addr" % fmtSockAddr
+                         % " "
+                         % ftag "nodeid" % later (maybe mempty (bprint fmtNodeId))
+                         % " "
+                         % fexception
+                         )
+                         addr
+                         (map P2P.nodeNodeId minfo)
+                         ex
+            Gossip.ConnectionLost peer ex ->
+                Log.infoM "connection reset by peer"
+                          (fmtPeer % " " % fexception)
+                          peer
+                          ex
+            Gossip.ConnectionAccepted addr ->
+                Log.infoM "incoming connection" (ftag "addr" % fmtSockAddr) addr
+            Gossip.Disconnected peer ->
+                Log.infoM "disconnected" fmtPeer peer
+
+        Gossip.TraceMembership e ->
+            let
+                (msg, peer) = case e of
+                    Gossip.Promoted p ->
+                        ("peer promoted to active view", p)
+                    Gossip.Demoted p ->
+                        ("peer demoted from active view", p)
+             in
+                Log.debugM msg fmtPeer peer
+
+        Gossip.TraceWire (Gossip.ProtocolError rcpt ex) ->
+            Log.errM "error sending" (fmtPeer % " " % fexception) rcpt ex
+
+        Gossip.TraceWire e ->
+            let
+                payloadInfo = \case
+                   Gossip.ProtocolPlumtree rpc ->
+                       case Gossip.EBT.rpcPayload rpc of
+                           Gossip.EBT.Gossip{} -> "gossip"
+                           Gossip.EBT.IHave{}  -> "ihave"
+                           Gossip.EBT.Prune    -> "prune"
+                           Gossip.EBT.Graft{}  -> "graft"
+
+                   Gossip.ProtocolHyParView rpc ->
+                       case Gossip.HPV.rpcPayload rpc of
+                           Gossip.HPV.Join           -> "join"
+                           Gossip.HPV.ForwardJoin{}  -> "forward join"
+                           Gossip.HPV.Disconnect     -> "disconnect"
+                           Gossip.HPV.Neighbor{}     -> "neighbor"
+                           Gossip.HPV.NeighborReject -> "neighbor reject"
+                           Gossip.HPV.Shuffle{}      -> "shuffle"
+                           Gossip.HPV.ShuffleReply{} -> "shuffle reply"
+
+                (msg, pl, peer) = case e of
+                    Gossip.ProtocolRecv from rpc ->
+                        ("received", payloadInfo rpc, from)
+                    Gossip.ProtocolSend to' rpc ->
+                        ("sending", payloadInfo rpc, to')
+                    _ -> panic "Gossip.ProtocolError not handled"
+             in
+                Log.debugM msg (stext % " " % fmtPeer) pl peer
+
+    handleHandshake
+        :: (Crypto.Hashable c (PublicKey c), Buildable (Crypto.Hash c))
+        => P2P.HandshakeEvent (P2P.NodeInfo c)
+        -> ReaderT Logger IO ()
+    handleHandshake = Log.withNamespace "handshake" . \case
+        P2P.HandshakeError addr ex ->
+            Log.errM "error during handshake"
+                     (ftag "addr" % fmtSockAddr % " " % fexception)
+                     addr
+                     ex
+        P2P.HandshakeComplete peer ->
+            Log.debugM "handshake complete" fmtPeer peer
 
 -- | Maps each 'NotableEvent' to a set of 'Action's. The big pattern-matching
 -- block is by design. Despite the repetition (once in 'emit' and once in
@@ -407,10 +435,6 @@ toActions = \case
     TxsRemovedFromMempoolEvent txs -> [
         GaugeAdd "oscoin.mempool.txs.total" noLabels (- fromIntegral (length txs))
      ]
-    Peer2PeerErrorEvent p2pErr -> [
-        CounterIncrease "oscoin.p2p.errors.total" $ p2pErrorToLabels p2pErr
-
-     ]
     HttpApiRequest req status duration -> [
         CounterIncrease "oscoin.api.http_requests.total" $
             labelsFromList [ ("method", sformat fmtMethod (HTTP.requestMethod req))
@@ -421,8 +445,45 @@ toActions = \case
                         defaultBuckets
                         (fromIntegral duration / fromIntegral Time.seconds)
      ]
+    P2PEvent ev -> p2pActions ev
+  where
+    p2pActions = \case
+        P2P.TraceDisco     ev -> discoActions ev
+        P2P.TraceGossip    ev -> gossipActions ev
+        P2P.TraceHandshake ev -> handshakeActions ev
+        P2P.TraceP2P       ev -> case ev of
+            P2P.ConversionError e ->
+                [ CounterIncrease "oscoin.p2p.conversion_errors.total" $
+                    conversionErrorToLabels e
+                ]
+            P2P.NodeIsolated ->
+                [ CounterIncrease "oscoin.p2p.network_partitions.total" noLabels
+                ]
 
-    GossipEvent e -> case e of
+    discoActions = \case
+        Disco.MDnsResponderEvent Disco.ResponderError{} ->
+            [ CounterIncrease
+                "oscoin.disco.mdns_responder.errors.total"
+                noLabels
+            ]
+        Disco.MDnsResponderEvent Disco.ResponderRecv{} ->
+            [ CounterIncrease
+                "oscoin.disco.mdns_responder.requests.total"
+                noLabels
+            ]
+        Disco.DiscoStartEvent ->
+            [ CounterIncrease
+                "oscoin.disco.discos.attempts.total"
+                noLabels
+            ]
+        Disco.DiscoCompleteEvent ->
+            [ CounterIncrease
+                "oscoin.disco.discos.successes.total"
+                noLabels
+            ]
+        _ -> []
+
+    gossipActions = \case
         Gossip.TraceConnection evt -> case evt of
             Gossip.Connected{} ->
                 [ CounterIncrease
@@ -486,7 +547,7 @@ toActions = \case
 
         _ -> []
 
-    HandshakeEvent e -> case e of
+    handshakeActions = \case
         P2P.HandshakeError{} ->
             [ CounterIncrease
                 "oscoin.p2p.handshake.errors.total"
@@ -497,20 +558,6 @@ toActions = \case
                 "oscoin.p2p.handshake.completions.total"
                 noLabels
             ]
-
-    DiscoEvent e -> case e of
-        Disco.MDnsResponderEvent Disco.ResponderError{} ->
-            [ CounterIncrease
-                "oscoin.disco.mdns_responder.errors.total"
-                noLabels
-            ]
-        Disco.MDnsResponderEvent Disco.ResponderRecv{} ->
-            [ CounterIncrease
-                "oscoin.disco.mdns_responder.requests.total"
-                noLabels
-            ]
-        _ -> []
-
 
 {------------------------------------------------------------------------------
   Utility functions
@@ -524,6 +571,9 @@ listOf formatElement = later (F.build . map (bprint formatElement))
 {------------------------------------------------------------------------------
   Formatters
 -------------------------------------------------------------------------------}
+
+noFields :: Format r r
+noFields = Formatting.now mempty
 
 fmtBlockHash :: F.Buildable (Crypto.Hash c) => Format r (Crypto.Hash c -> r)
 fmtBlockHash = ftag "block_hash" % formatHash
@@ -598,6 +648,6 @@ validationErrorToLabels :: Consensus.ValidationError c -> Labels
 validationErrorToLabels validationError = labelsFromList $
     (:[]) . ("validation_error",) $ gderiveErrorClass validationError
 
-p2pErrorToLabels :: P2P.ConversionError -> Labels
-p2pErrorToLabels p2pError = labelsFromList $
+conversionErrorToLabels :: P2P.ConversionError -> Labels
+conversionErrorToLabels p2pError = labelsFromList $
     (:[]) . ("p2p_error",) $ gderiveErrorClass p2pError

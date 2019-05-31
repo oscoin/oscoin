@@ -8,6 +8,7 @@ import           Oscoin.Configuration
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Genesis (buildGenesisBlock)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Data.Tx
@@ -20,6 +21,7 @@ import qualified Oscoin.P2P as P2P
 import qualified Oscoin.P2P.Disco as P2P.Disco
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import qualified Oscoin.P2P.Handshake as Handshake
+import qualified Oscoin.P2P.Trace as P2P (Traceable(TraceDisco))
 import           Oscoin.Protocol (runProtocol)
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
@@ -143,7 +145,9 @@ main = do
             disco <- managed $
                 let
                     instr :: HasCallStack => P2P.Disco.DiscoEvent -> IO ()
-                    instr = Telemetry.emit telemetry . Telemetry.DiscoEvent
+                    instr = Telemetry.emit telemetry
+                          . Telemetry.P2PEvent @Crypto
+                          . P2P.TraceDisco
                  in
                     P2P.Disco.withDisco instr optDiscovery' $
                         Set.fromList

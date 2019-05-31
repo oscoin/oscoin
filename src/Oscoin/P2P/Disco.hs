@@ -38,6 +38,7 @@ import           Oscoin.Prelude hiding (option)
 
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import           Oscoin.P2P.Disco.Options
+import           Oscoin.P2P.Disco.Trace (DiscoEvent(..))
 import           Oscoin.P2P.Types
                  ( BootstrapInfo(..)
                  , Host
@@ -69,13 +70,6 @@ import           Network.Socket
 
 {-# ANN module ("HLint: ignore Use >=>" :: String) #-}
 
-data DiscoEvent =
-      MDnsResponderEvent MDns.ResponderTrace
-    | MDnsResolverEvent  MDns.ResolverTrace
-    | AddrInfoError      IP PortNumber IOException
-    | DNSError           DNS.DNSError
-    deriving Show
-
 -- | Set up the discovery machinery, and pass an action to the continuation to
 -- perform actual discovery.
 --
@@ -103,24 +97,30 @@ withDisco tracer opt !advertise k = do
         else
             pure Nothing
 
-    run $ k (resolve rslv mrslv)
+    run $ k (tracer DiscoStartEvent
+           *> resolve rslv mrslv
+           <* tracer DiscoCompleteEvent
+            )
   where
     run = if optEnableMDns opt then withResponder else identity
 
-    resolve rslv mrslv = runConcurrently $ (\a b c -> a <> b <> c)
-        <$> (Concurrently
-                . map Set.fromList
-                . flip concatMapM (optSDDomains opt)
-                $ resolveSRV tracer rslv (optNetwork opt))
-        <*> (Concurrently
-                . map Set.fromList
-                . flip concatMapM (optSeeds opt)
-                $ \BootstrapInfo { bootGossipAddr } ->
-                    resolveA tracer rslv (addrHost bootGossipAddr) (addrPort bootGossipAddr))
-        <*> (Concurrently $
-                map (fromMaybe mempty) . for mrslv $ \r ->
-                    Set.fromList <$>
-                        resolveMDns tracer rslv r (optNetwork opt))
+    resolve rslv mrslv = runConcurrently $ liftA3 (\a b c -> a <> b <> c)
+        (Concurrently
+            . map Set.fromList
+            . flip concatMapM (optSDDomains opt)
+            $ resolveSRV tracer rslv (optNetwork opt))
+        (Concurrently
+            . map Set.fromList
+            . flip concatMapM (optSeeds opt)
+            $ \BootstrapInfo { bootGossipAddr } ->
+                resolveA tracer
+                         rslv
+                         (addrHost bootGossipAddr)
+                         (addrPort bootGossipAddr))
+        (Concurrently $
+            map (fromMaybe mempty) . for mrslv $ \r ->
+                Set.fromList <$>
+                    resolveMDns tracer rslv r (optNetwork opt))
 
     withResponder io =
         withAsync runResponder $ \r ->
