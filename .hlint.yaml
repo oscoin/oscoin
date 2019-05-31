@@ -48,6 +48,7 @@
 - ignore:
     name: Avoid restricted qualification
     within:
+    - Oscoin.Deployment.Internal.GCE
     - Oscoin.P2P
     - Oscoin.Protocol.Sync
     - System.Console.Option
