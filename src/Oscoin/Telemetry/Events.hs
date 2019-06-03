@@ -9,11 +9,9 @@ import           Oscoin.Crypto.Blockchain.Block.Difficulty (Difficulty)
 import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
-import qualified Oscoin.P2P.Disco as P2P.Disco
-import qualified Oscoin.P2P.Types as P2P
+import qualified Oscoin.P2P.Trace as P2P (Traceable)
+import qualified Oscoin.P2P.Types as P2P (NodeInfo)
 import           Oscoin.Time (Duration)
-
-import qualified Network.Gossip.IO.Trace as Gossip (Traceable)
 
 import           Formatting.Buildable (Buildable)
 import           Network.HTTP.Types as HTTP
@@ -105,17 +103,11 @@ data NotableEvent where
     TxsRemovedFromMempoolEvent :: forall c. Buildable (Hash c)
                                => [Hash c]
                                -> NotableEvent
-    -- | Triggered every time the P2P layer returns a 'ConversionError'.
-    Peer2PeerErrorEvent :: P2P.ConversionError -> NotableEvent
     -- | Triggered every time a new HTTP request is issued to the node's API.
     HttpApiRequest :: HTTP.Request -> HTTP.Status -> Duration -> NotableEvent
-    -- | Events emitted by the @gossip@ library
-    GossipEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
-                => Gossip.Traceable (P2P.NodeInfo c)
-                -> NotableEvent
-    -- | Events emitted during the p2p handshake phase
-    HandshakeEvent :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
-                   => P2P.HandshakeEvent (P2P.NodeInfo c)
-                   -> NotableEvent
-    -- | Peer discovery discovery events
-    DiscoEvent :: P2P.Disco.DiscoEvent -> NotableEvent
+
+    -- | Events emitted from the P2P subsystem
+    P2PEvent
+        :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
+        => P2P.Traceable (P2P.NodeInfo c)
+        -> NotableEvent

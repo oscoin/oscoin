@@ -94,7 +94,7 @@ testSmoke = do
     ports@Ports { apiPort, ekgPort, metricsPort } <- randomPorts
     withOscoinExe ports $ \stdoutHdl _ -> do
         threadDelay 2000000
-        out <- C8.hGet stdoutHdl 1024
+        out <- C8.hGet stdoutHdl 2048
         expectOutputContains "node starting" out
         expectOutputContains "mined block"   out
 

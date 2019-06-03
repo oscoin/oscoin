@@ -49,7 +49,6 @@ module Oscoin.P2P.Types
     , Msg(..)
     , MsgId(..)
 
-    , HandshakeEvent(..)
     , ConversionError(..)
 
     -- * Formatters
@@ -63,8 +62,6 @@ import           Oscoin.Crypto.Blockchain.Block (Beneficiary, Block, BlockHash)
 import           Oscoin.Crypto.Hash (Hash, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Telemetry.Logging as Log
-
-import qualified Network.Gossip.IO.Peer as Gossip (Peer)
 
 import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
@@ -84,7 +81,7 @@ import qualified Data.Vector.Unboxed as V.Unboxed
 import           Formatting as F
 import qualified Generics.SOP as SOP
 import qualified Network.DNS as DNS
-import           Network.Socket (PortNumber, SockAddr)
+import           Network.Socket (PortNumber)
 import qualified Network.Socket as Network
 import           System.Random (RandomGen, randomR)
 
@@ -460,10 +457,6 @@ instance
             (2, 1) -> TxId    <$> CBOR.decode
             (2, _) -> fail "Oscoin.P2P.Types: Unknown tag for `MsgId`"
             (_, _) -> fail "Oscoin.P2P.Types: Invalid listLen for `MsgId`"
-
-data HandshakeEvent n =
-      HandshakeError    SockAddr SomeException
-    | HandshakeComplete (Gossip.Peer n)
 
 data ConversionError =
       DeserialiseFailure CBOR.DeserialiseFailure
