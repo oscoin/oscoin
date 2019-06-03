@@ -14,6 +14,7 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Genesis (createGenesisParameters)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Data.Ledger as Ledger
 import           Oscoin.Time (Timestamp)
 
 import           Codec.Serialise (Serialise)
@@ -49,6 +50,8 @@ dispatchCommand
        , Crypto.HasDigitalSignature c
        , ByteArrayAccess (BlockHash c)
        , Serialise (Beneficiary c)
+       , Serialise (Crypto.Signature c)
+       , Ord (Ledger.AccountId c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.ShortHash c)
        )
@@ -68,6 +71,8 @@ genesisCreate
        ( MonadCLI c m
        , Serialise (BlockHash c)
        , Serialise (Beneficiary c)
+       , Serialise (Crypto.Signature c)
+       , Ord (Ledger.AccountId c)
        , ByteArrayAccess (BlockHash c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Yaml.ToJSON (Crypto.ShortHash c)

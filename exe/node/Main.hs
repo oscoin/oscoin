@@ -11,7 +11,7 @@ import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Genesis (buildGenesisBlock)
 import qualified Oscoin.Crypto.PubKey as Crypto
 import qualified Oscoin.Crypto.PubKey.FileStore as Crypto
-import           Oscoin.Data.Tx
+import           Oscoin.Data.OscoinTx (emptyState, validateTx)
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool as Mempool
@@ -119,11 +119,12 @@ main = do
                 BlockStore.SQLite.withBlockStore
                     (blockstorePath optPaths)
                     genesisBlock
+
             -- FIXME(adn) Replace with a proper evaluator & state once we switch to
             -- the OscoinTx type.
             let dummyEval _ _ s = ([], s)
             ledger <- liftIO $
-                Ledger.newFromBlockStoreIO dummyEval (fst blkStore) mempty
+                Ledger.newFromBlockStoreIO dummyEval (fst blkStore) emptyState
 
             proto <- managed $
                 runProtocol (Consensus.cValidate consensus)

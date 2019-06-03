@@ -10,6 +10,7 @@ import           Oscoin.Prelude
 
 import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Data.OscoinTx (Tx, TxPayload)
 import           Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
@@ -25,12 +26,11 @@ import qualified Data.List as List
 import qualified Data.Text as T
 import           GHC.Exception (srcLocFile, srcLocStartCol, srcLocStartLine)
 
-import           Test.Oscoin.DummyLedger
 import           Test.QuickCheck.Extended
 import           Test.Tasty
 import           Test.Tasty.QuickCheck hiding ((===))
 
-tests :: Dict (IsCrypto c) -> [TestTree]
+tests :: (SQLite.StorableTx c, Show (TxPayload c)) => Dict (IsCrypto c) -> [TestTree]
 tests d =
     [ testProperty "getTip . insertBlock equivalence"  (propInsertGetTipEquivalence d)
     , testProperty "lookupBlockByHeight  equivalence" (propLookupBlockByHeightEquivalence d)
@@ -51,7 +51,8 @@ classifyChain chain =
 
 -- | Check that given a random 'Blockchain', we can insert a bunch of blocks
 -- and get the tip, and that both stores agree on the result.
-propInsertGetTipEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propInsertGetTipEquivalence
+    :: forall c.  (SQLite.StorableTx c, Show (TxPayload c)) => Dict (IsCrypto c) -> Property
 propInsertGetTipEquivalence Dict =
     forAllShrink (genBlockchainFrom (defaultGenesis @c)) genericShrink $ \chain ->
         classifyChain chain $
@@ -60,7 +61,7 @@ propInsertGetTipEquivalence Dict =
                 p2 <- publicApiCheck stores Abstract.getTip
                 pure (p1 .&&. p2)
 
-propLookupBlockByHeightEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propLookupBlockByHeightEquivalence :: forall c.  SQLite.StorableTx c => Dict (IsCrypto c) -> Property
 propLookupBlockByHeightEquivalence Dict =
     let gen = do
           chain  <- genBlockchainFrom (defaultGenesis @c)
@@ -74,7 +75,7 @@ propLookupBlockByHeightEquivalence Dict =
                 _  <- privateApiCheck stores (`Abstract.insertBlocksNaive` (Chrono.reverse . blocks) chain)
                 publicApiCheck stores (`Abstract.lookupBlockByHeight` hght)
 
-propLookupBlocksByHeightEquivalence :: forall c.  Dict (IsCrypto c) -> Property
+propLookupBlocksByHeightEquivalence :: forall c.  SQLite.StorableTx c => Dict (IsCrypto c) -> Property
 propLookupBlocksByHeightEquivalence Dict =
     let gen = do
           chain  <- genBlockchainFrom (defaultGenesis @c)
@@ -102,8 +103,8 @@ type StoresUnderTest c tx s m =
 -- SQLite store to pass through chain selection.
 withStores
     :: forall c a.
-       IsCrypto c
-    => (StoresUnderTest c DummyTx DummySeal IO -> IO a)
+       (IsCrypto c, SQLite.StorableTx c)
+    => (StoresUnderTest c (Tx c) DummySeal IO -> IO a)
     -> IO a
 withStores action =
     SQLite.withBlockStore ":memory:" defaultGenesis $ \sqlStore ->

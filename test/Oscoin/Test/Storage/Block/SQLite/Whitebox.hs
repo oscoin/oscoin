@@ -11,7 +11,7 @@ import           Data.ByteArray.Orphans ()
 
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.Tx
+import           Oscoin.Data.OscoinTx
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
 
 import           Oscoin.Test.Crypto
@@ -24,7 +24,11 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
-tests :: forall c. Dict (IsCrypto c) -> [TestTree]
+tests
+    :: forall c.
+    ( Show (TxPayload c)
+    , Arbitrary (Tx c)
+    ) => Dict (IsCrypto c) -> [TestTree]
 tests Dict =
     [ testGroup "Storage.Block.SQLite whitebox testing (internals)"
         [ testProperty "isStored"           (withSqliteDB @c (const arbitrary) testIsStored)
@@ -39,8 +43,7 @@ tests Dict =
 ------------------------------------------------------------------------------}
 
 testIsStored
-    :: forall c.
-       IsCrypto c
+    :: forall c. (IsCrypto c)
     => ()
     -> Sqlite.Handle c (Tx c) DummySeal
     -> Assertion
@@ -54,7 +57,7 @@ testIsStored () h = do
     result' @?= False
 
 testIsConflicting
-    :: IsCrypto c
+    :: (IsCrypto c)
     => ( Block c (Tx c) (Sealed c DummySeal)
        , Block c (Tx c) (Sealed c DummySeal)
        )

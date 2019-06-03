@@ -7,8 +7,6 @@
 module Oscoin.Storage.Block.SQLite.Internal
     ( Handle(..)
     , TxRow(..)
-    , IsTxRow(..)
-    , StorableTx
     , runTransaction
     , open
     , close
@@ -19,7 +17,7 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getTip
     , getBlockTxs
     , getBlocks
-    , getTx
+    , lookupTx
     , getChainSuffix
     , getChainHashes
     , lookupBlockByHeight
@@ -46,7 +44,8 @@ import           Oscoin.Crypto.Blockchain.Block
                  , parentHash
                  )
 import           Oscoin.Crypto.Hash (Hash)
-import           Oscoin.Storage.Block.SQLite.Transaction
+import           Oscoin.Data.OscoinTx (Tx)
+import           Oscoin.Storage.Block.SQLite.Internal.Tx
 import           Oscoin.Time.Chrono (OldestFirst(..))
 import           Oscoin.Time.Chrono as Chrono
 
@@ -116,13 +115,12 @@ close Handle{..} = runTransactionWith (const identity) hConn $ do
 -- | Initialize the block store with a genesis block. This can safely be run
 -- multiple times.
 initialize
-    :: ( StorableTx c tx
+    :: ( StorableTx c
        , ToField (Sealed c s)
-       , Serialise (Beneficiary c)
        )
-    => Block c tx (Sealed c s)
-    -> Handle c tx s
-    -> IO (Handle c tx s)
+    => Block c (Tx c) (Sealed c s)
+    -> Handle c (Tx c) s
+    -> IO (Handle c (Tx c) s)
 initialize gen h@Handle{hConn} = runTransaction hConn $ do
     conn   <- ask
     liftIO $
@@ -144,7 +142,7 @@ isStored bh = do
 -- | Check if a given block is conflicting with the main chain. This means a
 -- block already exists with the same height.
 isConflicting
-    :: Block c tx s
+    :: Block c (Tx c) s
     -> Transaction IO Bool
 isConflicting block = do
     conn <- ask
@@ -156,16 +154,14 @@ isConflicting block = do
 -- Invariant: the input block must have passed \"basic\" validation.
 -- (cfr. 'applyBlock').
 storeBlock
-    :: forall c tx s.
+    :: forall c s.
         ( ToField (Sealed c s)
-        , StorableTx c tx
-        , Serialise (Beneficiary c)
+        , StorableTx c
         , Serialise s
         , Typeable c
         , FromField (Sealed c s)
-        , FromField (Hash c)
-        ) => Handle c tx s
-          -> Block c tx (Sealed c s)
+        ) => Handle c (Tx c) s
+          -> Block c (Tx c) (Sealed c s)
           -> IO ()
 storeBlock Handle{..} blk = runTransaction hConn $ do
     blockExists        <- isStored $ blockHash blk
@@ -177,35 +173,31 @@ storeBlock Handle{..} blk = runTransaction hConn $ do
         else pure ()
 
   where
-    extendsTip :: Block c tx (Sealed c s) -> Bool
+    extendsTip :: Block c (Tx c) (Sealed c s) -> Bool
     extendsTip currentTip =
         (blockHash currentTip              == parentHash blk) &&
         ((blockHeight . blockHeader $ blk) == (succ . blockHeight . blockHeader $ currentTip))
 
 
 getGenesisBlock
-    :: forall c s tx.
+    :: forall c s.
        ( Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField s
-       , StorableTx c tx
-       , FromField (Hash c)
+       , StorableTx c
        )
-    => Handle c tx s
-    -> IO (Block c tx (Sealed c s))
+    => Handle c (Tx c) s
+    -> IO (Block c (Tx c) (Sealed c s))
 getGenesisBlock Handle{hConn} = runTransaction hConn $ getGenesisBlockInternal
 
 getGenesisBlockInternal
-    :: forall c s tx.
+    :: forall c s.
        ( Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField s
-       , StorableTx c tx
-       , FromField (Hash c)
+       , StorableTx c
        )
-    => Transaction IO (Block c tx s)
+    => Transaction IO (Block c (Tx c) s)
 getGenesisBlockInternal = do
     conn <- ask
     Only bHash :. bHeader :. Only bBeneficiary <-
@@ -218,29 +210,25 @@ getGenesisBlockInternal = do
 
 -- | Get the chain starting from a given hash up to the tip
 getChainSuffix
-    :: ( StorableTx c tx
+    :: ( StorableTx c
        , Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField s
-       , FromField (Hash c)
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> BlockHash c
-    -> IO (NewestFirst [] (Block c tx (Sealed c s)))
+    -> IO (NewestFirst [] (Block c (Tx c) (Sealed c s)))
 getChainSuffix Handle{hConn} hsh =
     runTransaction hConn $ getChainSuffixInternal hsh
 
 getChainSuffixInternal
-    :: ( StorableTx c tx
+    :: ( StorableTx c
        , Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField s
-       , FromField (Hash c)
        )
     => BlockHash c
-    -> Transaction IO (NewestFirst [] (Block c tx s))
+    -> Transaction IO (NewestFirst [] (Block c (Tx c) s))
 getChainSuffixInternal hsh = do
     result <- lookupBlockHeight hsh
     case result of
@@ -267,7 +255,7 @@ getChainHashes conn (fromIntegral -> depth :: Integer) =
 
 -- | Rollback 'n' blocks.
 rollbackBlocks
-    :: BlockCache c tx (Sealed c s)
+    :: BlockCache c (Tx c) (Sealed c s)
     -> Depth
     -> Transaction IO ()
 rollbackBlocks blockCache (fromIntegral -> depth :: Integer) = do
@@ -280,13 +268,12 @@ rollbackBlocks blockCache (fromIntegral -> depth :: Integer) = do
         BlockCache.invalidate blockCache
 
 switchToFork
-    :: ( StorableTx c tx
+    :: ( StorableTx c
        , ToField s
-       , Serialise (Beneficiary c)
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> Depth
-    -> OldestFirst NonEmpty (Block c tx (Sealed c s))
+    -> OldestFirst NonEmpty (Block c (Tx c) (Sealed c s))
     -> IO ()
 switchToFork Handle{..} depth newChain = runTransaction hConn $ do
     rollbackBlocks hBlockCache depth
@@ -307,12 +294,11 @@ lookupBlockHeight hsh = do
 -- Must be called from within a transaction. Must include a valid parent reference.
 -- /precondition:/ This block must extend the tip.
 storeBlock'
-    :: ( StorableTx c tx
+    :: ( StorableTx c
        , ToField (Sealed c s)
-       , Serialise (Beneficiary c)
        )
-    => BlockCache c tx (Sealed c s)
-    -> Block c tx (Sealed c s)
+    => BlockCache c (Tx c) (Sealed c s)
+    -> Block c (Tx c) (Sealed c s)
     -> Transaction IO ()
 storeBlock' hBlockCache blk = do
     hConn <- ask
@@ -358,29 +344,25 @@ storeBlock' hBlockCache blk = do
 
 getBlocks
     :: ( Serialise s
-       , StorableTx c tx
-       , Serialise (Beneficiary c)
+       , StorableTx c
        , Typeable c
-       , FromField (Hash c)
-       , FromField (Sealed c s)
+       , FromField s
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> Depth
-    -> IO (NewestFirst [] (Block c tx (Sealed c s)))
+    -> IO (NewestFirst [] (Block c (Tx c) (Sealed c s)))
 getBlocks Handle{..} depth = runTransaction hConn $
     getBlocksInternal hBlockCache depth
 
 getBlocksInternal
     :: ( Serialise s
-       , Serialise (Beneficiary c)
-       , StorableTx c tx
+       , StorableTx c
        , Typeable c
-       , FromField (Hash c)
        , FromField (Sealed c s)
        )
-    => BlockCache c tx (Sealed c s)
+    => BlockCache c (Tx c) (Sealed c s)
     -> Depth
-    -> Transaction IO (NewestFirst [] (Block c tx (Sealed c s)))
+    -> Transaction IO (NewestFirst [] (Block c (Tx c) (Sealed c s)))
 getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
     conn <- ask
     -- Hit the cache first
@@ -396,41 +378,35 @@ getBlocksInternal hBlockCache (fromIntegral -> depth :: Int) = do
 
 getTip
     :: ( Serialise s
-       , Serialise (Beneficiary c)
-       , StorableTx c tx
+       , StorableTx c
        , Typeable c
-       , FromField (Hash c)
        , FromField (Sealed c s)
        )
-    => Handle c tx s
-    -> IO (Block c tx (Sealed c s))
+    => Handle c (Tx c) s
+    -> IO (Block c (Tx c) (Sealed c s))
 getTip h = runTransaction (hConn h) $ getTipInternal (hBlockCache h)
 
 getTipInternal
     :: ( Serialise s
-       , Serialise (Beneficiary c)
-       , StorableTx c tx
+       , StorableTx c
        , Typeable c
-       , FromField (Hash c)
        , FromField (Sealed c s)
        )
-    => BlockCache c tx (Sealed c s)
-    -> Transaction IO (Block c tx (Sealed c s))
+    => BlockCache c (Tx c) (Sealed c s)
+    -> Transaction IO (Block c (Tx c) (Sealed c s))
 getTipInternal cache =
     headDef (panic "No blocks in storage!") . toNewestFirst <$> getBlocksInternal cache 1
 
 lookupBlockByHeight
-    :: forall c tx s.
+    :: forall c s.
        ( Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField (Sealed c s)
-       , FromField (Hash c)
-       , StorableTx c tx
+       , StorableTx c
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> Height
-    -> IO (Maybe (Block c tx (Sealed c s)))
+    -> IO (Maybe (Block c (Tx c) (Sealed c s)))
 lookupBlockByHeight Handle{hConn} h = runTransaction hConn $ do
     conn <- ask
     result :: Maybe (Only (BlockHash c) :. BlockHeader c (Sealed c s) :. Only (Beneficiary c)) <- listToMaybe <$> liftIO (Sql.query conn
@@ -439,22 +415,20 @@ lookupBlockByHeight Handle{hConn} h = runTransaction hConn $ do
                WHERE height = ? |] (Only h))
 
     for result $ \(Only blockHash :. bh :. Only be) -> do
-        txs :: [tx] <- liftIO $ getBlockTxs conn blockHash
+        txs :: [Tx c] <- liftIO $ getBlockTxs conn blockHash
         pure $ mkBlock bh be txs
 
 lookupBlocksByHeight
-    :: forall c tx s.
+    :: forall c s.
        ( Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField (Sealed c s)
-       , FromField (Hash c)
-       , StorableTx c tx
+       , StorableTx c
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> (Height, Height)
     -- ^ The /start/ and the /end/ of the range (inclusive).
-    -> IO (OldestFirst [] (Block c tx (Sealed c s)))
+    -> IO (OldestFirst [] (Block c (Tx c) (Sealed c s)))
 lookupBlocksByHeight Handle{hConn} (start,end) = runTransaction hConn $ do
     conn <- ask
     liftIO $ do

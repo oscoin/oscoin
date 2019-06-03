@@ -50,6 +50,7 @@ import qualified Codec.Serialise as CBOR
 import           Control.Monad.Fail (fail)
 import           Crypto.Data.Auth.Tree (Tree)
 import qualified Crypto.Data.Auth.Tree as WorldState
+import           Data.ByteArray (ByteArrayAccess(..))
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
@@ -73,6 +74,37 @@ data StateVal c =
     | NatVal     Natural
 
 deriving instance (Eq (AccountId c), Eq (PublicKey c)) => Eq (StateVal c)
+
+instance Serialise (StateVal c) => ByteArrayAccess (StateVal c) where
+    length             = fromIntegral . LBS.length . CBOR.serialise
+    withByteArray sv f = withByteArray (LBS.toStrict (CBOR.serialise sv)) f
+
+instance
+    ( Serialise (Crypto.Hash c)
+    , Serialise (AccountId c)
+    , Serialise (Signature c)
+    , Ord (AccountId c)
+    ) => Serialise (StateVal c)
+  where
+    encode (AccountVal acc) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 0
+        <> CBOR.encode acc
+    encode (ProjectVal proj) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 1
+        <> CBOR.encode proj
+    encode (NatVal n) =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 2
+        <> CBOR.encode n
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWordCanonical
+        case pre of
+            (2, 0) -> AccountVal <$> CBOR.decode
+            (2, 1) -> ProjectVal . mkProject <$> CBOR.decode
+            (2, 2) -> NatVal <$> CBOR.decode
+            e      -> fail $ "Failed decoding StateVal from CBOR: " ++ show e
 
 -- | Like 'Map.adjust', but for 'WorldState'.
 adjust :: (StateVal c -> StateVal c) -> StateKey -> WorldState c -> WorldState c
@@ -125,6 +157,27 @@ data Account c = Account
 
 deriving instance (Eq (AccountId c)) => Eq (Account c)
 
+instance ( Serialise (Crypto.Hash c)
+         , Serialise (AccountId c)
+         , Serialise (Signature c)
+         ) => Serialise (Account c)
+  where
+    encode Account{..} =
+           CBOR.encodeListLen 4
+        <> CBOR.encodeWord 0
+        <> CBOR.encode accountId
+        <> CBOR.encode accountBalance
+        <> CBOR.encode accountNonce
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWordCanonical
+        case pre of
+            (4, 0) ->
+                Account
+                    <$> CBOR.decode
+                    <*> CBOR.decode
+                    <*> CBOR.decode
+            e -> fail $ "Failed decoding Account from CBOR: " ++ show e
+
 mkAccount :: AccountId c -> Account c
 mkAccount acc = Account
     { accountId      = acc
@@ -173,10 +226,18 @@ data Checkpoint c = Checkpoint
     }
 
 deriving instance
-    (Eq (AccountId c), Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Eq (Checkpoint c)
+    ( Eq (AccountId c)
+    , Eq (PublicKey c)
+    , Eq (Crypto.Hash c)
+    , Eq (Signature c)
+    ) => Eq (Checkpoint c)
 
 instance
-    (Eq (AccountId c), Eq (PublicKey c), Eq (Crypto.Hash c), Eq (Signature c)) => Ord (Checkpoint c)
+    ( Eq (AccountId c)
+    , Eq (PublicKey c)
+    , Eq (Crypto.Hash c)
+    , Eq (Signature c)
+    ) => Ord (Checkpoint c)
   where
     a <= b = checkpointNumber a <= checkpointNumber b
 
@@ -312,12 +373,29 @@ data Project c = Project
     , pUpdateContract  :: UpdateContract' c
     }
 
+instance
+    ( Serialise (Crypto.Hash c)
+    , Serialise (AccountId c)
+    , Serialise (Signature c)
+    , Ord (AccountId c)
+    ) => Serialise (Project c)
+  where
+    encode Project{..} =
+           CBOR.encodeListLen 2
+        <> CBOR.encodeWord 0
+        <> CBOR.encode pAccount
+    decode = do
+        pre <- liftA2 (,) CBOR.decodeListLenCanonical CBOR.decodeWordCanonical
+        case pre of
+            (2, 0) -> mkProject <$> CBOR.decode
+            e      -> fail $ "Failed decoding Project from CBOR: " ++ show e
+
 instance (Eq (AccountId c)) => Eq (Project c) where
     (==) a b = projectId a == projectId b
 
-mkProject :: (Ord (AccountId c)) => AccountId c -> Project c
+mkProject :: (Ord (AccountId c)) => Account c -> Project c
 mkProject acc = Project
-    { pAccount          = mkAccount acc
+    { pAccount          = acc
     , pMaintainers      = mempty
     , pContributors     = mempty
     , pSupporters       = mempty

@@ -13,6 +13,7 @@ import           Oscoin.Crypto.Blockchain.Block (BlockHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Data.Ledger
+import           Oscoin.Data.Query
 import qualified Oscoin.Data.Tx.Abstract as Abstract
 
 import qualified Codec.CBOR.Decoding as CBOR
@@ -21,9 +22,29 @@ import           Codec.Serialise (Serialise)
 import qualified Codec.Serialise as CBOR
 import           Control.Monad.Fail (fail)
 import qualified Crypto.Data.Auth.Tree as WorldState
+import qualified Crypto.Data.Auth.Tree.Class as WorldState
 import           Data.ByteArray (ByteArrayAccess(..))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
+
+-------------------------------------------------------------------------------
+-- TxState
+-------------------------------------------------------------------------------
+
+newtype TxState c = TxState (WorldState c)
+
+instance CBOR.Serialise (StateVal c) => Query (TxState c) where
+    query key (TxState st) = LBS.toStrict . CBOR.serialise <$> WorldState.lookup key st
+
+instance ( Crypto.HasHashing c
+         , WorldState.MerkleHash (Crypto.Hash c)
+         , ByteArrayAccess (StateVal c)
+         ) => Crypto.Hashable c (TxState c)
+  where
+    hash (TxState st) = Crypto.toHashed (WorldState.merkleHash st)
+
+emptyState :: TxState c
+emptyState = TxState WorldState.empty
 
 -------------------------------------------------------------------------------
 -- Tx
@@ -50,7 +71,7 @@ validateTx :: Tx c -> Either (TxError c) ()
 validateTx _ = Right ()
 
 type instance Abstract.TxValidationError c (Tx c) = TxError c
-type instance Abstract.TxState c (Tx c) = WorldState c
+type instance Abstract.TxState c (Tx c) = TxState c
 type instance Abstract.TxOutput c (Tx c) = TxOutput
 
 -- | Transaction payload.
@@ -129,6 +150,14 @@ deriving instance (Eq (Signature c), Eq (BlockHash c), Eq (AccountId c)) => Eq (
 deriving instance (Eq (BlockHash c), Eq (Signature c), Ord (AccountId c)) => Ord (TxError c)
 
 -------------------------------------------------------------------------------
+
+-- | Make a transaction.
+mkTx :: [TxMessage c] -> Network -> PublicKey c -> Signature c -> Tx c
+mkTx msgs net pk sig =
+    Tx' { txPayload = mkTxPayload msgs pk
+        , txNetwork = net
+        , txSignature = sig
+        }
 
 -- | Make a transaction payload with the given messages and author.
 mkTxPayload :: [TxMessage c] -> PublicKey c -> TxPayload c
@@ -225,7 +254,7 @@ applyTxMessage (TxRegisterProject acc) author ws =
                   , [] )
   where
     key = accountKey acc
-    prj = (mkProject acc) { pMaintainers = Map.singleton author mem }
+    prj = (mkProject (mkAccount acc)) { pMaintainers = Map.singleton author mem }
     mem = mkMember author 0
 
 applyTxMessage (TxUnregisterProject acc) author ws = do
@@ -492,6 +521,21 @@ deriving instance
     , Eq (PublicKey c)
     ) => Eq (TxPayload c)
 
+deriving instance
+    ( Ord (AccountId c)
+    , Ord (Crypto.Hash c)
+    , Ord (Signature c)
+    , Ord (PublicKey c)
+    ) => Ord (TxPayload c)
+
+deriving instance
+    ( Crypto.HasHashing c
+    , Show (BlockHash c)
+    , Show (AccountId c)
+    , Show (Signature c)
+    , Show (PublicKey c)
+    ) => Show (TxPayload c)
+
 instance
     ( Serialise (TxMessage c)
     , Serialise (PublicKey c)
@@ -564,3 +608,11 @@ instance
                     <*> CBOR.decode
                     <*> CBOR.decode
             e -> fail $ "Failed decoding Tx from CBOR: " ++ show e
+
+instance ( Serialise (AccountId c)
+         , Serialise (Crypto.Hash c)
+         , Serialise (Signature c)
+         , Serialise (PublicKey c)
+         , Crypto.HasHashing c
+         ) => Crypto.Hashable c (Tx' 1 c) where
+    hash = Crypto.hashSerial

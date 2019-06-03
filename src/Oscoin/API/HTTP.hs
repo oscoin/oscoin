@@ -12,7 +12,8 @@ import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
 import           Oscoin.Crypto.PubKey.RealWorld ()
-import           Oscoin.Data.Tx
+import qualified Oscoin.Data.Ledger as Ledger
+import           Oscoin.Data.OscoinTx (Tx)
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Trans as Node
 import           Oscoin.Telemetry.Middleware (loggingMiddleware)
@@ -33,7 +34,7 @@ import           Formatting.Buildable (Buildable)
 
 -- | Runner specialised over the production 'Crypto', as we use a separate
 -- node handle for tests.
-run :: (Serialise s)
+run :: (Serialise s, Serialise (Ledger.StateVal Crypto))
     => Int
     -> Node.Handle Crypto (Tx Crypto) s i
     -> IO ()

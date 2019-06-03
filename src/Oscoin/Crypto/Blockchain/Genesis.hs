@@ -17,7 +17,9 @@ import qualified Data.Aeson as Aeson
 import           Oscoin.Consensus.Nakamoto (PoW(..), findPoW)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.Tx
+import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Data.Ledger as Ledger
+import           Oscoin.Data.OscoinTx (TxState, emptyState)
 import qualified Oscoin.Time as Time
 
 import           Codec.Serialise
@@ -69,6 +71,8 @@ buildGenesisBlock
     :: forall c tx. ( Serialise (Crypto.Hash c)
        , Crypto.HasHashing c
        , Serialise (Beneficiary c)
+       , Serialise (Crypto.Signature c)
+       , Ord (Ledger.AccountId c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        )
     => GenesisParameters c -> Block c tx (Sealed c PoW)
@@ -92,6 +96,8 @@ createGenesisParameters
        , ByteArrayAccess (BlockHash c)
        , AuthTree.MerkleHash (Crypto.Hash c)
        , Serialise (Beneficiary c)
+       , Serialise (Crypto.Signature c)
+       , Ord (Ledger.AccountId c)
        ) => Beneficiary c -> Timestamp -> Difficulty -> Maybe (GenesisParameters c)
 createGenesisParameters gpBeneficiary gpTimestamp gpStartDifficulty = do
     gpPoW <- findPoW blockHeader
@@ -127,8 +133,8 @@ noTxDataHash beneficiary = hashData $ mkBlockData beneficiary txs
 
 -- | Initial state referenced by the genesis block. We hardcode this
 -- for now.
-initialStateHash :: Crypto.HasHashing c => Crypto.Hash c
-initialStateHash = Crypto.fromHashed $ Crypto.hash initialState
-
-initialState :: LegacyTxState
-initialState = mempty
+initialStateHash
+    :: forall c.
+    ( Crypto.Hashable c (TxState c)
+    ) => Crypto.Hash c
+initialStateHash = Crypto.fromHashed $ Crypto.hash (emptyState @c)

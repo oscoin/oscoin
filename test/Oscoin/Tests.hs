@@ -22,7 +22,7 @@ import           Test.Tasty
 
 import           Data.ByteArray.Orphans ()
 
-tests :: forall c. Dict (IsCrypto c) -> Consensus.Config -> TestTree
+tests :: forall c.  Dict (IsCrypto c) -> Consensus.Config -> TestTree
 tests d@Dict config = testGroup "Oscoin"
     [ testGroup      "CLI"                            CLI.tests
     , Consensus.tests d config

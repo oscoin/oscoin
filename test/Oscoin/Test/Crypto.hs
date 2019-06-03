@@ -17,8 +17,7 @@ import           Oscoin.Crypto.Hash
 import           Oscoin.Crypto.Hash.Mock
 import           Oscoin.Crypto.PubKey
 import           Oscoin.Data.Ledger (Contribution, DependencyUpdate)
-import           Oscoin.Data.Tx
-import           Oscoin.Data.Tx.Abstract
+import           Oscoin.Data.OscoinTx
 import           Oscoin.Test.Util
 
 import           Codec.Serialise (Serialise)
@@ -75,7 +74,6 @@ instance Sized (Address Crypto) where
 instance Sized (Address MockCrypto) where
     upperBoundBytes _ = 31
 
-
 -- | Kitchen-sink for all the constraints our cryptography must abide to.
 type IsCrypto c = ( HasDigitalSignature c
                   , HasHashing c
@@ -95,15 +93,18 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Serialise (Signature c)
                   , Serialise (BlockHash c)
                   , Serialise (ShortHash c)
+                  , Serialise (Hash c)
                   , Serialise (DependencyUpdate c)
                   , Serialise (Contribution c)
                   , Ord (PublicKey c)
                   , Ord (Signature c)
                   , Ord (ShortHash c)
+                  , Ord (TxPayload c)
                   , Show (ShortHash c)
                   , Show (PublicKey c)
                   , Show (Signature c)
                   , Show (Hash c)
+                  , Show (TxPayload c)
                   , Semigroup (Hash c)
                   , Condensed (PublicKey c)
                   , Condensed (PrivateKey c)
@@ -115,8 +116,8 @@ type IsCrypto c = ( HasDigitalSignature c
                   , Hashable c ByteString
                   , Hashable c LByteString
                   , Hashable c (PublicKey c)
+                  , Hashable c (Tx c)
                   , Data.Hashable (PublicKey c)
-                  , Hashable c (TxState c (Tx c))
                   , AuthTree.MerkleHash (Hash c)
                   , Ord (Hash c)
                   , ByteArrayAccess (BlockHash c)
@@ -127,7 +128,10 @@ type IsCrypto c = ( HasDigitalSignature c
                   , ToField (BlockHash c)
                   , ToField (Hashed c (Tx c))
                   , ToField (Sealed c Text)  -- DummySeal ~ Text
+                  , ToField (Signature c)
+                  , ToField (Hash c)
                   , FromField (Hash c)
                   , FromField (Sealed c Text)  -- DummySeal ~ Text
+                  , FromField (Signature c)
                   , Sized (Address c)
                   )

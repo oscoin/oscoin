@@ -59,9 +59,13 @@ instance ( CBOR.Serialise (Crypto.Signature c)
          ) => FromField (Crypto.Signed c msg) where
     fromField = fromFieldSerial
 
-instance ( CBOR.Serialise msg
-         , CBOR.Serialise (Crypto.Signature c)
-         ) => ToField (Crypto.Signed c msg) where
+instance ( CBOR.Serialise (Crypto.Signature c)
+         , Typeable c
+         ) => FromField (Crypto.Signature c) where
+    fromField = fromFieldSerial
+
+instance ( CBOR.Serialise (Crypto.Signature c)
+         ) => ToField (Crypto.Signature c) where
     toField = toFieldSerial
 
 instance (CBOR.Serialise (Crypto.PublicKey c), Typeable c) => FromField (Crypto.PublicKey c) where

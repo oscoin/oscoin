@@ -332,7 +332,7 @@ isGenesisBlock Block{..} =
 
 
 sealBlock
-    :: ( Crypto.Hashable c (BlockHeader c (Sealed c s)) )
+    :: Crypto.Hashable c (BlockHeader c (Sealed c s))
     => s
     -> Block c tx Unsealed
     -> Block c tx (Sealed c s)

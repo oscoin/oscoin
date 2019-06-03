@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS "blocks" (
   "difficulty"    integer       NOT NULL,
   "seal"          blob          NOT NULL,
 
-  -- NOTE: This field holds an Ed25519 public key.
   "beneficiary"   blob          NOT NULL,
 
   FOREIGN KEY ("parenthash")
@@ -22,12 +21,19 @@ CREATE TABLE IF NOT EXISTS "blocks" (
 CREATE UNIQUE INDEX IF NOT EXISTS block_height_ix ON blocks(height);
 
 CREATE TABLE IF NOT EXISTS "transactions" (
+  -- Tx
   "hash"       char(64)      NOT NULL PRIMARY KEY,
-  "context"    char(64)      NOT NULL,
-  "message"    text          NOT NULL,
-  "author"     char(64)      NOT NULL,
-  "chainid"    int           NOT NULL,
+  "network"    int           NOT NULL,
+  "signature"  blob          NOT NULL,
+
+  -- TxPayload
+  "messages"   blob          NOT NULL,
   "nonce"      integer       NOT NULL,
+  "fee"        integer       NOT NULL,
+  "burn"       integer       NOT NULL,
+  "author"     char(64)      NOT NULL,
+
+  -- Foreign key
   "blockhash"  char(64)      NOT NULL,
 
   FOREIGN KEY ("blockhash")

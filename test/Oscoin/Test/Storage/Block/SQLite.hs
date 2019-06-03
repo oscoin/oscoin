@@ -9,7 +9,7 @@ import           Oscoin.Prelude
 
 
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Data.Tx
+import           Oscoin.Data.OscoinTx
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import           Oscoin.Storage.Block.SQLite as Sqlite
 import           Oscoin.Storage.Block.SQLite.Internal as Sqlite
@@ -38,6 +38,7 @@ defaultGenesis =
 withSqliteDB
     :: ( IsCrypto c
        , Show a
+       , StorableTx c
        )
     => (Block c (Tx c) (Sealed c DummySeal) -> Gen a)
     -> (a -> Sqlite.Handle c (Tx c) DummySeal -> IO ())
@@ -53,6 +54,7 @@ withSqliteDB genTestData action = monadicIO $ do
 withMemStore
     :: ( IsCrypto c
        , Show a
+       , StorableTx c
        )
     => (Block c (Tx c) (Sealed c DummySeal) -> Gen a)
     -> (a -> Abstract.BlockStore c (Tx c) DummySeal IO -> IO ())

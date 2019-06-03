@@ -1,30 +1,27 @@
-module Test.Oscoin.Data.OscoinTx where
+module Test.Oscoin.Data.OscoinTx (tests, genTx) where
 
 import           Oscoin.Prelude
 
 import           Oscoin.Configuration (allNetworks)
-import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Crypto.PubKey
-                 (HasDigitalSignature, KeyPair, PrivateKey, PublicKey)
+import           Oscoin.Crypto.PubKey (PublicKey)
 import           Oscoin.Data.Ledger
 import           Oscoin.Data.OscoinTx
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPairs)
 import           Oscoin.Test.Util
 
 import qualified Codec.Serialise as CBOR
 import qualified Crypto.Data.Auth.Tree as WorldState
 
+import           Numeric.Natural
+
 import           Test.Oscoin.Crypto.Hash.Gen (genHash, genShortHash)
 import           Test.Oscoin.Crypto.PubKey.Gen (genPublicKey, genSignature)
-import           Test.Oscoin.P2P.Handshake (genKeyPairPair)
 
 import           Test.Hedgehog.Extended
 import           Test.Tasty
 import           Test.Tasty.Hedgehog
 
 import qualified Hedgehog.Gen as Gen
-import           Hedgehog.Gen.QuickCheck (quickcheck)
 import qualified Hedgehog.Range as Range
 
 
@@ -33,13 +30,14 @@ tests
     => CBOR.Serialise (DependencyUpdate c)
     => Dict (IsCrypto c) -> TestTree
 tests Dict = testGroup "Test.Oscoin.Data.OscoinTx"
-    [ testProperty "Transfer balance"        (propTransferBalance @c Dict)
-    , testProperty "Apply transaction"       (propApplyTxPayload  @c Dict)
-    , testProperty "Multi-message"           (propMultiTransfer   @c Dict)
-    , testProperty "Tx fee & burn"           (propTxFeeBurn       @c Dict)
-    , testProperty "Register project"        (propRegisterProj    @c Dict)
-    , testProperty "Nonces"                  (propNonce           @c Dict)
-    , testProperty "Roundtrip CBOR"          (propRoundtripCBOR   @c Dict)
+    [ testProperty "Transfer balance"        (propTransferBalance     @c Dict)
+    , testProperty "Apply transaction"       (propApplyTxPayload      @c Dict)
+    , testProperty "Multi-message"           (propMultiTransfer       @c Dict)
+    , testProperty "Tx fee & burn"           (propTxFeeBurn           @c Dict)
+    , testProperty "Register project"        (propRegisterProj        @c Dict)
+    , testProperty "Nonces"                  (propNonce               @c Dict)
+    , testProperty "Roundtrip Tx"            (propRoundtripTx         @c Dict)
+    , testProperty "Roundtrip StateVal"      (propRoundtripStateVal   @c Dict)
     ]
 
 propApplyTxPayload :: forall c. Dict (IsCrypto c) -> Property
@@ -114,8 +112,9 @@ propTransferBalance Dict = property $ do
 
 propMultiTransfer :: forall c. Dict (IsCrypto c) -> Property
 propMultiTransfer Dict = property $ do
-    (alicePk, bobPk) <- publicKeyPair @c
-    charlie          <- forAll (genAccountId @c)
+    alicePk   <- forAll (genPublicKey @c)
+    bobPk     <- forAll (genPublicKey @c)
+    charlie   <- forAll (genAccountId @c)
 
     let (alice, bob) = (toAccountId alicePk, toAccountId bobPk)
 
@@ -164,7 +163,8 @@ propTxFeeBurn Dict = property $ do
 
 propRegisterProj :: forall c. Dict (IsCrypto c) -> Property
 propRegisterProj Dict = property $ do
-    (alicePk, bobPk) <- publicKeyPair @c
+    alicePk <- forAll (genPublicKey @c)
+    bobPk   <- forAll (genPublicKey @c)
 
     let (alice, bob) = (toAccountId alicePk, toAccountId bobPk)
 
@@ -217,12 +217,12 @@ propNonce Dict = property $ do
     -- Alice's nonce is now incremented by `1`.
     nonce' === (accountNonce acc + 1)
 
-propRoundtripCBOR
+propRoundtripTx
     :: forall c. CBOR.Serialise (Contribution c)
     => CBOR.Serialise (DependencyUpdate c)
     => HasHashing c
     => Dict (IsCrypto c) -> Property
-propRoundtripCBOR Dict = property $ do
+propRoundtripTx Dict = property $ do
     msg <- forAll (genTxMessage @c)
     (CBOR.deserialise . CBOR.serialise) msg === msg
 
@@ -232,6 +232,13 @@ propRoundtripCBOR Dict = property $ do
 
     tx <- forAll (genTx @c)
     (CBOR.deserialise . CBOR.serialise) tx === tx
+
+propRoundtripStateVal
+    :: forall c. HasHashing c
+    => Dict (IsCrypto c) -> Property
+propRoundtripStateVal Dict = property $ do
+    sv <- forAll (genStateVal @c)
+    (CBOR.deserialise . CBOR.serialise) sv === sv
 
 -------------------------------------------------------------------------------
 -- Utility
@@ -243,35 +250,21 @@ lookupBalance acc ws = accountBalance <$> lookupAccount acc ws
 lookupNonce :: forall c. (IsCrypto c) => AccountId c -> WorldState c -> Either (TxError c) Nonce
 lookupNonce acc ws = accountNonce <$> lookupAccount acc ws
 
-publicKeyPair :: forall c. (IsCrypto c) => PropertyT IO (PublicKey c, PublicKey c)
-publicKeyPair = do
-    ((a, _), (b, _)) <- genKeyPairPair @c
-    pure (a, b)
-
-publicKeys
-    :: ( HasHashing c, HasDigitalSignature c
-       , Condensed (PublicKey c), Condensed (PrivateKey c)
-       ) => Int -> PropertyT IO [PublicKey c]
-publicKeys n = map fst <$> keyPairs n
-
-keyPairs
-    :: forall c.
-    ( Crypto.HasHashing     c
-    , HasDigitalSignature   c
-    , Condensed (PublicKey  c)
-    , Condensed (PrivateKey c)
-    ) => Int -> PropertyT IO [KeyPair c]
-keyPairs n =
-    forAllWith condensedS (quickcheck (arbitraryKeyPairs n)) >>= \case
-        xs | length xs == n -> pure xs
-        x                   -> annotate (condensedS x) *> failure
-
-assertRight :: Condensed a => Either a b -> PropertyT IO ()
-assertRight = void . evalEither
-
 -------------------------------------------------------------------------------
 -- Generators
 -------------------------------------------------------------------------------
+
+genStateVal :: (HasHashing c) => Gen (StateVal c)
+genStateVal = do
+    id <- genAccountId
+    Gen.choice
+        [ AccountVal <$> genAccount id
+        , NatVal     <$> genEpoch
+        ]
+
+genEpoch :: Gen Natural
+genEpoch =
+    Gen.integral (Range.constantFrom 0 0 1024)
 
 genAccountIdPair :: HasHashing c => Gen (AccountId c, AccountId c)
 genAccountIdPair = do

@@ -4,8 +4,7 @@
 module Oscoin.Storage.Block.SQLite
     ( withBlockStore
     , StorableTx
-    , IsTxRow(..)
-    , TxRow(..)
+    , SQLite.TxRow(..)
     ) where
 
 import           Oscoin.Prelude
@@ -20,9 +19,12 @@ import           Oscoin.Crypto.Blockchain.Block
                  , mkBlock
                  )
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Data.OscoinTx (Tx)
 
 import qualified Oscoin.Storage.Block.Abstract as Abstract
-import           Oscoin.Storage.Block.SQLite.Internal
+import           Oscoin.Storage.Block.SQLite.Internal (Handle(..))
+import qualified Oscoin.Storage.Block.SQLite.Internal as SQLite
+import           Oscoin.Storage.Block.SQLite.Internal.Tx (StorableTx)
 
 import           Database.SQLite.Simple ((:.)(..), Only(..))
 import qualified Database.SQLite.Simple as Sql
@@ -41,72 +43,70 @@ import           Codec.Serialise (Serialise)
 withBlockStore
     :: ( ToField s
        , FromField s
-       , FromField (Crypto.Hash c)
        , Typeable c
        , Serialise s
-       , Serialise (Beneficiary c)
-       , StorableTx c tx
+       , StorableTx c
        )
     => String
     -- ^ The path where the DB will live on disk
-    -> Block c tx (Sealed c s)
+    -> Block c (Tx c) (Sealed c s)
     -- ^ The genesis block (used to initialise the store)
-    -> (Abstract.BlockStore c tx s IO -> IO b)
+    -> (Abstract.BlockStore c (Tx c) s IO -> IO b)
     -- ^ Action which uses the 'BlockStore'.
     -> IO b
 withBlockStore path genesisBlock action =
     let newBlockStore internalHandle =
             ( (Abstract.BlockStoreReader {
-                  Abstract.getGenesisBlock       = getGenesisBlock internalHandle
+                  Abstract.getGenesisBlock       = SQLite.getGenesisBlock internalHandle
                 , Abstract.lookupBlock           = lookupBlock internalHandle
-                , Abstract.lookupBlockByHeight   = lookupBlockByHeight internalHandle
-                , Abstract.lookupBlocksByHeight  = lookupBlocksByHeight internalHandle
+                , Abstract.lookupBlockByHeight   = SQLite.lookupBlockByHeight internalHandle
+                , Abstract.lookupBlocksByHeight  = SQLite.lookupBlocksByHeight internalHandle
                 , Abstract.lookupTx              = lookupTx internalHandle
-                , Abstract.getBlocksByDepth      = getBlocks internalHandle
-                , Abstract.getBlocksByParentHash = getChainSuffix internalHandle
-                , Abstract.getTip                = getTip internalHandle
+                , Abstract.getBlocksByDepth      = SQLite.getBlocks internalHandle
+                , Abstract.getBlocksByParentHash = SQLite.getChainSuffix internalHandle
+                , Abstract.getTip                = SQLite.getTip internalHandle
                 }
             , Abstract.BlockStoreWriter {
-                  Abstract.insertBlock     = storeBlock internalHandle
-                , Abstract.switchToFork    = switchToFork internalHandle
+                  Abstract.insertBlock     = SQLite.storeBlock internalHandle
+                , Abstract.switchToFork    = SQLite.switchToFork internalHandle
                 })
             , internalHandle
             )
-    in bracket (newBlockStore <$> (initialize genesisBlock =<< open path))
-               (close . snd)
+    in bracket (newBlockStore <$> (SQLite.initialize genesisBlock =<< SQLite.open path))
+               (SQLite.close . snd)
                (action . fst)
 
 
 lookupBlock
-    :: forall c tx s.
+    :: forall c s.
        ( Serialise s
-       , Serialise (Beneficiary c)
        , Typeable c
        , FromField (Sealed c s)
-       , FromField (Crypto.Hash c)
-       , StorableTx c tx
+       , StorableTx c
        )
-    => Handle c tx s
+    => Handle c (Tx c) s
     -> BlockHash c
-    -> IO (Maybe (Block c tx (Sealed c s)))
-lookupBlock Handle{hConn} h = runTransaction hConn $ do
+    -> IO (Maybe (Block c (Tx c) (Sealed c s)))
+lookupBlock Handle{hConn} h = SQLite.runTransaction hConn $ do
     conn <- ask
     result :: Maybe (BlockHeader c (Sealed c s) :. Only (Beneficiary c)) <- listToMaybe <$> liftIO (Sql.query conn
         [sql| SELECT height, parenthash, datahash, statehash, timestamp, difficulty, seal, beneficiary
                 FROM blocks
                WHERE hash = ? |] (Only h))
 
-    txs :: [tx] <- liftIO $ getBlockTxs conn h
+    txs :: [Tx c] <- liftIO $ SQLite.getBlockTxs conn h
 
     for result $ \(bh :. Only be) ->
         pure $ mkBlock bh be txs
 
 -- FIXME(adn): At the moment there is no way to construct a proper 'TxLookup'
 -- type out of the database.
-lookupTx :: (StorableTx c tx) => Handle c tx s -> Crypto.Hashed c tx -> IO (Maybe (TxLookup c tx))
-lookupTx Handle{hConn} hash = runTransaction hConn $ do
+lookupTx
+    :: (StorableTx c, Typeable c)
+    => Handle c (Tx c) s -> Crypto.Hashed c (Tx c) -> IO (Maybe (TxLookup c (Tx c)))
+lookupTx Handle{hConn} hash = SQLite.runTransaction hConn $ do
     conn <- ask
-    maybeTx <- liftIO $ getTx conn (Crypto.fromHashed hash)
+    maybeTx <- liftIO $ SQLite.lookupTx conn (Crypto.fromHashed hash)
     pure $ case maybeTx of
         Nothing -> Nothing
         Just tx -> Just $ TxLookup tx Crypto.zeroHash 0

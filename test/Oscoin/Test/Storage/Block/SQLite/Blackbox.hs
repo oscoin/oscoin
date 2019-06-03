@@ -9,7 +9,7 @@ import           Oscoin.Crypto.Blockchain
                  (Blockchain(..), blocks, chainLength, height, tip, txPayload)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
-import           Oscoin.Data.Tx
+import           Oscoin.Data.OscoinTx hiding (txPayload)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Time.Chrono as Chrono
 
@@ -121,7 +121,7 @@ testLookupBlocksByHeight chain (publicAPI, privateAPI) = do
     none @?= mempty
 
 testStoreLookupTx
-    :: IsCrypto c
+    :: (IsCrypto c)
     => Block c (Tx c) (Sealed c DummySeal)
     -> Abstract.BlockStore c (Tx c) DummySeal IO
     -> Assertion
