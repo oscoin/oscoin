@@ -24,6 +24,7 @@ import qualified Test.Oscoin.Crypto.Blockchain.GeneratorsTest
 import qualified Test.Oscoin.Crypto.Blockchain.Genesis
 import qualified Test.Oscoin.Crypto.Hash
 import qualified Test.Oscoin.Crypto.PubKey
+import qualified Test.Oscoin.Crypto.PubKey.FileStore
 import qualified Test.Oscoin.Data.OscoinTx
 import qualified Test.Oscoin.Node.Mempool
 import qualified Test.Oscoin.Node.Options
@@ -95,6 +96,7 @@ main = do
                     , Test.Oscoin.Configuration.tests
                     , Test.Oscoin.Crypto.Blockchain.Eval.tests crypto
                     , Test.Oscoin.Crypto.Blockchain.GeneratorsTest.tests crypto
+                    , Test.Oscoin.Crypto.PubKey.FileStore.tests
                     , Test.Oscoin.Data.OscoinTx.tests crypto
                     , Test.Oscoin.Node.Mempool.tests crypto
                     , Test.Oscoin.Node.Options.tests crypto

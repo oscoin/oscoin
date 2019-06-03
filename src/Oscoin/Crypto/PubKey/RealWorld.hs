@@ -32,7 +32,7 @@ instance HasDigitalSignature Crypto where
     newtype PublicKey Crypto =
         PublicKey (PK Crypto Ed25519.PublicKey) deriving (Show, Eq, Ord)
 
-    data PrivateKey Crypto = PrivateKey (SK Ed25519.SecretKey)
+    data PrivateKey Crypto = PrivateKey (SK Ed25519.SecretKey) deriving (Eq)
 
     data Signature Crypto =
         Signature Ed25519.Signature deriving Show

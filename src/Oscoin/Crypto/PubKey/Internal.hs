@@ -29,3 +29,4 @@ deriving instance Generic (PK c k)
 -- implementing the 'HasDigitalSignature' instance in 'PubKey.RealWorld'.
 -- Use the abstract PublicKey/PrivateKey instead.
 newtype SK k = SK k
+    deriving (Eq)

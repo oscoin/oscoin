@@ -3,7 +3,6 @@ module Main (main) where
 import           Oscoin.Prelude hiding (option)
 
 import qualified Oscoin.API.HTTP as HTTP
-import           Oscoin.CLI.KeyStore (KeyStoreError(..), readKeyPair)
 import           Oscoin.Configuration
 import qualified Oscoin.Consensus as Consensus
 import qualified Oscoin.Consensus.Config as Consensus
@@ -11,6 +10,7 @@ import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Genesis (buildGenesisBlock)
 import qualified Oscoin.Crypto.PubKey as Crypto
+import qualified Oscoin.Crypto.PubKey.FileStore as Crypto
 import           Oscoin.Data.Tx
 import           Oscoin.Node (runNodeT, withNode)
 import qualified Oscoin.Node as Node
@@ -39,6 +39,7 @@ import qualified Data.Yaml as Yaml
 import           Network.HTTP.Types.Status (notFound404)
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
+import           System.FilePath
 
 import           Options.Applicative
 
@@ -65,10 +66,9 @@ main = do
                  (progDesc "Oscoin Node")
 
     keys <-
-        flip runReaderT (Just $ keysDir optPaths) $
-            catches readKeyPair
+            catches (Crypto.readKeyPair $ keysDir optPaths </> "id")
                 [ Handler $ \case
-                    KeyNotFound{}
+                    Crypto.KeyNotFound{}
                       | optAllowEphemeralKeys -> liftIO Crypto.generateKeyPair
                     e                         -> throwM e
                 ]

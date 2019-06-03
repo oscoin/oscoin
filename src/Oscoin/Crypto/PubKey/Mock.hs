@@ -30,6 +30,7 @@ instance HasDigitalSignature MockCrypto where
     newtype PublicKey MockCrypto =
         MockPK (PK MockCrypto MockKey) deriving (Eq, Ord)
     newtype PrivateKey MockCrypto = MockSK (SK (MockKey, [Word8]))
+        deriving (Eq)
 
     newtype Signature MockCrypto =
         MockSignature [Word8] deriving (Eq, Show, Ord)
