@@ -7,6 +7,7 @@ import           Oscoin.Prelude hiding (get, state)
 import           Oscoin.Crypto.Blockchain (blocks, genesis, height, tip)
 import           Oscoin.Crypto.Blockchain.Block
 import qualified Oscoin.Crypto.Hash as Crypto
+import           Oscoin.Data.Tx
 import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 import           Oscoin.Test.HTTP.Helpers
@@ -46,11 +47,11 @@ tests Dict = testGroup "Test.Oscoin.API.HTTP"
             liftIO $ runSession testState testSession
 
 data HTTPTest c = HTTPTest
-    { testState   :: NodeState c DummySeal
-    , testSession :: Session c DummySeal ()
+    { testState   :: NodeState c (Tx c) DummySeal
+    , testSession :: Session c (Tx c) DummySeal ()
     }
 
-httpTest :: NodeState c DummySeal -> Session c DummySeal () -> IO (HTTPTest c)
+httpTest :: NodeState c (Tx c) DummySeal -> Session c (Tx c) DummySeal () -> IO (HTTPTest c)
 httpTest state sess = pure $ HTTPTest{ testState = state, testSession = sess }
 
 getMissingBlock :: forall c. IsCrypto c => PropertyM IO (HTTPTest c)

@@ -18,6 +18,7 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
 import           Oscoin.API.Client.HTTP
+import           Oscoin.Data.Tx
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.HTTP.Helpers (DummySeal, Session, liftWaiSession)
@@ -26,10 +27,10 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 
 
-session :: (IsCrypto c) => Client c (Session c DummySeal)
+session :: (IsCrypto c) => Client c (Session c (Tx c) DummySeal)
 session = httpClientFromRequest makeWaiRequest
 
-makeWaiRequest :: Request -> Session c DummySeal Response
+makeWaiRequest :: Request -> Session c (Tx c) DummySeal Response
 makeWaiRequest Request{..} = liftWaiSession $ fromSresp <$> Wai.srequest sreq
   where
     sreq = Wai.SRequest req requestBody
