@@ -5,7 +5,7 @@ module Test.Oscoin.Storage.Block.Orphanage
     ) where
 
 import           Oscoin.Prelude hiding (reverse)
-import qualified Prelude (last, reverse)
+import qualified Prelude (head, last, reverse)
 
 
 import           Oscoin.Consensus.Nakamoto (blockScore)
@@ -13,15 +13,18 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Storage.Block.Orphanage
 import qualified Oscoin.Time as Time
-import           Oscoin.Time.Chrono (reverse, toNewestFirst)
+import           Oscoin.Time.Chrono (OldestFirst(..), reverse, toNewestFirst)
 
 import           Oscoin.Test.Crypto
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
                  (defaultBeneficiary)
 import           Oscoin.Test.Crypto.Blockchain.Generators
-import           Oscoin.Test.Util (Condensed(..))
+import           Oscoin.Test.Util (Condensed(..), condensedS)
 
 import           Data.ByteArray.Orphans ()
+import qualified Data.List as List
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -37,6 +40,9 @@ tests d = testGroup "Test.Oscoin.Storage.Block.Orphanage"
     , testProperty "propSelectBestCandidateSingleChoice" (propSelectBestCandidateSingleChoice d)
     , testProperty "propSelectBestCandidateMultipleChoice" (propSelectBestCandidateMultipleChoice d)
     , testProperty "propSelectBestCandidateComplex" (propSelectBestCandidateComplex d)
+    , testProperty "propFuseChains"  (propFuseChains d)
+    , testProperty "propPruneChainsShallow" (propPruneChainsShallow d)
+    , testProperty "propPruneChainsDeep"    (propPruneChainsDeep d)
     ]
 
 {------------------------------------------------------------------------------
@@ -122,6 +128,148 @@ propSelectBestCandidateComplex Dict = property $ do
         $ conjoin
         $ map (\(_, lnk) -> bestChainOrphanage lnk === bestChainOracle (parentHash lnk) chains) chains
 
+-- | In this property we test that the Orphanage is capable of joining chains
+-- together if a \"missig link\" is added as orphan. For example, consider
+-- the following chains:
+--
+-- 0 <- 1 <- 2
+-- 4 <- 5
+--
+-- Now, if 3 comes in, the orphanage should be able to fuse both chains
+-- together, resulting into:
+--
+-- 0 <- 1 <- 2 <- 3 <- 4 <- 5
+--
+propFuseChains :: forall c. Dict (IsCrypto c) -> Property
+propFuseChains Dict = property $ do
+    let gen = do
+          root       <- genBlockFrom (defaultGenesis @c)
+          fusedChain <- toOldestFirst . reverse . blocks
+                    <$> genBlockchainFrom root `suchThat` (\c -> chainLength c >= 3)
+          -- Generate a random split, making sure to leave at least two blocks
+          -- at the end for the singleBlock and the rest of the chain.
+          splitIdx   <- choose (1, length fusedChain - 2)
+
+          let (chain1, chain2) = List.splitAt splitIdx fusedChain
+          pure (chain1, Prelude.head chain2, drop 1 chain2)
+
+    forAll gen $ \(chain1, singleBlock, chain2) -> do
+
+        let fusedChain = chain1 <> [singleBlock] <> chain2
+
+        let o'' = emptyOrphanage blockScore
+                & insertOrphans chain1
+                & insertOrphans chain2
+        let finalOrphanage = insertOrphan singleBlock o''
+        let rootHash = blockHash $ defaultGenesis @c
+
+        let best = do
+              (_, c) <- selectBestChain [rootHash] finalOrphanage
+              pure . NonEmpty.toList
+                   . toOldestFirst
+                   . toBlocksOldestFirst finalOrphanage
+                   $ c
+
+        let totalSize orph =
+                size rootHash orph + size (blockHash $ singleBlock) orph
+
+        conjoin [ totalSize o'' === 2 -- Before fusing things, there are 2 chains.
+                , best          === Just fusedChain
+                , totalSize finalOrphanage === 1 -- After, only 1.
+                ]
+
+-- | Tests that 'pruneOrphanageShallow' works as advertised.
+propPruneChainsShallow :: forall c. Dict (IsCrypto c) -> Property
+propPruneChainsShallow Dict = property $ do
+    let gen = do
+          commonRoot <- genBlockFrom (defaultGenesis @c)
+
+          -- Two uncorrelated forks all branching from the same block.
+          -- Deleting one shouldn't affect the other. @chain1@ has a greater score, so
+          -- that it's picked up first.
+          chain2      <- genBlockchainFrom commonRoot
+          chain1      <- genBlockchainFrom commonRoot
+                           `suchThat` (\c -> totalScore c > totalScore chain2)
+          pure (chain1, chain2)
+    forAllShow gen (uncurry showChains) $ \(chain1, chain2) -> do
+
+        let o'' = emptyOrphanage blockScore
+                & insertOrphans (blocks chain1)
+                & insertOrphans (blocks chain2)
+        let rootHash = blockHash $ defaultGenesis @c
+        let firstBestCandidate = snd <$> selectBestChain [rootHash] o''
+
+        let finalOrphanage = do
+              c <- firstBestCandidate
+              pure $ pruneOrphanageShallow c o''
+
+        let secondBestCandidate = do
+              o <- finalOrphanage
+              (_, c) <- selectBestChain [rootHash] o
+              pure . reverse
+                   . toBlocksOldestFirst o
+                   $ c
+
+        conjoin [ map (reverse . toBlocksOldestFirst o'') firstBestCandidate
+                                                     === Just (blocks' chain1)
+                , map (size rootHash) finalOrphanage === Just 1
+                , secondBestCandidate                === Just (blocks' chain2)
+                ]
+
+showChains
+    :: HasHashing c
+    => Blockchain c tx s
+    -> Blockchain c tx s
+    -> String
+showChains chain1 chain2 =
+    condensedS chain1 <> " , score: " <> show (totalScore chain1) <> "\n" <>
+    condensedS chain2 <> " , score:"  <> show (totalScore chain2)
+
+-- | Tests that 'pruneOrphanageDeep' works as advertised. The code is very
+-- similar to 'propPruneChainsShallow', with the difference that now we will
+-- also have an orphan branching off the tip of 'chain1'. If we request a
+-- deep pruning, such second orphan shouldn't survive.
+propPruneChainsDeep :: forall c. Dict (IsCrypto c) -> Property
+propPruneChainsDeep Dict = property $ do
+    let gen = do
+          commonRoot <- genBlockFrom (defaultGenesis @c)
+
+          -- Two uncorrelated forks all branching from the same block.
+          -- Deleting one shouldn't affect the other. @chain1@ has a greater score, so
+          -- that it's picked up first.
+          chain2      <- genBlockchainFrom commonRoot
+          chain1      <- genBlockchainFrom commonRoot
+                           `suchThat` (\c -> totalScore c > totalScore chain2)
+          branchingFork <- genBlockchainFrom (tip chain1)
+          pure (chain1, branchingFork, chain2)
+    forAllShow gen (\(c1,f1,c2) -> showChains c1 c2 ++ "\n" ++ condensedS f1) $ \(chain1, branchingFork, chain2) -> do
+
+        let o'  = emptyOrphanage blockScore
+                & insertOrphans (blocks chain1)
+                & insertOrphans (blocks chain2)
+                & insertOrphans (blocks branchingFork)
+        let rootHash = blockHash $ defaultGenesis @c
+
+        let finalOrphanage = do
+              c <- snd <$> selectBestChain [rootHash] o'
+              pure $ pruneOrphanageDeep c o'
+
+        let secondBestCandidate = do
+              o <- finalOrphanage
+              (_, c) <- selectBestChain [rootHash] o
+              pure . reverse
+                   . toBlocksOldestFirst o
+                   $ c
+
+        let chain1TipParent = blockPrevHash . blockHeader $ tip chain1
+
+        -- Test that there should be no trace of candidates once we pruned
+        -- chain1 deeply.
+        conjoin [ map (size rootHash) finalOrphanage        === Just 1
+                , map (size chain1TipParent) finalOrphanage === Just 0
+                , secondBestCandidate                       === Just (blocks' chain2)
+                ]
+
 {------------------------------------------------------------------------------
   Utility functions
 ------------------------------------------------------------------------------}
@@ -137,16 +285,19 @@ insertOrphansShuffled blks o = do
 
 -- | Inserts all the given blocks in the 'Orphanage'.
 insertOrphans
-    :: IsCrypto c
-    => [Block c tx (Sealed c s)]
+    :: Foldable f
+    => IsCrypto c
+    => f (Block c tx (Sealed c s))
     -> Orphanage c tx s
     -> Orphanage c tx s
 insertOrphans xs o =
     foldl' (flip insertOrphan) o xs
 
-
 defaultGenesis :: IsCrypto c => Block c () (Sealed c ())
 defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch defaultBeneficiary)
+
+totalScore :: Blockchain c tx s -> Score
+totalScore = sum . map blockScore . toNewestFirst . blocks
 
 classifyChainsByScore
     :: forall c tx s. [(Blockchain c tx s, Block c tx (Sealed c s))]
@@ -158,7 +309,7 @@ classifyChainsByScore chains = tabulate "Chain Score" scores
       scores = map (\(c,lnk) -> toScore (lnk : toNewestFirst (blocks c))) chains
 
       toScore :: [Block c tx (Sealed c s)] -> String
-      toScore blks = case totalScore blks of
+      toScore blks = case totalScore (unsafeToBlockchain blks) of
                        x | x == 0     -> "0 score"
                        x | x <= 10    -> "0-10 score"
                        x | x <= 50    -> "10-50 score"
@@ -166,9 +317,6 @@ classifyChainsByScore chains = tabulate "Chain Score" scores
                        x | x <= 5000  -> "500-5000 score"
                        x | x <= 50000 -> "5000-50000 score"
                        _              -> ">50000 score"
-
-      totalScore :: [Block c tx (Sealed c s)] -> Score
-      totalScore = sum . map blockScore
 
 bestChainOracle
     :: IsCrypto c
@@ -185,11 +333,11 @@ bestChainOracle root xs =
             ) (filter (\(_,ls) -> parentHash ls == root) xs)
         winningChain = Prelude.reverse ((toNewestFirst . blocks) chain <> [lnk])
     in Just $ ChainCandidate
-        { candidateChain     = Seq.fromList (map blockHash winningChain)
+        { candidateChain     = OldestFirst $ Seq.fromList (map blockHash winningChain)
         , candidateTipHeader = blockHeader (Prelude.last winningChain)
         , candidateScore     = sum (map blockScore winningChain)
+        , candidateRootHash  = root
         }
-
 
 {------------------------------------------------------------------------------
   (Temporary) Orphans
@@ -201,6 +349,7 @@ instance (IsCrypto c, Show s) => Condensed (ChainCandidate c s) where
         <> condensed candidateChain
         <> ", tip  = "   <> show candidateTipHeader
         <> ", score  = " <> condensed candidateScore
+        <> ",rootHash = " <> condensed candidateRootHash
         <> " }"
 
 showOrphans

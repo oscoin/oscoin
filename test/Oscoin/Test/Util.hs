@@ -80,6 +80,9 @@ instance (Condensed a, Condensed b, Condensed c) => Condensed (a, b, c) where
 instance Condensed a => Condensed [a] where
     condensed xs = "[" <> T.intercalate "," (map condensed xs) <> "]"
 
+instance Crypto.HasHashing c => Condensed (NonEmpty (Block c tx (Sealed c s))) where
+    condensed = showChainDigest . Blockchain
+
 instance Crypto.HasHashing c => Condensed (BlockHash c) where
     condensed h = F.sformat F.string (C8.unpack . Crypto.compactHash $ h)
 
@@ -193,6 +196,9 @@ instance Show (Signature c) => Condensed (Signed c Text) where
 
 instance Condensed (f a) => Condensed (OldestFirst f a) where
     condensed = condensed . toOldestFirst
+
+instance Condensed (f a) => Condensed (NewestFirst f a) where
+    condensed = condensed . toNewestFirst
 
 -------------------------------------------------------------------------------
 -- Utility functions

@@ -267,12 +267,7 @@ selectBestChain mgr = do
                    switchToFork bestFork chainSuffix
                    -- Prune the chain which won, /as well as/ every dangling orphan
                    -- originating from the suffix chain which has been replaced.
-                   let orphanage' =
-                         foldl' (\acc blockInSuffix ->
-                                    O.pruneOrphanage (blockHash blockInSuffix)
-                                                     (O.fromChainSuffix scoreFn (OldestFirst $ blockInSuffix NonEmpty.:| []))
-                                                     $ acc
-                                ) (O.pruneOrphanage parentHash bestFork orphanage) chainSuffix
+                   let orphanage' = O.pruneOrphanageDeep bestFork orphanage
                    pure $ mgr { protoOrphanage = orphanage' }
                else pure mgr
         _ -> pure mgr

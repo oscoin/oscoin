@@ -17,6 +17,10 @@ module Oscoin.Time.Chrono
     ( NewestFirst(..)
     , OldestFirst(..)
 
+    , mapNF
+    , mapOF
+    , hoistNF
+    , hoistOF
     , reverse
     ) where
 
@@ -44,11 +48,29 @@ class ChronogicallyOrdered a where
 newtype NewestFirst f a = NewestFirst { toNewestFirst :: f a }
   deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid, Serialise)
 
+-- | Applies the given function '(f a -> f b)' directly to the underlying
+-- 'Functor' of the 'NewestFirst' collection.
+mapNF :: (f a -> f b) -> NewestFirst f a -> NewestFirst f b
+mapNF f (NewestFirst nf) = NewestFirst (f nf)
+
+-- | Change the underlying 'Functor' of the 'NewestFirst'.
+hoistNF :: (forall x. f x -> g x) -> NewestFirst f a -> NewestFirst g a
+hoistNF natTrans (NewestFirst nf) = NewestFirst (natTrans nf)
+
 -- | A wrapper over a 'Foldable' functor 'f', typically a list or a non-empty
 -- one, where the API contract stats that elements are ordered from the oldest
 -- to the newest.
 newtype OldestFirst f a = OldestFirst { toOldestFirst :: f a }
   deriving (Show, Eq, Functor, Foldable, Semigroup, Monoid, Serialise)
+
+-- | Applies the given function '(f a -> f b)' directly to the underlying
+-- 'Functor' of the 'OldestFirst' collection.
+mapOF :: (f a -> f b) -> OldestFirst f a -> OldestFirst f b
+mapOF f (OldestFirst nf) = OldestFirst (f nf)
+
+-- | Change the underlying 'Functor' of the 'OldestFirst'.
+hoistOF :: (forall x. f x -> g x) -> OldestFirst f a -> OldestFirst g a
+hoistOF natTrans (OldestFirst nf) = OldestFirst (natTrans nf)
 
 instance ChronogicallyOrdered (NewestFirst [] a) where
     type ReverseOf (NewestFirst [] a) = OldestFirst [] a
