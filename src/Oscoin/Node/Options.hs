@@ -25,6 +25,7 @@ import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.P2P.Disco (discoOpts, discoParser)
 import qualified Oscoin.P2P.Disco as P2P.Disco
+import qualified Oscoin.Telemetry.Options as Telemetry
 
 import           Data.IP (IP)
 import qualified Data.Text as T
@@ -47,6 +48,7 @@ data Options crypto network = Options
     , optEkgPort            :: Maybe PortNumber
     , optAllowEphemeralKeys :: Bool
     , optBeneficiary        :: Beneficiary crypto
+    , optTelemetry          :: Telemetry.Options
     } deriving (Generic)
 
 deriving instance (Eq (Crypto.PublicKey c),   Eq   (Beneficiary c), Eq   n) => Eq   (Options c n)
@@ -119,6 +121,7 @@ nodeOptionsParser cps = Options
         ( long "beneficiary"
        <> help "Beneficiary account id for block rewards. Hex encoded with leading 0x"
         )
+    <*> Telemetry.telemetryOptionsParser
   where
     readBeneficiary = Crypto.parseShortHash . T.pack
 
@@ -140,7 +143,8 @@ nodeOptionsOpts
         optEkgHost
         optEkgPort
         optAllowEphemeralKeys
-        optBeneficiary) = concat
+        optBeneficiary
+        optTelemetry) = concat
     [ pure . Opt "host"        $ show optHost
     , pure . Opt "gossip-port" $ show optGossipPort
     , pure . Opt "api-port"    $ show optApiPort
@@ -154,6 +158,7 @@ nodeOptionsOpts
     , maybe [] (pure . Opt "ekg-port"     . show) optEkgPort
     , bool  [] [Flag "allow-ephemeral-keys"] optAllowEphemeralKeys
     , pure . Opt "beneficiary"  $ show optBeneficiary
+    , Telemetry.telemetryOptionsOpts optTelemetry
     ]
 
 renderNodeOptionsOpts

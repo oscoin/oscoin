@@ -28,9 +28,8 @@ module Oscoin.Telemetry.Logging
     , Config (..)
     , defaultConfig
 
-    , configForEnvironment
-    , styleForEnvironment
-    , severityForEnvironment
+    , StyleFormatter (..)
+    , LayoutFormat (..)
 
     -- * Constructing 'Logger's
     , withStdLogger
@@ -91,8 +90,6 @@ module Oscoin.Telemetry.Logging
 
 import           Oscoin.Prelude hiding (SrcLoc)
 
-import           Oscoin.Configuration (Environment(..))
-
 import           Control.Concurrent (ThreadId)
 import           Control.Exception.Safe (Exception, MonadMask, SomeException)
 import qualified Control.Exception.Safe as Safe
@@ -128,7 +125,7 @@ data Severity =
       Debug -- ^ Things of interest during development, off in a \"production\" setting
     | Info  -- ^ Context around program execution and/or errors
     | Err   -- ^ Errors
-    deriving (Eq, Ord, Enum, Show, Read)
+    deriving (Eq, Ord, Enum, Bounded, Show, Read)
 
 -- | An arbitrary namespace
 --
@@ -158,13 +155,13 @@ data StyleFormatter = StyleFormatter
     { useColours   :: Bool
       -- ^ Whether or not the output must be coloured
     , layoutFormat :: LayoutFormat
-    }
+    } deriving (Eq, Show)
 
-data LayoutFormat = NoLayout
-                  -- ^ Do not use any layout, use unaltered logfmt
-                  | HumanReadable
-                  -- ^ Give the 'msg' tag special treatment, and left-align
-                  -- the severity.
+data LayoutFormat =
+      NoLayout      -- ^ Do not use any layout, use unaltered logfmt
+    | HumanReadable -- ^ Give the 'msg' tag special treatment, and left-align
+                    -- the severity.
+    deriving (Eq, Ord, Enum, Bounded, Show, Read)
 
 -- | The logging environment
 data Logger = Logger
@@ -200,25 +197,6 @@ defaultStyle :: StyleFormatter
 defaultStyle = StyleFormatter
     { useColours   = False
     , layoutFormat = NoLayout
-    }
-
--- | The conventional 'StyleFormatter' for an 'Environment'.
-styleForEnvironment :: Environment -> StyleFormatter
-styleForEnvironment = \case
-    Production  -> StyleFormatter False NoLayout
-    Development -> StyleFormatter True HumanReadable
-
--- | The conventional 'Severity' for an 'Environment'.
-severityForEnvironment :: Environment -> Severity
-severityForEnvironment = \case
-    Production  -> Info
-    Development -> Debug
-
--- | The conventional 'Config' for an 'Environment'.
-configForEnvironment :: Environment -> Config
-configForEnvironment env = defaultConfig
-    { cfgLevel = severityForEnvironment env
-    , cfgStyle = styleForEnvironment env
     }
 
 -- | Default 'Config'

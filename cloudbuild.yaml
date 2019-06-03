@@ -174,9 +174,15 @@ steps:
       set -euo pipefail
 
       if [[ "$BRANCH_NAME" == "master" ]]; then
-        ./scripts/deploy/gce/node
+        ./scripts/deploy/gce/node \
+            --log-level=Debug \
+            --no-log-colours \
+            --log-layout=NoLayout
       else
-        DRY_RUN=yes ./scripts/deploy/gce/node
+        DRY_RUN=yes ./scripts/deploy/gce/node \
+            --log-level=Debug \
+            --no-log-colours \
+            --log-layout=NoLayout
       fi
 
   - id: "Publish Haddocks"
