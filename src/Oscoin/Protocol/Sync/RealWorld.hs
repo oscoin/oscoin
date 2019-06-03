@@ -16,17 +16,17 @@ import           Oscoin.P2P (Addr(..), nodeHttpApiAddr, renderHost)
 import           Oscoin.Protocol.Sync
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import           Oscoin.Telemetry.Trace
+import qualified Oscoin.Telemetry.Events.Sync as Telemetry.Events
+import           Oscoin.Telemetry.Trace as Telemetry
 import           Oscoin.Time (Duration, microseconds, seconds)
 
 import           Codec.Serialise as CBOR
 import           Control.Monad.Trans.Resource hiding (throwM)
-import           Control.Retry
-                 (RetryPolicyM, RetryStatus, exponentialBackoff, retrying)
 import qualified Data.ByteString.Char8 as C8
 import           Data.Conduit
 import qualified Data.Conduit.Combinators as C
 import           Data.Conduit.Serialise (conduitDecodeCBOR)
+import           Formatting.Buildable (Buildable)
 import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Conduit as C
 import qualified Oscoin.API.Types as API
@@ -85,12 +85,16 @@ newDataFetcher httpManager = DataFetcher $ \peer args ->
                 -- Expected type: IO (ProtocolResponse r)
                 -- Actual type: IO (ProtocolResponse 'GetBlockHeaders)
 
-                let rq = mkRequest GetTip mempty peer
-                liftIO $ HTTP.withResponse rq httpManager $ \res -> do
-                    cborBlob <- HTTP.brRead (HTTP.responseBody res)
-                    case CBOR.deserialise . toS $ cborBlob of
-                      API.Ok t    -> pure t
-                      API.Err err -> throwM $ RequestNetworkError GetTip peerAddr (toS err)
+                response <- C.http (mkRequest GetTip mempty peer) httpManager
+                mbBlock  <- runConduit $ HTTP.responseBody response
+                         .| conduitDecodeCBOR
+                         .| await
+                case mbBlock of
+                  Just (API.Err e) ->
+                      throwM $ RequestNetworkError GetTip peerAddr (toS e)
+                  Just (API.Ok b) -> pure (b :: Block c tx (Sealed c s))
+                  Nothing ->
+                      throwM $ RequestNetworkError GetTip peerAddr "no result received from peer."
             pure $ join r
 
         -- This implementation is basically 'fetchBlocks' from the spec.
@@ -197,15 +201,11 @@ newSyncContext
 newSyncContext getActive chainReader upstreamConsumers probe = do
     mgr <- liftIO (HTTP.newManager HTTP.defaultManagerSettings)
     pure $ SyncContext
-        { scNu                = 5
+        { scNu                = 2
         , scActivePeers       = liftIO getActive
         , scDataFetcher       = newDataFetcher mgr
         , scEventTracer       = liftIO . newEventTracer probe
         , scConcurrently      = Async.forConcurrently
-        -- FIXME(adn) The above is nonoptimal for this syncing code, as /any/
-        -- exception will cause all the other actions to be cancelled. This is
-        -- hardly what we want here, as we do want other peers to carry on
-        -- undisturbed if one of the HTTP requests / CBOR deserialisation fails.
         , scLocalChainReader  = BlockStore.hoistBlockStoreReader liftIO chainReader
         , scEventHandlers = map (\f -> liftIO . f) upstreamConsumers
         }
@@ -227,6 +227,9 @@ runSync syncContext (SyncT s) = do
       Right r  -> pure r
 
 -- | Syncs a node, in a monad which can do @IO@.
+-- This function is implemented as an endless loop. During each loop, we check
+-- whether or not we are done syncing (cfr. 'isDone') and, if we are not, we
+-- sync the required blocks, wait 30 seconds, and try again.
 syncNode
     :: forall c tx s m.
        ( MonadIO m
@@ -234,26 +237,11 @@ syncNode
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
+       , Buildable (Hash c)
        )
     => SyncT c tx s m ()
-syncNode = do
-    ctx <- ask
-    retrying policy (checkSynced ctx) $ \ _retryStatus -> do
-        remoteTip <- getRemoteTip
-        localTip  <- lift (BlockStore.getTip (scLocalChainReader ctx))
-        for_ (range localTip remoteTip) syncBlocks
-  where
-      policy :: RetryPolicyM (SyncT c tx s m)
-      policy = exponentialBackoff 100_000
-
-      -- Retry syncing if 'isDone' returns False.
-      checkSynced
-          :: SyncContext c tx s m
-          -> RetryStatus
-          -> ()
-          -> SyncT c tx s m Bool
-      checkSynced ctx _retryStatus () = do
-          -- We need to refetch the tips.
-          remoteTip <- getRemoteTip
-          localTip  <- lift (BlockStore.getTip (scLocalChainReader ctx))
-          pure $ not (isDone (scNu ctx) localTip remoteTip)
+syncNode = forever $ do
+    sync `catchError` \(e :: SyncError) ->
+       recordEvent $ Telemetry.Events.NodeSyncError (toException e)
+    -- Throttle each iteration of the algorithm by 30 seconds.
+    liftIO $ threadDelay 30000000

@@ -22,7 +22,9 @@ import qualified Oscoin.P2P.Disco as P2P.Disco
 import qualified Oscoin.P2P.Disco.MDns as MDns
 import qualified Oscoin.P2P.Handshake as Handshake
 import qualified Oscoin.P2P.Trace as P2P (Traceable(TraceDisco))
-import           Oscoin.Protocol (runProtocol)
+import           Oscoin.Protocol (dispatchBlockSync, runProtocol)
+import           Oscoin.Protocol.Sync (SyncEvent(..))
+import qualified Oscoin.Protocol.Sync.RealWorld as Sync
 import           Oscoin.Storage (hoistStorage)
 import qualified Oscoin.Storage.Block.SQLite as BlockStore.SQLite
 import qualified Oscoin.Storage.Ledger as Ledger
@@ -180,6 +182,17 @@ main = do
                                myNodeInfo
                                (P2P.Disco.optNetwork optDiscovery'))
 
+            syncContext <- liftIO $
+                Sync.newSyncContext (P2P.getPeers gossip)
+                                    (fst blkStore)
+                                    [\se -> case se of
+                                              SyncBlock b -> dispatchBlockSync proto $ b
+                                              -- Not interested in headers in
+                                              -- a full node.
+                                              SyncBlockHeader _ -> pure ()
+                                    ]
+                                    (Telemetry.telemetryProbe telemetry)
+
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)
                 <> Concurrently (miner node gossip)
@@ -187,6 +200,7 @@ main = do
                         maybeRunMetrics telemetry optMetricsHost optMetricsPort)
                 <> (Concurrently $
                         maybeRunEkg metricsStore optEkgHost optEkgPort)
+                <> (Concurrently $ Sync.runSync syncContext Sync.syncNode)
 
     either (const exitFailure) (const exitSuccess) res
   where

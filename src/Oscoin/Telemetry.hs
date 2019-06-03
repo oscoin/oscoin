@@ -53,6 +53,7 @@ import qualified Oscoin.P2P.Trace as P2P (P2PEvent(..), Traceable(..))
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
 import           Oscoin.Telemetry.Events
+import qualified Oscoin.Telemetry.Events.Sync as Events.Sync
 import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
@@ -188,6 +189,36 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                           duration
 
         P2PEvent e -> handleP2P e
+        NodeSyncEvent    ev -> Log.withNamespace "sync" $ case ev of
+            Events.Sync.NodeSyncStarted (localTip, localHeight) (remoteTip, remoteHeight) ->
+                Log.infoM "Node syncing started"
+                          ( ftag "local_tip"  % formatHash % " "
+                          % ftag "local_height" % shown % " "
+                          % ftag "remote_tip" % formatHash % " "
+                          % ftag "remote_height" % shown % " "
+                          )
+                          localTip
+                          localHeight
+                          remoteTip
+                          remoteHeight
+            Events.Sync.NodeSyncFinished (localTip, localHeight) ->
+                Log.infoM "Node syncing finished"
+                          ( ftag "local_tip"  % formatHash % " "
+                          % ftag "local_height" % shown
+                          )
+                          localTip
+                          localHeight
+            Events.Sync.NodeSyncMissing missing ->
+                Log.infoM "Missing blocks to fetch elsewhere"
+                          ( ftag "number"  % int )
+                          missing
+            Events.Sync.NodeSyncFetched requested ->
+                Log.infoM "Fetched blocks from peer"
+                          ( ftag "number"  % int )
+                          requested
+            Events.Sync.NodeSyncError ex ->
+                Log.errM "Node syncing error" fexception ex
+
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
     withLogger = flip runReaderT telemetryLogger
@@ -446,6 +477,13 @@ toActions = \case
                         (fromIntegral duration / fromIntegral Time.seconds)
      ]
     P2PEvent ev -> p2pActions ev
+    NodeSyncEvent e -> case e of
+        Events.Sync.NodeSyncStarted{} ->
+            [ CounterIncrease
+                "oscoin.protocol.sync.sync_iterations"
+                noLabels
+            ]
+        _ -> []
   where
     p2pActions = \case
         P2P.TraceDisco     ev -> discoActions ev
@@ -558,6 +596,7 @@ toActions = \case
                 "oscoin.p2p.handshake.completions.total"
                 noLabels
             ]
+
 
 {------------------------------------------------------------------------------
   Utility functions

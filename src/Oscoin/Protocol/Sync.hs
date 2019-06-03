@@ -25,11 +25,17 @@ module Oscoin.Protocol.Sync
     -- * Pure functions
     , range
     , isDone
+    , height
 
     -- * Syncing functions
     , syncBlocks
+    , sync
+
+    -- * Recording events
+    , recordEvent
 
     -- * Testing internals
+    , syncUntil
     , withActivePeers
     , withActivePeer
     , getRemoteTip
@@ -46,12 +52,15 @@ import           Oscoin.Crypto.Blockchain.Block
                  , BlockHeader
                  , Height
                  , Sealed
+                 , blockHash
                  , blockHeader
                  , blockHeight
                  )
 import           Oscoin.P2P as P2P
-import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
-import           Oscoin.Telemetry.Trace
+import           Oscoin.Storage.Block.Abstract (BlockStoreReader, getTip)
+import           Oscoin.Telemetry.Events (NotableEvent(NodeSyncEvent))
+import qualified Oscoin.Telemetry.Events.Sync as Telemetry.Events
+import           Oscoin.Telemetry.Trace as Telemetry
 import           Oscoin.Time (Duration)
 
 import           Data.Conduit
@@ -62,6 +71,7 @@ import           Data.List ((\\))
 import           Data.List.Split (chunksOf)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
+import           Formatting.Buildable (Buildable)
 import           GHC.Natural
 
 {------------------------------------------------------------------------------
@@ -202,7 +212,7 @@ data SyncContext c tx s m = SyncContext
     , scLocalChainReader  :: BlockStoreReader c tx s m
     -- ^ A read-only handle to the local blockchain.
     , scEventHandlers :: [SyncEvent c tx s -> m ()]
-    -- ^ A list of \"upstream consumers\", represented as effectful actions from
+    -- ^ A list of event handlers, represented as effectful actions from
     -- a 'SyncEvent' to 'm ()'.
     }
 
@@ -266,18 +276,12 @@ maxBlocksPerPeer = 50
 -- | Returns 'True' if the node finished syncing all the blocks.
 -- This is the 'isDone' state transition function from the spec.
 isDone
-    :: ( Eq tx
-       , Eq s
-       , Eq (Hash c)
-       , Eq (Beneficiary c)
-       )
-    => Natural
+    :: Natural
     -> Block c tx s
     -> Block c tx s
     -> Bool
-isDone (fromIntegral -> nu) localTip remoteTip
-    | height localTip > height remoteTip = False -- a rollback possibly occurred.
-    | otherwise = remoteTip == localTip || height remoteTip - height localTip < nu
+isDone (fromIntegral -> nu) localTip remoteTip =
+    height remoteTip - height localTip < nu
 
 -- | Returns the range between two blocks.
 range
@@ -352,6 +356,7 @@ syncBlocks
        , Ord s
        , Ord (Hash c)
        , Ord (Beneficiary c)
+       , Buildable (Hash c)
        )
     => Range
     -> SyncT c tx s m ()
@@ -415,6 +420,10 @@ syncBlocks rng = do
         forM_ requested $ \b ->
             forM_ (scEventHandlers ctx) $ \dispatch ->
                 dispatch (SyncBlock b)
+        recordEvent' @c (scEventTracer ctx) $
+            Telemetry.Events.NodeSyncFetched (length requested)
+        recordEvent' @c (scEventTracer ctx) $
+            Telemetry.Events.NodeSyncMissing (length missing)
         pure missing
 
     -- Tries to fetch a missing block (as identified by its 'Height') from
@@ -442,3 +451,78 @@ syncBlocks rng = do
          Nothing -> pure () -- TODO(adn) telemetry?
          Just b -> forM_ (scEventHandlers ctx) $ \dispatch ->
                        dispatch (SyncBlock b)
+
+-- | Calls 'isDone' internally, and try syncing blocks if it returns 'False'.
+syncUntil
+    :: forall c tx s m.
+       ( Monad m
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (Beneficiary c)
+       , Buildable (Hash c)
+       )
+    => (SyncContext c tx s m -> Block c tx (Sealed c s) -> Block c tx (Sealed c s) -> Bool)
+    -> SyncT c tx s m ()
+syncUntil finished = do
+    ctx <- ask
+    remoteTip <- getRemoteTip
+    localTip  <- lift (getTip (scLocalChainReader ctx))
+    unlessDone ctx localTip remoteTip $
+        for_ (range localTip remoteTip) syncBlocks
+
+  where
+    unlessDone
+        :: SyncContext c tx s m
+        -> Block c tx (Sealed c s)
+        -> Block c tx (Sealed c s)
+        -> SyncT c tx s m ()
+        -> SyncT c tx s m ()
+    unlessDone ctx localTip remoteTip action =
+        if finished ctx localTip remoteTip
+           then recordEvent $
+                Telemetry.Events.NodeSyncFinished (blockHash localTip, height localTip)
+        else do
+            recordEvent $
+                Telemetry.Events.NodeSyncStarted (blockHash localTip, height localTip)
+                                                 (blockHash remoteTip, height remoteTip)
+
+            action
+
+            newLocalTip <- lift (getTip (scLocalChainReader ctx))
+            recordEvent $
+                Telemetry.Events.NodeSyncFinished (blockHash newLocalTip, height newLocalTip)
+
+sync
+    :: ( Monad m
+       , Ord tx
+       , Ord s
+       , Ord (Hash c)
+       , Ord (Beneficiary c)
+       , Buildable (Hash c)
+       )
+    => SyncT c tx s m ()
+sync = syncUntil (\ctx lcl rmt -> isDone (scNu ctx) lcl rmt)
+
+
+{------------------------------------------------------------------------------
+  Record telemetry events
+------------------------------------------------------------------------------}
+
+recordEvent
+    :: ( Monad m
+       , Buildable (Hash c)
+       )
+    => Telemetry.Events.NodeSyncEvent c
+    -> SyncT c tx s m ()
+recordEvent evt = do
+    ctx <- ask
+    lift $ recordEvent' (scEventTracer ctx) evt
+
+recordEvent'
+    :: Buildable (Hash c)
+    => Tracer m
+    -> Telemetry.Events.NodeSyncEvent c
+    -> m ()
+recordEvent' eventTracer evt =
+    eventTracer $ Telemetry.traced (NodeSyncEvent evt) ()

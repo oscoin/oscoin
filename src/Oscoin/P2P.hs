@@ -348,8 +348,8 @@ getPeers
        , MonadIO m
        )
     => Gossip.Run.Env (NodeInfo c)
-    -> m (HashSet (Gossip.Peer (NodeInfo c)))
-getPeers = liftIO . Gossip.Run.getPeers
+    -> m (HashSet (NodeInfo c))
+getPeers env = HashSet.map Gossip.peerNodeId <$> liftIO (Gossip.Run.getPeers env)
 
 getPeers'
     :: ( Eq (Crypto.PublicKey c)

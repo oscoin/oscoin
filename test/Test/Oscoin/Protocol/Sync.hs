@@ -8,12 +8,20 @@ import           Oscoin.Test.Crypto
 
 import qualified Oscoin.API.HTTP as API
 import qualified Oscoin.API.HTTP.Internal as API
+import           Oscoin.Configuration (Environment(Development))
+import           Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
                  (Blockchain, blocks, tip, unsafeToBlockchain, (|>))
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, Sealed, blockHeader, emptyGenesisBlock, sealBlock)
-import           Oscoin.Data.Tx
+                 ( Block
+                 , Sealed
+                 , blockHash
+                 , blockHeader
+                 , emptyGenesisBlock
+                 , sealBlock
+                 )
+import           Oscoin.Data.OscoinTx
 import           Oscoin.P2P
                  ( Addr(..)
                  , mkAddr
@@ -22,15 +30,20 @@ import           Oscoin.P2P
                  , nodeHttpApiAddr
                  , readHost
                  )
+import           Oscoin.Protocol (dispatchBlockSync, runProtocol)
 import           Oscoin.Protocol.Sync as Sync
 import qualified Oscoin.Protocol.Sync.Mock as Mock
 import qualified Oscoin.Protocol.Sync.RealWorld as IO
+import           Oscoin.Storage.Block.Abstract as Abstract
+import           Oscoin.Telemetry as Telemetry
 import           Oscoin.Telemetry.Logging (noLogger)
+import           Oscoin.Telemetry.Metrics (labelsFromList, newMetricsStore)
 import           Oscoin.Telemetry.Trace (noProbe)
 import qualified Oscoin.Time as Time
-import           Oscoin.Time.Chrono
+import           Oscoin.Time.Chrono as Chrono
 
 import           Codec.Serialise
+import qualified Control.Concurrent.Async as Async
 import           Control.Concurrent.STM
 import           Data.Conduit
 import           Data.Conduit.Combinators (sinkList)
@@ -45,6 +58,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Hedgehog
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import           Hedgehog.Internal.Property (forAllT)
+import qualified Oscoin.Storage.Block.SQLite as SQLite
 import qualified Oscoin.Storage.Block.STM as STM
 import           Oscoin.Test.Consensus.Nakamoto.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators (genBlockFrom)
@@ -53,6 +67,7 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers (nodeState, withNode)
+import           Oscoin.Test.Util (condensed)
 import           Test.Oscoin.P2P.Gen (genPortNumber)
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty (TestTree, testGroup)
@@ -73,6 +88,7 @@ tests d = testGroup "Test.Oscoin.Protocol.Sync"
     , testProperty "prop_syncBlocks_io_full" (prop_syncBlocks_io_full d)
     , testProperty "prop_syncBlocks_sim_missing" prop_syncBlocks_sim_missing
     , testProperty "prop_syncBlocks_io_missing" (prop_syncBlocks_io_missing d)
+    , testProperty "prop_sync_io_mutual_consensus" (prop_sync_io_mutual_consensus d)
     ]
 
 -- | For GHCi use.
@@ -90,6 +106,7 @@ props d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     ,("prop_syncBlocks_io_full", prop_syncBlocks_io_full d)
     ,("prop_syncBlocks_sim_missing", prop_syncBlocks_sim_missing)
     ,("prop_syncBlocks_io_missing", prop_syncBlocks_io_missing d)
+    ,("prop_sync_io_mutual_consensus", prop_sync_io_mutual_consensus d)
     ]
 
 {------------------------------------------------------------------------------
@@ -313,6 +330,49 @@ prop_syncBlocks_io_missing d@Dict = withTests 1 . property $ do
         -- compare.
         sort allEvts === sort (map SyncBlock allBlocksNoGenesis)
 
+-- | Simulates two nodes talking to each other, where one would be on the
+-- correct chain and the other one lagging behind. We want to assess that they
+-- eventually end up with the same chain.
+prop_sync_io_mutual_consensus :: forall c. Dict (IsCrypto c) -> Property
+prop_sync_io_mutual_consensus d@Dict = withTests 1 . property $ do
+
+    testPeer1@(peer1, chain1) <- forAllT (genNakamotoPeer d)
+    (peer2, _)                <- forAllT (genNakamotoPeer d)
+
+    -- The second peer starts from a cold-sync situation.
+    let chain2 = unsafeToBlockchain [nakamotoGenesis d]
+
+    let noGenesis = OldestFirst . drop 1 . Oscoin.Prelude.reverse . toNewestFirst . blocks
+    let handleEvt proto = \case
+          SyncBlock b -> dispatchBlockSync proto b
+          _ -> pure ()
+
+    -- Starts both peer1 and peer2 as remote nodes.
+    (blks1, blks2) <- withNodes d [testPeer1, (peer2, chain2)] $ do
+        -- Starts both peer1 and peer2 as local nodes.
+        let doSync chain peers = liftIO $ do
+              metricsStore <- newMetricsStore $ labelsFromList []
+              SQLite.withBlockStore ":memory:" (nakamotoGenesis d) $ \store@(public, private) -> do
+                  liftIO $ Abstract.insertBlocksNaive private (noGenesis chain)
+                  runProtocol (\_ _ -> Right ())
+                              Nakamoto.blockScore
+                              (Telemetry.newTelemetryStore noLogger metricsStore)
+                              store
+                              (Consensus.configForEnvironment Development) $ \proto ->
+                      liftIO $ do
+                          ctx <- IO.newSyncContext (pure $ Set.fromList peers) public [handleEvt proto] noProbe
+                          IO.runSync ctx (replicateM_ 1 (Sync.syncUntil (\_ _ _ -> False)))
+                          Abstract.getBlocksByParentHash public (blockHash $ nakamotoGenesis d)
+
+        liftIO $ Async.concurrently (doSync chain1 [peer2])
+                                    (doSync chain2 [peer1])
+
+    annotate ("Initial chain 1: " <> toS (condensed $ noGenesis chain1))
+    annotate ("Initial chain 2: " <> toS (condensed $ noGenesis chain2))
+    annotate ("Final chain 1: "   <> toS (condensed $ Chrono.reverse blks1))
+    annotate ("Final chain 2: "   <> toS (condensed $ Chrono.reverse blks2))
+    blks1 === blks2
+
 {------------------------------------------------------------------------------
   Utility functions
 ------------------------------------------------------------------------------}
@@ -348,7 +408,7 @@ spinUpNode
     -> IO (Async ())
 spinUpNode Dict tokens (peer, peerChain) = (\a -> link a >> pure a) =<<
     async (do
-        let initialState = nodeState mempty peerChain mempty
+        let initialState = nodeState mempty peerChain emptyState
         withNode mempty validateTx Nakamoto.emptyPoW initialState $ \hdl ->
             API.runApi' noLogger
                         (atomically $ writeTBQueue tokens ())
