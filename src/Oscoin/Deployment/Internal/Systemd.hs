@@ -10,6 +10,8 @@ module Oscoin.Deployment.Internal.Systemd
     , ServiceSection
     , InstallSection
 
+    , RestartPolicy (..)
+
     , Service
     , renderService
     , dockerDaemonService
@@ -47,9 +49,18 @@ data UnitSection = UnitSection
     , after       :: [Unit]
     } deriving Generic
 
+data RestartPolicy
+    = Never
+    | Always
+    | OnFailure
+    | OnAbnormal
+    | OnWatchdog
+    | OnAbort
+
 data ServiceSection = ServiceSection
     { environment     :: Map Text Text
     , environmentFile :: Maybe FilePath
+    , restart         :: RestartPolicy
     , execStartPre    :: Maybe Text
     , execStart       :: Text
     , execStop        :: Maybe Text
@@ -88,6 +99,8 @@ dockerDaemonService rlogin name container =
                 [("HOME", "/home/" <> view (the @"user" . the @"name") container)]
 
             , environmentFile = Nothing
+
+            , restart = OnFailure
 
             , execStartPre = fmtTxt .
                 Doge.registryLoginCmd "/usr/bin" <$> rlogin
@@ -136,6 +149,7 @@ renderServiceSection :: ServiceSection -> Text
 renderServiceSection ServiceSection {..} = T.unlines . catMaybes $
       pure "[Service]"
     : map (("EnvironmentFile=" <>) . toS) environmentFile
+    : pure ("Restart=" <> renderRestartPolicy restart)
     : map ("ExecStartPre=" <>) execStartPre
     : pure ("ExecStart=" <> execStart)
     : map ("ExecStop=" <>) execStop
@@ -151,6 +165,15 @@ renderInstallSection InstallSection {..} = T.unlines $
     <> map (("WantedBy="   <>) . unitName) wantedBy
     <> map (("RequiredBy=" <>) . unitName) requiredBy
     <> map (("Also="       <>) . unitName) also
+
+renderRestartPolicy :: RestartPolicy -> Text
+renderRestartPolicy = \case
+    Never      -> "no"
+    Always     -> "always"
+    OnFailure  -> "on-failure"
+    OnAbnormal -> "on-abnormal"
+    OnWatchdog -> "on-watchdog"
+    OnAbort    -> "on-abort"
 
 unitName :: Unit -> Text
 unitName = \case

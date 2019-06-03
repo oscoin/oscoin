@@ -176,13 +176,11 @@ steps:
       if [[ "$BRANCH_NAME" == "master" ]]; then
         ./scripts/deploy/gce/node \
             --log-level=Debug \
-            --no-log-colours \
-            --log-layout=NoLayout
+            --block-time-lower=60
       else
         DRY_RUN=yes ./scripts/deploy/gce/node \
             --log-level=Debug \
-            --no-log-colours \
-            --log-layout=NoLayout
+            --block-time-lower=60
       fi
 
   - id: "Publish Haddocks"

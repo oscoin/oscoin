@@ -48,6 +48,8 @@ $OSCOIN_DEPLOY node \
     --environment=development \
     --beneficiary="$OSCOIN_BENEFICIARY" \
     --allow-ephemeral-keys \
+    --no-log-colours \
+    --log-layout=NoLayout \
     --output="$_clowninit" \
     "$@" \
     gce \
