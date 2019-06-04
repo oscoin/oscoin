@@ -4,10 +4,9 @@ import           Oscoin.Prelude
 
 import           Oscoin.API.HTTP.Internal
 import           Oscoin.API.Types
-import           Oscoin.Crypto.Blockchain (Height, TxLookup(..))
+import           Oscoin.Crypto.Blockchain (Height)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash, SealedBlock)
-import           Oscoin.Crypto.Blockchain.Eval (Receipt(..))
-import           Oscoin.Crypto.Hash (Hashed, hash)
+import           Oscoin.Crypto.Hash (hash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Node as Node
 import qualified Oscoin.Node.Mempool.Class as Mempool
@@ -23,32 +22,6 @@ import           Network.HTTP.Types.Status
 
 root :: ApiAction c tx s i ()
 root = respond ok200 noBody
-
-getTransaction
-    :: ( ApiTx c tx
-       , Serialise (TxLookupResponse c tx)
-       )
-    => Hashed c tx
-    -> ApiAction c tx s i ()
-getTransaction txId = do
-    (tx, bh, confirmations) <- liftNode (lookupTx txId) >>= \case
-        Nothing -> respond notFound404 $ errBody "Transaction not found"
-        Just res -> pure $ res
-    txReceipt <- liftNode $ Node.lookupReceipt txId
-    respond ok200 $ Ok TxLookupResponse
-        { txHash = hash tx
-        , txBlockHash =  bh
-        , txOutput = receiptTxOutput <$> txReceipt
-        , txConfirmations = confirmations
-        , txPayload = tx
-        }
-    where
-        fromTxLookup TxLookup{..} = (txPayload, Just txBlockHash, txConfirmations)
-        lookupTx id = Mempool.lookupTx id >>= \case
-            Just tx -> pure $ Just (tx, Nothing, 0)
-            Nothing -> do
-                result <- Node.lookupTx id
-                pure $ fromTxLookup <$> result
 
 submitTransaction
     :: forall c tx s i a.

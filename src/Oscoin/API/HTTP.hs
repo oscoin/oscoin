@@ -8,7 +8,6 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (BlockHash, SealedBlock)
-import           Oscoin.Crypto.Hash (toHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.Hash.RealWorld ()
 import           Oscoin.Crypto.PubKey.RealWorld ()
@@ -103,10 +102,6 @@ api mdlware = do
     -- /transactions ----------------------------------------------------------
 
     post "transactions" Handlers.submitTransaction
-
-    -- /transactions/:id ------------------------------------------------------
-
-    get ("transactions" <//> var) (Handlers.getTransaction . toHashed)
 
     -- /state/:key ------------------------------------------------------------
 
