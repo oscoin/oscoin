@@ -52,6 +52,7 @@ import qualified Oscoin.P2P.Handshake.Trace as P2P (HandshakeEvent(..))
 import qualified Oscoin.P2P.Trace as P2P (P2PEvent(..), Traceable(..))
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
+import           Oscoin.Protocol.Trace (ProtocolEvent(..))
 import           Oscoin.Telemetry.Events
 import qualified Oscoin.Telemetry.Events.Sync as Events.Sync
 import           Oscoin.Telemetry.Internal (Handle(..))
@@ -189,7 +190,8 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                           duration
 
         P2PEvent e -> handleP2P e
-        NodeSyncEvent    ev -> Log.withNamespace "sync" $ case ev of
+        ProtocolEvent ev -> handleProtocol ev
+        NodeSyncEvent ev -> Log.withNamespace "sync" $ case ev of
             Events.Sync.NodeSyncStarted (localTip, localHeight) (remoteTip, remoteHeight) ->
                 Log.infoM "Node syncing started"
                           ( ftag "local_tip"  % formatHash % " "
@@ -393,6 +395,34 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
         P2P.HandshakeComplete peer ->
             Log.debugM "handshake complete" fmtPeer peer
 
+    handleProtocol
+        :: Buildable (Crypto.Hash c)
+        => ProtocolEvent c
+        -> ReaderT Logger IO ()
+    handleProtocol = Log.withNamespace "protocol" . \case
+        BlockExtendedTip newTip ->
+            Log.infoM "Block extended tip"
+                      ( ftag "new_tip"  % formatHash)
+                      newTip
+        BlockStoredAsOrphan orphanHash orphanageSize ->
+            Log.debugM "Block stored as orphan"
+                       (fmtBlockHash % " " %
+                        ftag "orphanage_size" % int
+                       )
+                       orphanHash
+                       orphanageSize
+        RollbackOccurred depth newTip ->
+            Log.debugM "Rollback occurred"
+                       (ftag "depth" % int % " " %
+                        ftag "new_tip" % formatHash
+                       )
+                       depth
+                       newTip
+        PotentialNewChainFound chainScore ->
+            Log.debugM "Chain evaluated for adoption"
+                       (ftag "candidate_score" % int)
+                       chainScore
+
 -- | Maps each 'NotableEvent' to a set of 'Action's. The big pattern-matching
 -- block is by design. Despite the repetition (once in 'emit' and once in
 -- this function) it guides library authors to be reminded of which points they
@@ -477,6 +507,17 @@ toActions = \case
                         (fromIntegral duration / fromIntegral Time.seconds)
      ]
     P2PEvent ev -> p2pActions ev
+    ProtocolEvent e -> case e of
+        BlockExtendedTip _ -> []
+        PotentialNewChainFound _ -> []
+        BlockStoredAsOrphan _ orphanageSize -> [
+          GaugeSet "oscoin.protocol.orphanage.size" noLabels (fromIntegral orphanageSize)
+         ]
+        RollbackOccurred _rollbackDepth _ -> [
+          CounterIncrease "oscoin.protocol.rollbacks.total" noLabels
+          -- TODO(adn) Use an histogram to bucket the depth of the rollback,
+          -- so we can study how much we are rolling-back, on average.
+         ]
     NodeSyncEvent e -> case e of
         Events.Sync.NodeSyncStarted{} ->
             [ CounterIncrease

@@ -3,6 +3,7 @@ module Oscoin.Storage.Block.Orphanage
     ( Orphanage -- opaque
     , emptyOrphanage
     , getOrphans
+    , size
     , member
     , candidateAvailable
     , insertOrphan
@@ -15,7 +16,7 @@ module Oscoin.Storage.Block.Orphanage
     , pruneOrphanageDeep
 
     -- * Internal use only
-    , size
+    , sizeAt
     , candidates
     , ChainCandidate(..)
     ) where
@@ -197,12 +198,12 @@ snocBlock scoreBlock b cc =
 -- | Returns the size (i.e. the number of chain candidates) for a given
 -- 'BlockHash' in the orphanage.
 -- Internal use only.
-size
+sizeAt
     :: Ord (Hash c)
     => Hash c
     -> Orphanage c tx s
     -> Int
-size rootHash (Orphanage _ chains _ _) =
+sizeAt rootHash (Orphanage _ chains _ _) =
     case Map.lookup rootHash chains of
       Nothing -> 0
       Just cs -> length cs
@@ -220,6 +221,11 @@ getOrphans = Map.keysSet . orphans
 
 member :: Ord (BlockHash c) => Orphanage c tx s -> BlockHash c -> Bool
 member o h = Set.member h . Map.keysSet . orphans $ o
+
+-- | /O(1)/ The size of the 'Orphanage', i.e. how many /unique/ orphans are
+-- currently stored.
+size :: Orphanage c tx s -> Int
+size = Map.size . orphans
 
 -- | /O(log n)/ Returns 'True' if the input candidate matches an available chain in
 -- the orphanage.

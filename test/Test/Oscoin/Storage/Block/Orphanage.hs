@@ -171,7 +171,7 @@ propFuseChains Dict = property $ do
                    $ c
 
         let totalSize orph =
-                size rootHash orph + size (blockHash $ singleBlock) orph
+                sizeAt rootHash orph + sizeAt (blockHash $ singleBlock) orph
 
         conjoin [ totalSize o'' === 2 -- Before fusing things, there are 2 chains.
                 , best          === Just fusedChain
@@ -211,9 +211,9 @@ propPruneChainsShallow Dict = property $ do
                    $ c
 
         conjoin [ map (reverse . toBlocksOldestFirst o'') firstBestCandidate
-                                                     === Just (blocks' chain1)
-                , map (size rootHash) finalOrphanage === Just 1
-                , secondBestCandidate                === Just (blocks' chain2)
+                                                       === Just (blocks' chain1)
+                , map (sizeAt rootHash) finalOrphanage === Just 1
+                , secondBestCandidate                  === Just (blocks' chain2)
                 ]
 
 showChains
@@ -265,9 +265,9 @@ propPruneChainsDeep Dict = property $ do
 
         -- Test that there should be no trace of candidates once we pruned
         -- chain1 deeply.
-        conjoin [ map (size rootHash) finalOrphanage        === Just 1
-                , map (size chain1TipParent) finalOrphanage === Just 0
-                , secondBestCandidate                       === Just (blocks' chain2)
+        conjoin [ map (sizeAt rootHash) finalOrphanage        === Just 1
+                , map (sizeAt chain1TipParent) finalOrphanage === Just 0
+                , secondBestCandidate                         === Just (blocks' chain2)
                 ]
 
 {------------------------------------------------------------------------------

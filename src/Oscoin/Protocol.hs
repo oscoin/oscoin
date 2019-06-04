@@ -24,6 +24,7 @@ import           Oscoin.Crypto.Blockchain (Blockchain(..))
 import           Oscoin.Crypto.Blockchain.Block hiding (parentHash)
 import qualified Oscoin.Crypto.Blockchain.Block as Block
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
+import           Oscoin.Protocol.Trace
 import           Oscoin.Storage.Block.Abstract
                  (BlockStore, BlockStoreReader, BlockStoreWriter)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
@@ -36,6 +37,7 @@ import           Oscoin.Time.Chrono as Chrono
 import           Control.Concurrent.Async (Async)
 import qualified Control.Concurrent.Async as Async
 import qualified Control.Concurrent.Chan.Unagi.Bounded as Unagi
+import           Control.Monad.Trans.Writer.CPS (runWriterT, tell)
 import qualified Data.List.NonEmpty as NonEmpty
 
 -- | This data structure incorporates all the different components and
@@ -174,13 +176,13 @@ stepProtocol
     => Protocol c tx s m
     -> Block c tx (Sealed c s)
     -> m (Protocol c tx s m, [NotableEvent])
-stepProtocol mgr incomingBlock = do
+stepProtocol mgr incomingBlock = runWriterT $ do
     -- Step 2. Try to store the block; if this is recognised as to be an
     -- orphan, we store it immediately. If this block is scheduled for
     -- inclusion to extend the tip of the chain, then its full validity is
     -- enforced.
     extendsTip <- do
-        currentTip <- BlockStore.getTip bsPublicAPI
+        currentTip <- lift $ BlockStore.getTip bsPublicAPI
         pure $ blockHash currentTip == Block.parentHash incomingBlock
 
     if extendsTip
@@ -188,22 +190,26 @@ stepProtocol mgr incomingBlock = do
            -- Get the last (cached) 'mutableChainDepth' blocks and performs
            -- full block validation.
            let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
-           ancestors <- BlockStore.getBlocksByDepth bsPublicAPI depth
+           ancestors <- lift $ BlockStore.getBlocksByDepth bsPublicAPI depth
 
            case protoValidateFull mgr (toNewestFirst ancestors) incomingBlock of
-               Left validationError ->
-                   let evt = BlockValidationFailedEvent (blockHash incomingBlock) validationError
-                   in pure (mgr, [evt])
+               Left validationError -> do
+                   tell [BlockValidationFailedEvent (blockHash incomingBlock) validationError]
+                   pure mgr
                Right () -> do
                    -- Step 3: store the fully-validated block.
-                   BlockStore.insertBlock bsPrivateAPI incomingBlock
+                   lift $ BlockStore.insertBlock bsPrivateAPI incomingBlock
+                   tell [ProtocolEvent $ BlockExtendedTip bHash]
                    -- At this point, we need to check whether or not in the
                    -- orphanage there is a candidate available, because the
                    -- incoming block might be a fork-block which is extending
                    -- an orphan chain
                    if O.candidateAvailable (blockHash incomingBlock) (protoOrphanage mgr)
-                      then (,mempty) <$> selectBestChain mgr
-                      else pure (mgr, mempty)
+                      then do
+                          (mgr',evts) <- lift $ selectBestChain mgr
+                          tell evts
+                          pure mgr'
+                      else pure mgr
 
        -- NOTE(adn) This is a side effect of the fact that storing
        -- the genesis as an orphan would insert it into the orphanage with
@@ -213,14 +219,20 @@ stepProtocol mgr incomingBlock = do
        -- inserting the genesis block into the orphanage in the first place;
        -- After all, the genesis block should never be considered an orphan.
        else if not (isGenesisBlock incomingBlock)
-               then -- Step 4: Chain selection, as a new orphan has been added.
+               then do -- Step 4: Chain selection, as a new orphan has been added.
                    let o' = O.insertOrphan incomingBlock (protoOrphanage mgr)
-                   in (,mempty) <$> selectBestChain mgr { protoOrphanage = o' }
-               else pure (mgr, mempty)
+                   (mgr', evts) <- lift $ selectBestChain mgr { protoOrphanage = o' }
+
+                   tell (ProtocolEvent (BlockStoredAsOrphan bHash (O.size o')) : evts)
+                   pure mgr'
+               else pure mgr
 
   where
       bsPublicAPI :: BlockStoreReader c tx s m
       bsPublicAPI = fst . protoFullBlockStore $ mgr
+
+      bHash :: BlockHash c
+      bHash = blockHash $ incomingBlock
 
       bsPrivateAPI :: BlockStoreWriter c tx s m
       bsPrivateAPI = snd . protoFullBlockStore $ mgr
@@ -236,20 +248,23 @@ selectBestChain
        ( Monad m
        , Ord s
        , Ord (BlockHash c)
+       , Buildable (BlockHash c)
        )
     => Protocol c tx s m
-    -> m (Protocol c tx s m)
-selectBestChain mgr = do
+    -> m (Protocol c tx s m, [NotableEvent])
+selectBestChain mgr = runWriterT $ do
     -- NOTE(adn) Grab the \"mutable\" part of the chain and
     -- compare each root hash to see if there is any fork originating from that.
     let depth = fromIntegral $ mutableChainDepth (protoConfig mgr)
     mutableBlockHashes <-
-        map blockHash . Chrono.reverse <$> BlockStore.getBlocksByDepth bsPublicAPI depth
+        map blockHash . Chrono.reverse <$> lift (BlockStore.getBlocksByDepth bsPublicAPI depth)
 
     case O.selectBestChain (toOldestFirst mutableBlockHashes) orphanage of
         Just (parentHash, bestFork) | isValid bestFork -> do
             -- Compare the orphan best chain with the chain suffix currently adopted
-            chainSuffix <- BlockStore.getBlocksByParentHash bsPublicAPI parentHash
+            chainSuffix <- lift $ BlockStore.getBlocksByParentHash bsPublicAPI parentHash
+
+            tell [ProtocolEvent $ PotentialNewChainFound @c (O.candidateScore bestFork)]
 
             -- Switch-to-better-chain condition: either the chain suffix is
             -- empty, which means we are extending directly the tip, or if we
@@ -296,8 +311,17 @@ selectBestChain mgr = do
     orphanage  = protoOrphanage mgr
 
     switchToFork fork chainSuffix = do
+        let forkDepth = fromIntegral $ length chainSuffix
         let newChain = O.toBlocksOldestFirst orphanage fork
-        BlockStore.switchToFork bsPrivateAPI (fromIntegral $ length chainSuffix) newChain
+        let evt = RollbackOccurred forkDepth
+                                   (blockHash . NonEmpty.last
+                                              . toOldestFirst
+                                              $ newChain
+                                   )
+
+        tell [ProtocolEvent evt]
+
+        lift $ BlockStore.switchToFork bsPrivateAPI forkDepth newChain
 
 -- | Returns 'True' if the input block is novel to the 'Protocol', i.e it's
 -- neither in the block store nor in the orphanage.

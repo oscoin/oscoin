@@ -11,6 +11,7 @@ import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import qualified Oscoin.P2P.Trace as P2P (Traceable)
 import qualified Oscoin.P2P.Types as P2P (NodeInfo)
+import           Oscoin.Protocol.Trace (ProtocolEvent)
 import           Oscoin.Time (Duration)
 
 import qualified Oscoin.Telemetry.Events.Sync as Events.Sync
@@ -113,6 +114,11 @@ data NotableEvent where
         :: forall c. (Hashable c (PublicKey c), Buildable (Hash c))
         => P2P.Traceable (P2P.NodeInfo c)
         -> NotableEvent
+    -- | Events emitted when the protocol is running
+    ProtocolEvent
+       :: forall c. Buildable (Hash c)
+       => ProtocolEvent c
+       -> NotableEvent
     -- | Events emitted during node syncing
     NodeSyncEvent :: forall c. (Buildable (Hash c))
                   => Events.Sync.NodeSyncEvent c -> NotableEvent
