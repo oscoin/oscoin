@@ -247,11 +247,11 @@ syncNode
     -- first time.
     -> SyncT c tx s m ()
 syncNode onReady = do
-    lift . onReady =<< catchingSyncErrors (syncUntil (\_ _ _ -> False))
+    lift . onReady =<< catchingSyncErrors (syncUntil (isDone . scNu))
     forever $ do
-        void $ catchingSyncErrors sync
         -- Throttle each iteration of the algorithm by 30 seconds.
         liftIO $ threadDelay 30000000
+        void $ catchingSyncErrors sync
   where
       catchingSyncErrors action =
           (Right <$> action) `catchError`
