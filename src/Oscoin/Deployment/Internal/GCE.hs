@@ -155,7 +155,7 @@ cloudConfig (max 1 . min 8 -> numLocalDisks) containers =
             . plainTextFileContents $ Text.unlines
                 [ "<source>"
                 , "  @type systemd"
-                , "  match [{\"CONTAINER_NAME\": \"" <> container <> "\"}]"
+                , "  filters [{\"CONTAINER_NAME\": \"" <> container <> "\"}]"
                 , "  <storage>"
                 , "    @type local"
                 , "    persistent true"
