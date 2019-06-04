@@ -158,7 +158,7 @@ catchNetworkError protoReq addr action = do
 newEventTracer :: Probe IO -> Tracer IO
 newEventTracer = probed
 
--- ^ Given a monadic IO operation and a maximum Duration for this action to
+-- | Given a monadic IO operation and a maximum Duration for this action to
 -- take, it either returns the value @a@ or a 'Timeout'.
 timed :: MonadUnliftIO m => Duration -> m a -> m (Either Timeout a)
 timed maxTimeout action = do
@@ -170,6 +170,8 @@ timed maxTimeout action = do
       nsToMicro :: Duration -> Duration
       nsToMicro s = round (realToFrac s / (fromIntegral microseconds :: Double))
 
+-- | Like 'timed', but specialised to return a 'SyncError'. It uses 'timed'
+-- under the hood.
 timed'
     :: MonadUnliftIO m
     => ProtocolRequest
@@ -227,6 +229,7 @@ runSync syncContext (SyncT s) = do
       Right r  -> pure r
 
 -- | Syncs a node, in a monad which can do @IO@.
+-- Fires the 'onReady' callback after completing a first round of sync.
 -- This function is implemented as an endless loop. During each loop, we check
 -- whether or not we are done syncing (cfr. 'isDone') and, if we are not, we
 -- sync the required blocks, wait 30 seconds, and try again.
@@ -239,9 +242,19 @@ syncNode
        , Ord (Beneficiary c)
        , Buildable (Hash c)
        )
-    => SyncT c tx s m ()
-syncNode = forever $ do
-    sync `catchError` \(e :: SyncError) ->
-       recordEvent $ Telemetry.NodeSyncError (toException e)
-    -- Throttle each iteration of the algorithm by 30 seconds.
-    liftIO $ threadDelay 30000000
+    => (Either SyncError (LocalTip c tx s, RemoteTip c tx s) -> m ())
+    -- ^ A callback which will fire once the sync has been performed the
+    -- first time.
+    -> SyncT c tx s m ()
+syncNode onReady = do
+    lift . onReady =<< catchingSyncErrors (syncUntil (\_ _ _ -> False))
+    forever $ do
+        void $ catchingSyncErrors sync
+        -- Throttle each iteration of the algorithm by 30 seconds.
+        liftIO $ threadDelay 30000000
+  where
+      catchingSyncErrors action =
+          (Right <$> action) `catchError`
+            \(e :: SyncError) -> do
+               recordEvent $ Telemetry.NodeSyncError (toException e)
+               pure $ Left e

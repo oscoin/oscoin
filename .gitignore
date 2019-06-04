@@ -12,3 +12,4 @@ dist-newstyle
 dist
 .ghc.environment*
 blockstore.db
+stack.yaml.lock
