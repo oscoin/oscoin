@@ -55,7 +55,7 @@ import qualified Oscoin.Storage.Block.Abstract as BlockStore
 import           Codec.Serialise
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (MFunctor(..))
-import           Control.Retry (constantDelay, limitRetries, recovering)
+import           Control.Retry (constantDelay, limitRetries, recoverAll)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
 import           Lens.Micro ((^.))
 
@@ -134,15 +134,13 @@ miner = do
            , Hashable  c tx
            )
         => Block c tx (Sealed c s)
-        -> m (Either IOException ())
+        -> m (Either SomeException ())
     tryBroadcast blk =
         let
             policy = limitRetries 5 <> constantDelay 10000
-            -- TODO(kim): gossip should allow us to intercept the `NoSuchPeer`
-            -- error here, too
-            hdlrs  = [const . Handler $ \(_ :: IOException) -> pure True]
          in
-            try . recovering policy hdlrs . const $
+            -- Always retry in case of (synchronous) exceptions.
+            try . recoverAll policy . const $
                 P2P.broadcast (P2P.BlockMsg blk)
 
 -- | Mine a block with the node’s 'Consensus' on top of the best chain obtained
