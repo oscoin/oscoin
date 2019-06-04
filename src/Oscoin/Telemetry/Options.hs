@@ -32,7 +32,7 @@ telemetryOptionsParser = Options
     <*> styleParser
   where
     styleParser = Log.StyleFormatter
-        <$> switch
+        <$> flag True False
             ( long    "no-log-colours"
            <> help    "Turn off terminal colors for log output"
             )
@@ -57,7 +57,7 @@ telemetryOptionsOpts
         (Log.StyleFormatter useColours layoutFormat)) =
       Opt "log-level"  (show optLogSeverity)
     : Opt "log-layout" (show layoutFormat)
-    : bool [] [Flag "no-log-colours"] useColours
+    : bool [] [Flag "no-log-colours"] (not useColours)
 
 renderTelemetryOptionsOpts :: Options -> [Text]
 renderTelemetryOptionsOpts = map (F.sformat F.build) . telemetryOptionsOpts
