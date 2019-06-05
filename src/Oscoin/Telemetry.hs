@@ -52,9 +52,8 @@ import qualified Oscoin.P2P.Handshake.Trace as P2P (HandshakeEvent(..))
 import qualified Oscoin.P2P.Trace as P2P (P2PEvent(..), Traceable(..))
 import           Oscoin.P2P.Types (fmtLogConversionError)
 import qualified Oscoin.P2P.Types as P2P
-import           Oscoin.Protocol.Trace (ProtocolEvent(..))
+import           Oscoin.Protocol.Trace (NodeSyncEvent(..), ProtocolEvent(..))
 import           Oscoin.Telemetry.Events
-import qualified Oscoin.Telemetry.Events.Sync as Events.Sync
 import           Oscoin.Telemetry.Internal (Handle(..))
 import           Oscoin.Telemetry.Logging as Log
 import           Oscoin.Telemetry.Metrics
@@ -191,35 +190,7 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
 
         P2PEvent e -> handleP2P e
         ProtocolEvent ev -> handleProtocol ev
-        NodeSyncEvent ev -> Log.withNamespace "sync" $ case ev of
-            Events.Sync.NodeSyncStarted (localTip, localHeight) (remoteTip, remoteHeight) ->
-                Log.infoM "Node syncing started"
-                          ( ftag "local_tip"  % formatHash % " "
-                          % ftag "local_height" % shown % " "
-                          % ftag "remote_tip" % formatHash % " "
-                          % ftag "remote_height" % shown % " "
-                          )
-                          localTip
-                          localHeight
-                          remoteTip
-                          remoteHeight
-            Events.Sync.NodeSyncFinished (localTip, localHeight) ->
-                Log.infoM "Node syncing finished"
-                          ( ftag "local_tip"  % formatHash % " "
-                          % ftag "local_height" % shown
-                          )
-                          localTip
-                          localHeight
-            Events.Sync.NodeSyncMissing missing ->
-                Log.infoM "Missing blocks to fetch elsewhere"
-                          ( ftag "number"  % int )
-                          missing
-            Events.Sync.NodeSyncFetched requested ->
-                Log.infoM "Fetched blocks from peer"
-                          ( ftag "number"  % int )
-                          requested
-            Events.Sync.NodeSyncError ex ->
-                Log.errM "Node syncing error" fexception ex
+        NodeSyncEvent ev -> handleSync ev
 
   where
     withLogger :: ReaderT Log.Logger IO a -> IO a
@@ -422,6 +393,39 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
             Log.debugM "Chain evaluated for adoption"
                        (ftag "candidate_score" % int)
                        chainScore
+    handleSync
+       :: Buildable (Crypto.Hash c)
+       => NodeSyncEvent c
+       -> ReaderT Logger IO ()
+    handleSync = Log.withNamespace "sync" . \case
+        NodeSyncStarted (localTip, localHeight) (remoteTip, remoteHeight) ->
+            Log.infoM "Node syncing started"
+                      ( ftag "local_tip"  % formatHash % " "
+                      % ftag "local_height" % shown % " "
+                      % ftag "remote_tip" % formatHash % " "
+                      % ftag "remote_height" % shown % " "
+                      )
+                      localTip
+                      localHeight
+                      remoteTip
+                      remoteHeight
+        NodeSyncFinished (localTip, localHeight) ->
+            Log.infoM "Node syncing finished"
+                      ( ftag "local_tip"  % formatHash % " "
+                      % ftag "local_height" % shown
+                      )
+                      localTip
+                      localHeight
+        NodeSyncMissing missing ->
+            Log.infoM "Missing blocks to fetch elsewhere"
+                      ( ftag "number"  % int )
+                      missing
+        NodeSyncFetched requested ->
+            Log.infoM "Fetched blocks from peer"
+                      ( ftag "number"  % int )
+                      requested
+        NodeSyncError ex ->
+            Log.errM "Node syncing error" fexception ex
 
 -- | Maps each 'NotableEvent' to a set of 'Action's. The big pattern-matching
 -- block is by design. Despite the repetition (once in 'emit' and once in
@@ -519,7 +523,7 @@ toActions = \case
           -- so we can study how much we are rolling-back, on average.
          ]
     NodeSyncEvent e -> case e of
-        Events.Sync.NodeSyncStarted{} ->
+        NodeSyncStarted{} ->
             [ CounterIncrease
                 "oscoin.protocol.sync.sync_iterations"
                 noLabels

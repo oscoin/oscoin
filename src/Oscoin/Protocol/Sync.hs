@@ -57,9 +57,9 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHeight
                  )
 import           Oscoin.P2P as P2P
+import           Oscoin.Protocol.Trace as Telemetry
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader, getTip)
 import           Oscoin.Telemetry.Events (NotableEvent(NodeSyncEvent))
-import qualified Oscoin.Telemetry.Events.Sync as Telemetry.Events
 import           Oscoin.Telemetry.Trace as Telemetry
 import           Oscoin.Time (Duration)
 
@@ -421,9 +421,9 @@ syncBlocks rng = do
             forM_ (scEventHandlers ctx) $ \dispatch ->
                 dispatch (SyncBlock b)
         recordEvent' @c (scEventTracer ctx) $
-            Telemetry.Events.NodeSyncFetched (length requested)
+            Telemetry.NodeSyncFetched (length requested)
         recordEvent' @c (scEventTracer ctx) $
-            Telemetry.Events.NodeSyncMissing (length missing)
+            Telemetry.NodeSyncMissing (length missing)
         pure missing
 
     -- Tries to fetch a missing block (as identified by its 'Height') from
@@ -481,17 +481,17 @@ syncUntil finished = do
     unlessDone ctx localTip remoteTip action =
         if finished ctx localTip remoteTip
            then recordEvent $
-                Telemetry.Events.NodeSyncFinished (blockHash localTip, height localTip)
+                Telemetry.NodeSyncFinished (blockHash localTip, height localTip)
         else do
             recordEvent $
-                Telemetry.Events.NodeSyncStarted (blockHash localTip, height localTip)
-                                                 (blockHash remoteTip, height remoteTip)
+                Telemetry.NodeSyncStarted (blockHash localTip, height localTip)
+                                          (blockHash remoteTip, height remoteTip)
 
             action
 
             newLocalTip <- lift (getTip (scLocalChainReader ctx))
             recordEvent $
-                Telemetry.Events.NodeSyncFinished (blockHash newLocalTip, height newLocalTip)
+                Telemetry.NodeSyncFinished (blockHash newLocalTip, height newLocalTip)
 
 sync
     :: ( Monad m
@@ -513,7 +513,7 @@ recordEvent
     :: ( Monad m
        , Buildable (Hash c)
        )
-    => Telemetry.Events.NodeSyncEvent c
+    => Telemetry.NodeSyncEvent c
     -> SyncT c tx s m ()
 recordEvent evt = do
     ctx <- ask
@@ -522,7 +522,7 @@ recordEvent evt = do
 recordEvent'
     :: Buildable (Hash c)
     => Tracer m
-    -> Telemetry.Events.NodeSyncEvent c
+    -> Telemetry.NodeSyncEvent c
     -> m ()
 recordEvent' eventTracer evt =
     eventTracer $ Telemetry.traced (NodeSyncEvent evt) ()

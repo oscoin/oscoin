@@ -14,9 +14,9 @@ import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
 import           Oscoin.P2P (Addr(..), nodeHttpApiAddr, renderHost)
 import           Oscoin.Protocol.Sync
+import qualified Oscoin.Protocol.Trace as Telemetry
 import           Oscoin.Storage.Block.Abstract (BlockStoreReader)
 import qualified Oscoin.Storage.Block.Abstract as BlockStore
-import qualified Oscoin.Telemetry.Events.Sync as Telemetry.Events
 import           Oscoin.Telemetry.Trace as Telemetry
 import           Oscoin.Time (Duration, microseconds, seconds)
 
@@ -242,6 +242,6 @@ syncNode
     => SyncT c tx s m ()
 syncNode = forever $ do
     sync `catchError` \(e :: SyncError) ->
-       recordEvent $ Telemetry.Events.NodeSyncError (toException e)
+       recordEvent $ Telemetry.NodeSyncError (toException e)
     -- Throttle each iteration of the algorithm by 30 seconds.
     liftIO $ threadDelay 30000000
