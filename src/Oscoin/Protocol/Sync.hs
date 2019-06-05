@@ -11,6 +11,8 @@ module Oscoin.Protocol.Sync
       SyncT(..)
     , SyncError(..)
     , Timeout(..)
+    , LocalTip
+    , RemoteTip
     , ActivePeer
     , ActivePeers
     , SyncEvent(..)
@@ -77,6 +79,10 @@ import           GHC.Natural
 {------------------------------------------------------------------------------
   Types
 ------------------------------------------------------------------------------}
+
+type LocalTip c tx s  = Block c tx (Sealed c s)
+
+type RemoteTip c tx s = Block c tx (Sealed c s)
 
 -- | An active peer, i.e. one of the nodes we are connected to and to which we
 -- can ask for information.
@@ -453,6 +459,8 @@ syncBlocks rng = do
                        dispatch (SyncBlock b)
 
 -- | Calls 'isDone' internally, and try syncing blocks if it returns 'False'.
+-- Returns the up-to-date local tip together with the remote tip fetched at
+-- the time this function was first called.
 syncUntil
     :: forall c tx s m.
        ( Monad m
@@ -462,8 +470,9 @@ syncUntil
        , Ord (Beneficiary c)
        , Buildable (Hash c)
        )
-    => (SyncContext c tx s m -> Block c tx (Sealed c s) -> Block c tx (Sealed c s) -> Bool)
-    -> SyncT c tx s m ()
+    => (SyncContext c tx s m -> LocalTip c tx s -> RemoteTip c tx s -> Bool)
+    -- ^ A predicate on the local & remote tips.
+    -> SyncT c tx s m (LocalTip c tx s, RemoteTip c tx s)
 syncUntil finished = do
     ctx <- ask
     remoteTip <- getRemoteTip
@@ -477,11 +486,13 @@ syncUntil finished = do
         -> Block c tx (Sealed c s)
         -> Block c tx (Sealed c s)
         -> SyncT c tx s m ()
-        -> SyncT c tx s m ()
+        -> SyncT c tx s m (LocalTip c tx s, RemoteTip c tx s)
     unlessDone ctx localTip remoteTip action =
         if finished ctx localTip remoteTip
-           then recordEvent $
-                Telemetry.NodeSyncFinished (blockHash localTip, height localTip)
+           then do
+               recordEvent $
+                 Telemetry.NodeSyncFinished (blockHash localTip, height localTip)
+               pure (localTip, remoteTip)
         else do
             recordEvent $
                 Telemetry.NodeSyncStarted (blockHash localTip, height localTip)
@@ -492,6 +503,7 @@ syncUntil finished = do
             newLocalTip <- lift (getTip (scLocalChainReader ctx))
             recordEvent $
                 Telemetry.NodeSyncFinished (blockHash newLocalTip, height newLocalTip)
+            pure (newLocalTip, remoteTip)
 
 sync
     :: ( Monad m
@@ -502,7 +514,7 @@ sync
        , Buildable (Hash c)
        )
     => SyncT c tx s m ()
-sync = syncUntil (\ctx lcl rmt -> isDone (scNu ctx) lcl rmt)
+sync = void $ syncUntil (\ctx lcl rmt -> isDone (scNu ctx) lcl rmt)
 
 
 {------------------------------------------------------------------------------

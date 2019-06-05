@@ -193,14 +193,19 @@ main = do
                                     ]
                                     (Telemetry.telemetryProbe telemetry)
 
+            -- When the node finished syncing for the first time, start the
+            -- miner and link the async to the main thread.
+            let onNodeReady _result = liftIO $
+                    link =<< async (miner node gossip)
+
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)
-                <> Concurrently (miner node gossip)
                 <> (Concurrently $
                         maybeRunMetrics telemetry optMetricsHost optMetricsPort)
                 <> (Concurrently $
                         maybeRunEkg metricsStore optEkgHost optEkgPort)
-                <> (Concurrently $ Sync.runSync syncContext Sync.syncNode)
+                <> (Concurrently $
+                        Sync.runSync syncContext (Sync.syncNode onNodeReady))
 
     either (const exitFailure) (const exitSuccess) res
   where
