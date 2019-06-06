@@ -13,8 +13,7 @@ import           Codec.Serialise
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Arbitrary ()
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
@@ -79,4 +78,4 @@ buildTestBlock
     -> [Tx]
     -> (Block c Tx Unsealed, St, [Receipt c Tx Output])
 buildTestBlock Dict st txs =
-    buildBlock blockEval epoch defaultBeneficiary st txs (emptyGenesisBlock epoch defaultBeneficiary)
+    buildBlock blockEval epoch someBeneficiary st txs (someGenesisBlock ())

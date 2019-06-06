@@ -12,13 +12,10 @@ import           Oscoin.Consensus.Nakamoto (blockScore)
 import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Blockchain as Blockchain
 import           Oscoin.Storage.Block.Orphanage
-import qualified Oscoin.Time as Time
 import           Oscoin.Time.Chrono (OldestFirst(..), reverse, toNewestFirst)
 
 import           Oscoin.Test.Crypto
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
 import           Oscoin.Test.Crypto.Blockchain.Generators
 import           Oscoin.Test.Util (Condensed(..), condensedS)
 
@@ -294,7 +291,7 @@ insertOrphans xs o =
     foldl' (flip insertOrphan) o xs
 
 defaultGenesis :: IsCrypto c => Block c () (Sealed c ())
-defaultGenesis = sealBlock mempty (emptyGenesisBlock Time.epoch defaultBeneficiary)
+defaultGenesis = someGenesisBlock ()
 
 totalScore :: Blockchain c tx s -> Score
 totalScore = sum . map blockScore . toNewestFirst . blocks

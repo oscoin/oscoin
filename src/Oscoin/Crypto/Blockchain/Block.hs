@@ -27,8 +27,6 @@ module Oscoin.Crypto.Blockchain.Block
     , blockData
     , blockTxs
     , blockBeneficiary
-    , emptyGenesisBlock
-    , emptyGenesisFromState
     , isGenesisBlock
     , headerHash
     , parentHash
@@ -299,29 +297,6 @@ mkBlockData benef txs =
         , blockDataTxs         = Seq.fromList (toList txs)
         }
 
-emptyGenesisBlock
-    :: (HasBlockHeader c Unsealed)
-    => Timestamp
-    -> Beneficiary c
-    -> Block c tx Unsealed
-emptyGenesisBlock blockTimestamp benef =
-    mkBlock header benef []
-  where
-    header = emptyHeader { blockTimestamp }
-
-emptyGenesisFromState
-    :: ( HasBlockHeader c Unsealed
-       , Crypto.Hashable c st
-       )
-    => Timestamp
-    -> Beneficiary c
-    -> st
-    -> Block c tx Unsealed
-emptyGenesisFromState blockTimestamp benef st =
-    mkBlock header benef []
-  where
-    header = emptyHeader { blockTimestamp, blockStateHash = stHash }
-    stHash = Crypto.fromHashed . Crypto.hash $ st
 
 isGenesisBlock
     :: (Crypto.HasHashing c)

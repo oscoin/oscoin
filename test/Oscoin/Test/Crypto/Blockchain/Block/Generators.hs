@@ -4,6 +4,12 @@ module Oscoin.Test.Crypto.Blockchain.Block.Generators
     , genBlockWith
     , genStandaloneBlock
 
+    , genBeneficiary
+    , someBeneficiary
+
+    , someGenesisBlock
+    , someGenesisBlock'
+
     , genSeal
     , genPoWSeal
     , genDifficulty
@@ -21,11 +27,11 @@ import           Oscoin.Crypto.Blockchain
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Time
 
+import qualified Hedgehog
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
 import           Oscoin.Test.Crypto.Hash.Arbitrary ()
 import           Oscoin.Test.Time ()
+import           Test.Oscoin.Crypto.Hash.Gen
 import           Test.QuickCheck
 
 
@@ -50,7 +56,7 @@ genStandaloneBlock = do
     stateHash <- arbitrary
     blockSeal <- arbitrary
 
-    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
+    let blockData@BlockData{..} = mkBlockData someBeneficiary txs
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockPrevHash   = prevHash
                , blockDataHash   = hashData blockData
@@ -60,6 +66,36 @@ genStandaloneBlock = do
                , blockTargetDifficulty = diffi
                }
     pure $ mkBlock header blockDataBeneficiary blockDataTxs
+
+someBeneficiary :: Crypto.HasHashing c => Beneficiary c
+someBeneficiary = Crypto.zeroShortHash
+
+genBeneficiary :: (Hedgehog.MonadGen m, Crypto.HasHashing c) => m (Beneficiary c)
+genBeneficiary = genShortHash
+
+-- | Similar to 'someGenesisBlock\'' with a zero state hash.
+someGenesisBlock
+    :: ( Serialise s
+       , Serialise (Crypto.Hash c)
+       , Crypto.HasHashing c
+       )
+    => s -> Block c tx (Sealed c s)
+someGenesisBlock seal = someGenesisBlock' seal Crypto.zeroHash
+
+-- | Returns an empty genesis block with the given seal and state hash.
+-- The block is not intrinsically valid. It uses 'someBeneficiary'.
+someGenesisBlock' :: (Serialise s, Serialise (Crypto.Hash c), Crypto.HasHashing c) => s -> Crypto.Hash c -> Block c tx (Sealed c s)
+someGenesisBlock' seal stateHash = mkBlock header someBeneficiary []
+  where
+    header = BlockHeader
+        { blockHeight   = 0
+        , blockPrevHash = Crypto.zeroHash
+        , blockDataHash = Crypto.zeroHash
+        , blockStateHash = stateHash
+        , blockSeal = SealedWith seal
+        , blockTimestamp = epoch
+        , blockTargetDifficulty = unsafeDifficulty 0
+        }
 
 
 -- | The difficulty is calculated with random swings with a factor of 4(**).
@@ -115,7 +151,7 @@ genBlockWith
     -> Gen (Block c tx s)
 genBlockWith parentBlock txs st = do
     let prevHeader = blockHeader parentBlock
-    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
+    let blockData@BlockData{..} = mkBlockData someBeneficiary txs
     elapsed    <- choose (2750 * seconds, 3250 * seconds)
     blockSeal  <- arbitrary
     blockDiffi <- genDifficultyFrom (blockTargetDifficulty prevHeader)
@@ -173,7 +209,7 @@ genNakamotoBlockWith prefix@(parent:|_) txs = do
     blockState <- arbitrary :: Gen Word8
     blockSeal  <- genPoWSeal
     blockDiffi <- pure $ Nakamoto.chainDifficulty (toList prefix)
-    let blockData@BlockData{..} = mkBlockData defaultBeneficiary txs
+    let blockData@BlockData{..} = mkBlockData someBeneficiary txs
     let header = (emptyHeader :: BlockHeader c Unsealed)
                { blockHeight           = succ (blockHeight prevHeader)
                , blockPrevHash         = headerHash prevHeader

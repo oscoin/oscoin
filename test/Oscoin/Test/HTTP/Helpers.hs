@@ -33,7 +33,6 @@ import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain
-import           Oscoin.Crypto.Blockchain.Block (emptyGenesisBlock, sealBlock)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -49,12 +48,10 @@ import qualified Oscoin.Storage.Ledger as Ledger
 import qualified Oscoin.Telemetry as Telemetry
 import qualified Oscoin.Telemetry.Logging as Log
 import qualified Oscoin.Telemetry.Metrics as Metrics
-import           Oscoin.Time
 
 import           Oscoin.Test.Consensus.Network (DummyNodeId)
 import           Oscoin.Test.Crypto
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Data.Tx.Arbitrary ()
 
 import           Test.QuickCheck (arbitrary)
@@ -162,7 +159,7 @@ withNode emptyTxOutput validateTx seal NodeState{..} k = do
                 }
             , Node.cfgTelemetry       = metrics
             , Node.cfgConsensusConfig = config
-            , Node.cfgBeneficiary     = defaultBeneficiary
+            , Node.cfgBeneficiary     = someBeneficiary
             }
 
     mph <- atomically $ do
@@ -209,7 +206,7 @@ createValidTx payload = liftIO $ do
 
 -- | Creates a new empty blockchain with a dummy seal.
 emptyBlockchain :: IsCrypto c => Blockchain c tx DummySeal
-emptyBlockchain = fromGenesis $ sealBlock "" (emptyGenesisBlock epoch defaultBeneficiary)
+emptyBlockchain = fromGenesis $ someGenesisBlock ""
 
 -- | Run a 'Session' with the given initial node state
 runSession
@@ -237,7 +234,7 @@ runSessionWithState
     -> m ()
 runSessionWithState seal bindings (Session sess)= do
     let initialState = LegacyTxState $ Map.fromList bindings
-    let genBlock = sealBlock seal $ emptyGenesisFromState epoch defaultBeneficiary initialState
+    let genBlock = someGenesisBlock' seal $ Crypto.fromHashed $ Crypto.hash initialState
     let nst = nodeState [] (fromGenesis genBlock) initialState
     liftIO $ withNode [] Tx.validateTx seal nst $ \nh -> do
         app <- API.app nh

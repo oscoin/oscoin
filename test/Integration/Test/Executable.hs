@@ -8,8 +8,8 @@ import           Oscoin.Crypto (Crypto)
 import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
 import           Oscoin.Crypto.PubKey.RealWorld ()
 
-import           Oscoin.Test.Crypto.Blockchain.Block.Helpers
-                 (defaultBeneficiary)
+import           Oscoin.Test.Crypto.Blockchain.Block.Generators
+                 (someBeneficiary)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary ()
 
 import qualified Data.ByteString.Char8 as C8
@@ -52,7 +52,7 @@ randomPorts = Ports
 withOscoinExe :: Ports -> (Handle -> Handle -> Assertion) -> Assertion
 withOscoinExe Ports{..} f = do
     randomNetwork <- take 63 . randomRs ('a', 'z') <$> getStdGen
-    let beneficiary :: Beneficiary Crypto = defaultBeneficiary
+    let beneficiary :: Beneficiary Crypto = someBeneficiary
 
     -- Generates a temporary directory where to store some ephemeral keys, which
     -- are needed for the test to pass on CI.
