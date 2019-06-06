@@ -32,6 +32,7 @@ import qualified Oscoin.API.Types as API
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash (Hashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
@@ -133,7 +134,7 @@ withNode
        , Hashable c (Abstract.TxState c tx)
        , Hashable c tx
        )
-    => Abstract.TxOutput c tx
+    => Evaluator c (TxState c tx) tx (TxOutput c tx)
     -- ^ The empyt transaction output
     -> (tx -> Either (Abstract.TxValidationError c tx) ())
     -- ^ A validation function for the mempool.
@@ -142,7 +143,7 @@ withNode
     -> NodeState c tx s
     -> (NodeHandle c tx s -> IO a)
     -> IO a
-withNode emptyTxOutput validateTx seal NodeState{..} k = do
+withNode eval validateTx seal NodeState{..} k = do
     let logger = Log.noLogger
     metrics   <-
         Telemetry.newTelemetryStore logger <$>
@@ -165,8 +166,7 @@ withNode emptyTxOutput validateTx seal NodeState{..} k = do
         pure mp
 
     blkStore@(blockStoreReader, _) <- newBlockStoreIO (blocks' blockstoreState)
-    let dummyEvalBlock _ txs s = (map (const emptyTxOutput) txs, s)
-    ledger <- Ledger.newFromBlockStoreIO dummyEvalBlock blockStoreReader statestoreState
+    ledger <- Ledger.newFromBlockStoreIO eval blockStoreReader statestoreState
     runProtocol (\_ _ -> Right ()) blockScore metrics blkStore config $ \dispatchBlock ->
         Node.withNode
             cfg
@@ -212,7 +212,7 @@ runSession
     -> Session c (Tx c) DummySeal ()
     -> Assertion
 runSession nst (Session sess) =
-    withNode [] Tx.validateTx mempty nst $ \nh -> do
+    withNode Tx.evaluateBlock Tx.validateTx mempty nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 
@@ -233,7 +233,7 @@ runSessionWithState seal bindings (Session sess)= do
     let initialState = LegacyTxState $ Map.fromList bindings
     let genBlock = someGenesisBlock' seal $ Crypto.fromHashed $ Crypto.hash initialState
     let nst = nodeState [] (fromGenesis genBlock) initialState
-    liftIO $ withNode [] Tx.validateTx seal nst $ \nh -> do
+    liftIO $ withNode Tx.evaluateBlock Tx.validateTx seal nst $ \nh -> do
         app <- API.app nh
         Wai.runSession (runReaderT sess nh) app
 

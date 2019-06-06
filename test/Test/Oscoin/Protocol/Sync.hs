@@ -546,7 +546,7 @@ spinUpNode
 spinUpNode Dict tokens (peer, peerChain) = (\a -> link a >> pure a) =<<
     async (do
         let initialState = nodeState mempty peerChain emptyState
-        withNode mempty validateTx Nakamoto.emptyPoW initialState $ \hdl ->
+        withNode evaluateBlock validateTx Nakamoto.emptyPoW initialState $ \hdl ->
             API.runApi' noLogger
                         (atomically $ writeTBQueue tokens ())
                         (API.api identity)
