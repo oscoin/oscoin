@@ -32,23 +32,13 @@ test_buildBlock d@Dict = testGroup "buildBlock"
     , testProperty "receipts have block hash" $
         \txs -> let (blk, _, receipts) = buildTestBlock d mempty txs
                 in conjoin [ receiptTxBlock receipt === blockHash blk | receipt <- receipts ]
-    , testProperty "valid transactions create new state" $
+    , testProperty "new state is computed" $
         \txs -> let (_, s, _) = buildTestBlock d mempty txs
-                    validTxOutputs = [ output | TxOk output <- txs ]
-                in reverse validTxOutputs === s
-    , testProperty "only valid transactions are included in block" $
-        \txs -> let (blk, _, _) = buildTestBlock d mempty txs
-                    validTxs = filter txIsOk txs
-                in validTxs === toList (blockTxs blk)
-    , testProperty "transactions errors recorded in receipts" $
-        \txs err -> let (_, _, receipts) = buildTestBlock d mempty txsWithError
-                        txsWithError = TxErr err : txs
-                    in (receiptTxOutput <$> head receipts) === Just (Left (EvalError (show err)))
-    , testProperty "error transactions do not change block" $
-        \txs -> let validTxs = [ TxOk out | TxOk out <- txs ]
-                    (blkWithErrors, _, _) = buildTestBlock d mempty txs
-                    (blkWithoutErrors, _, _) = buildTestBlock d mempty validTxs
-                in  blockTxs blkWithErrors === blockTxs blkWithoutErrors
+                    outputs = [ output | Tx output <- txs ]
+                in reverse outputs === s
+    , testProperty "receipts include output" $
+        \txs -> let (_, _, receipts) = buildTestBlock d mempty txs
+                in conjoin [ receiptTxOutput receipt === output | (Tx output, receipt) <- zip txs receipts ]
     ]
 
 --
@@ -63,20 +53,11 @@ type Output = Word8
 
 type St = [Output]
 
-data Tx
-    = TxOk Output
-    | TxErr Int
+data Tx = Tx Output
     deriving (Eq, Show, Generic)
 
-txIsOk :: Tx -> Bool
-txIsOk (TxOk _)  = True
-txIsOk (TxErr _) = False
-
 instance Arbitrary Tx where
-    arbitrary = txFromEither <$> arbitrary
-      where
-        txFromEither (Left err)     = TxErr err
-        txFromEither (Right output) = TxOk output
+    arbitrary = Tx <$> arbitrary
 
 instance Serialise Tx
 
@@ -85,12 +66,9 @@ instance Crypto.HasHashing c => Crypto.Hashable c Tx where
 
 blockEval :: Evaluator c St Tx Output
 blockEval _beneficiary [] oldState = ([], oldState)
-blockEval beneficiary (tx:txs) oldState =
-    let (result, newState) = case tx of
-            (TxOk output) -> (Right output, output : oldState)
-            (TxErr err)   -> (Left (EvalError (show err)), oldState)
-        (results, finalState) = blockEval beneficiary txs newState
-    in (result:results, finalState)
+blockEval beneficiary (Tx output:txs) oldState =
+    let (outputs, finalState) = blockEval beneficiary txs (output:oldState)
+    in (output:outputs, finalState)
 
 
 -- | Build block on an empty genesis block with 'eval' as defined

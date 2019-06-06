@@ -42,7 +42,6 @@ import qualified Network.Gossip.Plumtree as Gossip.EBT
 
 import qualified Oscoin.Consensus.Types as Consensus
 import           Oscoin.Crypto.Blockchain.Block (prettyDifficulty)
-import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (formatHash, formatHashed)
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey (PublicKey)
@@ -123,11 +122,6 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                          (fmtBlockHash % " " % fmtValidationError)
                          blockHash
                          validationError
-        BlockEvaluationFailedEvent blockHash evalError ->
-            Log.errM "block failed evaluation"
-                     (fmtBlockHash % " " % ferror Eval.fromEvalError)
-                     blockHash
-                     evalError
         DifficultyAdjustedEvent newDifficulty previousDifficulty ->
             let fmt = ftag "new" % stext % " "
                     % ftag "old" % stext % " "
@@ -464,9 +458,6 @@ toActions = \case
     BlockValidationFailedEvent _ validationError -> [
         CounterIncrease "oscoin.blocks_failed_validation.total" $
             validationErrorToLabels validationError
-     ]
-    BlockEvaluationFailedEvent _ _evalError -> [
-        CounterIncrease "oscoin.blocks_failed_evaluation.total" noLabels
      ]
     -- NOTE(adn) If we find it useful, we could include also separate counters
     -- for how many times the difficulty increased or decreased.

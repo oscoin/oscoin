@@ -6,7 +6,6 @@ import           Oscoin.Prelude
 
 import qualified Oscoin.Consensus.Types as Consensus
 import           Oscoin.Crypto.Blockchain.Block.Difficulty (Difficulty)
-import qualified Oscoin.Crypto.Blockchain.Eval as Eval
 import           Oscoin.Crypto.Hash (HasHashing, Hash, Hashable, Hashed)
 import           Oscoin.Crypto.PubKey (PublicKey)
 import qualified Oscoin.P2P.Trace as P2P (Traceable)
@@ -55,11 +54,6 @@ data NotableEvent where
     BlockValidationFailedEvent :: forall c. (Buildable (Hash c), HasHashing c)
                                => Hash c
                                -> Consensus.ValidationError c
-                               -> NotableEvent
-    -- | Triggered every time a 'Block' fails to evaluate.
-    BlockEvaluationFailedEvent :: forall c. (Buildable (Hash c), HasHashing c)
-                               => Hash c
-                               -> Eval.EvalError
                                -> NotableEvent
     -- | Triggered when the 'Difficulty' is adjusted. The first argument is
     -- the new difficulty, the second the (now) previous one.

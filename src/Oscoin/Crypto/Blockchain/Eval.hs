@@ -1,8 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Crypto.Blockchain.Eval
     ( Evaluator
-    , EvalError(..)
-    , EvalResult
     , Receipt(..)
     , buildBlock
     , evalBlock
@@ -17,26 +15,15 @@ import qualified Oscoin.Crypto.Hash as Crypto
 
 import           Codec.Serialise (Serialise)
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
-import qualified Generics.SOP as SOP
 
 
-type EvalResult state output = Either EvalError (output, state)
-
-type Evaluator c state tx output = Beneficiary c -> [tx] -> state -> ([Either EvalError output], state)
-
-newtype EvalError = EvalError { fromEvalError :: Text }
-    deriving (Eq, Show, Read, Semigroup, Monoid, IsString, Generic)
-
-instance SOP.Generic EvalError
-instance SOP.HasDatatypeInfo EvalError
-
-instance Serialise EvalError
+type Evaluator c state tx output = Beneficiary c -> [tx] -> state -> ([output], state)
 
 -- | A 'Receipt' is generated whenever a transaction is evaluated as
 -- part of a block.
 data Receipt c tx o = Receipt
     { receiptTx       :: Crypto.Hashed c tx
-    , receiptTxOutput :: Either EvalError o
+    , receiptTxOutput :: o
     , receiptTxBlock  :: BlockHash c
     -- ^ Identifies the block the output was generated in
     } deriving (Generic, Functor)
@@ -48,7 +35,7 @@ mkReceipt
     :: (Crypto.Hashable c tx)
     => Block c tx s
     -> tx
-    -> Either EvalError o
+    -> o
     -> Receipt c tx o
 mkReceipt block tx result = Receipt (Crypto.hash tx) result (blockHash block)
 
@@ -80,8 +67,7 @@ buildBlock
 buildBlock eval tick benef st txs parentBlock =
     let initialState = st
         (txOutputs, newState) = evalWithTxs eval benef txs initialState
-        validTxs = [tx | (tx, Right _) <- txOutputs]
-        newBlock = mkUnsealedBlock (Just parentBlock) tick benef validTxs newState
+        newBlock = mkUnsealedBlock (Just parentBlock) tick benef txs newState
         receipts = map (uncurry $ mkReceipt newBlock) txOutputs
      in (newBlock, newState, receipts)
 
@@ -109,7 +95,7 @@ evalWithTxs
     -> Beneficiary c
     -> [tx]
     -> state
-    -> ([(tx, Either EvalError output)], state)
+    -> ([(tx, output)], state)
 evalWithTxs eval beneficiary txs oldState =
     let (txOutputs, newState) = eval beneficiary txs oldState
         outputsWithTxs = zip txs txOutputs
