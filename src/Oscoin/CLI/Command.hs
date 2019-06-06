@@ -8,7 +8,6 @@ module Oscoin.CLI.Command
 import           Oscoin.Prelude
 
 import qualified Crypto.Data.Auth.Tree.Class as AuthTree
-import qualified Oscoin.API.Client as API
 import           Oscoin.CLI.KeyStore
 import           Oscoin.Crypto.Blockchain.Block
 import           Oscoin.Crypto.Blockchain.Genesis (createGenesisParameters)
@@ -33,8 +32,6 @@ class (MonadRandom m, MonadKeyStore c m) => MonadCLI c m where
     putLine :: Text -> m ()
     -- | Get the current time
     getTime :: m Timestamp
-
-    getClient :: m (API.Client c m)
 
 data Result
     = ResultOk
