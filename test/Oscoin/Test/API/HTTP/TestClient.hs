@@ -14,7 +14,7 @@ module Oscoin.Test.API.HTTP.TestClient
     , session
     ) where
 
-import           Oscoin.Prelude hiding (get)
+import           Oscoin.Prelude
 
 import           Oscoin.API.Client
 import           Oscoin.API.Client.HTTP
@@ -27,7 +27,7 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Test as Wai
 
 
-session :: (IsCrypto c) => Client c (Session c (Tx c) DummySeal)
+session :: (IsCrypto c) => Client c (Tx c) (Session c (Tx c) DummySeal)
 session = httpClientFromRequest makeWaiRequest
 
 makeWaiRequest :: Request -> Session c (Tx c) DummySeal Response

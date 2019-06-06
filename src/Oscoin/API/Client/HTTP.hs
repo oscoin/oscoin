@@ -15,7 +15,6 @@ import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
 import           Oscoin.Crypto.Hash (Hash)
-import           Oscoin.Crypto.PubKey (PublicKey, Signature)
 
 import           Codec.Serialise
 import qualified Data.ByteString.BaseN as BaseN
@@ -26,13 +25,12 @@ import           Network.HTTP.Types.Status
 
 createNetworkHttpClient
     :: ( Serialise (Hash c)
-       , Serialise (PublicKey c)
-       , Serialise (Signature c)
+       , Serialise tx
        , MonadIO m
        , MonadThrow m
        , MonadIO n
        )
-    => Text -> n (Client c m)
+    => Text -> n (Client c tx m)
 createNetworkHttpClient uri = liftIO $ do
     manager <- Client.newManager Client.defaultManagerSettings
     baseRequest <- Client.parseRequest (toS uri)
@@ -58,11 +56,10 @@ data Response = Response
 -- requests.
 httpClientFromRequest
     :: ( Serialise (Hash c)
-       , Serialise (PublicKey c)
-       , Serialise (Signature c)
+       , Serialise tx
        , MonadThrow m
        )
-    => (Request -> m Response) -> Client c m
+    => (Request -> m Response) -> Client c tx m
 httpClientFromRequest httpRequest = Client{..}
     where
         submitTransaction tx =

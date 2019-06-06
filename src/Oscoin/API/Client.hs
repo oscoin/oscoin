@@ -7,15 +7,14 @@ module Oscoin.API.Client
 import           Oscoin.Prelude
 
 import           Oscoin.API.Types
-import           Oscoin.Data.Tx
 
-data Client c m = Client
-    { submitTransaction :: Tx c -> m (Result (TxSubmitResponse c (Tx c)))
+data Client c tx m = Client
+    { submitTransaction :: tx -> m (Result (TxSubmitResponse c tx))
     , getState          :: ByteString -> m (Maybe ByteString)
     }
 
 
-hoistClient :: (forall a. m a -> n a) -> Client c m -> Client c n
+hoistClient :: (forall a. m a -> n a) -> Client c tx m -> Client c tx n
 hoistClient natTrsf client = Client
     { submitTransaction = natTrsf . submitTransaction client
     , getState = natTrsf . getState client
