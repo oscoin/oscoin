@@ -27,6 +27,9 @@ type instance TxState c (Tx c) = LegacyTxState
 newtype LegacyTxState = LegacyTxState (Map ByteString ByteString)
     deriving (Show, Eq, Semigroup, Monoid)
 
+emptyState :: LegacyTxState
+emptyState = LegacyTxState mempty
+
 instance HasHashing c => Hashable c LegacyTxState where
     hash (LegacyTxState st) = toHashed . fromHashed . hashSerial $ st
 

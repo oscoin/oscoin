@@ -20,7 +20,7 @@ import           Oscoin.Crypto.Blockchain
                  )
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, blockHash, blockHeader)
-import           Oscoin.Data.OscoinTx
+import           Oscoin.Data.Tx
 import           Oscoin.P2P
                  ( Addr(..)
                  , mkAddr
@@ -48,6 +48,7 @@ import           Data.Conduit.Combinators (sinkList)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as Set
 import           Data.IORef
+import           Data.List.NonEmpty (NonEmpty((:|)))
 import           Data.Maybe (fromJust)
 import           Lens.Micro (over)
 import           Network.Socket (PortNumber)
@@ -56,7 +57,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Hedgehog
 import           Hedgehog.Gen.QuickCheck (quickcheck)
 import           Hedgehog.Internal.Property (forAllT)
-import qualified Oscoin.Storage.Block.SQLite as SQLite
+import           Oscoin.Storage.Block.Memory (newBlockStoreIO)
 import qualified Oscoin.Storage.Block.STM as STM
 import           Oscoin.Test.Consensus.Nakamoto.Arbitrary ()
 import           Oscoin.Test.Crypto.Blockchain.Block.Generators
@@ -457,17 +458,17 @@ prop_sync_io_mutual_consensus d@Dict = withTests 1 . property $ do
         -- Starts both peer1 and peer2 as local nodes.
         let doSync chain peers = liftIO $ do
               metricsStore <- newMetricsStore $ labelsFromList []
-              SQLite.withBlockStore ":memory:" (nakamotoGenesis d) $ \store@(public, private) -> do
-                  liftIO $ Abstract.insertBlocksNaive private (noGenesis chain)
-                  runProtocol (\_ _ -> Right ())
-                              Nakamoto.blockScore
-                              (Telemetry.newTelemetryStore noLogger metricsStore)
-                              store
-                              Consensus.testConfig $ \proto ->
-                      liftIO $ do
-                          ctx <- IO.newSyncContext (pure $ Set.fromList peers) public [handleEvt proto] noProbe
-                          IO.runSync ctx (replicateM_ 1 (Sync.syncUntil (\_ _ _ -> False)))
-                          Abstract.getBlocksByParentHash public (blockHash $ nakamotoGenesis d)
+              store@(public, private) <- newBlockStoreIO (NewestFirst $ nakamotoGenesis d :| [])
+              liftIO $ Abstract.insertBlocksNaive private (noGenesis chain)
+              runProtocol (\_ _ -> Right ())
+                          Nakamoto.blockScore
+                          (Telemetry.newTelemetryStore noLogger metricsStore)
+                          store
+                          Consensus.testConfig $ \proto ->
+                  liftIO $ do
+                      ctx <- IO.newSyncContext (pure $ Set.fromList peers) public [handleEvt proto] noProbe
+                      IO.runSync ctx (replicateM_ 1 (Sync.syncUntil (\_ _ _ -> False)))
+                      Abstract.getBlocksByParentHash public (blockHash $ nakamotoGenesis d)
 
         liftIO $ Async.concurrently (doSync chain1 [peer2])
                                     (doSync chain2 [peer1])
