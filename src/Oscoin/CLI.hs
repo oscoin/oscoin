@@ -6,8 +6,6 @@ module Oscoin.CLI
     , runCommand
     ) where
 
-import qualified Oscoin.API.Client as API
-import           Oscoin.API.Client.HTTP (createNetworkHttpClient)
 import           Oscoin.CLI.Command
 import           Oscoin.CLI.KeyStore
 import           Oscoin.CLI.Parser (CLI(..), execParser, execParserPure)
@@ -22,15 +20,11 @@ import           Crypto.Random.Types (MonadRandom(..))
 type CommandRunner a = CommandRunnerT IO a
 
 runCommand :: Maybe FilePath -> Command Crypto -> IO Result
-runCommand mbKeysPath cmd = do
-    commandClient <- createNetworkHttpClient "http://127.0.0.1:8477"
-    let commandEnv = CommandEnv{commandClient}
+runCommand mbKeysPath cmd =
     flip runReaderT mbKeysPath $
-        flip runReaderT commandEnv $ runCommandRunnerT $ dispatchCommand cmd
+        runCommandRunnerT $ dispatchCommand cmd
 
-data CommandEnv = CommandEnv { commandClient :: API.Client Crypto IO  }
-
-newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: ReaderT CommandEnv m a }
+newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: m a }
     deriving ( Functor
              , Applicative
              , Monad
@@ -38,11 +32,10 @@ newtype CommandRunnerT m a = CommandRunnerT { runCommandRunnerT :: ReaderT Comma
              , MonadMask
              , MonadCatch
              , MonadThrow
-             , MonadTrans
              )
 
-askCommandEnv :: Monad m => CommandRunnerT m CommandEnv
-askCommandEnv = CommandRunnerT ask
+instance MonadTrans CommandRunnerT where
+    lift = CommandRunnerT
 
 instance MonadKeyStore Crypto m => MonadKeyStore Crypto (CommandRunnerT m)
 
@@ -59,4 +52,3 @@ instance
     putLine            = liftIO . putStrLn
     putString          = liftIO . putStr
     getTime            = liftIO Time.now
-    getClient          = API.hoistClient liftIO . commandClient <$> askCommandEnv

@@ -14,29 +14,23 @@ module Oscoin.API.Client.HTTP
 import           Oscoin.Prelude hiding (get)
 
 import           Oscoin.API.Client
-import           Oscoin.Crypto.Blockchain.Block (BlockHash)
-import           Oscoin.Crypto.Hash (Hash, fromHashed)
-import           Oscoin.Crypto.PubKey (PublicKey, Signature)
+import           Oscoin.Crypto.Hash (Hash)
 
 import           Codec.Serialise
 import qualified Data.ByteString.BaseN as BaseN
-import           Formatting.Buildable (Buildable)
 import qualified Network.HTTP.Client as Client
 import           Network.HTTP.Types.Header
 import           Network.HTTP.Types.Method
 import           Network.HTTP.Types.Status
-import           Web.HttpApiData (toUrlPiece)
 
 createNetworkHttpClient
-    :: ( Buildable (Hash c)
-       , Serialise (BlockHash c)
-       , Serialise (PublicKey c)
-       , Serialise (Signature c)
+    :: ( Serialise (Hash c)
+       , Serialise tx
        , MonadIO m
        , MonadThrow m
        , MonadIO n
        )
-    => Text -> n (Client c m)
+    => Text -> n (Client c tx m)
 createNetworkHttpClient uri = liftIO $ do
     manager <- Client.newManager Client.defaultManagerSettings
     baseRequest <- Client.parseRequest (toS uri)
@@ -61,20 +55,15 @@ data Response = Response
 -- | Make a 'Client' from a function executing the underlying HTTP
 -- requests.
 httpClientFromRequest
-    :: ( Buildable (Hash c)
-       , Serialise (BlockHash c)
-       , Serialise (PublicKey c)
-       , Serialise (Signature c)
+    :: ( Serialise (Hash c)
+       , Serialise tx
        , MonadThrow m
        )
-    => (Request -> m Response) -> Client c m
+    => (Request -> m Response) -> Client c tx m
 httpClientFromRequest httpRequest = Client{..}
     where
         submitTransaction tx =
             post httpRequest "/transactions" tx
-
-        getTransaction txId =
-            get httpRequest $ "/transactions/" <> toUrlPiece (fromHashed txId)
 
         getState key =
             get httpRequest $ "/state/" <> toS (BaseN.encodedBytes $ BaseN.encodeBase16 key)

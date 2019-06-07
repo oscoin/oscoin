@@ -91,7 +91,6 @@ instance IsCrypto c => MonadCLI c (TestCommandRunner c) where
     putLine t     = putStr (t <> "\n")
     putString t   = modify $ \s -> s { commandOutput = commandOutput s <> t }
     getTime       = pure Time.epoch
-    getClient     = panic "Test client not implemented"
 
 
 instance MonadRandom (TestCommandRunner c) where
