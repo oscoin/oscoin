@@ -410,14 +410,10 @@ emit Handle{..} evt = withLogger $ GHC.withFrozenCallStack $ do
                       )
                       localTip
                       localHeight
-        NodeSyncMissing missing ->
-            Log.infoM "Missing blocks to fetch elsewhere"
-                      ( ftag "number"  % int )
-                      missing
-        NodeSyncFetched requested ->
-            Log.infoM "Fetched blocks from peer"
-                      ( ftag "number"  % int )
-                      requested
+        NodeSyncDispatched incoming ->
+            Log.infoM "Downloaded and dispatched block"
+                      fmtBlockHash
+                      incoming
         NodeSyncError ex ->
             Log.errM "Node syncing error" fexception ex
 

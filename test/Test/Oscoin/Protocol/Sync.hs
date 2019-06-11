@@ -12,7 +12,13 @@ import           Oscoin.Configuration (Environment(Development))
 import           Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
-                 (Blockchain, blocks, tip, unsafeToBlockchain, (|>))
+                 ( Blockchain
+                 , blocks
+                 , chainLength
+                 , tip
+                 , unsafeToBlockchain
+                 , (|>)
+                 )
 import           Oscoin.Crypto.Blockchain.Block
                  (Block, Sealed, blockHash, blockHeader)
 import           Oscoin.Data.OscoinTx
@@ -58,7 +64,7 @@ import           Oscoin.Test.Crypto.Blockchain.Block.Generators
 import           Oscoin.Test.Crypto.Blockchain.Generators (genBlockchainFrom)
 import           Oscoin.Test.Crypto.PubKey.Arbitrary (arbitraryKeyPair)
 import           Oscoin.Test.HTTP.Helpers (nodeState, withNode)
-import           Oscoin.Test.Util (condensed)
+import           Oscoin.Test.Util (condensed, condensedS)
 import           Test.Oscoin.P2P.Gen (genPortNumber)
 import           Test.QuickCheck (Arbitrary)
 import           Test.Tasty (TestTree, testGroup)
@@ -73,6 +79,10 @@ tests d = testGroup "Test.Oscoin.Protocol.Sync"
     , testProperty "prop_getRemoteTip_sim_two_peers_draw" prop_getRemoteTip_sim_two_peers_draw
     , testProperty "prop_getRemoteTip_sim_three_peers_majority" prop_getRemoteTip_sim_three_peers_majority
     , testProperty "prop_getRemoteTip_io_three_peers_majority" (prop_getRemoteTip_io_three_peers_majority d)
+    , testProperty "prop_commonChainHeight_sim_full_agreement" prop_commonChainHeight_sim_full_agreement
+    , testProperty "prop_commonChainHeight_io_full_agreement"  (prop_commonChainHeight_io_full_agreement d)
+    , testProperty "prop_commonChainHeight_sim_partial_agreement" prop_commonChainHeight_sim_partial_agreement
+    , testProperty "prop_commonChainHeight_sim_dishonest" prop_commonChainHeight_sim_dishonest
     , testProperty "prop_getBlocks_sim"  prop_getBlocks_sim
     , testProperty "prop_getBlockHeaders_sim"  prop_getBlockHeaders_sim
     , testProperty "prop_syncBlocks_sim_full" prop_syncBlocks_sim_full
@@ -91,6 +101,10 @@ props d = checkParallel $ Group "Test.Oscoin.Protocol.Sync"
     ,("prop_getRemoteTip_sim_two_peers_draw", prop_getRemoteTip_sim_two_peers_draw)
     ,("prop_getRemoteTip_sim_three_peers_majority", prop_getRemoteTip_sim_three_peers_majority)
     ,("prop_getRemoteTip_io_three_peers_majority", prop_getRemoteTip_io_three_peers_majority d)
+    ,("prop_commonChainHeight_sim_full_agreement", prop_commonChainHeight_sim_full_agreement)
+    ,("prop_commonChainHeight_io_full_agreement",  prop_commonChainHeight_io_full_agreement d)
+    ,("prop_commonChainHeight_sim_partial_agreement", prop_commonChainHeight_sim_partial_agreement)
+    ,("prop_commonChainHeight_sim_dishonest", prop_commonChainHeight_sim_dishonest)
     ,("prop_getBlocks_sim", prop_getBlocks_sim)
     ,("prop_getBlockHeaders_sim", prop_getBlockHeaders_sim)
     ,("prop_syncBlocks_sim_full", prop_syncBlocks_sim_full)
@@ -176,6 +190,112 @@ prop_getRemoteTip_io_three_peers_majority d@Dict = withTests 1 . property $ do
         -- Chain1 is picked, as both peer1 and peer3 are in agreement.
         res === tip chain1
 
+testRetryPolicy :: RetryPolicy
+testRetryPolicy = RetryPolicy linearBacktrackPolicy 0 20 0 5
+
+-- Setup a test scenario with three nodes, where 2 has the same chain and the
+-- third one half of it.
+prop_commonChainHeight_sim_full_agreement :: Property
+prop_commonChainHeight_sim_full_agreement = property $ do
+    testPeer1@(_, chain1) <- forAll genMockPeer
+    (peer2, _) <- forAll genMockPeer
+
+    -- We build the common segment by cutting in half the chain of node1 &
+    -- node2.
+    let common = halfChain chain1
+
+    -- We now add some extra blocks on the common segment, creating chain3.
+    chain3 <- extendChain common
+
+    let localTip   = height $ tip chain3
+    let worldState = mockStateFrom chain3
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain1))
+    let res = Mock.runMockSync worldState
+                               Mock.mockContext
+                               (Sync.commonChainHeightWith testRetryPolicy localTip)
+
+    -- The height of the tip of the common chain is picked.
+    res === (Right (height (tip common)), [])
+
+prop_commonChainHeight_io_full_agreement :: Dict (IsCrypto c) -> Property
+prop_commonChainHeight_io_full_agreement d@Dict = withTests 1 . property $ do
+    testPeer1@(peer1, chain1) <- forAllT (genNakamotoPeer d)
+    (peer2, _) <- forAllT (genNakamotoPeer d)
+
+    let getActive = pure $ Set.fromList [peer1, peer2]
+    let common = halfChain chain1
+
+    chain3 <- foldl' (flip (|>)) common -- fuse the chains together
+            . drop 1  -- drop 'tip common'
+            . toOldestFirst
+            . Chrono.reverse
+            . blocks
+           <$> forAllT (quickcheck (genBlockchainFrom (tip common)))
+
+    let localTip   = height $ tip chain3
+
+    withNodes d [testPeer1, (peer2, chain1)] $ do
+        res <- liftIO $ STM.withBlockStore chain3 Nakamoto.blockScore $ \(localChainReader,_) -> do
+          syncContext <- IO.newSyncContext getActive localChainReader [] noProbe
+          IO.runSync syncContext (Sync.commonChainHeightWith testRetryPolicy localTip)
+
+        res === height (tip common)
+
+-- Setup a test scenario where the two remote peers are not in agreement. In
+-- particular, node2 is on a fork.
+prop_commonChainHeight_sim_partial_agreement :: Property
+prop_commonChainHeight_sim_partial_agreement = property $ do
+    testPeer1@(_, chain1) <- forAll genMockPeer
+    (peer2, _) <- forAll genMockPeer
+
+    -- We build the common segment by cutting in half the chain of node1
+    let common = halfChain chain1
+
+    -- We now add some extra blocks on the common segment, creating chain3.
+    chain2 <- extendChain common
+    chain3 <- extendChain common
+
+    let localTip   = height $ tip chain3
+    let worldState = mockStateFrom chain3
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
+    let res = Mock.runMockSync worldState
+                               Mock.mockContext
+                               (Sync.commonChainHeightWith testRetryPolicy localTip)
+
+    -- The height of the tip of the common chain is picked.
+    res === (Right (height (tip common)), [])
+
+-- Setup a test scenario where the two remote peers are not in agreement, and
+-- node2 is dishonest, so it's generating a completely different chain and
+-- tricking node3 to follow it.
+prop_commonChainHeight_sim_dishonest :: Property
+prop_commonChainHeight_sim_dishonest = property $ do
+    testPeer1@(_, chain1) <- forAll genMockPeer
+    (peer2, chain2) <- forAll genMockPeer
+
+    -- We build the common segment by cutting in half the chain of node1
+    let common = halfChain chain1
+
+    -- We now add some extra blocks on the common segment, creating chain3.
+    chain3 <- extendChain common
+
+    let localTip   = height $ tip chain3
+    let worldState = mockStateFrom chain3
+                   & over Mock.mockPeers (uncurry HM.insert testPeer1)
+                   & over Mock.mockPeers (uncurry HM.insert (peer2, chain2))
+    let res = Mock.runMockSync worldState
+                               Mock.mockContext
+                               (Sync.commonChainHeightWith testRetryPolicy localTip)
+
+    annotate (condensedS chain1)
+    annotate (condensedS chain2)
+    annotate (condensedS chain3)
+
+    -- The sync should start back from 0, as we cannot find a shared height.
+    res === (Right 0, [])
+
 -- This property tests the data fetcher of the simulator, as a preliminary
 -- step for 'prop_syncBlocks_sim_full'.
 prop_getBlocks_sim :: Property
@@ -244,9 +364,7 @@ prop_syncBlocks_sim_full = property $ do
                    & over Mock.mockPeers (uncurry HM.insert (peer2, chain1))
                    & over Mock.mockPeers (uncurry HM.insert (peer3, chain1))
 
-    let fullRange = fromJust $ range mockGenesis (tip chain1)
-
-    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks fullRange)
+    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks 0 (tip chain1))
 
     res === (Right (), map SyncBlock allBlocksNoGenesis)
 
@@ -257,7 +375,6 @@ prop_syncBlocks_io_full d@Dict = withTests 1 . property $ do
     (peer3, _) <- forAllT (genNakamotoPeer d)
 
     let allBlocksNoGenesis = drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
-    let fullRange = fromJust $ range (nakamotoGenesis d) (tip chain1)
     let getActive = pure $ Set.fromList [peer1, peer2, peer3]
 
     evts <- liftIO newTQueueIO
@@ -265,7 +382,7 @@ prop_syncBlocks_io_full d@Dict = withTests 1 . property $ do
     withNodes d [testPeer1, (peer2, chain1), (peer3, chain1)] $ do
         liftIO $ STM.withBlockStore chain1 Nakamoto.blockScore $ \(localChainReader,_) -> do
           syncContext <- IO.newSyncContext getActive localChainReader [atomically . writeTQueue evts] noProbe
-          IO.runSync syncContext (Sync.syncBlocks fullRange)
+          IO.runSync syncContext (Sync.syncBlocks 0 (tip chain1))
 
         allEvts <- liftIO $ atomically (flushTQueue evts)
         allEvts === map SyncBlock allBlocksNoGenesis
@@ -287,9 +404,9 @@ prop_syncBlocks_sim_missing = property $ do
     let allBlocksNoGenesis =
             drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
 
-    let fullRange = fromJust $ range mockGenesis (tip chain1)
+    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks 0 (tip chain1))
 
-    let res = Mock.runMockSync worldState Mock.mockContext (Sync.syncBlocks fullRange)
+    annotate (condensedS chain1)
 
     -- The event might arrive in any order, so we need to sort in order to
     -- compare.
@@ -304,8 +421,6 @@ prop_syncBlocks_io_missing d@Dict = withTests 1 . property $ do
     let allBlocksNoGenesis =
             drop 1 $ Oscoin.Prelude.reverse (toNewestFirst $ blocks chain1)
 
-    let fullRange = fromJust $ range (nakamotoGenesis d) (tip chain1)
-
     let getActive = pure $ Set.fromList [peer1, peer2, peer3]
 
     withNodes d [testPeer1, (peer2, unsafeToBlockchain [nakamotoGenesis d]), (peer3, chain1)] $ do
@@ -313,7 +428,7 @@ prop_syncBlocks_io_missing d@Dict = withTests 1 . property $ do
 
         liftIO $ STM.withBlockStore chain1 Nakamoto.blockScore $ \(localChainReader,_) -> do
           syncContext <- IO.newSyncContext getActive localChainReader [atomically . writeTQueue evts] noProbe
-          IO.runSync syncContext (Sync.syncBlocks fullRange)
+          IO.runSync syncContext (Sync.syncBlocks 0 (tip chain1))
 
         allEvts <- liftIO $ atomically (flushTQueue evts)
 
@@ -368,6 +483,37 @@ prop_sync_io_mutual_consensus d@Dict = withTests 1 . property $ do
   Utility functions
 ------------------------------------------------------------------------------}
 
+-- | Chops the input 'Blockchain' and return half of it.
+halfChain :: Blockchain c tx s -> Blockchain c tx s
+halfChain chain = unsafeToBlockchain
+                . Oscoin.Prelude.reverse
+                . take (round $ fromIntegral @Int @Double (chainLength chain) / 2.0)
+                . toOldestFirst
+                . Chrono.reverse
+                . blocks
+                $ chain
+
+-- | Extends the input chain (at the tip) with a bunch of random blocks.
+extendChain
+    :: ( IsCrypto c
+       , Monad m
+       , Arbitrary tx
+       , Arbitrary s
+       , Serialise tx
+       , Serialise s
+       , Show tx
+       , Show s
+       )
+    => Blockchain c tx s
+    -> PropertyT m (Blockchain c tx s)
+extendChain common =
+        foldl' (flip (|>)) common -- fuse the chains together
+     .  drop 1  -- drop 'tip common'
+     .  toOldestFirst
+     .  Chrono.reverse
+     .  blocks
+    <$> forAll (quickcheck (genBlockchainFrom (tip common)))
+
 -- | When given a list of active peers and their initial chains, it spins up
 -- the revelant HTTP APIs, execute the input action and teardown all the
 -- nodes at the end.
@@ -414,6 +560,11 @@ spinUpNode Dict tokens (peer, peerChain) = (\a -> link a >> pure a) =<<
 
 mockState :: Mock.WorldState
 mockState = Mock.emptyWorldState mockGenesis
+
+mockStateFrom
+    :: Blockchain MockCrypto Mock.MockTx Mock.MockSeal
+    -> Mock.WorldState
+mockStateFrom = Mock.worldStateFrom
 
 defaultGenesis
     :: Serialise s

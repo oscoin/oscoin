@@ -78,7 +78,6 @@ library:
     - safe-exceptions
     - semigroups
     - serialise
-    - split
     - splitmix
     - sqlite-simple
     - stm >=2.4.5.0

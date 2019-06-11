@@ -26,12 +26,9 @@ data NodeSyncEvent c =
       -- the first argument being the node's local
       -- tip and the second the remote tip.
     | NodeSyncFinished (BlockHash c, Height)
-    | NodeSyncFetched Int
-      -- ^ The given number of blocks was fetched directly from the requested
-      -- peer.
-    | NodeSyncMissing Int
-      -- ^ The given number of blocks needed to be fetched from a different
-      -- peer.
+    | NodeSyncDispatched (BlockHash c)
+      -- ^ The given block has been successfully dispatched to upstream
+      -- consumers.
     | NodeSyncError SomeException
       -- ^ Temporary loose representation of errors.
 

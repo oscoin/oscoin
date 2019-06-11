@@ -4,6 +4,7 @@
 --
 
 {-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE NumericUnderscores   #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Oscoin.Protocol.Sync
     (
@@ -30,6 +31,7 @@ module Oscoin.Protocol.Sync
     , height
 
     -- * Syncing functions
+    , commonChainHeight
     , syncBlocks
     , sync
 
@@ -37,16 +39,18 @@ module Oscoin.Protocol.Sync
     , recordEvent
 
     -- * Testing internals
+    , RetryPolicy(..)
+    , commonChainHeightWith
     , syncUntil
     , withActivePeers
     , withActivePeer
     , getRemoteTip
     , getRemoteHeight
+    , linearBacktrackPolicy
     ) where
 
-import           Oscoin.Crypto.Hash (Hash)
+import           Oscoin.Crypto.Hash (HasHashing, Hash, compactHash)
 import           Oscoin.Prelude
-import           Prelude (last)
 
 import           Oscoin.Crypto.Blockchain.Block
                  ( Beneficiary
@@ -57,22 +61,23 @@ import           Oscoin.Crypto.Blockchain.Block
                  , blockHash
                  , blockHeader
                  , blockHeight
+                 , blockPrevHash
                  )
 import           Oscoin.P2P as P2P
 import           Oscoin.Protocol.Trace as Telemetry
-import           Oscoin.Storage.Block.Abstract (BlockStoreReader, getTip)
+import           Oscoin.Storage.Block.Abstract
+                 (BlockStoreReader, getTip, lookupBlockByHeight)
 import           Oscoin.Telemetry.Events (NotableEvent(NodeSyncEvent))
 import           Oscoin.Telemetry.Trace as Telemetry
 import           Oscoin.Time (Duration)
 
 import           Data.Conduit
 import qualified Data.Conduit.Combinators as C
+import           Data.Conduit.List (unfoldM)
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HS
-import           Data.List ((\\))
-import           Data.List.Split (chunksOf)
 import qualified Data.Map.Strict as M
-import qualified Data.Set as Set
+import           Data.Numbers.Fibonacci (fib)
 import           Formatting.Buildable (Buildable)
 import           GHC.Natural
 
@@ -133,6 +138,8 @@ data SyncError =
       -- ^ It was not possible to fetch a valid tip from our peers.
     | AllPeersSyncError [SyncError]
       -- ^ All the queried peers didn't respond in the allocated timeout.
+    | BlockNotFound ByteString
+      -- ^ The block with the given hash couldn't be downloaded.
     deriving (Show, Eq)
 
 instance Exception SyncError
@@ -155,6 +162,12 @@ data ProtocolRequest =
       GetTip
     -- ^ Get the tip of the remote chain, i.e. the tip of the chain the
     -- active peers are following.
+    | GetBlockAtHeight
+    -- ^ Get the block at a particular height.
+    | GetBlock
+    -- ^ Get the block identified by a given 'Hash'.
+    | GetBlockHashes
+    -- ^ Get some block hashes.
     | GetBlocks
     -- ^ Get some blocks.
     | GetBlockHeaders
@@ -164,23 +177,35 @@ data ProtocolRequest =
 -- | The singleton type for 'ProtocolRequest', capable of carrying some
 -- witness (in this case, 'ProtocolRequest').
 data SProtocolRequest r where
-  SGetTip :: SProtocolRequest 'GetTip
-  SGetBlocks :: SProtocolRequest 'GetBlocks
-  SGetBlockHeaders :: SProtocolRequest 'GetBlockHeaders
+  SGetTip           :: SProtocolRequest 'GetTip
+  SGetBlockAtHeight :: SProtocolRequest 'GetBlockAtHeight
+  SGetBlock         :: SProtocolRequest 'GetBlock
+  SGetBlockHashes   :: SProtocolRequest 'GetBlockHashes
+  SGetBlocks        :: SProtocolRequest 'GetBlocks
+  SGetBlockHeaders  :: SProtocolRequest 'GetBlockHeaders
 
 -- | A closed type family mapping each 'ProtocolRequest' to its list of
 -- arguments, so that we can use the 'ProtocolRequest' (where all constructors
 -- have kind /*/) as a constraint.
-type family ProtocolRequestArgs (r :: ProtocolRequest) :: * where
-    ProtocolRequestArgs 'GetTip          = ()
-    ProtocolRequestArgs 'GetBlocks       = Range
-    ProtocolRequestArgs 'GetBlockHeaders = Range
+type family ProtocolRequestArgs c (r :: ProtocolRequest) :: * where
+    ProtocolRequestArgs c 'GetTip           = ()
+    ProtocolRequestArgs c 'GetBlockAtHeight = Height
+    ProtocolRequestArgs c 'GetBlock         = Hash c
+    ProtocolRequestArgs c 'GetBlockHashes   = Range
+    ProtocolRequestArgs c 'GetBlocks        = Range
+    ProtocolRequestArgs c 'GetBlockHeaders  = Range
 
 -- | A protocol response, indexed by the corresponding 'ProtocolRequest, so
 -- that matching the wrong type will result in a type error.
 type family ProtocolResponse c (m :: * -> *) tx s (r :: ProtocolRequest) :: * where
     ProtocolResponse c m tx s 'GetTip =
         Block c tx (Sealed c s)
+    ProtocolResponse c m tx s 'GetBlockAtHeight =
+        Maybe (Block c tx (Sealed c s))
+    ProtocolResponse c m tx s 'GetBlock =
+        Block c tx (Sealed c s)
+    ProtocolResponse c m tx s 'GetBlockHashes =
+        ConduitT () (Hash c) m ()
     ProtocolResponse c m tx s 'GetBlocks =
         ConduitT () (Block c tx (Sealed c s)) m ()
     ProtocolResponse c m tx s 'GetBlockHeaders =
@@ -193,7 +218,7 @@ newtype DataFetcher c tx s m =
     DataFetcher {
       fetch :: forall r. ActivePeer c
             -> SProtocolRequest r
-            -> ProtocolRequestArgs r
+            -> ProtocolRequestArgs c r
             -> m (Either SyncError (ProtocolResponse c m tx s r))
                 }
 
@@ -204,6 +229,18 @@ data SyncContext c tx s m = SyncContext
     -- ^ Used to determine the block tolerance to consider
     -- ourselves synced. It correspond to /nu/ from the spec, and is used
     -- in the calculation of 'isDone'.
+    , scMaxHashesPerPeer  :: Int
+    -- ^ How many hashes we request each peer to download at any given time.
+    -- This limits the number of information we have to exchange. A good value
+    -- is usually between 50 and 500.
+    , scBackwardDownloadThreshold :: Int
+    -- ^ If the algorithm cannot reach full consensus on the next block to
+    -- download (cfr 'downloadHashes') it transitions into an active phase
+    -- where it tries to download blocks from the remote tip back to the
+    -- local tip. Doing so in an unbound manner is dangerous as it might
+    -- generate a lot of orphans, saturating the process' memory. This
+    -- parameter establishes a threshold above which the algorithm won't try
+    -- to download the blocks.
     , scActivePeers       :: m (ActivePeers c)
     -- ^ An effectful action that can be used to get the set of active peers
     -- for this node.
@@ -215,6 +252,8 @@ data SyncContext c tx s m = SyncContext
     -- ^ An action that can be used to fetch some resources in parallel.
     -- 'IO'-based implementations will probably use 'forConcurrently' or some
     -- variation of it.
+    , scDelay :: Int -> m ()
+    -- ^ Waits for the number of given microseconds.
     , scLocalChainReader  :: BlockStoreReader c tx s m
     -- ^ A read-only handle to the local blockchain.
     , scEventHandlers :: [SyncEvent c tx s -> m ()]
@@ -272,12 +311,6 @@ withActivePeer f = do
 
 height :: Block c tx s -> Height
 height = blockHeight . blockHeader
-
--- | The maximum number of blocks we can request to each of our peers in a
--- single request. It loosely correspond to the notion of "in flight blocks"
--- in Bitcoin's inventory exchange.
-maxBlocksPerPeer :: Int
-maxBlocksPerPeer = 50
 
 -- | Returns 'True' if the node finished syncing all the blocks.
 -- This is the 'isDone' state transition function from the spec.
@@ -354,109 +387,358 @@ getRemoteHeight
     => SyncT c tx s m Height
 getRemoteHeight = map height getRemoteTip
 
--- | Given a valid 'Range', syncs the blocks within that range.
+{------------------------------------------------------------------------------
+                            Agreeing on a common height
+
+The syncing process starts by calling 'commonChainHeight' to retrieve the
+height associated to the block which root hash matches across all peers,
+including the local node. To understand why this is important, let's take a
+look at this picture, which shows 3 nodes at different heights and on different
+chains:
+
+
+                    height
+                               +-----+
+              node1   0 -------|-----|----------------------- 100
+                               |     |
+                               |     |
+                               |     |
+                               |     |
+                               |     |     70
+              node2   0 -------|-----|------\
+                               |     |       \
+                               |     |        \
+                               |     |         --------- 80
+                               |     |
+                               |    -|-- 60
+                               |   / |
+              node3   0 -------|--/  |
+                               | 55  |
+                               +-----+
+
+By returning 55 (perhaps inclusive of the block and/or the hash associated
+with it) we are sure we are starting from a valid block.
+
+-}
+
+-- | Calculates the \"common chain height\" between this node and its active
+-- peers. In case consensus can't be reached, the function retries again with
+-- a fibonacci sequence, i.e. by requesting @local_tip - fib(n)@ up to a
+-- limit.
+-- Returns 0 (i.e. genesis' height) if no common height could be retrieved.
+commonChainHeight
+    :: forall c tx s m.
+       ( Monad m
+       , Ord (Hash c)
+       )
+    => Height
+    -> SyncT c tx s m Height
+commonChainHeight = commonChainHeightWith defaultRetryPolicy
+  where
+      defaultBacktrackPolicy :: BacktrackPolicy
+      defaultBacktrackPolicy = fib
+
+      -- By default, we retry 5 times in case the peers do not respond for
+      -- any reason. We use 20 for 'rpMaxBacktrack' as in production, with
+      -- a 'fib' policy, we would try to go back /at max/ fib(20) blocks
+      -- (~ 6000).
+      defaultRetryPolicy :: RetryPolicy
+      defaultRetryPolicy = RetryPolicy defaultBacktrackPolicy 0 20 0 5
+
+-- | A 'BacktrackPolicy' specifies how much we can jump backward when trying
+-- to calculate the 'commonChainHeight'. For tests it's quite convenient to
+-- use a 'linearBacktrackPolicy' as it allows for predictable tests, whereas
+-- for production use something like a Fibonacci sequence works better.
+type BacktrackPolicy = Int -> Int
+
+linearBacktrackPolicy :: BacktrackPolicy
+linearBacktrackPolicy = succ
+
+data RetryPolicy = RetryPolicy
+    { rpBacktrackPolicy :: BacktrackPolicy
+    , rpBacktracks      :: Int
+    -- ^ How much we have backtracked so far.
+    , rpMaxBacktrack    :: Int
+    -- ^ A threshold to limit the number of attempts when backtracking.
+    , rpCurrentRetries  :: Int
+    -- ^ How many times we have retried already.
+    , rpMaxRetries      :: Int
+    -- ^ How many retries we are allowed, at maximum.
+    }
+
+data SyncHeightResult =
+      NobodyHasBlock
+      -- ^ Nobody had the block
+    | BlockNotFoundLocally
+      -- ^ The local node doesn't have the block we downloaded from its peers.
+    | BlockIsNotTheSameForAll
+      -- ^ The block is not the same for all peers.
+    | SyncHeightFailed
+
+-- | Allows the 'commonChainHeight' algorithm to be passed a 'RetryPolicy'
+-- which determines how far we need to backtrack when calculating the new
+-- 'Height'.
+commonChainHeightWith
+    :: forall c tx s m.
+       ( Monad m
+       , Ord (Hash c)
+       )
+    => RetryPolicy
+    -> Height
+    -> SyncT c tx s m Height
+commonChainHeightWith currentPolicy localHeight =
+    if done
+       then pure 0 -- returns genesis' height.
+       else do
+            res <- go currentPolicy
+            case res of
+              Left newPolicy     -> commonChainHeightWith newPolicy localHeight
+              Right commonHeight -> pure commonHeight
+  where
+
+    -- We stop trying if the height is <= 0 or if we exceeded the backtrack
+    -- limit.
+    done :: Bool
+    done = localHeight <= 0 ||
+           rpBacktracks currentPolicy > rpMaxBacktrack currentPolicy
+
+    go :: RetryPolicy -> SyncT c tx s m (Either RetryPolicy Height)
+    go policy@RetryPolicy{..} = do
+        ctx <- ask
+        -- The current height to try is calculated from the initial, starting
+        -- height (which never changes) minus the factor computed by the
+        -- 'rpBacktrackPolicy'.
+        let currentHeight =
+                localHeight - fromIntegral (rpBacktrackPolicy rpBacktracks)
+        -- Standard case: we received a response from our peers, so we simply
+        -- increment the number of backtracks.
+        let policy' = policy { rpBacktracks = rpBacktracks + 1 }
+
+        res <- trySyncHeight currentHeight
+        case res of
+            Right ()                     -> pure $ Right currentHeight
+            Left NobodyHasBlock          -> pure $ Left policy'
+            Left BlockNotFoundLocally    -> pure $ Left policy'
+            Left BlockIsNotTheSameForAll -> pure $ Left policy'
+            -- Either we have some timeouts or the number of blocks received is
+            -- insufficient. In this case we have to try again without
+            -- increasing 'rpBacktracks'.
+            Left SyncHeightFailed | rpCurrentRetries == rpMaxRetries ->
+                -- In this case we want to try again but increasing the
+                -- backtrack window but resetting the 'rpCurrentRetries'.
+                pure $ Left $ policy' { rpCurrentRetries = 0 }
+            Left SyncHeightFailed -> do
+                -- In this case we do not want to modify the 'rpBacktracks',
+                -- but simply try again, hoping the peers will reply to us
+                -- eventually.
+                lift $ scDelay ctx 1_000_000 -- wait 1 second
+                pure . Left $ policy { rpCurrentRetries = rpCurrentRetries + 1 }
+
+    -- Tries to fetch the block corresponding to the given 'Height' and
+    -- it succeeds if the latter correspond to a block which is the same
+    -- across all peers.
+    trySyncHeight :: Height -> SyncT c tx s m (Either SyncHeightResult ())
+    trySyncHeight requestedHeight = withActivePeers $ \ active -> do
+        ctx <- ask
+        results  <- lift $
+            scConcurrently ctx (HS.toList active) (\a ->
+                fetch (fetcher ctx) a SGetBlockAtHeight requestedHeight)
+        case second catMaybes (partitionEithers results) of
+          (_, []) -> pure $ Left NobodyHasBlock
+          ([], blocks@(x:_)) | length blocks == HS.size active -> do
+              mbBlock <- lift $ lookupBlockByHeight (localChain ctx) requestedHeight
+              case mbBlock of
+                Nothing -> pure $ Left BlockNotFoundLocally
+                Just myBlock ->
+                    if blockHash myBlock == blockHash x && allMatches (map blockHash blocks)
+                       then pure $ Right ()
+                       else pure $ Left BlockIsNotTheSameForAll
+          _ -> pure $ Left SyncHeightFailed
+
+
+    fetcher :: SyncContext c tx s m -> DataFetcher c tx s m
+    fetcher = scDataFetcher
+
+    localChain :: SyncContext c tx s m -> BlockStoreReader c tx s m
+    localChain = scLocalChainReader
+
+-- | Returns 'True' if all the elements of the list are the same.
+-- In order to assess they all matches, we zip the original list with its
+-- /reverse/, and check each pair.
+allMatches :: Eq a => [a] -> Bool
+allMatches [] = False
+allMatches l =
+    foldl' (\acc -> (&&) acc . uncurry (==)) True (zip l (reverse l))
+
+{------------------------------------------------------------------------------
+                            Syncing blocks
+------------------------------------------------------------------------------}
+
+-- | Given a starting height and a remote tip, syncs the blocks within that
+-- range.
 syncBlocks
     :: forall c tx s m.
        ( Monad m
-       , Ord tx
-       , Ord s
        , Ord (Hash c)
-       , Ord (Beneficiary c)
        , Buildable (Hash c)
+       , HasHashing c
        )
-    => Range
+    => Height
+    -- ^ The height the local node is starting from
+    -> RemoteTip c tx s
+    -- ^ The remote tip.
     -> SyncT c tx s m ()
-syncBlocks rng = do
+syncBlocks startingHeight remoteTip = do
     ctx <- ask
-    let fetcher = scDataFetcher ctx
-    withActivePeers $ \ activePeers ->
 
-        lift $ runConduit $
-               C.yieldMany (workDistribution activePeers)
-            .| C.mapM (fetchBlocks fetcher >=> notifyUpstreamConsumers ctx)
-            .| C.concat
-            .| C.iterM (fetchMissing fetcher activePeers ctx)
-            .| C.sinkNull
+    lastCommonBlock <- runConduit $
+             C.yieldMany (hashRanges ctx)
+          .| downloadHashes
+          .| checkHashes
+          .| downloadBlock
+          .| notifyUpstreamConsumers
+          .| C.foldl (\_acc b -> Just b) Nothing
+
+    -- Stage2: If we didn't reach the target height, we download all the
+    -- remaining blocks from remoteTip down to the last block we fetched.
+    -- N.B. If we are too far away from the remote tip, it's pointless
+    -- downloading these blocks, as they won't be applied anyway, they will
+    -- simply be put in the orphanage without a good one.
+    when (sufficientlyCloseToTip ctx lastCommonBlock) $
+
+      -- The target height in the 'takeWhile' is just the @startingHeight@,
+      -- because 'sufficientlyCloseToTip' enforces that this is < than
+      -- 'scBackwardDownloadThreshold'.
+
+      runConduit $
+             unfoldM downloadBlocks (blockHash remoteTip)
+          .| C.takeWhile (\b -> height b > startingHeight)
+          .| notifyUpstreamConsumers
+          .| C.sinkNull
 
   where
 
-    -- How many blocks a peer can have in-transit at any given time, to
-    -- avoid network congestion.
-    blocksPerPeer :: ActivePeers c -> Int
-    blocksPerPeer peers =
-        min maxBlocksPerPeer
-            (ceiling @Double @Int (fromIntegral (rangeEnd rng - rangeStart rng) / fromIntegral (length peers)))
+    remoteHeight :: Height
+    remoteHeight = height remoteTip
 
-    -- Distribute work across peers, which is equally split, where
-    -- each peer can be given /at most/ 'maxBlocksPerPeer' at the time,
-    -- in order to limit the amount of blocks in transit each time.
-    workDistribution :: ActivePeers c -> [(ActivePeer c, [Height])]
-    workDistribution peers =
-        zip (cycle (HS.toList peers))
-            (chunksOf (blocksPerPeer peers) [rangeStart rng .. rangeEnd rng])
+    -- The gap between the remote and the starting tip.
+    heightGap :: Height
+    heightGap = remoteHeight - startingHeight
 
-    -- Fetch some blocks from an active peer, and returns any fetched block
-    -- plus any missing block, identified by the height.
-    fetchBlocks
-        :: DataFetcher c tx s m
-        -> (ActivePeer c, [Height])
-        -> m (Set (Block c tx (Sealed c s)), [Height])
-    fetchBlocks fetcher (activePeer, !heightRange) =
-      case Range <$> head heightRange <*> pure (last heightRange) of
-          Nothing -> pure (mempty, mempty)
-          Just subRange -> do
-              res <- fetch fetcher activePeer SGetBlocks subRange
-              case res of
-                Left _timeout ->
-                    pure (mempty, heightRange) -- TODO(adn) Telemetry?
-                Right blks    ->
-                    runConduit $ blks
-                              .| C.foldl (\(requested, missing) blk ->
-                                  ( Set.insert blk requested
-                                  , missing \\ [height blk])
-                                  ) (mempty, heightRange)
+    -- Returns 'True' if we are \"sufficiently\" close to tip and we can
+    -- try download blocks newest-to-oldest.
+    sufficientlyCloseToTip
+        :: SyncContext c tx s m
+        -> Maybe (Block c tx (Sealed c s))
+        -> Bool
+    sufficientlyCloseToTip ctx commonBlock =
+         (map blockHash commonBlock /= Just (blockHash remoteTip))
+      && (heightGap <= fromIntegral (scBackwardDownloadThreshold ctx))
+
+
+    -- Returns a list of ranges we can use to iterate through the ranges of
+    -- the hashes we need to fetch, in steps of 'scMaxHashesPerPeer' at the time.
+    -- If we have a @startingHeight@ of 50 and a remoteTip's height of 2000,
+    -- we would get:
+    -- >> hashRanges
+    -- [Range 51 550, Range 551 1050, Range 1051 1550, Range 1551 2000]
+    hashRanges :: SyncContext c tx s m -> [Range]
+    hashRanges (fromIntegral . scMaxHashesPerPeer -> step) =
+        let start = startingHeight
+            end   = remoteHeight
+            ana b = if b <= end then Just (Range (b + 1) (min (b + step) end), b + step)
+                                else Nothing
+        in unfoldr ana start
+
+    -- Downloads some hashes and zip them together before propagating them
+    -- downstream. This ensures that:
+    -- 1. The conduit drains as soon as one of the returned lists is shorter
+    --    than the rest (short-circuiting);
+    -- 2. We are guaranteed that if a 'Hash' is propagated, it's shared
+    --    between all the peers.
+    downloadHashes
+        :: ConduitT Range (Int, [Hash c]) (SyncT c tx s m) ()
+    downloadHashes = awaitForever $ \rng -> do
+        (peersNum, results) <- lift . withActivePeers $ \peers -> do
+            forConcurrently <- asks scConcurrently
+            dataFetcher     <- asks scDataFetcher
+            (HS.size peers,) <$>
+                lift (forConcurrently (HS.toList peers) (\a -> fetch dataFetcher a SGetBlockHashes rng))
+        case partitionEithers results of
+          -- Nobody has these hashes, we have to stop.
+          (_, [])         -> pure ()
+
+          -- Somebody has the hashes, but that's not enough.
+          (_:_, _)        -> pure ()
+
+          -- No errors, we can proceed
+          ([], allHashes) ->
+                mapOutput (peersNum,)
+              . transPipe (SyncT . lift . lift)
+              . mapInput (const ()) (const (Just rng))
+              $ sequenceSources allHashes
+
+    -- Check that all the hashes matches and that their number is equal to
+    -- the number of active peers we fetched this information from.
+    checkHashes
+        :: ConduitT (Int, [Hash c]) (Hash c) (SyncT c tx s m) ()
+    checkHashes = awaitForever $ \case
+        (_, []) -> pure ()
+        (expectedResponses, hashes@(x:_)) ->
+            when (length hashes == expectedResponses && allMatches hashes) $
+                yield x
+
+    -- Downloads a block and yields it downstream.
+    downloadBlock
+        :: ConduitT (Hash c) (Block c tx (Sealed c s)) (SyncT c tx s m)( )
+    downloadBlock = awaitForever $ \blockHash ->
+        lift (downloadFromAny blockHash) >>= yield
+
+    -- Download a 'Block' from /any/ peer, i.e. in FIFO fashion.
+    downloadFromAny
+        :: Hash c
+        -> SyncT c tx s m (Block c tx (Sealed c s))
+    downloadFromAny blockHash = withActivePeers $ \peers -> do
+         fetcher <- asks scDataFetcher
+         mbBlock <- foldM (\mbBlock peer ->
+                      case mbBlock of
+                        Just b  -> pure (Just b)
+                        Nothing -> do
+                            res <- lift $ fetch fetcher peer SGetBlock blockHash
+                            case res of
+                              Left _err -> pure Nothing -- TODO(adn) telemetry
+                              Right b   -> pure $ Just b
+                          ) Nothing (HS.toList peers)
+         case mbBlock of
+           Nothing ->
+              throwError $ BlockNotFound (compactHash blockHash)
+           Just b  -> pure b
+
+    -- Download a single block from one of the available peers. The shape of
+    -- this function is 'unfold' friendly, where the first element of the tuple
+    -- is the downloaded block and the second its parent, i.e. the next
+    -- element to download.
+    downloadBlocks
+        :: Hash c
+        -> SyncT c tx s m (Maybe (Block c tx (Sealed c s), Hash c))
+    downloadBlocks blockHash = do
+         block <- downloadFromAny blockHash
+         pure $ Just (block, blockPrevHash . blockHeader $ block)
+
 
     -- Notifies the upstream consumers about the downloaded blocks, and
     -- forward the missing blocks downstream.
     notifyUpstreamConsumers
-        :: SyncContext c tx s m
-        -> (Set (Block c tx (Sealed c s)), [Height])
-        -> m [Height]
-    notifyUpstreamConsumers ctx (requested, missing) = do
-        forM_ requested $ \b ->
+        :: ConduitT (Block c tx (Sealed c s)) (Block c tx (Sealed c s)) (SyncT c tx s m) ()
+    notifyUpstreamConsumers = awaitForever $ \incomingBlock -> do
+        ctx <- lift ask
+        lift $ do
             forM_ (scEventHandlers ctx) $ \dispatch ->
-                dispatch (SyncBlock b)
-        recordEvent' @c (scEventTracer ctx) $
-            Telemetry.NodeSyncFetched (length requested)
-        recordEvent' @c (scEventTracer ctx) $
-            Telemetry.NodeSyncMissing (length missing)
-        pure missing
+                lift $ dispatch (SyncBlock incomingBlock)
+            recordEvent $
+                Telemetry.NodeSyncDispatched (blockHash incomingBlock)
+        yield incomingBlock -- propagate the block down.
 
-    -- Tries to fetch a missing block (as identified by its 'Height') from
-    -- any of the active peers.
-    fetchMissing
-        :: DataFetcher c tx s m
-        -> ActivePeers c
-        -> SyncContext c tx s m
-        -> Height
-        -> m ()
-    fetchMissing fetcher peers ctx missing = do
-       -- Tries to download each individual block from each and every
-       -- peer. We don't fail in case the block cannot be downloaded,
-       -- as we hope that eventually the peers will be able to catch up.
-       mbBlock <- foldM (\mbBlock peer ->
-                    case mbBlock of
-                      Just b  -> pure (Just b)
-                      Nothing -> do
-                          res <- fetch fetcher peer SGetBlocks (Range missing missing)
-                          case res of
-                            Left _err -> pure Nothing
-                            Right c   -> runConduit (c .| C.head)
-                        ) Nothing (HS.toList peers)
-       case mbBlock of
-         Nothing -> pure () -- TODO(adn) telemetry?
-         Just b -> forM_ (scEventHandlers ctx) $ \dispatch ->
-                       dispatch (SyncBlock b)
 
 -- | Calls 'isDone' internally, and try syncing blocks if it returns 'False'.
 -- Returns the up-to-date local tip together with the remote tip fetched at
@@ -466,19 +748,20 @@ syncUntil
        ( Monad m
        , Ord tx
        , Ord s
-       , Ord (Hash c)
        , Ord (Beneficiary c)
        , Buildable (Hash c)
+       , HasHashing c
        )
     => (SyncContext c tx s m -> LocalTip c tx s -> RemoteTip c tx s -> Bool)
     -- ^ A predicate on the local & remote tips.
     -> SyncT c tx s m (LocalTip c tx s, RemoteTip c tx s)
 syncUntil finished = do
     ctx <- ask
-    remoteTip <- getRemoteTip
-    localTip  <- lift (getTip (scLocalChainReader ctx))
+    remoteTip    <- getRemoteTip
+    localTip     <- lift (getTip (scLocalChainReader ctx))
+    startHeight  <- commonChainHeight (height localTip)
     unlessDone ctx localTip remoteTip $
-        for_ (range localTip remoteTip) syncBlocks
+        syncBlocks startHeight remoteTip
 
   where
     unlessDone
@@ -509,9 +792,9 @@ sync
     :: ( Monad m
        , Ord tx
        , Ord s
-       , Ord (Hash c)
        , Ord (Beneficiary c)
        , Buildable (Hash c)
+       , HasHashing c
        )
     => SyncT c tx s m ()
 sync = void $ syncUntil (\ctx lcl rmt -> isDone (scNu ctx) lcl rmt)

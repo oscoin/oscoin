@@ -10,7 +10,13 @@ module Oscoin.Protocol.Sync.RealWorld (
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block
-                 (Beneficiary, Block, BlockHash, Sealed, blockHeader)
+                 ( Beneficiary
+                 , Block
+                 , BlockHash
+                 , Sealed
+                 , blockHash
+                 , blockHeader
+                 )
 import           Oscoin.Crypto.Hash (HasHashing, Hash)
 import           Oscoin.P2P (Addr(..), nodeHttpApiAddr, renderHost)
 import           Oscoin.Protocol.Sync
@@ -31,6 +37,7 @@ import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Conduit as C
 import qualified Oscoin.API.Types as API
 import qualified UnliftIO.Async as Async
+import           Web.HttpApiData (toUrlPiece)
 
 {------------------------------------------------------------------------------
   Scary IO implementation
@@ -46,18 +53,23 @@ mkRequest
     :: ProtocolRequest
     -> [(ByteString, Maybe ByteString)]
     -- ^ The query string, if any.
+    -> ByteString
+    -- ^ Any extra parametr to append to the url
     -> ActivePeer c
     -> HTTP.Request
-mkRequest protoReq queryString peer =
+mkRequest protoReq queryString extraUrlPiece peer =
     let peerAddr   = nodeHttpApiAddr peer
         prettyHost = renderHost (addrHost peerAddr)
         url = case protoReq of
-                GetTip          -> "/blockchain/tip"
-                GetBlocks       -> "/blocks/by-height"
-                GetBlockHeaders -> "/blocks/by-height"
+                GetTip           -> "/blockchain/tip"
+                GetBlockAtHeight -> "/blocks/by-height"
+                GetBlock         -> "/blocks"
+                GetBlockHashes   -> "/blocks/by-height" -- fixme, very inefficient.
+                GetBlocks        -> "/blocks/by-height"
+                GetBlockHeaders  -> "/blocks/by-height"
     in HTTP.defaultRequest { HTTP.host = toS prettyHost
                            , HTTP.secure = False -- FIXME(adn) Support for https if needed.
-                           , HTTP.path = url
+                           , HTTP.path = url <> extraUrlPiece
                            , HTTP.port = fromIntegral (addrPort peerAddr)
                            , HTTP.checkResponse = HTTP.throwErrorStatusCodes
                            }
@@ -69,6 +81,7 @@ newDataFetcher
     , Serialise s
     , Serialise (Hash c)
     , Serialise (Beneficiary c)
+    , Buildable (Hash c)
     , HasHashing c
     )
     => HTTP.Manager
@@ -85,7 +98,7 @@ newDataFetcher httpManager = DataFetcher $ \peer args ->
                 -- Expected type: IO (ProtocolResponse r)
                 -- Actual type: IO (ProtocolResponse 'GetBlockHeaders)
 
-                response <- C.http (mkRequest GetTip mempty peer) httpManager
+                response <- C.http (mkRequest GetTip mempty mempty peer) httpManager
                 mbBlock  <- runConduit $ HTTP.responseBody response
                          .| conduitDecodeCBOR
                          .| await
@@ -97,13 +110,65 @@ newDataFetcher httpManager = DataFetcher $ \peer args ->
                       throwM $ RequestNetworkError GetTip peerAddr "no result received from peer."
             pure $ join r
 
+        SGetBlockAtHeight -> \blockHeight -> do
+            let Range{..} = Range blockHeight blockHeight
+            r <- timed' GetBlockAtHeight peerAddr $ catchNetworkError GetBlockAtHeight peerAddr $ do
+                let params = [ ("start", Just (C8.pack . show $ rangeStart))
+                             , ("end"  , Just (C8.pack . show $ rangeEnd))
+                             ]
+                response <- C.http (mkRequest GetBlocks params mempty peer) httpManager
+                mbBlock  <- runConduit $ HTTP.responseBody response
+                         .| conduitDecodeCBOR
+                         .| await
+                case mbBlock of
+                  Nothing ->
+                      throwM $ RequestNetworkError GetBlockAtHeight peerAddr "no result received from peer."
+                  Just (API.Err e) ->
+                      throwM $ RequestNetworkError GetBlockAtHeight peerAddr (toS e)
+                  Just (API.Ok [b]) -> pure $ Just (b :: Block c tx (Sealed c s))
+                  Just _ -> pure Nothing
+            pure $ join r
+
+        SGetBlock -> \bHash -> do
+            r <- timed' GetBlock peerAddr $ catchNetworkError GetBlock peerAddr $ do
+                let urlPiece = toS ("/" <> toUrlPiece bHash)
+                response <- C.http (mkRequest GetBlock mempty urlPiece peer) httpManager
+                mbBlock  <- runConduit $ HTTP.responseBody response
+                         .| conduitDecodeCBOR
+                         .| await
+                case mbBlock of
+                  Nothing ->
+                      throwM $ RequestNetworkError GetBlock peerAddr "no result received from peer."
+                  Just (API.Err e) ->
+                      throwM $ RequestNetworkError GetBlock peerAddr (toS e)
+                  Just (API.Ok b) -> pure (b :: Block c tx (Sealed c s))
+            pure $ join r
+
+        -- FIXME(adn) We need a proper HTTP endpoint, this is very wasteful.
+        SGetBlockHashes -> \Range{..} -> do
+            r <- timed' GetBlockHashes peerAddr $ catchNetworkError GetBlockHashes peerAddr $ do
+                let params = [ ("start", Just (C8.pack . show $ rangeStart))
+                             , ("end"  , Just (C8.pack . show $ rangeEnd))
+                             ]
+                response <- C.http (mkRequest GetBlockHashes params mempty peer) httpManager
+                pure (  HTTP.responseBody response
+                     .| mapOutput (\r ->
+                         case r of
+                             API.Ok (o :: [Block c tx (Sealed c s)])  ->
+                                 map blockHash o
+                             API.Err e ->
+                                 throwM $ RequestNetworkError GetBlocks peerAddr (toS e)
+                                  ) conduitDecodeCBOR
+                     .| C.concat)
+            pure $ join r
+
         -- This implementation is basically 'fetchBlocks' from the spec.
         SGetBlocks -> \Range{..} -> do
             r <- timed' GetBlocks peerAddr $ catchNetworkError GetBlocks peerAddr $ do
                 let params = [ ("start", Just (C8.pack . show $ rangeStart))
                              , ("end"  , Just (C8.pack . show $ rangeEnd))
                              ]
-                response <- C.http (mkRequest GetBlocks params peer) httpManager
+                response <- C.http (mkRequest GetBlocks params mempty peer) httpManager
                 pure (  HTTP.responseBody response
                      .| mapOutput (\r ->
                          case r of
@@ -124,7 +189,7 @@ newDataFetcher httpManager = DataFetcher $ \peer args ->
                 let params = [ ("start", Just (C8.pack . show $ rangeStart))
                              , ("end"  , Just (C8.pack . show $ rangeEnd))
                              ]
-                response <- C.http (mkRequest GetBlockHeaders params peer) httpManager
+                response <- C.http (mkRequest GetBlockHeaders params mempty peer) httpManager
                 pure (  HTTP.responseBody response
                      .| mapOutput (\r ->
                          case r of
@@ -191,6 +256,7 @@ newSyncContext
        , Serialise (BlockHash c)
        , Serialise (Beneficiary c)
        , HasHashing c
+       , Buildable (Hash c)
        )
     => IO (ActivePeers c)
     -- ^ An action to fetch the currently active peers for this node.
@@ -203,13 +269,16 @@ newSyncContext
 newSyncContext getActive chainReader upstreamConsumers probe = do
     mgr <- liftIO (HTTP.newManager HTTP.defaultManagerSettings)
     pure $ SyncContext
-        { scNu                = 2
-        , scActivePeers       = liftIO getActive
-        , scDataFetcher       = newDataFetcher mgr
-        , scEventTracer       = liftIO . newEventTracer probe
-        , scConcurrently      = Async.forConcurrently
-        , scLocalChainReader  = BlockStore.hoistBlockStoreReader liftIO chainReader
-        , scEventHandlers = map (\f -> liftIO . f) upstreamConsumers
+        { scNu                        = 2
+        , scMaxHashesPerPeer          = 500
+        , scBackwardDownloadThreshold = 2016
+        , scActivePeers               = liftIO getActive
+        , scDataFetcher               = newDataFetcher mgr
+        , scEventTracer               = liftIO . newEventTracer probe
+        , scConcurrently              = Async.forConcurrently
+        , scDelay                     = liftIO . threadDelay
+        , scLocalChainReader          = BlockStore.hoistBlockStoreReader liftIO chainReader
+        , scEventHandlers             = map (\f -> liftIO . f) upstreamConsumers
         }
 
 {------------------------------------------------------------------------------
@@ -238,9 +307,9 @@ syncNode
        ( MonadIO m
        , Ord tx
        , Ord s
-       , Ord (Hash c)
        , Ord (Beneficiary c)
        , Buildable (Hash c)
+       , HasHashing c
        )
     => (Either SyncError (LocalTip c tx s, RemoteTip c tx s) -> m ())
     -- ^ A callback which will fire once the sync has been performed the

@@ -6,8 +6,8 @@ import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain, tip)
 import           Oscoin.Crypto.Blockchain.Block
-                 (Block, Score, Sealed, blockHeader, blockHeight)
-import           Oscoin.Crypto.Hash (Hash)
+                 (Block, Score, Sealed, blockHash, blockHeader, blockHeight)
+import           Oscoin.Crypto.Hash (Hash, compactHash)
 import qualified Oscoin.Crypto.Hash as Crypto
 import qualified Oscoin.Crypto.PubKey as Crypto
 import           Oscoin.Protocol.Sync
@@ -72,6 +72,17 @@ emptyWorldState
 emptyWorldState genesisBlock =
     WorldState mempty (BlockStore.Pure.genesisBlockStore genesisBlock mockScore)
 
+worldStateFrom
+    :: ( Eq (Crypto.PublicKey MockCrypto)
+       , Ord (Hash MockCrypto)
+       , Hashable (Crypto.PublicKey MockCrypto)
+       )
+    => Blockchain MockCrypto MockTx MockSeal
+    -- ^ The initial chain, local to the node under test.
+    -> WorldState
+worldStateFrom initialChain =
+    WorldState mempty (BlockStore.Pure.initWithChain initialChain mockScore)
+
 toMockPeers :: WorldState -> HashSet MockPeer
 toMockPeers (WorldState m _) = Set.fromMap (() <$ m)
 
@@ -84,13 +95,16 @@ mockContext
     => SyncContext MockCrypto MockTx MockSeal Sim
 mockContext =
     SyncContext
-        { scNu                = 0  -- can be adjusted later.
-        , scActivePeers       = gets toMockPeers
-        , scDataFetcher       = mkDataFetcherSim
-        , scEventTracer       = probed noProbe
-        , scConcurrently      = forM
-        , scLocalChainReader  = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
-        , scEventHandlers = [ \se -> tell [se] ]
+        { scNu                        = 0  -- can be adjusted later.
+        , scMaxHashesPerPeer          = 50
+        , scBackwardDownloadThreshold = 2016
+        , scActivePeers               = gets toMockPeers
+        , scDataFetcher               = mkDataFetcherSim
+        , scEventTracer               = probed noProbe
+        , scConcurrently              = forM
+        , scDelay                     = const (pure ())
+        , scLocalChainReader          = fst (BlockStore.Pure.mkStateBlockStore chainReaderL)
+        , scEventHandlers             = [ \se -> tell [se] ]
         }
 
 -- | Creates a new simulation 'DataFetcher'.
@@ -106,6 +120,20 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
         case HM.lookup peer _mockPeerState of
             Nothing -> panic "newDataFetcherSim - precondition violation, empty blockchain."
             Just bc -> pure . Right $ tip bc
+
+    SGetBlockAtHeight -> \h -> do
+        let rng = Range h h
+        Right . head <$> lookupBlocks rng peer
+
+    SGetBlock -> \h -> do
+        mbBlock <- lookupBlock h peer
+        case mbBlock of
+          Nothing -> pure $ Left (BlockNotFound $ compactHash h)
+          Just b  -> pure $ Right b
+
+    SGetBlockHashes -> \rng -> do
+        blocks <- lookupBlocks rng peer
+        pure $ Right (yieldMany (map blockHash blocks))
 
     SGetBlocks -> \rng -> do
         blocks <- lookupBlocks rng peer
@@ -129,6 +157,21 @@ mkDataFetcherSim = DataFetcher $ \peer -> \case
               let peerChain = BlockStore.Pure.initWithChain c mockScore
               let store = fst (BlockStore.Pure.mkStateBlockStore (chainL peerChain))
               Chrono.toOldestFirst <$> BlockStore.lookupBlocksByHeight store (rangeStart, rangeEnd)
+
+      lookupBlock
+          :: Hash MockCrypto
+          -> MockPeer
+          -> Sim (Maybe (Block MockCrypto MockTx (Sealed MockCrypto MockSeal)))
+      lookupBlock h peer = do
+          WorldState{..} <- get
+          case HM.lookup peer _mockPeerState of
+            Nothing -> pure Nothing
+            Just c  -> do
+              -- The peers are read-only and don't do chain selection, so
+              -- the score function is irrelevant here.
+              let peerChain = BlockStore.Pure.initWithChain c mockScore
+              let store = fst (BlockStore.Pure.mkStateBlockStore (chainL peerChain))
+              BlockStore.lookupBlock store h
 
       chainL
           :: BlockStore.Pure.Handle MockCrypto MockTx MockSeal
