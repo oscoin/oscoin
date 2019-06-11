@@ -28,7 +28,7 @@ import qualified Test.QuickCheck as QC
                          _          -> "(unknown)"
         in unlines [
                  "api call at " <> calledAt <> " yielded a result mismatch!\n"
-               , "expected = " <> T.unpack (condensed expected) <> "\n"
-               , "actual   = " <> T.unpack (condensed actual)   <> "\n"
+               , "expected (rhs) = " <> T.unpack (condensed expected) <> "\n"
+               , "actual   (lhs) = " <> T.unpack (condensed actual)   <> "\n"
                , "Counterexample is:"
                ]

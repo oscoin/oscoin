@@ -86,8 +86,9 @@ genBlockchain = do
 
 data ForkParams = ForkParams
     { forkBranchingFactor :: Natural
-    -- ^ Currently not used, but it can determine the /branching factor/
-    -- for the fork, i.e. if this fork can generate other forks.
+    -- ^ Determines the /branching factor/
+    -- for the fork, i.e. if this fork can generate other forks, and, if
+    -- yes, how many.
     , forkMaxLength       :: Natural
     -- ^ The maximum size for the generated fork.
     , forkNumber          :: Natural
@@ -189,6 +190,12 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
                                      , fromIntegral forkMaxLength
                                      )
                   fork <- resize forkSize (genBlockchainFrom x)
+
+                  -- Generate any nested forks branching from this one.
+                  nestedForksNum <- choose (0, toInteger forkBranchingFactor)
+                  nestedForks <-
+                      genOrphanChainsFrom (ForkParams 0 forkMaxLength (fromIntegral nestedForksNum)) fork
+
                   let (blks, orphanChain) = map (unsafeToBlockchain . reverse)
                                           . splitAt 1
                                           . drop 1 -- drop the tip, which is 'x'.
@@ -196,10 +203,9 @@ genOrphanChainsFrom forkParams@ForkParams{..} inputChain = do
                                           . Chrono.reverse
                                           . blocks
                                           $ fork
-                  -- NOTE(adn) Ignoring for now more complicated scenarios
-                  -- where we could have a fork of a fork.
                   case blks of
-                    [missingBlock] -> go xs ((orphanChain, missingBlock) : acc)
+                    [missingBlock] ->
+                        go xs ((orphanChain, missingBlock) : acc <> nestedForks)
                     _ -> go xs acc
 
 

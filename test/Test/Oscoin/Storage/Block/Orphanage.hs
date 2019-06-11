@@ -5,7 +5,7 @@ module Test.Oscoin.Storage.Block.Orphanage
     ) where
 
 import           Oscoin.Prelude hiding (reverse)
-import qualified Prelude (head, last, reverse)
+import qualified Prelude (head, reverse)
 
 
 import           Oscoin.Consensus.Nakamoto (blockScore)
@@ -22,6 +22,7 @@ import           Oscoin.Test.Util (Condensed(..), condensedS)
 import           Data.ByteArray.Orphans ()
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -170,10 +171,12 @@ propFuseChains Dict = property $ do
         let totalSize orph =
                 sizeAt rootHash orph + sizeAt (blockHash $ singleBlock) orph
 
-        conjoin [ totalSize o'' === 2 -- Before fusing things, there are 2 chains.
-                , best          === Just fusedChain
-                , totalSize finalOrphanage === 1 -- After, only 1.
-                ]
+        classifyChainsByLength [unsafeToBlockchain fusedChain] $
+            conjoin [ totalSize o'' === 2 -- Before fusing things, there are 2 chains.
+                    , best          === Just fusedChain
+                    , totalSize finalOrphanage === 1 -- After, only 1.
+                    , Map.size (tips finalOrphanage) === 1
+                    ]
 
 -- | Tests that 'pruneOrphanageShallow' works as advertised.
 propPruneChainsShallow :: forall c. Dict (IsCrypto c) -> Property
@@ -211,6 +214,7 @@ propPruneChainsShallow Dict = property $ do
                                                        === Just (blocks' chain1)
                 , map (sizeAt rootHash) finalOrphanage === Just 1
                 , secondBestCandidate                  === Just (blocks' chain2)
+                , map (map fst . Map.toList . tips) finalOrphanage === Just [blockHash (tip chain2)]
                 ]
 
 showChains
@@ -262,9 +266,10 @@ propPruneChainsDeep Dict = property $ do
 
         -- Test that there should be no trace of candidates once we pruned
         -- chain1 deeply.
-        conjoin [ map (sizeAt rootHash) finalOrphanage        === Just 1
-                , map (sizeAt chain1TipParent) finalOrphanage === Just 0
-                , secondBestCandidate                         === Just (blocks' chain2)
+        conjoin [ map (sizeAt rootHash) finalOrphanage             === Just 1
+                , map (sizeAt chain1TipParent) finalOrphanage      === Just 0
+                , map (map fst . Map.toList . tips) finalOrphanage === Just [blockHash (tip chain2)]
+                , secondBestCandidate                              === Just (blocks' chain2)
                 ]
 
 {------------------------------------------------------------------------------
@@ -315,6 +320,22 @@ classifyChainsByScore chains = tabulate "Chain Score" scores
                        x | x <= 50000 -> "5000-50000 score"
                        _              -> ">50000 score"
 
+classifyChainsByLength
+    :: forall c tx s. [Blockchain c tx s]
+    -> Property
+    -> Property
+classifyChainsByLength = tabulate "Chain Length" . map toLength
+  where
+      toLength :: Blockchain c tx s -> String
+      toLength chain = case chainLength chain of
+                       x | x == 0     -> "0 length"
+                       x | x <= 10    -> "0-10 length"
+                       x | x <= 50    -> "10-50 length"
+                       x | x <= 500   -> "50-500 length"
+                       x | x <= 5000  -> "500-5000 length"
+                       x | x <= 50000 -> "5000-50000 length"
+                       _              -> ">50000 length"
+
 bestChainOracle
     :: IsCrypto c
     => BlockHash c
@@ -322,29 +343,29 @@ bestChainOracle
     -> [(Blockchain c tx s, Block c tx (Sealed c s))]
     -> Maybe (ChainCandidate c s)
 bestChainOracle _ [] = Nothing
-bestChainOracle root xs =
-    let (chain, lnk) =
-            maximumBy (\(chain1,lnk1) (chain2, lnk2) ->
-                sum (map blockScore (lnk1 : (toNewestFirst . blocks) chain1)) `compare`
-                sum (map blockScore (lnk2 : (toNewestFirst . blocks) chain2))
-            ) (filter (\(_,ls) -> parentHash ls == root) xs)
-        winningChain = Prelude.reverse ((toNewestFirst . blocks) chain <> [lnk])
-    in Just $ ChainCandidate
-        { candidateChain     = OldestFirst $ Seq.fromList (map blockHash winningChain)
-        , candidateTipHeader = blockHeader (Prelude.last winningChain)
-        , candidateScore     = sum (map blockScore winningChain)
-        , candidateRootHash  = root
-        }
+bestChainOracle root xs = do
+    (chain, lnk) <- do
+        let filtered = filter (\(_,ls) -> parentHash ls == root) xs
+        guard (length filtered > 0)
+        pure $ maximumBy (\(chain1,lnk1) (chain2, lnk2) ->
+            sum (map blockScore (lnk1 : (toNewestFirst . blocks) chain1)) `compare`
+            sum (map blockScore (lnk2 : (toNewestFirst . blocks) chain2))
+             ) filtered
+    let winningChain = Prelude.reverse ((toNewestFirst . blocks) chain <> [lnk])
+    pure ChainCandidate
+     { candidateChain     = OldestFirst $ Seq.fromList (map blockHash winningChain)
+     , candidateScore     = sum (map blockScore winningChain)
+     , candidateRootHash  = root
+     }
 
 {------------------------------------------------------------------------------
   (Temporary) Orphans
 ------------------------------------------------------------------------------}
 
-instance (IsCrypto c, Show s) => Condensed (ChainCandidate c s) where
+instance IsCrypto c => Condensed (ChainCandidate c s) where
     condensed ChainCandidate{..} =
            "Candidate { chain = "
         <> condensed candidateChain
-        <> ", tip  = "   <> show candidateTipHeader
         <> ", score  = " <> condensed candidateScore
         <> ",rootHash = " <> condensed candidateRootHash
         <> " }"
