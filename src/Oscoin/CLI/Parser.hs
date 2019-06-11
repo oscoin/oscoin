@@ -10,22 +10,15 @@ import           Oscoin.Crypto.Blockchain.Block (minDifficulty, parseDifficulty)
 import           Oscoin.Crypto.Hash (HasHashing(parseShortHash))
 
 import           Oscoin.CLI.Command
-import           Oscoin.Configuration
-                 ( ConfigPaths
-                 , Environment
-                 , Paths
-                 , environmentParser
-                 , pathsParser
-                 )
+import           Oscoin.Configuration (ConfigPaths, Paths, pathsParser)
 
 import qualified Data.Text as T
 import           Options.Applicative hiding (execParser, execParserPure)
 import qualified Options.Applicative as Options
 
 data CLI c = CLI
-    { cliPaths       :: Paths
-    , cliEnvironment :: Environment
-    , cliCommand     :: Command c
+    { cliPaths   :: Paths
+    , cliCommand :: Command c
     }
 
 execParser :: HasHashing c => ConfigPaths -> IO (CLI c)
@@ -43,7 +36,6 @@ mainParserInfo cps =
 mainParser :: HasHashing c => ConfigPaths -> Parser (CLI c)
 mainParser cps = CLI
     <$> pathsParser cps
-    <*> environmentParser
     <*> subparser
         ( command "keypair"  (keyPairParser  `withInfo` "Key pair commands")
        <> command "genesis-parameters" genesisParser

@@ -1,13 +1,16 @@
 module Test.Oscoin.Configuration.Gen
     ( paths
-    , environment
+    , consensusOptions
     , filePath
     )
 where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Environment, Paths(..))
+import           Oscoin.Configuration
+                 (ConsensusOptions(..), NakamotoLenientOptions(..), Paths(..))
+import qualified Oscoin.Consensus.Nakamoto as Nakamoto
+import           Oscoin.Time (seconds)
 
 import           System.FilePath ((</>))
 
@@ -18,8 +21,17 @@ import qualified Hedgehog.Range as Range
 paths :: MonadGen m => m Paths
 paths = Paths <$> filePath <*> filePath <*> filePath
 
-environment :: MonadGen m => m Environment
-environment = Gen.enumBounded
+consensusOptions :: forall m. MonadGen m => m ConsensusOptions
+consensusOptions = Gen.choice [genNakamotoStrict, genNakamotoLenient]
+  where
+      genNakamotoStrict :: m ConsensusOptions
+      genNakamotoStrict = pure NakamotoStrict
+
+      genNakamotoLenient :: m ConsensusOptions
+      genNakamotoLenient = do
+          blockTime <- Gen.word8
+            (Range.constant 1 (fromIntegral $ Nakamoto.blockTime `div` seconds))
+          NakamotoLenient . NakamotoLenientOptions blockTime <$> Gen.bool
 
 -- nb. ranges are way below admissible values for performance reasons
 filePath :: MonadGen m => m FilePath

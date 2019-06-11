@@ -54,9 +54,8 @@ main = do
         , optGossipPort
         , optApiPort
         , optDiscovery
-        , optBlockTimeLower
+        , optConsensus
         , optPaths
-        , optEnvironment
         , optMetricsHost
         , optMetricsPort
         , optEkgHost
@@ -84,9 +83,9 @@ main = do
 
     metricsStore <-
         newMetricsStore $ labelsFromList
-            [("env", renderEnvironment optEnvironment)]
+            []
 
-    let consensusConfig = Consensus.configForEnvironment optEnvironment
+    let consensusConfig = Consensus.defaultConfig
     let logConfig       =
             Log.defaultConfig
                 { Log.cfgLevel = Telemetry.optLogSeverity optTelemetry
@@ -107,14 +106,14 @@ main = do
             let probe   = Telemetry.telemetryProbe telemetry
                         & Telemetry.hoistProbe liftIO
             let consensus =
-                    case optEnvironment of
-                        Production  ->
+                    case optConsensus of
+                        NakamotoStrict ->
                             Consensus.nakamotoConsensus
                                 (Telemetry.probed probe)
-                        Development ->
+                        NakamotoLenient lenientOptions  ->
                             Consensus.nakamotoConsensusLenient
                                 (Telemetry.probed probe)
-                                optBlockTimeLower
+                                (nloBlockTimeLower lenientOptions)
 
 
             blkStore <- managed $
@@ -138,8 +137,7 @@ main = do
             node <- managed $
                 let
                     config =
-                        mkNodeConfig optEnvironment
-                                     (P2P.Disco.optNetwork optDiscovery')
+                        mkNodeConfig (P2P.Disco.optNetwork optDiscovery')
                                      telemetry
                                      consensusConfig
                                      optBeneficiary
@@ -195,8 +193,11 @@ main = do
 
             -- When the node finished syncing for the first time, start the
             -- miner and link the async to the main thread.
+            let startMiner = case optConsensus of
+                               NakamotoStrict       -> True
+                               NakamotoLenient opts -> not (nloNoMining opts)
             let onNodeReady _result = liftIO $
-                    link =<< async (miner node gossip)
+                    when startMiner $ link =<< async (miner node gossip)
 
             liftIO . runConcurrently $
                    Concurrently (HTTP.run (fromIntegral optApiPort) node)
@@ -209,11 +210,10 @@ main = do
 
     either (const exitFailure) (const exitSuccess) res
   where
-    mkNodeConfig env net metrics consensusConfig beneficiary
+    mkNodeConfig net metrics consensusConfig beneficiary
         = Node.Config
             { Node.cfgGlobalConfig    = Node.GlobalConfig
-                { Node.globalEnv             = env
-                , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
+                { Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
                 , Node.globalPhysicalNetwork = net
                 }
             , Node.cfgTelemetry       = metrics

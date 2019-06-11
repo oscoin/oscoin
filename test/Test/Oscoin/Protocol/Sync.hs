@@ -8,7 +8,6 @@ import           Oscoin.Test.Crypto
 
 import qualified Oscoin.API.HTTP as API
 import qualified Oscoin.API.HTTP.Internal as API
-import           Oscoin.Configuration (Environment(Development))
 import           Oscoin.Consensus.Config as Consensus
 import qualified Oscoin.Consensus.Nakamoto as Nakamoto
 import           Oscoin.Crypto.Blockchain
@@ -464,7 +463,7 @@ prop_sync_io_mutual_consensus d@Dict = withTests 1 . property $ do
                               Nakamoto.blockScore
                               (Telemetry.newTelemetryStore noLogger metricsStore)
                               store
-                              (Consensus.configForEnvironment Development) $ \proto ->
+                              Consensus.testConfig $ \proto ->
                       liftIO $ do
                           ctx <- IO.newSyncContext (pure $ Set.fromList peers) public [handleEvt proto] noProbe
                           IO.runSync ctx (replicateM_ 1 (Sync.syncUntil (\_ _ _ -> False)))

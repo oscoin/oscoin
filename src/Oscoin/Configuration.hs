@@ -10,14 +10,11 @@ module Oscoin.Configuration
     , pathsOpts
     , renderPathsOpts
 
-    , Environment(..)
-    , allEnvironments
-    , renderEnvironment
-    , readEnvironment
-    , readEnvironmentText
-    , environmentParser
-    , environmentOpts
-    , renderEnvironmentOpts
+    , ConsensusOptions(..)
+    , NakamotoLenientOptions(..)
+    , consensusParser
+    , consensusOpts
+    , renderConsensusOptionsOpts
 
     , Network(..)
     , allNetworks
@@ -34,7 +31,7 @@ import           Control.Monad.Fail (fail)
 import qualified Formatting as F
 import           Options.Applicative
 import           Paths_oscoin (getDataDir)
-import           System.Console.Option (Opt(Opt))
+import           System.Console.Option (Opt(Flag, Opt))
 import           System.Directory (XdgDirectory(..), getXdgDirectory)
 import           System.FilePath ((<.>), (</>))
 
@@ -102,40 +99,66 @@ pathsOpts (Paths keysDir blockstorePath genesisParametersPath) =
 renderPathsOpts :: Paths -> [Text]
 renderPathsOpts = map (F.sformat F.build) . pathsOpts
 
--- | Deployment environment
-data Environment = Production | Development
-    deriving (Show, Eq, Enum, Bounded)
+data ConsensusOptions =
+     NakamotoStrict
+   | NakamotoLenient NakamotoLenientOptions
+   deriving (Eq, Show)
 
--- | A list of all the possible environments.
-allEnvironments :: [Environment]
-allEnvironments = [minBound .. maxBound]
+data NakamotoLenientOptions = NakamotoLenientOptions
+    { nloBlockTimeLower :: Word8
+    , nloNoMining       :: Bool
+    } deriving (Eq, Show)
 
-renderEnvironment :: Environment -> Text
-renderEnvironment Production  = "production"
-renderEnvironment Development = "development"
+consensusOpts :: ConsensusOptions -> [Opt Text]
+consensusOpts NakamotoStrict =
+    bool [] [Flag "nakamoto-consensus-strict"] True
+consensusOpts (NakamotoLenient opts) =
+    bool [] [Flag "nakamoto-consensus-lenient"] True <>
+  ( Opt "block-time-lower" (show (nloBlockTimeLower opts))
+  : bool [] [Flag "no-mining"] (nloNoMining opts)
+  )
 
-readEnvironment :: String -> Either String Environment
-readEnvironment = readEnvironmentText . toS
+renderConsensusOptionsOpts :: ConsensusOptions -> [Text]
+renderConsensusOptionsOpts = map (F.sformat F.build) . consensusOpts
 
-readEnvironmentText :: Text -> Either String Environment
-readEnvironmentText "production"  = pure Production
-readEnvironmentText "development" = pure Development
-readEnvironmentText x             = Left . toS $ "Unknown environment: " <> x
+consensusParser :: Parser ConsensusOptions
+consensusParser = fromMaybe NakamotoStrict <$>
+    optional (nakamotoStrictParser <|> nakamotoLenientParser)
 
-environmentParser :: Parser Environment
-environmentParser = option (eitherReader readEnvironment)
-    ( long "environment"
-   <> help "The deployment environment"
-   <> metavar (intercalate "|" (map (toS . renderEnvironment) allEnvironments))
-   <> value Development
-   <> showDefaultWith (toS . renderEnvironment)
-    )
+nakamotoStrictParser :: Parser ConsensusOptions
+nakamotoStrictParser =
+    flag' NakamotoStrict (
+            long "nakamoto-consensus-strict"
+         <> help "Use 'Nakamoto' as consensus. This is strict in the sense \
+                 \that it will try to enforce the full validation rules, \
+                 \including the ones on block's age."
+          )
 
-environmentOpts :: Environment -> [Opt Text]
-environmentOpts = pure . Opt "environment" . renderEnvironment
-
-renderEnvironmentOpts :: Environment -> [Text]
-renderEnvironmentOpts = map (F.sformat F.build) . environmentOpts
+nakamotoLenientParser :: Parser ConsensusOptions
+nakamotoLenientParser =
+    flag' NakamotoLenient (
+            long "nakamoto-consensus-lenient"
+         <> help "Use 'Nakamoto' as consensus. This is lenient in the sense \
+                 \that it will not try to enforce the full validation rules, \
+                 \but only a subset of them."
+          ) <*> parseOptions
+  where
+    parseOptions = NakamotoLenientOptions <$>
+                   option auto
+                     ( long "block-time-lower"
+                    <> help "(Lenient consensus only). Lower bound on the \
+                            \ block time. Applies only to empty blocks in \
+                            \the development environment, and is useful to avoid busy looping \
+                            \in an idle network."
+                    <> metavar "SECONDS"
+                    <> value 1
+                    <> showDefault
+                     )
+                <*> switch
+                    ( long "no-mining"
+                   <> help "(Lenient consensus only). Do not start the miner \
+                           \ when the node is running."
+                    )
 
 -- | A logical oscoin network.
 data Network =

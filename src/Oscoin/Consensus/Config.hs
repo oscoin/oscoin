@@ -1,13 +1,12 @@
 -- | Loads all the consensus-related config values from a static file.
 module Oscoin.Consensus.Config
     ( Config(..)
-    , configForEnvironment
     , defaultConfig
+    , testConfig
     ) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Environment(..))
 import           Oscoin.Crypto.Blockchain.Block (Depth)
 
 -- | Consensus configuration parameters.
@@ -25,10 +24,8 @@ defaultConfig = Config
     , mutableChainDepth = 2016 -- blocks
     }
 
-configForEnvironment :: Environment -> Config
-configForEnvironment = \case
-    Production  -> defaultConfig
-    Development -> defaultConfig
-        { maxBlockSize      = 128000  -- 128kb
-        , mutableChainDepth = 20      -- blocks
-        }
+testConfig :: Config
+testConfig = defaultConfig
+   { maxBlockSize      = 128000  -- 128kb
+   , mutableChainDepth = 20      -- blocks
+   }

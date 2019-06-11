@@ -13,7 +13,7 @@ module Oscoin.Node.Trans
 import           Oscoin.Prelude
 
 import           Oscoin.Clock (MonadClock(..))
-import           Oscoin.Configuration (Environment, Network)
+import           Oscoin.Configuration (Network)
 import           Oscoin.Consensus (Consensus)
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto.Blockchain.Block (Beneficiary)
@@ -54,8 +54,7 @@ data Config c = Config
     }
 
 data GlobalConfig = GlobalConfig
-    { globalEnv             :: Environment
-    , globalLogicalNetwork  :: Network
+    { globalLogicalNetwork  :: Network
     , globalPhysicalNetwork :: P2P.Network
     }
 

@@ -101,11 +101,21 @@ Available options:
                            --sd-domain=oscoin.io
                            --sd-domain=monadic.xyz
   --enable-mdns            Enable mDNS discovery
+  --nakamoto-consensus-strict
+                           Use 'Nakamoto' as consensus. This is strict in the
+                           sense that it will try to enforce the full validation
+                           rules, including the ones on block's age.
+  --nakamoto-consensus-lenient
+                           Use 'Nakamoto' as consensus. This is lenient in the
+                           sense that it will not try to enforce the full
+                           validation rules, but only a subset of them.
   --block-time-lower SECONDS
-                           Lower bound on the block time. Applies only to empty
-                           blocks in the development environment, and is useful
-                           to avoid busy looping in an idle
-                           network. (default: 1)
+                           (Lenient consensus only). Lower bound on the block
+                           time. Applies only to empty blocks in the development
+                           environment, and is useful to avoid busy looping in
+                           an idle network. (default: 1)
+  --no-mining              (Lenient consensus only). Do not start the miner when
+                           the node is running.
   --keys FILEPATH          Directory where the keypair is stored. Default:
                            $XDG_CONFIG_HOME/oscoin (default: "/home/xla/.config/oscoin")
   --blockstore FILEPATH    Path to the block store SQLite .db file. Default:

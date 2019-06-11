@@ -20,7 +20,7 @@ First, generate a key pair for your node::
 
 Then run the full node with::
 
-   stack exec oscoin -- --blockstore blockstore.db --block-time-lower 600 --beneficiary 0x0000000000000000000000000000000000000000
+   stack exec oscoin -- --blockstore blockstore.db --nakamoto-consensus-lenient --block-time-lower 600 --beneficiary 0x0000000000000000000000000000000000000000
 
 Testing
 -------

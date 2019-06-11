@@ -45,7 +45,6 @@ $OSCOIN_DEPLOY node \
     --api-port="$OSCOIN_API_PORT" \
     --metrics-port="$OSCOIN_METRICS_PORT" \
     --sd-domain="$GCE_DNS_DOMAIN" \
-    --environment=development \
     --beneficiary="$OSCOIN_BENEFICIARY" \
     --allow-ephemeral-keys \
     --no-log-colours \

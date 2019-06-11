@@ -29,7 +29,6 @@ import           Oscoin.Prelude hiding (First, get)
 
 import qualified Oscoin.API.HTTP as API
 import qualified Oscoin.API.Types as API
-import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Consensus.Trivial (blockScore, trivialConsensus)
 import           Oscoin.Crypto.Blockchain
@@ -144,17 +143,15 @@ withNode
     -> (NodeHandle c tx s -> IO a)
     -> IO a
 withNode emptyTxOutput validateTx seal NodeState{..} k = do
-    let env    = Development
     let logger = Log.noLogger
     metrics   <-
         Telemetry.newTelemetryStore logger <$>
             Metrics.newMetricsStore Metrics.noLabels
     net       <- P2P.randomNetwork <$> newSMGen
-    let config = Consensus.configForEnvironment env
+    let config = Consensus.testConfig
     let cfg    = Node.Config
             { Node.cfgGlobalConfig    = Node.GlobalConfig
-                { Node.globalEnv             = env
-                , Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
+                { Node.globalLogicalNetwork  = P2P.fromPhysicalNetwork net
                 , Node.globalPhysicalNetwork = net
                 }
             , Node.cfgTelemetry       = metrics

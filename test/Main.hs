@@ -4,7 +4,6 @@ module Main (main) where
 
 import           Oscoin.Prelude
 
-import           Oscoin.Configuration (Environment(Development))
 import qualified Oscoin.Consensus.Config as Consensus
 import           Oscoin.Crypto
 import           Oscoin.Crypto.Hash.Mock ()
@@ -75,7 +74,7 @@ withCrypto MockCryptoTest      f = f mockCrypto
 
 main :: IO ()
 main = do
-    let config = Consensus.configForEnvironment Development
+    let config = Consensus.testConfig
     let ingredients = map (failFast . selectCrypto) defaultIngredients
 
     defaultMainWithIngredients ingredients $

@@ -13,10 +13,10 @@ import           Oscoin.Prelude hiding (option)
 
 import           Oscoin.Configuration
                  ( ConfigPaths
-                 , Environment
+                 , ConsensusOptions
                  , Paths
-                 , environmentOpts
-                 , environmentParser
+                 , consensusOpts
+                 , consensusParser
                  , pathsOpts
                  , pathsParser
                  )
@@ -39,9 +39,8 @@ data Options crypto network = Options
     , optGossipPort         :: PortNumber
     , optApiPort            :: PortNumber
     , optDiscovery          :: P2P.Disco.Options crypto network
-    , optBlockTimeLower     :: Word8
     , optPaths              :: Paths
-    , optEnvironment        :: Environment
+    , optConsensus          :: ConsensusOptions
     , optMetricsHost        :: Maybe HostName
     , optMetricsPort        :: Maybe PortNumber
     , optEkgHost            :: Maybe HostName
@@ -78,17 +77,8 @@ nodeOptionsParser cps = Options
        <> showDefault
         )
     <*> discoParser
-    <*> option auto
-        ( long "block-time-lower"
-       <> help "Lower bound on the block time. Applies only to empty blocks in \
-               \the development environment, and is useful to avoid busy looping \
-               \in an idle network."
-       <> metavar "SECONDS"
-       <> value 1
-       <> showDefault
-        )
     <*> pathsParser cps
-    <*> environmentParser
+    <*> consensusParser
     <*> optional
         ( option str
           ( long "metrics-host"
@@ -135,9 +125,8 @@ nodeOptionsOpts
         optGossipPort
         optApiPort
         optDiscovery
-        optBlockTimeLower
         optPaths
-        optEnvironment
+        optConsensus
         optMetricsHost
         optMetricsPort
         optEkgHost
@@ -149,9 +138,8 @@ nodeOptionsOpts
     , pure . Opt "gossip-port" $ show optGossipPort
     , pure . Opt "api-port"    $ show optApiPort
     , discoOpts optDiscovery
-    , pure . Opt "block-time-lower" . show $ optBlockTimeLower
     , pathsOpts optPaths
-    , environmentOpts optEnvironment
+    , consensusOpts optConsensus
     , maybe [] (pure . Opt "metrics-host" . toS)  optMetricsHost
     , maybe [] (pure . Opt "metrics-port" . show) optMetricsPort
     , maybe [] (pure . Opt "ekg-host"     . toS)  optEkgHost

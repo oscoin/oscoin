@@ -6,9 +6,7 @@ import           Oscoin.Configuration
                  ( Network
                  , getConfigPaths
                  , pathsParser
-                 , readEnvironmentText
                  , readNetworkText
-                 , renderEnvironment
                  , renderNetwork
                  , renderPathsOpts
                  )
@@ -31,24 +29,17 @@ import           Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
 tests = testGroup "Test.Oscoin.Configuration"
-    [ testProperty "prop_roundtripEnvironment"     prop_roundtripEnvironment
-    , testProperty "prop_roundtripNetworkText"     prop_roundtripNetworkText
+    [ testProperty "prop_roundtripNetworkText"     prop_roundtripNetworkText
     , testProperty "prop_roundtripNetworkShowRead" prop_roundtripNetworkShowRead
     , testProperty "prop_roundtripPathsCLI"        prop_roundtripPathsCLI
     ]
 
 props :: IO Bool
 props = checkParallel $ Group "Test.Oscoin.Configuration"
-    [ ("prop_roundtripEnvironment"    , prop_roundtripEnvironment)
-    , ("prop_roundtripNetworkText"    , prop_roundtripNetworkText)
+    [ ("prop_roundtripNetworkText"    , prop_roundtripNetworkText)
     , ("prop_roundtripNetworkShowRead", prop_roundtripNetworkShowRead)
     , ("prop_roundtripPathsCLI"       , prop_roundtripPathsCLI)
     ]
-
-prop_roundtripEnvironment :: Property
-prop_roundtripEnvironment = property $ do
-    env <- forAll Gen.enumBounded
-    tripping env renderEnvironment readEnvironmentText
 
 prop_roundtripNetworkText :: Property
 prop_roundtripNetworkText = property $ do
