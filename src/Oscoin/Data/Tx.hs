@@ -4,6 +4,7 @@ module Oscoin.Data.Tx where
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain.Block (BlockHash)
+import           Oscoin.Crypto.Blockchain.Eval (Evaluator)
 import           Oscoin.Crypto.Hash
 import qualified Oscoin.Crypto.Hash as Crypto
 import           Oscoin.Crypto.PubKey
@@ -17,15 +18,17 @@ import           Control.Monad.Fail (fail)
 import           Data.ByteArray (ByteArrayAccess)
 import qualified Data.Map as Map
 
-import qualified Oscoin.Data.OscoinTx as OscoinTx
 import           Oscoin.Data.Query
 
 
-type instance TxOutput c (Tx c) = OscoinTx.TxOutput
+type instance TxOutput c (Tx c) = DummyPayload
 type instance TxState c (Tx c) = LegacyTxState
 
 newtype LegacyTxState = LegacyTxState (Map ByteString ByteString)
     deriving (Show, Eq, Semigroup, Monoid)
+
+emptyState :: LegacyTxState
+emptyState = LegacyTxState mempty
 
 instance HasHashing c => Hashable c LegacyTxState where
     hash (LegacyTxState st) = toHashed . fromHashed . hashSerial $ st
@@ -120,3 +123,9 @@ validateTx Tx{..} =
     if verify txPubKey txMessage
     then Right ()
     else Left TxInvalidSignature
+
+
+evaluateBlock :: Evaluator c LegacyTxState (Tx c) DummyPayload
+evaluateBlock _beneficiary txs st = first reverse $ foldl' go ([], st) txs
+  where
+    go (output, st') tx = (txMessageContent tx : output, st')
