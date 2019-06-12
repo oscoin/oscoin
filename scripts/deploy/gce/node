@@ -121,17 +121,16 @@ gcloud compute instance-groups managed wait-until-stable \
     --region="$GCE_REGION"
 
 # update SRV records
-_instances=$(gcloud compute instance-groups managed list-instances \
-    "oscoin-node-$OSCOIN_NETWORK" \
-    --format="value(instance)" \
-    --region="$GCE_REGION")
-
 _zonefile=$(mktemp "/tmp/${GCE_DNS_ZONE}.zone.XXXXX")
-for x in $_instances; do
-    echo "_gossip._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_GOSSIP_PORT} ${x}.c.${GCE_PROJECT_ID}.internal."   >> "$_zonefile"
-    echo "_api._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_API_PORT} ${x}.c.${GCE_PROJECT_ID}.internal."         >> "$_zonefile"
-    echo "_metrics._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_METRICS_PORT} ${x}.c.${GCE_PROJECT_ID}.internal." >> "$_zonefile"
-done
+_rrs_tmpl=$(cat <<EOF
+_gossip._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_GOSSIP_PORT} {0:s}.{1:s}.c.${GCE_PROJECT_ID}.internal.
+_api._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_API_PORT} {0:s}.{1:s}.c.${GCE_PROJECT_ID}.internal.
+_metrics._tcp.oscoin.${OSCOIN_NETWORK}.${GCE_DNS_DOMAIN}. 300 IN SRV 0 1 ${OSCOIN_METRICS_PORT} {0:s}.{1:s}.c.${GCE_PROJECT_ID}.internal.
+EOF
+)
+gcloud compute instances list --filter="name:oscoin-node-devnet" \
+    --format="value(format($_rrs_tmpl, name, zone))" \
+    > "$_zonefile"
 gcloud dns record-sets import --zone="$GCE_DNS_ZONE" \
     --zone-file-format \
     --delete-all-existing \
