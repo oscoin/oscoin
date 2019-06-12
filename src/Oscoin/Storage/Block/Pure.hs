@@ -63,6 +63,11 @@ mkStateBlockStore bsHandleL = (blockStoreReader, blockStoreWriter)
             getGenesisBlock <$> use bsHandleL
         , lookupBlock = \h ->
             lookupBlock h <$> use bsHandleL
+        , lookupHashesByHeight =
+            -- Tie the recursive knot by piggybacking on 'lookupBlocksByHeight'
+            -- on the @blockStoreReader@ being created.
+            map (Chrono.mapOF (map blockHash)) .
+                Abstract.lookupBlocksByHeight blockStoreReader
         , lookupBlockByHeight = \h ->
             lookupBlockByHeight h <$> use bsHandleL
         , lookupBlocksByHeight = \h ->

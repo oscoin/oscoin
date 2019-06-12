@@ -28,6 +28,10 @@ tests Dict = testGroup "Test.Oscoin.API.HTTP"
         [ test "Missing block" (getMissingBlock @c)
         , test "Existing block" (getExistingBlock @c)
         ]
+    , testGroup "GET /blocks/hashes"
+        [ test "returns some hashes when given a valid range" (lookupHashesByHeight_OK @c)
+        , test "returns empty list on invalid range" (lookupHashesByHeight_KO @c)
+        ]
     , testGroup "GET /blockchain/best"
         [ test "No depth specified" (getBestChain @c)
         ]
@@ -71,6 +75,28 @@ getExistingBlock = do
         get ("/blocks/" <> blockId) >>=
             assertStatus ok200 <>
             assertResultOK g
+
+lookupHashesByHeight_OK :: IsCrypto c => PropertyM IO (HTTPTest c)
+lookupHashesByHeight_OK = do
+    chain <- pick genBlockchain
+
+    liftIO $ httpTest (nodeState mempty chain mempty) $
+        get ("/blocks/hashes?start=0&end=" <> show (height chain)) >>=
+            assertStatus ok200 <>
+            assertResultOK (map blockHash . Chrono.toOldestFirst
+                                          . Chrono.reverse
+                                          . blocks
+                                          $ chain
+                           )
+
+lookupHashesByHeight_KO :: forall c. IsCrypto c => PropertyM IO (HTTPTest c)
+lookupHashesByHeight_KO = do
+    chain <- pick genBlockchain
+
+    liftIO $ httpTest (nodeState mempty chain mempty) $
+        get "/blocks/hashes?start=3&end=0" >>=
+            assertStatus ok200 <>
+            assertResultOK ([] :: [BlockHash c])
 
 getBestChain :: IsCrypto c => PropertyM IO (HTTPTest c)
 getBestChain = do

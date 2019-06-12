@@ -59,6 +59,7 @@ withBlockStore path genesisBlock action =
             ( (Abstract.BlockStoreReader {
                   Abstract.getGenesisBlock       = SQLite.getGenesisBlock internalHandle
                 , Abstract.lookupBlock           = lookupBlock internalHandle
+                , Abstract.lookupHashesByHeight  = SQLite.lookupHashesByHeight internalHandle
                 , Abstract.lookupBlockByHeight   = SQLite.lookupBlockByHeight internalHandle
                 , Abstract.lookupBlocksByHeight  = SQLite.lookupBlocksByHeight internalHandle
                 , Abstract.lookupTx              = lookupTx internalHandle

@@ -57,6 +57,11 @@ mkBlockStore getBlocks modifyBlocks = (blockStoreReader, blockStoreWriter)
                 _ Seq.:|> gen  -> pure gen
         , lookupBlock = \h ->
             find (\b -> blockHash b == h) <$> getBlocks
+        , lookupHashesByHeight =
+            -- Tie the recursive knot by piggybacking on 'lookupBlocksByHeight'
+            -- on the @blockStoreReader@ being created.
+            map (Chrono.mapOF (map blockHash)) .
+                Abstract.lookupBlocksByHeight blockStoreReader
         , lookupBlockByHeight = \h ->
             find (\b -> (blockHeight . blockHeader $ b) == h) <$> getBlocks
         , lookupBlocksByHeight = \(start,end) ->

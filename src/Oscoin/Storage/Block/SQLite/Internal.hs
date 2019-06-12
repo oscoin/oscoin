@@ -22,6 +22,7 @@ module Oscoin.Storage.Block.SQLite.Internal
     , getChainHashes
     , lookupBlockByHeight
     , lookupBlocksByHeight
+    , lookupHashesByHeight
     , switchToFork
     , storeBlock
     ) where
@@ -441,3 +442,18 @@ lookupBlocksByHeight Handle{hConn} (start,end) = runTransaction hConn $ do
 
         Chrono.OldestFirst <$>
             for rows (\(Only h :. bh :. Only be) -> mkBlock bh be <$> getBlockTxs conn h)
+
+lookupHashesByHeight
+    :: forall c s.
+       FromField (BlockHash c)
+    => Handle c (Tx c) s
+    -> (Height, Height)
+    -- ^ The /start/ and the /end/ of the range (inclusive).
+    -> IO (OldestFirst [] (BlockHash c))
+lookupHashesByHeight Handle{hConn} (start,end) = runTransaction hConn $ do
+    conn <- ask
+    liftIO $ do
+        rows :: [Only (BlockHash c)] <- Sql.query conn
+            [sql|  SELECT hash FROM blocks WHERE height >= ? AND height <= ?  ORDER BY height ASC
+                   |] (Only start :. Only end)
+        pure . Chrono.OldestFirst . map (\(Only h) -> h) $ rows

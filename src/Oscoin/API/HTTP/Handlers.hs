@@ -72,6 +72,15 @@ getBlock h = do
         Nothing ->
             respond notFound404 $ errBody "Block not found"
 
+lookupHashesByHeight
+    :: Serialise (BlockHash c)
+    => ApiAction c tx s i a
+lookupHashesByHeight = do
+    start  <- param' "start"
+    end    <- param' "end"
+    hashes <- liftNode $ Node.lookupHashesByHeight (start, end)
+    respond ok200 $ Ok (Chrono.toOldestFirst hashes)
+
 lookupBlockByHeight
     :: (Serialise (SealedBlock c tx s))
     => Height

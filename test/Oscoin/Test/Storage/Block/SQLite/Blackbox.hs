@@ -33,6 +33,7 @@ tests Dict =
         [ testProperty "Store/lookup Block"   (withMemStore genBlockFrom (testStoreLookupBlock @c))
         , testProperty "lookupBlockByHeight"  (withMemStore genBlockchainFrom (testLookupBlockByHeight @c))
         , testProperty "lookupBlocksByHeight" (withMemStore genBlockchainFrom (testLookupBlocksByHeight @c))
+        , testProperty "lookupHashesByHeight" (withMemStore genBlockchainFrom (testLookupHashesByHeight @c))
         , testProperty "Store/lookup Tx"      (withMemStore genNonEmptyBlock (testStoreLookupTx @c))
         , testProperty "Get Genesis Block"    (withMemStore pure (testGetGenesisBlock @c))
         , testProperty "Get blocks"           (withMemStore genGetBlocks (testGetBlocks @c))
@@ -118,6 +119,38 @@ testLookupBlocksByHeight chain (publicAPI, privateAPI) = do
     -- Finally we test that if we request an invalid range (i.e. start > end)
     -- nothing is returned.
     none <- Abstract.lookupBlocksByHeight publicAPI (rangeEnd + 100, 0)
+    none @?= mempty
+
+testLookupHashesByHeight
+    :: IsCrypto c
+    => Blockchain c (Tx c) DummySeal
+    -> Abstract.BlockStore c (Tx c) DummySeal IO
+    -> Assertion
+testLookupHashesByHeight chain (publicAPI, privateAPI) = do
+    let allBlocks  = Chrono.reverse $ blocks chain
+    let rangeEnd   = pred . height $ chain
+    let tipless    = Chrono.OldestFirst
+                   . map blockHash
+                   . reverse
+                   . drop 1
+                   . Chrono.toNewestFirst
+                   . blocks $ chain
+    Abstract.insertBlocksNaive privateAPI allBlocks
+
+    -- We test the happy path scenario first, i.e. that all the requested
+    -- hashes are there.
+    hashes <- Abstract.lookupHashesByHeight publicAPI (0, rangeEnd)
+    hashes @?= tipless
+
+    -- We now test that if the /end/ of the range is beyond the max height in
+    -- the chain, the system returns only the available hashes (basically, the
+    -- whole chain)
+    fullRange <- Abstract.lookupHashesByHeight publicAPI (0, rangeEnd + 100)
+    fullRange @?= Chrono.reverse (map blockHash $ blocks chain)
+
+    -- Finally we test that if we request an invalid range (i.e. start > end)
+    -- nothing is returned.
+    none <- Abstract.lookupHashesByHeight publicAPI (rangeEnd + 100, 0)
     none @?= mempty
 
 testStoreLookupTx

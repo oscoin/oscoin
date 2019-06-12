@@ -19,6 +19,7 @@ module Oscoin.Node
     , lookupTx
     , lookupReceipt
     , lookupBlock
+    , lookupHashesByHeight
     , lookupBlockByHeight
     , lookupBlocksByHeight
     ) where
@@ -250,6 +251,14 @@ lookupBlock
 lookupBlock h = do
     bs <- getBlockStoreReader
     BlockStore.lookupBlock bs h
+
+lookupHashesByHeight
+    :: (MonadIO m)
+    => (Height, Height)
+    -> NodeT c tx s i m (Chrono.OldestFirst [] (BlockHash c))
+lookupHashesByHeight range = do
+    bs <- getBlockStoreReader
+    BlockStore.lookupHashesByHeight bs range
 
 lookupBlockByHeight
     :: (MonadIO m)

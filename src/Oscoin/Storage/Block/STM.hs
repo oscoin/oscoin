@@ -6,7 +6,7 @@ module Oscoin.Storage.Block.STM
 import           Oscoin.Prelude
 
 import           Oscoin.Crypto.Blockchain (Blockchain)
-import           Oscoin.Crypto.Blockchain.Block (ScoreFn, Sealed)
+import           Oscoin.Crypto.Blockchain.Block (ScoreFn, Sealed, blockHash)
 import           Oscoin.Crypto.Hash (Hashable)
 import qualified Oscoin.Storage.Block.Abstract as Abstract
 import qualified Oscoin.Storage.Block.Pure as Pure
@@ -27,12 +27,18 @@ withBlockStore
 withBlockStore chain score action = do
     hdl <- newTVarIO (Pure.initWithChain chain score)
     let modifyHandle = atomically . modifyTVar' hdl
-        newBlockStore  =
-            ( Abstract.BlockStoreReader
+        blockStoreReader =
+            Abstract.BlockStoreReader
                 { Abstract.getGenesisBlock       =
                     withHandle Pure.getGenesisBlock hdl
                 , Abstract.lookupBlock           = \h ->
                     withHandle (Pure.lookupBlock h) hdl
+                , Abstract.lookupHashesByHeight  =
+                    -- Tie the recursive knot by piggybacking on
+                    -- 'lookupBlocksByHeight' on the @blockStoreReader@ being
+                    -- created.
+                    map (Chrono.mapOF (map blockHash)) .
+                        Abstract.lookupBlocksByHeight blockStoreReader
                 , Abstract.lookupTx              = \h ->
                     withHandle (Pure.lookupTx h) hdl
                 , Abstract.lookupBlockByHeight   = \h ->
@@ -45,6 +51,8 @@ withBlockStore chain score action = do
                       withHandle (Chrono.NewestFirst <$> Pure.getChainSuffix h) hdl
                 , Abstract.getTip                = withHandle Pure.getTip hdl
                 }
+        newBlockStore  =
+            ( blockStoreReader
             , Abstract.BlockStoreWriter
                 { Abstract.insertBlock     = modifyHandle . Pure.insert
                 -- The STM blockstore piggybacks on the pure store which doesn't
