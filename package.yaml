@@ -46,11 +46,13 @@ library:
     - ekg-core
     - fast-logger
     - filepath
+    - fingertree
     - formatting
     - generic-lens
     - generics-sop
     - gossip
     - hashable
+    - heaps
     - hostname
     - http-api-data
     - http-client
