@@ -18,6 +18,7 @@ import qualified Crypto.Data.Auth.Tree.Cryptonite as Cryptonite
 import           Crypto.Hash (Blake2b_256(..), Digest, RIPEMD160(..))
 import qualified Crypto.Hash as Crypto
 import           Data.Aeson (FromJSON(..), ToJSON(..), withText)
+import qualified Data.Binary as Binary
 import           Data.ByteArray (ByteArrayAccess, convert)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
@@ -66,12 +67,6 @@ instance HasHashing Crypto where
 
     hashAlgorithm = Blake2b_256
 
-    parseShortHash t = do
-        t' <- T.stripPrefix "0x" t
-        case BaseN.decodeAtBaseEither BaseN.Base16 (encodeUtf8 t') of
-            Left _  -> Nothing
-            Right h -> ShortHash <$> Crypto.digestFromByteString h
-
     toShortHash h = ShortHash
                   . Crypto.hash @ByteString @RIPEMD160
                   . ByteArray.convert @(Crypto.Digest (HashAlgorithm Crypto)) @ByteString
@@ -107,6 +102,10 @@ instance Hashable Crypto Word8 where
 instance (ByteArrayAccess a) => Hashable Crypto (Maybe a) where
     hash (Just x) = toHashed . Hash $ Crypto.hash x
     hash Nothing  = toHashed $ zeroHash
+
+instance Binary.Binary (ShortHash Crypto) where
+    put = notImplemented
+    get = notImplemented
 
 {------------------------------------------------------------------------------
   Serialisation instances

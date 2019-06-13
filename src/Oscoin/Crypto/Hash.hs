@@ -13,6 +13,7 @@ module Oscoin.Crypto.Hash
     , formatHash
     , formatHashed
     , formatShortHash
+    , parseShortHash
 
     , hashBinary
     , hashSerial
@@ -39,6 +40,7 @@ import qualified Data.ByteString.BaseN as BaseN
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Multihash (Multihash, Multihashable)
 import qualified Data.Multihash as Multihash
+import qualified Data.Text as T
 import qualified Database.SQLite.Simple.ToField as Sql
 import           Formatting (Format)
 import qualified Formatting as Fmt
@@ -97,6 +99,7 @@ class HasHashing crypto => Hashable crypto a where
 class
     ( Ord (Hash crypto)
     , Eq (Hash crypto)
+    , Binary (ShortHash crypto)
     ) => HasHashing crypto where
     type family HashAlgorithm crypto = algo | algo -> crypto
 
@@ -118,9 +121,6 @@ class
     -- | A short hash, in the similar spirit of the BTC one.
     -- eg. ripemd160(blake2b(x))
     toShortHash :: Hash crypto -> ShortHash crypto
-
-    -- | Parse a 'ShortHash' from 'Text'.
-    parseShortHash :: Text -> Maybe (ShortHash crypto)
 
     -- | A compact representation of the hash.
     compactHash :: Hash crypto -> ByteString
@@ -152,8 +152,28 @@ formatHash :: Fmt.Buildable (Hash crypto) => Format r (Hash crypto -> r)
 formatHash = fmtB58
 
 -- | Format a 'ShortHash' value.
-formatShortHash :: Fmt.Buildable (ShortHash crypto) => Format r (ShortHash crypto -> r)
-formatShortHash = "0x" Fmt.% Fmt.build
+formatShortHash :: Binary (ShortHash crypto) => Format r (ShortHash crypto -> r)
+formatShortHash = "0x" Fmt.% Fmt.mapf shortHashToText Fmt.stext
+
+shortHashToText :: Binary (ShortHash crypto) => ShortHash crypto -> Text
+shortHashToText =
+        BaseN.encodedText
+        . BaseN.encodeAtBase BaseN.Base16
+        . toS
+        . Binary.encode
+
+-- | Parse a 'ShortHash' from 'Text'.
+parseShortHash :: Binary (ShortHash crypto) => Text -> Maybe (ShortHash crypto)
+parseShortHash t = do
+    t' <- T.stripPrefix "0x" t
+    bytes <- case BaseN.decodeAtBaseEither BaseN.Base16 (encodeUtf8 t') of
+        Left _      -> Nothing
+        Right bytes -> Just bytes
+    case Binary.decodeOrFail (toS bytes) of
+        Right (rest, _, sh ) | LBS.null rest -> Just sh
+        _                                    -> Nothing
+
+
 
 -- | Format a 'Hashed' value.
 --

@@ -16,6 +16,7 @@ import           Codec.Serialise
 import           Crypto.Data.Auth.Tree.Class (MerkleHash(..))
 import           Data.Aeson hiding (decode, encode)
 import           Data.Aeson.Types (typeMismatch)
+import qualified Data.Binary as Binary
 import           Data.ByteArray (ByteArrayAccess(..), convert)
 import           Data.ByteArray.Orphans ()
 import qualified Data.ByteString as BS
@@ -62,11 +63,6 @@ instance HasHashing MockCrypto where
     zeroShortHash = ShortHash zeroHash
 
     toShortHash = ShortHash
-
-    parseShortHash t =
-        case readMaybe . T.unpack $ t of
-          Just w64 -> pure $ ShortHash $ FnvHash (FnvHash64 w64)
-          Nothing  -> Nothing
 
     compactHash (FnvHash (FnvHash64 w64)) = BS.take 7
                                           . BaseN.encodedBytes
@@ -159,8 +155,9 @@ instance MerkleHash (Hash MockCrypto) where
 instance Buildable (Hash MockCrypto) where
     build (FnvHash (FnvHash64 w64)) = F.bprint F.build w64
 
-instance Buildable (ShortHash MockCrypto) where
-    build (ShortHash h) = build h
+instance Binary.Binary (ShortHash MockCrypto) where
+    put = notImplemented
+    get = notImplemented
 
 instance Sql.ToField (Hash MockCrypto) where
     toField (FnvHash (FnvHash64 w64)) = Sql.SQLText . T.pack . show $ w64
