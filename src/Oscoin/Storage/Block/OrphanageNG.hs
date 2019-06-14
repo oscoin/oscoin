@@ -79,21 +79,23 @@ instance Show (Orphanage c tx s) where
 -- compute the best chain in 'selectBestChain', as well as
 -- other useful information we want to cache.
 data ChainMeasure c = ChainMeasure
-    { mScore :: Score
+    { mScore  :: Score
       -- ^ The total 'Score' for this candidate
-    , mRoot  :: BlockHash c
+    , mRoot   :: BlockHash c
       -- ^ The hash of the root block for the candidate, i.e. the 'blockPrevHash'
       -- of the oldest block of this candidate.
-    , mTip   :: BlockHash c
+    , mOldest :: BlockHash c
+      -- ^ the hash of the oldest block of this candidate.
+    , mTip    :: BlockHash c
       -- ^ The current tip for the candidate.
     }
 
 instance Semigroup (ChainMeasure c) where
-    (ChainMeasure s1 r1 _t1) <> (ChainMeasure s2 _r2 t2) =
-        ChainMeasure (s1 + s2) r1 t2
+    (ChainMeasure s1 r1 o1 _t1) <> (ChainMeasure s2 _r2 _o2 t2) =
+        ChainMeasure (s1 + s2) r1 o1 t2
 
 instance HasHashing c => Monoid (ChainMeasure c) where
-    mempty = ChainMeasure 0 zeroHash zeroHash
+    mempty = ChainMeasure 0 zeroHash zeroHash zeroHash
     mappend = (<>)
 
 deriving instance Show (Hash c) => Show (ChainMeasure c)
@@ -128,6 +130,7 @@ chainCandidate
 chainCandidate scoreBlock b =
     let m = ChainMeasure { mScore = scoreBlock b
                          , mRoot  = blockPrevHash $ blockHeader b
+                         , mOldest = blockHash b
                          , mTip = blockHash b
                          }
     in ChainCandidate (Seq.singleton b) m
@@ -168,6 +171,12 @@ chainRoot
     -> BlockHash c
 chainRoot = mRoot . ccMeasure
 
+-- | /O(1)/. Looks up the oldest block for this 'ChainCandidate'.
+chainOldest
+    :: ChainCandidate c tx s
+    -> BlockHash c
+chainOldest = mOldest . ccMeasure
+
 -- | /O(1)/ Append the block /at the back/ of this 'ChainCandidate', which results
 -- in a new tip.
 appendBlock
@@ -195,12 +204,20 @@ updateChainMeasure
     -> ChainMeasure c
 updateChainMeasure (b, score) m@ChainMeasure{..} =
     if m == mempty
-       then ChainMeasure score (blockPrevHash $ blockHeader b) (blockHash b)
-       else ChainMeasure
-            { mScore = mScore + score
-            , mRoot  = if mRoot == blockHash b then (blockPrevHash $ blockHeader b) else mRoot
-            , mTip   = if mTip  == (blockPrevHash $ blockHeader b) then blockHash b else mTip
+       then ChainMeasure
+            { mScore  = score
+            , mRoot   = (blockPrevHash $ blockHeader b)
+            , mOldest = blockHash b
+            , mTip    = blockHash b
             }
+       else ChainMeasure
+            { mScore  = mScore + score
+            , mRoot   = if mRoot   == blockHash b then blockParent else mRoot
+            , mOldest = if mOldest == blockParent then mOldest else blockHash b
+            , mTip    = if mTip    == blockParent then blockHash b else mTip
+            }
+  where
+    blockParent = blockPrevHash (blockHeader b)
 
 -- | \( O(\log(\min(n_1,n_2))) \) Tries to concatenate two candidates together.
 -- The order of the argument doesn't matter, as long as one is a valid
@@ -322,36 +339,6 @@ selectBestChain blocksOnMainChain o =
         []  -> Nothing
         c:_ -> Just c
 
--- | /O(m)/ Evicts the candidates branching off the input block hash from the 'Orphanage'.
-bulkDelete
-    :: forall c tx s.
-       BlockHash c
-    -> Orphanage c tx s
-    -> Orphanage c tx s
-bulkDelete bHash o = notImplemented
---    o { candidates = candidates' (candidates o)
---      }
---  where
---      candidates' :: Map (ChainRoot c) (Candidates c s)
---                  -> Map (ChainRoot c) (Candidates c s)
---      candidates' = Map.delete bHash
-
--- | Extends the orphanage with new candidates associated to a 'ChainRoot'.
--- It takes into account the possibility that an existing set of candidates
--- might be present at that @ptr@, so this function won't replace them.
-bulkAdjust
-    :: forall c tx s. Ord (BlockHash c)
-    => ChainRoot c
-    -> Candidates c tx s
-    -> Orphanage c tx s
-    -> Orphanage c tx s
-bulkAdjust ptr newChains o = notImplemented
---    o { candidates = candidates'
---      }
---  where
---      candidates' :: Map (ChainRoot c) (Candidates c s)
---      candidates' = Map.alter (\maybeChains -> Just $ fromMaybe mempty maybeChains <> newChains) ptr (candidates o)
-
 {------------------------------------------------------------------------------
 
                                 Pruning chains
@@ -395,49 +382,63 @@ bulkAdjust ptr newChains o = notImplemented
 pruneOrphanageDeep
     :: forall c tx s.
        ( Ord (BlockHash c)
-       , Eq s
        )
     => ChainCandidate c tx s
     -> Orphanage c tx s
     -> Orphanage c tx s
-pruneOrphanageDeep bestFork o = notImplemented -- prune o [bestFork]
---  where
---      prune :: Orphanage c tx s
---            -> [ChainCandidate c s]
---            -> Orphanage c tx s
---      prune orph [] = orph
---      prune orph (c:cs) =
---          let branchingForks = map Vector.toList $ catMaybes $
---                  map (`Map.lookup` candidates orph)
---                      (toList $ candidateChain c)
---          in prune (pruneOrphanageShallow c orph)
---                   (cs <> mconcat branchingForks)
+pruneOrphanageDeep chain o =
+    case Map.lookup (chainRoot chain) (candidates o) of
+      Nothing    -> o
+      Just currentCandidates ->
+          let (counts, candidates') = prune currentCandidates
+          in o { candidates = Map.insert (chainRoot chain) candidates' (candidates o)
+               , orphans = Map.foldlWithKey' (\acc rootHash occurrences ->
+                   foldl' (\acc' _ -> RefCount.delete rootHash acc') acc [1 .. occurrences]
+                                      ) (orphans o) counts
+               }
+
+  where
+    -- Prunes from the candidates tree the candidates which have as parent
+    -- the @mOldest@ of the chain being pruned (this includes the input chain itself).
+    -- Returns the updated 'Candidates' together with an occurence map to be
+    -- used to decrease the reference count of @orphans@.
+    prune :: Candidates c tx s -> (Map (BlockHash c) Int, Candidates c tx s)
+    prune (Candidates cands) =
+        case Heap.partition (\(Down cc) -> chainOldest cc == chainOldest chain) cands of
+            (satisfy, doesNotSatisfy) ->
+                ( foldl' occurrenceMap mempty satisfy
+                , Candidates $ doesNotSatisfy
+                )
+
+    occurrenceMap
+        :: Map (BlockHash c) Int
+        -> Down (ChainCandidate c tx s)
+        -> Map (BlockHash c) Int
+    occurrenceMap acc (Down (ChainCandidate blks _)) =
+        foldl' (\mp b ->
+                   Map.alter (maybe (Just 1) (Just . succ)) (blockHash b) mp
+               ) acc blks
+
 
 -- | Given a candidate which won, delete the orphans from the store and
 -- the chain from the candidates.
+-- NOTE(adn): This doesn't "promote" any dangling fork originating from
+-- pruning the chain into standalone candidates.
 pruneOrphanageShallow
     :: forall c tx s.
        ( Ord (BlockHash c)
-       , Eq s
+       , HasHashing c
        )
     => ChainCandidate c tx s
     -> Orphanage c tx s
     -> Orphanage c tx s
-pruneOrphanageShallow inputCandidate o = notImplemented
---    let candidates'   = pruneCandidate (candidates o)
---    in o { candidates = candidates'
---         }
---  where
---      -- Prunes the input 'ChainCandidate'.
---      pruneCandidate :: Map (ChainRoot c) (Candidates c s)
---                     -> Map (ChainRoot c) (Candidates c s)
---      pruneCandidate old =
---          case map removeCandidate (Map.lookup (candidateRootHash $ measured inputCandidate) old) of
---            Nothing                  -> old
---            Just xs | Vector.null xs -> Map.delete candidateRootHash old
---            Just xs                  -> Map.insert candidateRootHash xs old
---
---      removeCandidate = Vector.filter (inputCandidate /=)
+pruneOrphanageShallow chain@(ChainCandidate blks m) o =
+    let prune = Candidates . Heap.filter ((/=) (Down chain)) . getCandidates
+    in o { candidates = Map.adjust prune (mRoot m) (candidates o)
+         , orphans    = foldl' (\acc b -> RefCount.delete (blockHash b) acc)
+                               (orphans o)
+                               blks
+         }
 
 -- | Adds a new 'Block' to the 'Orphanage'. Three scenarios are possible:
 -- 1. This is a \"singleton\" 'Block', i.e. it doesn't extend any of the
@@ -532,7 +533,6 @@ insertOrphan b o = withFrozenCallStack $
 
 tryLinkChains
     :: ( HasHashing c
-       , Ord (BlockHash c)
        , Eq s
        )
     => SealedBlock c tx s
@@ -556,8 +556,7 @@ tryLinkChains b o = fromMaybe o $ do
                         (orphans o)
                         [1 .. refCount]
              }
-  where
-    parent = blockPrevHash . blockHeader $ b
+
 
 -- | /O(i)/ Iterates through all the Candidates and prepend the input block.
 insertAtFront
@@ -571,7 +570,7 @@ insertAtFront bws (Candidates allCandidates) =
   Candidates $ Heap.map extend allCandidates
   where
     extend :: Down (ChainCandidate c tx s) -> Down (ChainCandidate c tx s)
-    extend candidate@(Down chain) = Down (prependBlock bws chain)
+    extend (Down chain) = Down (prependBlock bws chain)
 
 -- | /O(1)/ Insert a singleton 'ChainCandidate' into the 'Candidates'.
 insertSingleton
