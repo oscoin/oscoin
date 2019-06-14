@@ -32,6 +32,7 @@ import           Oscoin.Crypto.Blockchain.Block (SealedBlock)
 import           Oscoin.Crypto.Hash (HasHashing, Hash, zeroHash)
 import           Oscoin.Time.Chrono
 
+import           Data.Coerce (coerce)
 import           Data.Heap (Heap)
 import qualified Data.Heap as Heap
 import qualified Data.List.NonEmpty as NonEmpty
@@ -41,7 +42,6 @@ import qualified Data.Map.Strict as Map
 import           Data.Ord (Down)
 import           Data.Sequence (Seq, (><))
 import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
 
 {------------------------------------------------------------------------------
   Types
@@ -168,12 +168,10 @@ chainRoot
     -> BlockHash c
 chainRoot = mRoot . ccMeasure
 
--- | O(1) Append the block /at the back/ of this 'ChainCandidate', which results
+-- | /O(1)/ Append the block /at the back/ of this 'ChainCandidate', which results
 -- in a new tip.
 appendBlock
-    :: ( Eq (Hash c)
-       , HasHashing c
-       )
+    :: HasHashing c
     => (SealedBlock c tx s, Score)
     -> ChainCandidate c tx s
     -> ChainCandidate c tx s
@@ -183,9 +181,7 @@ appendBlock bws@(b,_) (ChainCandidate cc m) =
 -- | /O(1)/ Prepend the block /in front/ of this 'ChainCandidate'. The tip stays
 -- the same.
 prependBlock
-    :: ( Eq (Hash c)
-       , HasHashing c
-       )
+    :: HasHashing c
     => (SealedBlock c tx s, Score)
     -> ChainCandidate c tx s
     -> ChainCandidate c tx s
@@ -193,9 +189,7 @@ prependBlock bws@(b,_) (ChainCandidate cc m) =
     ChainCandidate (b Seq.<| cc) (updateChainMeasure bws m)
 
 updateChainMeasure
-    :: ( Eq (Hash c)
-       , HasHashing c
-       )
+    :: HasHashing c
     => (SealedBlock c tx s, Score)
     -> ChainMeasure c
     -> ChainMeasure c
@@ -223,12 +217,35 @@ extendChain (ChainCandidate c1 m1) (ChainCandidate c2 m2) =
 
 -- | Tries to extend the first candidates with the second ones.
 extendCandidates
-    :: Candidates c tx s
+    :: forall c tx s.
+       ( HasHashing c
+       , Eq s
+       )
+    => (SealedBlock c tx s -> Score)
     -> Candidates c tx s
+    -> (SealedBlock c tx s, Candidates c tx s)
     -> Maybe (Candidates c tx s)
-extendCandidates (Candidates c1) (Candidates c2) = notImplemented
+extendCandidates scoreBlock (Candidates candidatesToExtend) (lastInsertedBlock, (Candidates c2)) =
+    let c' = Heap.fromList $ concatMap tryExtend candidatesToExtend
+    in if Heap.size c' /= Heap.size candidatesToExtend
+          then Just (Candidates c') else Nothing
+  where
+      tryExtend
+          :: Down (ChainCandidate c tx s) -> [Down (ChainCandidate c tx s)]
+      tryExtend candidate@(Down chain) =
+        let parentChain = splitChainAt scoreBlock validExtension chain
+        in case chainTip parentChain of
+             x | x == blockParent ->
+               let newCandidates = catMaybes $
+                     map (extendChain parentChain . coerce) (toList c2)
+               in candidate : map Down newCandidates
+             _ -> [candidate]
 
+      validExtension :: SealedBlock c tx s -> Bool
+      validExtension b = blockHash b == blockParent
 
+      blockParent :: BlockHash c
+      blockParent = blockPrevHash (blockHeader lastInsertedBlock)
 
 {------------------------------------------------------------------------------
   Operations on the 'Orphanage'.
@@ -279,11 +296,7 @@ candidateAvailable rootHash Orphanage{candidates} =
 
 -- | /O(log(n))/ Picks the best candidate out of the candidate set at the given 'BlockHash'.
 selectBestCandidate
-    :: ( HasHashing c
-       , Ord (Hash c)
-       , Eq (ChainMeasure c)
-       , Eq s
-       )
+    :: HasHashing c
     => BlockHash c
     -> Orphanage c tx s
     -> Maybe (ChainCandidate c tx s)
@@ -291,15 +304,13 @@ selectBestCandidate blockOnMainChain o = do
     chains <- getCandidates <$> Map.lookup blockOnMainChain (candidates o)
     if Heap.null chains
        then Nothing
-       else let (Down c) = Heap.minimum chains in Just c
+       else Just . coerce $ Heap.minimum chains
 
 -- | /O(n * log(n))/ Given a list of block hashes on the main chain,
 -- selects the best-scoring 'ChainCandidate' which would extend the chain
 -- from that given block.
 selectBestChain
     :: ( HasHashing c
-       , Ord (Hash c)
-       , Eq (ChainMeasure c)
        , Eq s
        )
     => [BlockHash c]
@@ -313,8 +324,8 @@ selectBestChain blocksOnMainChain o =
 
 -- | /O(m)/ Evicts the candidates branching off the input block hash from the 'Orphanage'.
 bulkDelete
-    :: forall c tx s. Ord (BlockHash c)
-    => BlockHash c
+    :: forall c tx s.
+       BlockHash c
     -> Orphanage c tx s
     -> Orphanage c tx s
 bulkDelete bHash o = notImplemented
@@ -520,7 +531,10 @@ insertOrphan b o = withFrozenCallStack $
           }
 
 tryLinkChains
-    :: Ord (BlockHash c)
+    :: ( HasHashing c
+       , Ord (BlockHash c)
+       , Eq s
+       )
     => SealedBlock c tx s
     -> Orphanage c tx s
     -> Orphanage c tx s
@@ -532,7 +546,7 @@ tryLinkChains b o = fromMaybe o $ do
     -- which are now stale.
     fused <- fst $
         Map.mapAccumWithKey (\acc root cnds ->
-              (acc <|> map (root,) (extendCandidates cnds childrenChains), cnds)
+              (acc <|> map (root,) (extendCandidates (scoreBlock o) cnds (b, childrenChains)), cnds)
             ) Nothing (candidates o)
 
     pure $ o { candidates = Map.insert (fst fused) (snd fused) (candidates o)
