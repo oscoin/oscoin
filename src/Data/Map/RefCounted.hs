@@ -24,7 +24,7 @@ import qualified Data.Map.Strict as M
 import           Data.Set (Set)
 
 type RefCount = Int
-newtype RefCounted k v = RefCounted (Map k (v, RefCount))
+newtype RefCounted k v = RefCounted (Map k (v, RefCount)) deriving Show
 
 {------------------------------------------------------------------------------
    Construction
@@ -42,7 +42,10 @@ empty = RefCounted $ M.empty
 
 insert :: Ord k => k -> v -> RefCounted k v -> RefCounted k v
 insert k v (RefCounted mp) = RefCounted $
-    M.insertWith (\(new,_) (_,!count) -> (new, succ count)) k (v, 1) mp
+    M.alter (\mbV -> Just $ case mbV of
+                       Nothing        -> (v,1)
+                       Just (o, freq) -> (o, succ freq)
+            ) k mp
 {-# INLINE insert #-}
 
 {------------------------------------------------------------------------------

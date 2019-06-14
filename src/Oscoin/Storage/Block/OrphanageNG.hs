@@ -21,6 +21,7 @@ module Oscoin.Storage.Block.OrphanageNG
     , sizeAt
     , candidates
     , ChainCandidate(..)
+    , ChainMeasure(..)
     ) where
 
 import           Oscoin.Prelude
@@ -58,8 +59,16 @@ data ChainCandidate c tx s = ChainCandidate
 instance (Eq (ChainMeasure c), HasHashing c) => Eq (ChainCandidate c tx s) where
     c1 == c2 = ccMeasure c1 == ccMeasure c2
 
+deriving instance ( Show tx
+                  , Show s
+                  , Show (Beneficiary c)
+                  , Show (Hash c)
+                  ) => Show (ChainCandidate c tx s)
+
 newtype Candidates c tx s = Candidates
     { getCandidates :: Heap (Down (ChainCandidate c tx s)) }
+
+deriving instance Show (ChainCandidate c tx s) => Show (Candidates c tx s)
 
 data Orphanage c tx s = Orphanage
     { orphans    :: RefCounted (BlockHash c) (SealedBlock c tx s)
@@ -72,8 +81,14 @@ data Orphanage c tx s = Orphanage
     }
 
 -- Bogus instance created only to please the test code.
-instance Show (Orphanage c tx s) where
-    show _ = "<orphanage>"
+instance ( Show tx
+         , Show s
+         , Show (Hash c)
+         , Show (Beneficiary c)
+         ) => Show (Orphanage c tx s) where
+    show Orphanage{..} = "Orphanage { orphans = " ++ show orphans ++
+                         "          , candidates = " ++ show candidates ++
+                         "          }"
 
 -- | A 'ChainMeasure' stores a partially-accumulated 'Score', used to
 -- compute the best chain in 'selectBestChain', as well as
@@ -145,7 +160,7 @@ fromChainSuffix
     -> ChainCandidate c tx s
 fromChainSuffix scoreBlock (toOldestFirst -> blks) =
     case blks of
-      b :| bs -> foldl' (\acc blk -> appendBlock (blk, scoreBlock b) acc)
+      b :| bs -> foldl' (\acc blk -> appendBlock (blk, scoreBlock blk) acc)
                         (chainCandidate scoreBlock b)
                         bs
 
@@ -206,7 +221,7 @@ updateChainMeasure (b, score) m@ChainMeasure{..} =
     if m == mempty
        then ChainMeasure
             { mScore  = score
-            , mRoot   = (blockPrevHash $ blockHeader b)
+            , mRoot   = blockPrevHash $ blockHeader b
             , mOldest = blockHash b
             , mTip    = blockHash b
             }
@@ -242,21 +257,26 @@ extendCandidates
     -> Candidates c tx s
     -> (SealedBlock c tx s, Candidates c tx s)
     -> Maybe (Candidates c tx s)
-extendCandidates scoreBlock (Candidates candidatesToExtend) (lastInsertedBlock, (Candidates c2)) =
+extendCandidates scoreBlock (Candidates candidatesToExtend) (lastInsertedBlock, Candidates c2) =
     let c' = Heap.fromList $ concatMap tryExtend candidatesToExtend
-    in if Heap.size c' /= Heap.size candidatesToExtend
-          then Just (Candidates c') else Nothing
+    in if c' /= candidatesToExtend then Just (Candidates c') else Nothing
   where
       tryExtend
           :: Down (ChainCandidate c tx s) -> [Down (ChainCandidate c tx s)]
       tryExtend candidate@(Down chain) =
         let parentChain = splitChainAt scoreBlock validExtension chain
-        in case chainTip parentChain of
-             x | x == blockParent ->
-               let newCandidates = catMaybes $
-                     map (extendChain parentChain . coerce) (toList c2)
-               in candidate : map Down newCandidates
-             _ -> [candidate]
+            newCandidates = catMaybes $
+                map (extendChain parentChain . coerce) (toList c2)
+        in case parentChain of
+             x | chainTip x == blockParent ->
+                 -- Here we are extending directly at the tip, which means the
+                 -- old @candidate@ is not valid anymore and it must not be
+                 -- included in the final result set.
+                 if | chainTip x == chainTip chain -> map Down newCandidates
+                    -- Possible insertion in-the-middle. Preserve the original
+                    -- candidate.
+                    | otherwise -> candidate : map Down newCandidates
+             _                             -> [candidate]
 
       validExtension :: SealedBlock c tx s -> Bool
       validExtension b = blockHash b == blockParent
@@ -280,7 +300,6 @@ sizeAt rootHash (Orphanage _ chains _) =
     case Map.lookup rootHash chains of
       Nothing -> 0
       Just cs -> length (getCandidates cs)
-
 
 -- | /O(1)/ Creates a new, empty 'Orphanage'.
 emptyOrphanage
@@ -433,7 +452,7 @@ pruneOrphanageShallow
     -> Orphanage c tx s
     -> Orphanage c tx s
 pruneOrphanageShallow chain@(ChainCandidate blks m) o =
-    let prune = Candidates . Heap.filter ((/=) (Down chain)) . getCandidates
+    let prune = Candidates . Heap.filter (Down chain /=) . getCandidates
     in o { candidates = Map.adjust prune (mRoot m) (candidates o)
          , orphans    = foldl' (\acc b -> RefCount.delete (blockHash b) acc)
                                (orphans o)
@@ -462,7 +481,8 @@ insertOrphan
     -> Orphanage c tx s
     -> Orphanage c tx s
 insertOrphan b o = withFrozenCallStack $
-    fromMaybe o (extendExisting <|> newCandidate)
+    if not (member o blkHash) then fromMaybe o (extendExisting <|> newCandidate)
+                              else o
 
   where
     blkHash           = blockHash b
@@ -486,14 +506,12 @@ insertOrphan b o = withFrozenCallStack $
 
         -- If the incoming block extended the candidates at the front, it means
         -- we might need to fuse two chains together.
-        -- /and/ it also appears to be in the tips, we need to fuse two chains
-        -- together.
         pure $ tryLinkChains b $ o {
                    candidates = candidates'
                    -- Increment the ref-count by the number of current
                    -- candidates for blockHash.
                  , orphans    =
-                     foldl' (\acc _ -> RefCount.insert (blockHash b) b acc)
+                     foldl' (\acc _ -> RefCount.insert blkHash b acc)
                             (orphans o)
                             [1 .. candidatesSize chains']
                  }
@@ -523,11 +541,13 @@ insertOrphan b o = withFrozenCallStack $
                  }
 
     newCandidate :: Maybe (Orphanage c tx s)
-    newCandidate = Just $
-        o { candidates =
-            Map.adjust (insertSingleton (chainCandidate (scoreBlock o) b))
-                       blkHash
-                       currentCandidates
+    newCandidate = do
+        let new = chainCandidate (scoreBlock o) b
+        pure o { candidates =
+            Map.alter (\mbC -> Just $ case mbC of
+                                  Nothing -> Candidates $ Heap.singleton (Down new)
+                                  Just c  -> insertSingleton new c
+                       ) parentHash currentCandidates
           , orphans = RefCount.insert blkHash b (orphans o)
           }
 
@@ -539,7 +559,8 @@ tryLinkChains
     -> Orphanage c tx s
     -> Orphanage c tx s
 tryLinkChains b o = fromMaybe o $ do
-    childrenChains <- Map.lookup (blockHash b) (candidates o)
+    childrenChains <- Map.lookup parentHash (candidates o)
+    let candidates' = Map.delete parentHash (candidates o)
     let refCount   = Heap.size . getCandidates $ childrenChains
 
     -- Fused are now the 'Candidates' that includes also all the 'childrenChains',
@@ -547,15 +568,17 @@ tryLinkChains b o = fromMaybe o $ do
     fused <- fst $
         Map.mapAccumWithKey (\acc root cnds ->
               (acc <|> map (root,) (extendCandidates (scoreBlock o) cnds (b, childrenChains)), cnds)
-            ) Nothing (candidates o)
+            ) Nothing candidates'
 
-    pure $ o { candidates = Map.insert (fst fused) (snd fused) (candidates o)
-                          & Map.delete (blockHash b)
+    pure $ o { candidates = Map.insert (fst fused) (snd fused) candidates'
              , orphans    =
+                 -- FIXME(adn) This is not correct.
                  foldl' (\acc _ -> RefCount.insert (blockHash b) b acc)
                         (orphans o)
                         [1 .. refCount]
              }
+  where
+      parentHash = blockPrevHash $ blockHeader b
 
 
 -- | /O(i)/ Iterates through all the Candidates and prepend the input block.
@@ -565,7 +588,8 @@ insertAtFront
        , Eq s
        )
     => (SealedBlock c tx s, Score)
-    -> Candidates c tx s -> Candidates c tx s
+    -> Candidates c tx s
+    -> Candidates c tx s
 insertAtFront bws (Candidates allCandidates) =
   Candidates $ Heap.map extend allCandidates
   where

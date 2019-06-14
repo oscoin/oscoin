@@ -46,7 +46,6 @@ library:
     - ekg-core
     - fast-logger
     - filepath
-    - fingertree
     - formatting
     - generic-lens
     - generics-sop
