@@ -63,29 +63,20 @@ _ssds=$(for _ in $(seq 1 $GCE_NUM_SSDS); do
   echo "--local-ssd=interface=nvme"
 done)
 
-_itmpl=$(gcloud compute instance-templates list \
-    --filter="name:oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
-    --format='value(selfLink)' \
-    | wc -l)
-
-if [[ "$_itmpl" == "0" ]]; then
-    gcloud compute instance-templates create \
-        "oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
-        --image-project=cos-cloud \
-        --image-family=cos-stable \
-        $_ssds \
-        --machine-type="$GCE_MACHINE_TYPE" \
-        --region="$GCE_REGION" \
-        --service-account="$GCE_SERVICEACCOUNT" \
-        --network="$GCE_VPC" \
-        --scopes=monitoring-write,logging-write,storage-ro \
-        --tags="oscoin-node,oscoin-$OSCOIN_NETWORK" \
-        --labels="gossip-port=${OSCOIN_GOSSIP_PORT},api-port=${OSCOIN_API_PORT},metrics-port=${OSCOIN_METRICS_PORT}" \
-        --metadata=google-logging-enabled=true \
-        --metadata-from-file="user-data=$_clowninit"
-else
-    echo "Instance template $_itmpl already exists."
-fi
+gcloud compute instance-templates create \
+    "oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
+    --image-project=cos-cloud \
+    --image-family=cos-stable \
+    $_ssds \
+    --machine-type="$GCE_MACHINE_TYPE" \
+    --region="$GCE_REGION" \
+    --service-account="$GCE_SERVICEACCOUNT" \
+    --network="$GCE_VPC" \
+    --scopes=monitoring-write,logging-write,storage-ro \
+    --tags="oscoin-node,oscoin-$OSCOIN_NETWORK" \
+    --labels="gossip-port=${OSCOIN_GOSSIP_PORT},api-port=${OSCOIN_API_PORT},metrics-port=${OSCOIN_METRICS_PORT}" \
+    --metadata=google-logging-enabled=true \
+    --metadata-from-file="user-data=$_clowninit"
 
 # find or create instance group per $OSCOIN_NETWORK
 _grp=$(gcloud compute instance-groups managed list \
@@ -97,13 +88,13 @@ if [[ "$_grp" == "0" ]]; then
     gcloud compute instance-groups managed create \
         "oscoin-node-$OSCOIN_NETWORK" \
         --size="$OSCOIN_REPLICAS" \
-        --template="oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --template="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
         --region="$GCE_REGION"
 else
     # replace template and start rolling update
     gcloud compute instance-groups managed set-instance-template \
         "oscoin-node-$OSCOIN_NETWORK" \
-        --template="oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --template="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
         --region="$GCE_REGION"
 
     # Note:
