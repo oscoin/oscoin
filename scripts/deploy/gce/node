@@ -13,7 +13,8 @@ set -eoux pipefail
 
 DRY_RUN=${DRY_RUN:-""}
 
-OSCOIN_VERSION=${OSCOIN_VERSION:-$(git rev-parse --short HEAD)}
+OSCOIN_VERSION=${OSCOIN_VERSION:-$(git rev-parse HEAD)}
+OSCOIN_VERSION_SHORT=${OSCOIN_VERSION_SHORT:-$(git rev-parse --short HEAD)}
 OSCOIN_NETWORK=${OSCOIN_NETWORK:?Network not set}
 OSCOIN_REPLICAS=${OSCOIN_REPLICAS:-3}
 OSCOIN_GOSSIP_PORT=${OSCOIN_GOSSIP_PORT:-6942}
@@ -58,12 +59,12 @@ if [[ "x$DRY_RUN" != "x" ]]; then
     exit 0
 fi
 
-# create instance template per $OSCOIN_NETWORK + $OSCOIN_VERSION
+# create instance template per $OSCOIN_NETWORK + $OSCOIN_VERSION_SHORT
 _ssds=$(for _ in $(seq 1 $GCE_NUM_SSDS); do
   echo "--local-ssd=interface=nvme"
 done)
 
-_instance_template_name="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}"
+_instance_template_name="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION_SHORT}"
 
 gcloud compute instance-templates create \
     "$_instance_template_name" \
