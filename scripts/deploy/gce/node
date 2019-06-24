@@ -115,10 +115,18 @@ else
     # Also, wait $GCE_UPDATE_MIN_READY before a new node is considered up. This
     # is to allow it to sync with the old nodes. Obviously, this needs to be
     # reconsidered.
+
+    # regional managed instance groups must use max-surge >= num zones
+    _num_zones=$(gcloud compute zones list \
+        --filter="region:${GCE_REGION}" \
+        --format='value(name)' \
+        | wc -l)
+    _max_surge=$((OSCOIN_REPLICAS < _num_zones ? _num_zones : OSCOIN_REPLICAS))
+
     gcloud beta compute instance-groups managed rolling-action start-update \
         "oscoin-node-$OSCOIN_NETWORK" \
         --version="template=oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
-        --max-surge="$OSCOIN_REPLICAS" \
+        --max-surge="$_max_surge" \
         --max-unavailable=0 \
         --min-ready="${GCE_UPDATE_MIN_READY}" \
         --region="$GCE_REGION" \
