@@ -63,8 +63,10 @@ _ssds=$(for _ in $(seq 1 $GCE_NUM_SSDS); do
   echo "--local-ssd=interface=nvme"
 done)
 
+_instance_template_name="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}"
+
 gcloud compute instance-templates create \
-    "oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
+    "$_instance_template_name" \
     --image-project=cos-cloud \
     --image-family=cos-stable \
     $_ssds \
@@ -88,13 +90,13 @@ if [[ "$_grp" == "0" ]]; then
     gcloud compute instance-groups managed create \
         "oscoin-node-$OSCOIN_NETWORK" \
         --size="$OSCOIN_REPLICAS" \
-        --template="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
+        --template="$_instance_template_name" \
         --region="$GCE_REGION"
 else
     # replace template and start rolling update
     gcloud compute instance-groups managed set-instance-template \
         "oscoin-node-$OSCOIN_NETWORK" \
-        --template="oscoin-node-${OSCOIN_NETWORK}-${GCE_REGION}-${OSCOIN_VERSION}" \
+        --template="$_instance_template_name" \
         --region="$GCE_REGION"
 
     # Note:
@@ -116,7 +118,7 @@ else
 
     gcloud beta compute instance-groups managed rolling-action start-update \
         "oscoin-node-$OSCOIN_NETWORK" \
-        --version="template=oscoin-node-${OSCOIN_NETWORK}-${OSCOIN_VERSION}" \
+        --version="template=${_instance_template_name}" \
         --max-surge="$_max_surge" \
         --max-unavailable=0 \
         --min-ready="${GCE_UPDATE_MIN_READY}" \
