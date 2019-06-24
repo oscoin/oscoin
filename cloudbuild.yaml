@@ -153,16 +153,16 @@ steps:
     entrypoint: bash
     env:
     - BRANCH_NAME=$BRANCH_NAME
+
     - OSCOIN_VERSION=$COMMIT_SHA
     - OSCOIN_NETWORK=devnet
     - OSCOIN_BENEFICIARY=0x0000000000000000000000000000000000000000
-    - OSCOIN_REPLICAS=3
     - OSCOIN_GOSSIP_PORT=6942
     - OSCOIN_API_PORT=8080
     - OSCOIN_METRICS_PORT=8081
     - OSCOIN_DEPLOY=bin/oscoin-deploy
+
     - GCE_PROJECT_ID=$PROJECT_ID
-    - GCE_REGION=europe-west3
     - GCE_VPC=devnet
     - GCE_SERVICEACCOUNT=oscoin-node@opensourcecoin.iam.gserviceaccount.com
     - GCE_MACHINE_TYPE=n1-standard-1
@@ -174,16 +174,24 @@ steps:
       set -euo pipefail
 
       if [[ "$BRANCH_NAME" == "master" ]]; then
-        ./scripts/deploy/gce/node \
-            --log-level=Debug \
-            --nakamoto-consensus-lenient \
-            --block-time-lower=60
+        export DRY_RUN=""
       else
-        DRY_RUN=yes ./scripts/deploy/gce/node \
+        export DRY_RUN=yes
+      fi
+
+      GCE_REGION=asia-southeast1 OSCOIN_REPLICAS=1 \
+          ./scripts/deploy/gce/node \
             --log-level=Debug \
             --nakamoto-consensus-lenient \
             --block-time-lower=60
-      fi
+
+      for region in europe-west3 northamerica-northeast1; do
+        GCE_REGION=$region OSCOIN_REPLICAS=3 \
+            ./scripts/deploy/gce/node \
+                --log-level=Debug \
+                --nakamoto-consensus-lenient \
+                --no-mining
+      done
 
   - id: "Publish Haddocks"
     waitFor:
